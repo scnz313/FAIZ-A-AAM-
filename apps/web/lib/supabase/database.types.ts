@@ -12,7 +12,7 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.15"
   }
-  graphql_public: {
+  app: {
     Tables: {
       [_ in never]: never
     }
@@ -20,14 +20,144 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      graphql: {
+      active_publication_ids: { Args: never; Returns: string[] }
+      admissions_decide: {
         Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
+          p_action: string
+          p_application_id: string
+          p_conditions?: Json
+          p_expires_at?: string
+          p_private_note?: string
+          p_visible_reason?: string
         }
-        Returns: Json
+        Returns: undefined
+      }
+      admissions_request_changes: {
+        Args: {
+          p_application_id: string
+          p_private_note?: string
+          p_visible_reason: string
+        }
+        Returns: undefined
+      }
+      admissions_respond_offer: {
+        Args: {
+          p_application_id: string
+          p_offer_version?: number
+          p_response: string
+        }
+        Returns: string
+      }
+      admissions_review_advance: {
+        Args: {
+          p_action: string
+          p_application_id: string
+          p_private_note?: string
+          p_visible_reason?: string
+        }
+        Returns: undefined
+      }
+      admissions_submit: {
+        Args: {
+          p_application_id: string
+          p_expected_version?: number
+          p_schema_version?: number
+          p_snapshot: Json
+        }
+        Returns: string
+      }
+      bump_access_revalidation: {
+        Args: { p_account_id: string }
+        Returns: undefined
+      }
+      claim_outbox: {
+        Args: { p_batch_size?: number }
+        Returns: Database["public"]["Tables"]["outbox_events"]["Row"][]
+        SetofOptions: {
+          from: "*"
+          to: "outbox_events"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      enqueue_outbox: {
+        Args: {
+          p_event_key: string
+          p_kind: string
+          p_max_attempts?: number
+          p_payload?: Json
+          p_target_reference: string
+          p_target_type: string
+        }
+        Returns: Database["public"]["Tables"]["outbox_events"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "outbox_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      enrollment_convert: { Args: { p_application_id: string }; Returns: Json }
+      fail_outbox: {
+        Args: { p_error: string; p_event_key: string }
+        Returns: Database["public"]["Tables"]["outbox_events"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "outbox_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      finance_issue_admission_invoice: {
+        Args: { p_application_id: string; p_schedule_version_id?: string }
+        Returns: string
+      }
+      finance_post_sandbox_payment: {
+        Args: {
+          p_amount_paise: number
+          p_attempt_reference: string
+          p_invoice_ref: string
+          p_method?: string
+          p_provider_txn_id: string
+        }
+        Returns: string
+      }
+      has_any_role: { Args: { p_roles: string[] }; Returns: boolean }
+      has_role: { Args: { p_role: string }; Returns: boolean }
+      invoice_balance: { Args: { p_invoice_id: string }; Returns: number }
+      is_guardian: { Args: never; Returns: boolean }
+      is_pure_teacher: { Args: never; Returns: boolean }
+      is_staff_aal2: { Args: never; Returns: boolean }
+      mark_outbox_delivered: {
+        Args: { p_event_key: string }
+        Returns: Database["public"]["Tables"]["outbox_events"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "outbox_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      new_ref: { Args: { prefix: string; ref_year?: number }; Returns: string }
+      public_notice_ids: { Args: never; Returns: string[] }
+      record_audit: {
+        Args: {
+          p_action: string
+          p_actor_label?: string
+          p_outcome: string
+          p_reason?: string
+          p_target_reference: string
+          p_target_type: string
+        }
+        Returns: string
+      }
+      results_publish_batch: {
+        Args: { p_batch_id: string; p_expected_version: number }
+        Returns: string
+      }
+      timetable_publish_version: {
+        Args: { p_note?: string; p_version_id: string }
+        Returns: string
       }
     }
     Enums: {
@@ -841,21 +971,21 @@ export type Database = {
         Row: {
           created_at: string
           detail: string | null
-          document_id: string
+          document_id: string | null
           event_type: string
           id: string
         }
         Insert: {
           created_at?: string
           detail?: string | null
-          document_id: string
+          document_id?: string | null
           event_type: string
           id?: string
         }
         Update: {
           created_at?: string
           detail?: string | null
-          document_id?: string
+          document_id?: string | null
           event_type?: string
           id?: string
         }
@@ -939,7 +1069,7 @@ export type Database = {
       }
       email_suppressions: {
         Row: {
-          created_by_account_id: string
+          created_by_account_id: string | null
           email_hash: string
           id: string
           note: string | null
@@ -947,7 +1077,7 @@ export type Database = {
           suppressed_at: string
         }
         Insert: {
-          created_by_account_id: string
+          created_by_account_id?: string | null
           email_hash: string
           id?: string
           note?: string | null
@@ -955,7 +1085,7 @@ export type Database = {
           suppressed_at?: string
         }
         Update: {
-          created_by_account_id?: string
+          created_by_account_id?: string | null
           email_hash?: string
           id?: string
           note?: string | null
@@ -4629,7 +4759,7 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
+  app: {
     Enums: {},
   },
   public: {
