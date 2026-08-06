@@ -90,4 +90,9 @@ echo "== RLS positive/negative suite (fictional actors, plan.md §7)"
 # The suite must also fail loudly if its assertions abort.
 psql -h /tmp -p "$PGPORT" -U postgres -d "$DB" -t -c "select 'rls suite: '||result from (select result from (select 'RLS SUITE PASSED' as result) x) y;"
 
+echo "== transactional RPC suite (plan.md §8)"
+"${PSQL[@]}" -q -f scripts/validate-rpcs.sql
+
+psql -h /tmp -p "$PGPORT" -U postgres -d "$DB" -t -c "select 'rpc suite: '||result from (select result from (select 'RPC SUITE PASSED' as result) x) y;"
+
 echo "ALL LOCAL DATABASE CHECKS PASSED"

@@ -299,14 +299,24 @@ revoke all on public.exam_definitions, public.assessment_components, public.grad
 -- Guardians read only the published per-student snapshots of their ACTIVE
 -- linked children (portal rule: result_publication_items only), plus the
 -- publication headers for context. Withdrawn publications are excluded.
+-- The withdrawn check goes through a SECURITY DEFINER helper so the two
+-- guardian policies do not reference each other (policy recursion guard).
+create or replace function app.active_publication_ids()
+returns uuid[]
+language sql
+security definer
+set search_path = ''
+as $$
+  select array(select id from public.result_publications where status <> 'withdrawn')
+$$;
+revoke all on function app.active_publication_ids() from public;
+grant execute on function app.active_publication_ids() to authenticated;
+
 create policy guardian_read_publication_items on public.result_publication_items
   for select to authenticated
   using (
     app.is_guardian()
-    and publication_id in (
-      select p.id from public.result_publications p
-       where p.status <> 'withdrawn'
-    )
+    and publication_id = any(app.active_publication_ids())
     and student_id in (
       select l.student_id
         from public.guardian_student_links l

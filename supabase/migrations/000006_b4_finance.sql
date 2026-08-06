@@ -288,38 +288,53 @@ revoke all on public.fee_schedule_versions, public.fee_schedule_items, public.in
   from anon, authenticated;
 
 -- Guardians read finance rows only for students their ACTIVE links connect
--- them to (the same scope the portal ledger uses).
+-- them to, plus their own pre-conversion admission invoices (plan.md §6.6:
+-- the applicant must be able to see and pay the invoice they accepted).
 create policy guardian_read_invoices on public.invoices
   for select to authenticated
   using (
     app.is_guardian()
-    and student_id in (
-      select l.student_id
-        from public.guardian_student_links l
-        join public.guardians g on g.id = l.guardian_id
-        join public.user_accounts ua on ua.person_id = g.person_id
-       where ua.id = auth.uid()
-         and l.status = 'active'
+    and (
+      student_id in (
+        select l.student_id
+          from public.guardian_student_links l
+          join public.guardians g on g.id = l.guardian_id
+          join public.user_accounts ua on ua.person_id = g.person_id
+         where ua.id = auth.uid()
+           and l.status = 'active'
+      )
+      or applicant_ref in (
+        select reference from public.admission_applications
+         where owner_account_id = auth.uid()
+      )
     )
   );
 create policy guardian_read_invoice_items on public.invoice_items
   for select to authenticated
   using (invoice_id in (select id from public.invoices
-         where app.is_guardian() and student_id in (
-           select l.student_id
-             from public.guardian_student_links l
-             join public.guardians g on g.id = l.guardian_id
-             join public.user_accounts ua on ua.person_id = g.person_id
-            where ua.id = auth.uid() and l.status = 'active')));
+         where app.is_guardian() and (
+           student_id in (
+             select l.student_id
+               from public.guardian_student_links l
+               join public.guardians g on g.id = l.guardian_id
+               join public.user_accounts ua on ua.person_id = g.person_id
+              where ua.id = auth.uid() and l.status = 'active')
+           or applicant_ref in (select reference from public.admission_applications
+                                 where owner_account_id = auth.uid())
+         )));
 create policy guardian_read_receipts on public.receipts
   for select to authenticated
   using (invoice_id in (select id from public.invoices
-         where app.is_guardian() and student_id in (
-           select l.student_id
-             from public.guardian_student_links l
-             join public.guardians g on g.id = l.guardian_id
-             join public.user_accounts ua on ua.person_id = g.person_id
-            where ua.id = auth.uid() and l.status = 'active')));
+         where app.is_guardian() and (
+           student_id in (
+             select l.student_id
+               from public.guardian_student_links l
+               join public.guardians g on g.id = l.guardian_id
+               join public.user_accounts ua on ua.person_id = g.person_id
+              where ua.id = auth.uid() and l.status = 'active')
+           or applicant_ref in (select reference from public.admission_applications
+                                 where owner_account_id = auth.uid())
+         )));
 
 -- Finance staff (aal2) read/write through domain RPCs; direct reads allowed,
 -- direct writes limited to officers via RPCs (audit + idempotency live there).

@@ -1777,7 +1777,7 @@ export type Database = {
           reference: string
           schedule_version_id: string | null
           status: string
-          student_id: string
+          student_id: string | null
           term: string
           updated_at: string
           version: number
@@ -1793,7 +1793,7 @@ export type Database = {
           reference?: string
           schedule_version_id?: string | null
           status?: string
-          student_id: string
+          student_id?: string | null
           term: string
           updated_at?: string
           version?: number
@@ -1809,7 +1809,7 @@ export type Database = {
           reference?: string
           schedule_version_id?: string | null
           status?: string
-          student_id?: string
+          student_id?: string | null
           term?: string
           updated_at?: string
           version?: number
