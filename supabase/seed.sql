@@ -80,7 +80,7 @@ on conflict (code) do nothing;
 
 -- Working days Mon–Sat, periods 08:30–14:30 for the current year.
 insert into public.period_definitions (academic_year_id, day_of_week, period_number, starts_at, ends_at)
-select ay.id, d.day_of_week, p.period_number, p.starts_at, p.ends_at
+select ay.id, d.day_of_week, d.period_number, d.starts_at, d.ends_at
   from (values
     (1, 1, '08:30'::time, '08:45'::time),
     (1, 2, '08:45'::time, '09:30'::time),
