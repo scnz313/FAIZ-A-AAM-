@@ -493,6 +493,60 @@ as $$
   )
 $$;
 
+-- The current session holds an active grant for ANY of the given role codes.
+create or replace function app.has_any_role(p_roles text[])
+returns boolean
+language sql
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+      from public.role_grants rg
+     where rg.account_id = auth.uid()
+       and rg.role_code = any(p_roles)
+       and rg.status = 'active'
+       and rg.effective_from <= now()
+       and (rg.effective_to is null or rg.effective_to > now())
+  )
+$$;
+
+-- A staff session whose ONLY staff grant is teacher. Such sessions are bound
+-- to their exact assignment scope by the teacher_* policies; sessions with any
+-- additional functional staff role get operational queue access.
+create or replace function app.is_pure_teacher()
+returns boolean
+language sql
+security definer
+set search_path = ''
+as $$
+  select auth.uid() is not null
+     and exists (
+       select 1 from public.role_grants rg
+        where rg.account_id = auth.uid()
+          and rg.role_code = 'teacher'
+          and rg.status = 'active'
+          and rg.effective_from <= now()
+          and (rg.effective_to is null or rg.effective_to > now())
+     )
+     and not exists (
+       select 1 from public.role_grants rg
+        where rg.account_id = auth.uid()
+          and rg.role_code in (
+            'content_editor', 'content_publisher',
+            'admissions_officer', 'admissions_approver',
+            'finance_officer', 'finance_approver',
+            'hr_reviewer', 'hr_approver',
+            'exam_reviewer', 'result_publisher',
+            'timetable_manager', 'support_officer',
+            'auditor', 'system_administrator'
+          )
+          and rg.status = 'active'
+          and rg.effective_from <= now()
+          and (rg.effective_to is null or rg.effective_to > now())
+     )
+$$;
+
 -- Bump an account's security version (revocation takes effect on the next
 -- server request even while the JWT is still valid — plan.md §4).
 create or replace function app.bump_access_revalidation(p_account_id uuid)
@@ -592,6 +646,8 @@ grant usage on schema app to authenticated;
 grant execute on function app.is_staff_aal2() to authenticated;
 grant execute on function app.has_role(text) to authenticated;
 grant execute on function app.is_guardian() to authenticated;
+grant execute on function app.has_any_role(text[]) to authenticated;
+grant execute on function app.is_pure_teacher() to authenticated;
 
 -- ===========================================================================
 -- 4. REVALIDATION TRIGGERS

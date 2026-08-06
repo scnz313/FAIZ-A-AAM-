@@ -1,10 +1,13 @@
 -- =============================================================================
 -- Deterministic synthetic seed (plan.md §11 B0: "deterministic seed files").
 --
--- B0 seeds reference data only. Domain synthetic data arrives with its phase
--- (school configuration in B1, fictional applicants in B2, and so on).
--- Every statement is idempotent so `supabase db reset` reproduces the same
--- state without dashboard-only SQL.
+-- B0 seeds reference data; domain configuration arrives with its phase
+-- (school configuration in B1, admission windows/fee schedule/exam/timetable
+-- configuration in B2–B6). Rows that require an authenticated user account
+-- (applications, staff, students, documents, content versions) are created
+-- only by authorized commands — never by this seed. Every statement is
+-- idempotent so `supabase db reset` reproduces the same state without
+-- dashboard-only SQL.
 --
 -- No real student, guardian, applicant, job, financial, result, or document
 -- data may ever enter these seeds (plan.md §14).
@@ -144,3 +147,113 @@ insert into public.feature_flags (code, enabled, note) values
   ('student_accounts', false, 'Disabled until the school approves the student-account policy.'),
   ('payment_gateway', false, 'Disabled until a gateway and merchant are approved.')
 on conflict (code) do nothing;
+
+-- =============================================================================
+-- B2 admission windows (synthetic configuration; policy-pending until the
+-- school approves the admission calendar — plan.md §14)
+-- =============================================================================
+insert into public.admission_windows (academic_year_id, grade_id, opens_at, closes_at, capacity, policy, status)
+select ay.id, g.id, '2026-08-01T00:00:00+05:30', '2026-10-31T23:59:59+05:30', 60, '{"synthetic": true, "admission_policy": "pending"}'::jsonb, 'planned'
+  from public.academic_years ay
+  join public.grades g on g.code in ('6', '7', '8', '9', '10')
+ where ay.label = '2026-27'
+on conflict (academic_year_id, grade_id) do nothing;
+
+-- =============================================================================
+-- B4 fee schedule (synthetic draft; never effective until approved)
+-- =============================================================================
+insert into public.fee_schedule_versions (version, status, policy) values
+  (1, 'draft', '{"synthetic": true, "school_decision": "pending"}'::jsonb)
+on conflict (version) do nothing;
+
+insert into public.fee_schedule_items (schedule_version_id, code, label, amount_paise, period, kind, sort_order)
+select fsv.id, s.code, s.label, s.amount_paise, s.period, s.kind, s.sort_order
+  from public.fee_schedule_versions fsv
+  cross join (values
+    ('tuition', 'Tuition fee', 1200000, 'annual', 'fee', 10),
+    ('admission', 'Admission fee', 500000, 'once', 'fee', 20),
+    ('development', 'Development fund', 300000, 'annual', 'fee', 30),
+    ('exam', 'Examination fee', 200000, 'annual', 'fee', 40)
+  ) as s(code, label, amount_paise, period, kind, sort_order)
+ where fsv.version = 1
+on conflict (schedule_version_id, code) do nothing;
+
+-- =============================================================================
+-- B5 exam configuration and draft timetable (synthetic; planned/draft only)
+-- =============================================================================
+insert into public.grade_band_versions (version, status, bands) values
+  (1, 'draft', '{"synthetic": true, "bands": [{"min": 90, "grade": "A1"}, {"min": 75, "grade": "A"}, {"min": 60, "grade": "B"}, {"min": 45, "grade": "C"}, {"min": 33, "grade": "D"}, {"min": 0, "grade": "E"}], "school_decision": "pending"}'::jsonb)
+on conflict (version) do nothing;
+
+insert into public.exam_definitions (academic_year_id, grade_section_id, term, status)
+select ay.id, gs.id, d.term, 'planned'
+  from public.academic_years ay
+  join public.grade_sections gs on gs.academic_year_id = ay.id
+  cross join (values ('midterm'), ('final')) as d(term)
+ where ay.label = '2026-27'
+on conflict (academic_year_id, grade_section_id, term) do nothing;
+
+insert into public.assessment_components (exam_definition_id, subject_id, name, max_marks, weight, sort_order)
+select ed.id, s.id, ed.term, 100, 1, 0
+  from public.exam_definitions ed
+  join public.grade_sections gs on gs.id = ed.grade_section_id
+  join public.subjects s on s.code in ('MAT', 'SCI', 'ENG', 'URD', 'KAS', 'SST', 'COM')
+  where ed.term = 'midterm'
+on conflict (exam_definition_id, subject_id) do nothing;
+
+-- Draft timetable for 8-A (Monday only; a draft is never visible to families).
+insert into public.timetable_versions (grade_section_id, status, version, effective_from)
+select gs.id, 'draft', 1, '2026-04-06'
+  from public.grade_sections gs
+  join public.grades g on g.id = gs.grade_id
+ where g.code = '8'
+   and gs.section_label = 'A'
+   and gs.academic_year_id in (select id from public.academic_years where label = '2026-27')
+on conflict (grade_section_id, version) do nothing;
+
+insert into public.timetable_periods (timetable_version_id, day_of_week, period_number, starts_at, ends_at, subject_id, room_id, kind)
+select ttv.id, 1, p.period_number, p.starts_at, p.ends_at, s.id, r.id, p.kind
+  from public.timetable_versions ttv
+  cross join (values
+    (1, '08:30'::time, '08:45'::time, 'assembly', 'MAT'),
+    (2, '08:45'::time, '09:30'::time, 'class', 'MAT'),
+    (3, '09:30'::time, '10:15'::time, 'class', 'SCI'),
+    (4, '10:15'::time, '11:00'::time, 'class', 'ENG'),
+    (5, '11:15'::time, '12:00'::time, 'break', null),
+    (6, '12:00'::time, '12:45'::time, 'class', 'URD'),
+    (7, '13:30'::time, '14:15'::time, 'class', 'KAS'),
+    (8, '14:15'::time, '15:00'::time, 'class', 'SST')
+  ) as p(period_number, starts_at, ends_at, kind, subject_code)
+  left join public.subjects s on s.code = p.subject_code
+  left join public.rooms r on r.code = case when p.kind = 'assembly' then 'GRD' when p.period_number = 2 then 'R21' when p.period_number = 5 then null else 'R11' end
+ where ttv.version = 1 and ttv.status = 'draft'
+   and not exists (
+     select 1 from public.timetable_periods tp
+      where tp.timetable_version_id = ttv.id and tp.day_of_week = 1 and tp.period_number = p.period_number);
+
+-- =============================================================================
+-- B6 notices (published public + scheduled family notice; content pages are
+-- authored by staff through the CMS and never seeded)
+-- =============================================================================
+insert into public.content_items (kind, slug, current_status) values
+  ('notice', 'notice-admissions-2026-27', 'published'),
+  ('notice', 'notice-annual-day', 'scheduled')
+on conflict (slug) do nothing;
+
+insert into public.notices (content_item_id, category, urgent, status, published_at, expires_at)
+select ci.id, n.category, n.urgent, n.status, n.published_at::timestamptz, n.expires_at::timestamptz
+  from public.content_items ci
+  join (values
+    ('notice-admissions-2026-27', 'Admissions', false, 'published', '2026-08-01T09:00:00+05:30', '2026-12-31T23:59:59+05:30'),
+    ('notice-annual-day', 'Events', false, 'scheduled', null, null)
+  ) as n(slug, category, urgent, status, published_at, expires_at) on n.slug = ci.slug
+on conflict (content_item_id) do nothing;
+
+insert into public.notice_audiences (notice_id, audience)
+select ntc.id, 'public'
+  from public.notices ntc
+  join public.content_items ci on ci.id = ntc.content_item_id
+ where ci.slug = 'notice-admissions-2026-27'
+   and not exists (
+     select 1 from public.notice_audiences na
+      where na.notice_id = ntc.id and na.audience = 'public');

@@ -159,6 +159,7 @@ const yearIdByLabel = Object.fromEntries((years ?? []).map((y) => [y.label, y.id
 const gradeIdByCode = Object.fromEntries((grades ?? []).map((g) => [g.code, g.id]));
 
 const currentYearId = yearIdByLabel["2026-27"];
+let sectionsRows = [];
 if (currentYearId) {
   const sections = SECTIONS.map(([gradeCode, sectionLabel]) => ({
     academic_year_id: currentYearId,
@@ -168,7 +169,8 @@ if (currentYearId) {
   }));
   report("grade_sections", await upsert("grade_sections", sections, "academic_year_id,grade_id,section_label"));
 
-  const { data: sectionsRows } = await admin.from("grade_sections").select("id,academic_year_id,grade_id,section_label");
+  ({ data: sectionsRows } = await admin.from("grade_sections").select("id,academic_year_id,grade_id,section_label"));
+  sectionsRows = sectionsRows ?? [];
   const sectionIdByKey = Object.fromEntries(
     (sectionsRows ?? []).map((s) => [`${s.academic_year_id}:${s.grade_id}:${s.section_label}`, s.id]),
   );
@@ -194,6 +196,167 @@ if (currentYearId) {
 report("settings_versions", await upsert("settings_versions", [SETTINGS_VERSION_1], "version"));
 report("feature_flags", await upsert("feature_flags", FEATURE_FLAGS.map(([code, enabled, note]) => ({ code, enabled, note })), "code"));
 
+/* --- B2: admission windows (synthetic; policy-pending) --------------------- */
+if (currentYearId) {
+  const windows = ["6", "7", "8", "9", "10"].map((gradeCode) => ({
+    academic_year_id: currentYearId,
+    grade_id: gradeIdByCode[gradeCode],
+    opens_at: "2026-08-01T00:00:00+05:30",
+    closes_at: "2026-10-31T23:59:59+05:30",
+    capacity: 60,
+    policy: { synthetic: true, admission_policy: "pending" },
+    status: "planned",
+  }));
+  report(`admission_windows (${windows.length})`, await upsert("admission_windows", windows, "academic_year_id,grade_id"));
+}
+
+/* --- B4: fee schedule draft (never effective until approved) -------------- */
+report("fee_schedule_versions", await upsert("fee_schedule_versions", [
+  { version: 1, status: "draft", policy: { synthetic: true, school_decision: "pending" } },
+], "version"));
+
+const { data: scheduleRows, error: scheduleError } = await admin
+  .from("fee_schedule_versions")
+  .select("id,version");
+report("resolve fee schedule", scheduleError);
+const scheduleIdByVersion = Object.fromEntries((scheduleRows ?? []).map((s) => [s.version, s.id]));
+if (scheduleIdByVersion[1]) {
+  const items = [
+    ["tuition", "Tuition fee", 1200000, "annual", "fee", 10],
+    ["admission", "Admission fee", 500000, "once", "fee", 20],
+    ["development", "Development fund", 300000, "annual", "fee", 30],
+    ["exam", "Examination fee", 200000, "annual", "fee", 40],
+  ].map(([code, label, amount_paise, period, kind, sort_order]) => ({
+    schedule_version_id: scheduleIdByVersion[1],
+    code,
+    label,
+    amount_paise,
+    currency: "INR",
+    period,
+    kind,
+    sort_order,
+  }));
+  report(`fee_schedule_items (${items.length})`, await upsert("fee_schedule_items", items, "schedule_version_id,code"));
+}
+
+/* --- B5: grade bands + exam definitions + draft timetable ------------------ */
+report("grade_band_versions", await upsert("grade_band_versions", [
+  {
+    version: 1,
+    status: "draft",
+    bands: {
+      synthetic: true,
+      bands: [
+        { min: 90, grade: "A1" },
+        { min: 75, grade: "A" },
+        { min: 60, grade: "B" },
+        { min: 45, grade: "C" },
+        { min: 33, grade: "D" },
+        { min: 0, grade: "E" },
+      ],
+      school_decision: "pending",
+    },
+  },
+], "version"));
+
+if (currentYearId && sectionsRows.length > 0) {
+  const examDefs = [];
+  for (const section of sectionsRows) {
+    for (const term of ["midterm", "final"]) {
+      examDefs.push({ academic_year_id: currentYearId, grade_section_id: section.id, term, status: "planned" });
+    }
+  }
+  report(`exam_definitions (${examDefs.length})`, await upsert("exam_definitions", examDefs, "academic_year_id,grade_section_id,term"));
+
+  const { data: examRows } = await admin.from("exam_definitions").select("id,term");
+  const { data: subjectRows } = await admin.from("subjects").select("id,code");
+  const subjectIdByCode = Object.fromEntries((subjectRows ?? []).map((s) => [s.code, s.id]));
+  const components = (examRows ?? [])
+    .filter((e) => e.term === "midterm")
+    .flatMap((e) =>
+      ["MAT", "SCI", "ENG", "URD", "KAS", "SST", "COM"].map((code) => ({
+        exam_definition_id: e.id,
+        subject_id: subjectIdByCode[code],
+        name: "Midterm",
+        max_marks: 100,
+        weight: 1,
+        sort_order: 0,
+      })),
+    );
+  report(`assessment_components (${components.length})`, await upsert("assessment_components", components, "exam_definition_id,subject_id"));
+
+  /* Draft timetable for 8-A (Monday only; drafts are never family-visible). */
+  const sectionA = sectionsRows.find((s) => s.section_label === "A");
+  if (sectionA) {
+    report("timetable_versions", await upsert("timetable_versions", [
+      { grade_section_id: sectionA.id, status: "draft", version: 1, effective_from: "2026-04-06" },
+    ], "grade_section_id,version"));
+    const { data: ttvRows } = await admin.from("timetable_versions").select("id,version");
+    const ttv = (ttvRows ?? []).find((t) => t.version === 1);
+    if (ttv) {
+      const { data: roomRows } = await admin.from("rooms").select("id,code");
+      const roomIdByCode = Object.fromEntries((roomRows ?? []).map((r) => [r.code, r.id]));
+      const periods = [
+        [1, "08:30", "08:45", "assembly", "MAT", "GRD"],
+        [2, "08:45", "09:30", "class", "MAT", "R21"],
+        [3, "09:30", "10:15", "class", "SCI", "R11"],
+        [4, "10:15", "11:00", "class", "ENG", "R11"],
+        [5, "11:15", "12:00", "break", null, null],
+        [6, "12:00", "12:45", "class", "URD", "R11"],
+        [7, "13:30", "14:15", "class", "KAS", "R11"],
+        [8, "14:15", "15:00", "class", "SST", "R11"],
+      ].map(([period_number, starts_at, ends_at, kind, subjectCode, roomCode]) => ({
+        timetable_version_id: ttv.id,
+        day_of_week: 1,
+        period_number,
+        starts_at,
+        ends_at,
+        subject_id: subjectCode ? subjectIdByCode[subjectCode] : null,
+        teacher_assignment_id: null,
+        room_id: roomCode ? roomIdByCode[roomCode] : null,
+        kind,
+      }));
+      report(`timetable_periods (${periods.length})`, await upsert("timetable_periods", periods, "timetable_version_id,day_of_week,period_number"));
+    }
+  }
+}
+
+/* --- B6: notices (published public + scheduled; pages come from the CMS) --- */
+report("content_items", await upsert("content_items", [
+  { kind: "notice", slug: "notice-admissions-2026-27", current_status: "published" },
+  { kind: "notice", slug: "notice-annual-day", current_status: "scheduled" },
+], "slug"));
+
+const { data: contentRows, error: contentError } = await admin.from("content_items").select("id,slug");
+report("resolve content items", contentError);
+const contentIdBySlug = Object.fromEntries((contentRows ?? []).map((c) => [c.slug, c.id]));
+report("notices", await upsert("notices", [
+  {
+    content_item_id: contentIdBySlug["notice-admissions-2026-27"],
+    category: "Admissions",
+    urgent: false,
+    status: "published",
+    published_at: "2026-08-01T09:00:00+05:30",
+    expires_at: "2026-12-31T23:59:59+05:30",
+  },
+  {
+    content_item_id: contentIdBySlug["notice-annual-day"],
+    category: "Events",
+    urgent: false,
+    status: "scheduled",
+  },
+], "content_item_id"));
+
+if (contentIdBySlug["notice-admissions-2026-27"]) {
+  const { data: noticeRows } = await admin.from("notices").select("id,content_item_id");
+  const notice = (noticeRows ?? []).find((n) => n.content_item_id === contentIdBySlug["notice-admissions-2026-27"]);
+  if (notice) {
+    report("notice_audiences", await upsert("notice_audiences", [
+      { notice_id: notice.id, audience: "public" },
+    ], "notice_id,audience,role_code,academic_year_id,grade_section_id,student_id"));
+  }
+}
+
 /* --- verification -------------------------------------------------------- */
 
 const checks = [
@@ -206,6 +369,17 @@ const checks = [
   ["period_definitions", "day_of_week", null],
   ["settings_versions", "version", null],
   ["feature_flags", "code", null],
+  ["admission_windows", "reference", null],
+  ["fee_schedule_versions", "version", null],
+  ["fee_schedule_items", "code", null],
+  ["grade_band_versions", "version", null],
+  ["exam_definitions", "term", null],
+  ["assessment_components", "name", null],
+  ["timetable_versions", "reference", null],
+  ["timetable_periods", "period_number", null],
+  ["content_items", "slug", null],
+  ["notices", "reference", null],
+  ["notice_audiences", "audience", null],
 ];
 console.log("\nVerification:");
 for (const [table, column] of checks) {

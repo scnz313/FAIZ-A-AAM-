@@ -84,4 +84,10 @@ select 'deliver: '||status from app.mark_outbox_delivered('pdf.generate:r1:v1');
 insert into outbox_events (event_key, kind, target_type, target_reference) values ('email.deliver:a1:v1','email.deliver','admission_application','APP-2026-T02');
 select 'fail: '||status||' attempts='||attempts from app.fail_outbox('email.deliver:a1:v1','boom');"
 
+echo "== RLS positive/negative suite (fictional actors, plan.md §7)"
+"${PSQL[@]}" -q -f scripts/validate-rls.sql
+
+# The suite must also fail loudly if its assertions abort.
+psql -h /tmp -p "$PGPORT" -U postgres -d "$DB" -t -c "select 'rls suite: '||result from (select result from (select 'RLS SUITE PASSED' as result) x) y;"
+
 echo "ALL LOCAL DATABASE CHECKS PASSED"
