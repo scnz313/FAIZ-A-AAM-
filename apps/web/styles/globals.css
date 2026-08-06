@@ -652,6 +652,11 @@ textarea {
   color: var(--chalk);
 }
 
+.alert-strip--notice {
+  background: var(--willow-deep);
+  color: var(--chalk);
+}
+
 /* Tables ------------------------------------------------------------------- */
 
 .table {

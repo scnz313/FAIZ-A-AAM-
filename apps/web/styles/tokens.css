@@ -12,6 +12,7 @@
   --saffron: #b96832; /* brand accent — rules, focus, active states        */
   --saffron-deep: #8c4a1e; /* deep saffron — saffron text on paper surfaces  */
   --willow: #536d57; /* calm green — "good" status                        */
+  --willow-deep: #3f5243; /* deep willow — notice strips on chalk text      */
   --chalk: #ffffff; /* raised surface — panels, sidebar, badges           */
   --brick: #a23b2e; /* alert red — threshold crossings                    */
   --brick-deep: #7e2b20; /* severe red — critical strips, danger buttons    */

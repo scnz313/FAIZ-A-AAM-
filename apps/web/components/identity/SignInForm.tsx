@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { DEMO_PHONE, STAFF_DEMO_NOTE, identityService } from "@/modules/services/identity";
 
 import styles from "./SignInForm.module.css";
@@ -12,28 +13,38 @@ import styles from "./SignInForm.module.css";
 type FieldErrors = {
   identifier?: string;
   password?: string;
+  code?: string;
 };
 
-const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["identifier", "password"];
+type SignInFormProps = {
+  /** Runtime data adapter — "supabase" runs the real email-OTP flow. */
+  adapter: "demo" | "supabase";
+};
+
+const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["identifier", "password", "code"];
 
 function fieldId(field: keyof FieldErrors): string {
   return `sign-in-${field}`;
 }
 
 /**
- * Sign-in card. Submits through the typed identity service: the demo account
- * (+91 90000 00000, any password of 6+ characters) moves to verification;
- * anything else shows the rejection summary. On acceptance the page shows a
- * short next-step line and routes to /sign-in/verify. UI demo — this is not
- * real authentication and no data is protected.
+ * Sign-in card, adapter-aware (plan.md §10):
+ * - Supabase mode: real email-OTP flow — send a code to a verified email,
+ *   enter the six-digit code, and land in the portal. The response is
+ *   deliberately generic for known/unknown addresses (plan.md §4).
+ * - Demo mode: the honest prototype flow (+91 90000 00000, any password of
+ *   6+ characters) which moves to the demo verification screen.
  */
-export default function SignInForm() {
+export default function SignInForm({ adapter }: SignInFormProps) {
   const router = useRouter();
+  const supabaseMode = adapter === "supabase";
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [rejected, setRejected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   const [nextStep, setNextStep] = useState(false);
   const statusRef = useRef<HTMLElement>(null);
 
@@ -46,15 +57,51 @@ export default function SignInForm() {
 
   /* Move focus to the acceptance line so it is announced and visible. */
   useEffect(() => {
-    if (nextStep) statusRef.current?.focus();
-  }, [nextStep]);
+    if (nextStep || codeSent) statusRef.current?.focus();
+  }, [nextStep, codeSent]);
 
   function validate(): FieldErrors {
     const next: FieldErrors = {};
-    if (identifier.trim() === "") next.identifier = "Enter the phone number or email on the account.";
-    if (password === "") next.password = "Enter your password.";
-    else if (password.length < 6) next.password = "Password must be at least 6 characters.";
+    if (identifier.trim() === "") {
+      next.identifier = supabaseMode ? "Enter the email on the account." : "Enter the phone number or email on the account.";
+    } else if (supabaseMode && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())) {
+      next.identifier = "Enter a valid email address.";
+    }
+    if (!supabaseMode && password === "") next.password = "Enter your password.";
+    else if (!supabaseMode && password.length < 6) next.password = "Password must be at least 6 characters.";
+    if (codeSent && code.trim().length !== 6) next.code = "Enter the 6-digit code from the email.";
     return next;
+  }
+
+  async function sendCode(): Promise<void> {
+    const supabase = createSupabaseBrowserClient();
+    const email = identifier.trim();
+    const redirectTo = `${window.location.origin}/auth/callback?next=/portal`;
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: redirectTo },
+    });
+    if (error !== null) {
+      /* Generic response for known/unknown accounts (plan.md §4). */
+      setRejected("The code could not be sent right now — check the address and try again.");
+      return;
+    }
+    setCodeSent(true);
+    setRejected(null);
+  }
+
+  async function verifyCode(): Promise<void> {
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.auth.verifyOtp({
+      email: identifier.trim(),
+      token: code.trim(),
+      type: "email",
+    });
+    if (error !== null) {
+      setRejected("That code is not right — check it and try again.");
+      return;
+    }
+    router.push("/portal");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -69,6 +116,14 @@ export default function SignInForm() {
     }
     setSubmitting(true);
     try {
+      if (supabaseMode) {
+        if (codeSent) {
+          await verifyCode();
+        } else {
+          await sendCode();
+        }
+        return;
+      }
       const result = await identityService.signIn(identifier.trim(), password);
       if (!result.ok) {
         setRejected(result.reason);
@@ -84,11 +139,20 @@ export default function SignInForm() {
     <div>
       <p className="sr-only" role="status" aria-live="polite">
         {rejected !== null
-          ? "Sign-in was not accepted. Check the phone number and password."
-          : "Sign-in form — demo account only."}
+          ? "Sign-in was not accepted. Check the details and try again."
+          : supabaseMode
+            ? "Sign-in form — a code is sent to your email."
+            : "Sign-in form — demo account only."}
       </p>
 
-      {nextStep ? (
+      {codeSent ? (
+        <section ref={statusRef} tabIndex={-1} className={styles.success} role="status" aria-live="polite">
+          <p className="section-label">Code sent</p>
+          <p className={styles.successLine}>
+            We&apos;ve emailed a 6-digit code to <strong>{identifier.trim()}</strong>. Enter it below to continue.
+          </p>
+        </section>
+      ) : nextStep ? (
         <section
           ref={statusRef}
           tabIndex={-1}
@@ -105,29 +169,32 @@ export default function SignInForm() {
         <form className={styles.form} onSubmit={handleSubmit} noValidate>
           {rejected !== null && (
             <div className={styles.summary} role="alert">
-              <p className="field-error">
-                {rejected} Demo account: {DEMO_PHONE}, any password.
-              </p>
-              <p className={styles.demoLine}>
-                <span className="demo-badge">Demo</span>
-                <span>The demo accepts only that account — real accounts arrive with the backend.</span>
-              </p>
+              <p className="field-error">{rejected}</p>
+              {!supabaseMode && (
+                <p className={styles.demoLine}>
+                  <span className="demo-badge">Demo</span>
+                  <span>
+                    Demo account: {DEMO_PHONE}, any password of 6+ characters — real accounts arrive with the
+                    backend.
+                  </span>
+                </p>
+              )}
             </div>
           )}
 
           <div className={`field ${errors.identifier ? "field--invalid" : ""}`}>
             <label htmlFor={fieldId("identifier")}>
-              Phone or email <span aria-hidden="true">*</span>
+              {supabaseMode ? "Email" : "Phone or email"} <span aria-hidden="true">*</span>
             </label>
             <input
               id={fieldId("identifier")}
               className="input"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
+              type={supabaseMode ? "email" : "tel"}
+              inputMode={supabaseMode ? "email" : "tel"}
+              autoComplete={supabaseMode ? "email" : "tel"}
               value={identifier}
               onChange={(event) => setIdentifier(event.target.value)}
-              placeholder="+91 …"
+              placeholder={supabaseMode ? "you@example.com" : "+91 …"}
               aria-invalid={errors.identifier !== undefined}
               aria-describedby={errors.identifier ? `${fieldId("identifier")}-error` : undefined}
             />
@@ -138,32 +205,73 @@ export default function SignInForm() {
             )}
           </div>
 
-          <div className={`field ${errors.password ? "field--invalid" : ""}`}>
-            <label htmlFor={fieldId("password")}>
-              Password <span aria-hidden="true">*</span>
-            </label>
-            <input
-              id={fieldId("password")}
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              aria-invalid={errors.password !== undefined}
-              aria-describedby={errors.password ? `${fieldId("password")}-error` : undefined}
-            />
-            {errors.password && (
-              <p id={`${fieldId("password")}-error`} className="field-error">
-                {errors.password}
+          {!supabaseMode && (
+            <div className={`field ${errors.password ? "field--invalid" : ""}`}>
+              <label htmlFor={fieldId("password")}>
+                Password <span aria-hidden="true">*</span>
+              </label>
+              <input
+                id={fieldId("password")}
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                aria-invalid={errors.password !== undefined}
+                aria-describedby={errors.password ? `${fieldId("password")}-error` : undefined}
+              />
+              {errors.password && (
+                <p id={`${fieldId("password")}-error`} className="field-error">
+                  {errors.password}
+                </p>
+              )}
+            </div>
+          )}
+
+          {codeSent && (
+            <div className={`field ${errors.code ? "field--invalid" : ""}`}>
+              <label htmlFor={fieldId("code")}>
+                Verification code <span aria-hidden="true">*</span>
+              </label>
+              <input
+                id={fieldId("code")}
+                className="input num"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={code}
+                onChange={(event) => {
+                  setCode(event.target.value.replace(/\D/g, "").slice(0, 6));
+                  setErrors((current) => (current.code ? { ...current, code: undefined } : current));
+                }}
+                aria-invalid={errors.code !== undefined}
+                aria-describedby={errors.code ? `${fieldId("code")}-error` : undefined}
+              />
+              {errors.code && (
+                <p id={`${fieldId("code")}-error`} className="field-error">
+                  {errors.code}
+                </p>
+              )}
+              <p className={styles.actionNote}>
+                Demo environment: check the email inbox the code was sent to.
               </p>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className={styles.actions}>
             <Button variant="primary" type="submit" disabled={submitting}>
-              {submitting ? "Signing in…" : "Sign in"}
+              {submitting
+                ? "Sending…"
+                : codeSent
+                  ? "Verify code"
+                  : supabaseMode
+                    ? "Send code"
+                    : "Sign in"}
             </Button>
-            <p className={styles.actionNote}>Demo account: {DEMO_PHONE} · any password of 6+ characters.</p>
+            {!supabaseMode && (
+              <p className={styles.actionNote}>Demo account: {DEMO_PHONE} · any password of 6+ characters.</p>
+            )}
           </div>
         </form>
       )}
@@ -176,7 +284,7 @@ export default function SignInForm() {
           Demo staff access →
         </a>
       </div>
-      <p className={styles.staffNote}>{STAFF_DEMO_NOTE}</p>
+      {!supabaseMode && <p className={styles.staffNote}>{STAFF_DEMO_NOTE}</p>}
     </div>
   );
 }
