@@ -1,0 +1,102 @@
+.page {
+  max-width: 860px;
+}
+
+.demoLine {
+  margin: var(--space-2) 0 var(--space-6);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.rows {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  padding: var(--space-4);
+}
+
+.rowMain {
+  min-width: min(100%, 320px);
+  flex: 1 1 320px;
+}
+
+.rowTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0 0 var(--space-2);
+  font-size: 16px;
+}
+
+.rowTitle strong {
+  color: var(--ink);
+}
+
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.confirmCopy {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.rejectBox {
+  flex: 1 1 100%;
+  border-top: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  padding-top: var(--space-3);
+}
+
+.rejectActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.notice {
+  min-height: 1.4em;
+  margin: var(--space-4) 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.subHeading {
+  margin: var(--space-6) 0 var(--space-3);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.demoNote {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-top: var(--space-6);
+  font-size: 13px;
+  color: var(--ink-soft);
+}

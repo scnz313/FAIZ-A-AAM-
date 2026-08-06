@@ -1,0 +1,134 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 40px;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 4vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.intro {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  max-width: 62ch;
+}
+
+.sectionTitle {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.rows {
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+}
+
+.sessionRow {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  padding: 14px 2px;
+}
+
+.sessionRow strong {
+  display: block;
+  font-size: 14px;
+}
+
+.sessionRow small {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.sessionRowMuted {
+  opacity: 0.65;
+}
+
+.lastActive {
+  align-items: center;
+  color: var(--ink-soft);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 10px;
+  margin: 0;
+}
+
+.sessionAction {
+  justify-self: end;
+}
+
+.statusLine {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+  padding-top: 14px;
+}
+
+.statusText {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.passwordFields {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+@media (max-width: 860px) {
+  .passwordFields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.passwordNote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 12px 0 0;
+  max-width: 60ch;
+}
+
+.demoNote {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 10px;
+  line-height: 1.5;
+  margin: 0;
+  padding-top: 16px;
+}
+
+@media (max-width: 700px) {
+  .sessionRow {
+    grid-template-columns: 1fr;
+  }
+
+  .sessionAction {
+    justify-self: start;
+  }
+}

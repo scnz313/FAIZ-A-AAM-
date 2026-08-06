@@ -1,0 +1,36 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 40px;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 4vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.intro {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  max-width: 62ch;
+}
+
+.demoNote {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 10px;
+  line-height: 1.5;
+  margin: 0;
+  padding-top: 16px;
+}

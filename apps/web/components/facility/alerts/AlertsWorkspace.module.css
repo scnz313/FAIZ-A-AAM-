@@ -1,0 +1,158 @@
+.summary {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  margin: 26px 0 0;
+}
+
+.summaryCell {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  padding: 18px 30px 18px 0;
+}
+
+.summaryCell + .summaryCell {
+  border-left: 1px solid var(--line);
+  padding-left: 30px;
+}
+
+.summaryWord {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 5px;
+  text-transform: uppercase;
+}
+
+.summaryCount {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1;
+  margin: 0;
+}
+
+.filterRow {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 36px;
+  justify-content: space-between;
+  margin: 26px 0 8px;
+}
+
+.alertsTable {
+  min-width: 960px;
+}
+
+.cellDot {
+  padding-top: 3px;
+}
+
+.cellTitle strong {
+  display: block;
+  font-size: 12px;
+}
+
+.cellTitle small {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 10px;
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.cellContext strong {
+  display: block;
+  font-size: 10px;
+}
+
+.cellContext small {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 9px;
+  margin-top: 3px;
+}
+
+.cellRaised {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.cellBadges {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.cellActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.alertTrail {
+  color: var(--ink-soft);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.resolveForm {
+  border-top: 1px dashed #d9d2c6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 14px 0 4px;
+}
+
+.resolveForm label {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.resolveInput {
+  max-width: 420px;
+}
+
+.resolveActions {
+  display: flex;
+  gap: 10px;
+}
+
+.actionError {
+  background: #f3dfce;
+  color: #7c3f14;
+  font-size: 11px;
+  margin: 16px 0 0;
+  padding: 10px 14px;
+}
+
+.demoNote {
+  margin: 18px 0 0;
+}
+
+.liveRegion {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (max-width: 700px) {
+  .summaryCell {
+    padding: 14px 18px 14px 0;
+  }
+
+  .summaryCell + .summaryCell {
+    padding-left: 18px;
+  }
+}

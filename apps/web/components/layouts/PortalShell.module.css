@@ -1,0 +1,96 @@
+.urdu {
+  font-size: 12px;
+  line-height: 1.9;
+  padding-top: 0.1em;
+  color: var(--ink-soft);
+}
+
+.folio {
+  margin-top: var(--space-2);
+}
+
+.childSwitcher {
+  margin: var(--space-5) 0 var(--space-1);
+}
+
+.childSwitcher label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: var(--space-2);
+}
+
+.childSwitcher select {
+  width: 100%;
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .folioDate {
+    display: none;
+  }
+
+  /* Keep ≥16px so iOS Safari does not auto-zoom when the child switcher
+     receives focus. */
+  .childSwitcher select {
+    font-size: 16px;
+  }
+}
+
+/* Service-driven active-child context strip under the folio rule. */
+.contextStrip {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  padding-top: var(--space-2);
+}
+
+.contextLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4em;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.contextLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint, var(--ink-soft));
+}
+
+.contextLine strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.contextRef {
+  font-variant-numeric: tabular-nums;
+}
+
+.contextPending {
+  color: var(--saffron, #b96832);
+}
+
+.contextError {
+  color: var(--danger, #a03b2c);
+}
+
+.switcherNote {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.switcherError {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger, #a03b2c);
+}

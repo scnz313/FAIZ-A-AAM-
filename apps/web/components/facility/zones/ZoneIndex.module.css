@@ -1,0 +1,52 @@
+.table {
+  min-width: 880px;
+}
+
+/* Stretched row link: the <a> in the zone cell covers the whole row. */
+.rowLink {
+  position: relative;
+}
+
+.rowLink a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+
+.rowLink a::after {
+  content: "";
+  inset: 0;
+  position: absolute;
+}
+
+.rowLink:hover {
+  background: var(--cream);
+}
+
+.rowLink:hover a,
+.rowLink a:focus-visible {
+  text-decoration-color: var(--saffron);
+}
+
+.rowLink a:focus-visible {
+  outline: none;
+}
+
+.rowLink a:focus-visible::after {
+  outline: 2px solid var(--saffron);
+  outline-offset: -2px;
+}
+
+.dash {
+  color: var(--muted);
+}
+
+.empty {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}

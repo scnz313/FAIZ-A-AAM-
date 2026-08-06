@@ -1,0 +1,116 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+.legend {
+  color: var(--ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.panelHead {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panelTitle {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.liveNote {
+  color: var(--saffron-deep);
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
+.loading {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  margin: 0;
+}
+
+.inviteRow {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 16px;
+}
+
+.inviteForm {
+  border-top: 1px dashed var(--line-strong);
+  display: grid;
+  gap: 14px;
+  padding: 18px 0 20px;
+}
+
+.inviteFields {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr);
+}
+
+.inviteActions {
+  display: flex;
+  gap: 10px;
+}
+
+.table {
+  min-width: 900px;
+}
+
+.name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.role {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.email {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.lastActive {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.twoFa {
+  font-size: 13px;
+}
+
+.note {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  padding-top: 18px;
+}
+
+@media (max-width: 800px) {
+  .inviteFields {
+    grid-template-columns: 1fr;
+  }
+}

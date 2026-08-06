@@ -1,0 +1,166 @@
+.root {
+  /* Anchors the dropdown; above page content, below the shell drawer (80–90). */
+  position: relative;
+  z-index: 60;
+}
+
+.button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--chalk);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--ink);
+}
+
+.icon {
+  display: block;
+}
+
+.chip {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 1px;
+  background: var(--saffron);
+  color: var(--chalk);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Dropdown — flat ruled panel, no shadow (design rule). */
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  min-width: 300px;
+  max-width: min(90vw, 360px);
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  text-align: left;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.markAll {
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.markAll:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.markAll:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.item:first-child {
+  border-top: 0;
+}
+
+.marker {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  background: transparent;
+}
+
+.markerUnread {
+  background: var(--saffron);
+}
+
+.itemBody {
+  min-width: 0;
+}
+
+.itemMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 3px;
+}
+
+.kind {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saffron-deep);
+}
+
+.time {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.empty {
+  margin: 0;
+  padding: 20px 16px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}

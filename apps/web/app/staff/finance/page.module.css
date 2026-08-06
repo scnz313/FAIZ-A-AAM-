@@ -1,0 +1,90 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+.sectionHead {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sectionHead h2 {
+  margin: 0;
+}
+
+.metricValue {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.metricSub {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+.queue {
+  border-top: 1px solid var(--line);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.queueRow {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px 2px;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.queueRow:hover {
+  color: var(--saffron-deep);
+}
+
+.queueCopy {
+  font-size: 14px;
+  margin: 0;
+}
+
+.ruleNote {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.ruleNote p {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.ruleNote p + p {
+  margin-top: 8px;
+}
+
+@media (max-width: 700px) {
+  .queueRow {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}

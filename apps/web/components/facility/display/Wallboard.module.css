@@ -1,0 +1,318 @@
+.wallboard {
+  background: var(--ink);
+  color: var(--cream);
+  min-height: 84vh;
+  overflow: hidden;
+  padding: clamp(30px, 5vw, 64px) clamp(24px, 4vw, 56px);
+  position: relative;
+}
+
+.watermark {
+  opacity: 0.04;
+  pointer-events: none;
+  position: absolute;
+  right: -70px;
+  top: -70px;
+}
+
+.head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: space-between;
+  padding-bottom: 26px;
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+}
+
+.brandCopy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.brandName {
+  color: var(--chalk);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.brandSub {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  margin: 6px 0 0;
+  text-transform: uppercase;
+}
+
+.brandUrdu {
+  color: var(--chalk);
+  font-size: 20px;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.demoNote {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  margin: 0;
+  padding: 7px 10px;
+  text-transform: uppercase;
+}
+
+.hero {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  display: grid;
+  gap: clamp(20px, 3vw, 44px);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+  margin-top: 22px;
+  padding: clamp(26px, 4vw, 44px) 0;
+}
+
+.heroLabel {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.heroTempValue {
+  font-family: var(--serif);
+  font-size: clamp(64px, 9vw, 120px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.heroAqiValue {
+  font-family: var(--serif);
+  font-size: clamp(44px, 6vw, 78px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin: 0;
+}
+
+.heroAqiBand {
+  color: var(--saffron-bright);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  margin: 8px 0 0;
+  text-transform: uppercase;
+}
+
+.clockTime {
+  font-family: var(--serif);
+  font-size: clamp(34px, 4.5vw, 54px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin: 0;
+}
+
+.clockDate {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  margin: 10px 0 0;
+  text-transform: uppercase;
+}
+
+.tiles {
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tile {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 24px 22px 20px;
+}
+
+.tileName {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.tileStatus {
+  align-items: center;
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  font-size: 10px;
+  gap: 8px;
+  margin: 8px 0 18px;
+}
+
+.tileValues {
+  margin: 0;
+}
+
+.tileValues > div {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 0 8px;
+}
+
+.tileValues dt {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tileValues dd {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  margin: 0;
+}
+
+.squareDot {
+  display: inline-block;
+  flex: none;
+  height: 9px;
+  width: 9px;
+}
+
+.squareDot[data-tone="good"] {
+  background: #93b898;
+}
+
+.squareDot[data-tone="watch"] {
+  background: var(--saffron-bright);
+}
+
+.squareDot[data-tone="alert"] {
+  background: #c25b41;
+}
+
+.squareDot[data-tone="neutral"] {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.alertLine {
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  font-size: 13px;
+  margin: 0;
+  padding: 20px 0 4px;
+}
+
+.alertLine strong {
+  color: var(--saffron-bright);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.alertZone {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.updated {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  margin: 18px 0 0;
+  text-transform: uppercase;
+}
+
+.foot {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 26px;
+  justify-content: space-between;
+  margin-top: 30px;
+  padding-top: 18px;
+}
+
+/* As a flex item of .foot the folio shrinks to its label, collapsing the
+   flanking rules; give it the full row so the hairlines span edge to edge. */
+.foot :global(.folio) {
+  width: 100%;
+}
+
+.footNote {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.loading {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+.loadingNote {
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--serif);
+  font-size: 22px;
+  margin: 0;
+}
+
+.stateTitle {
+  color: var(--cream);
+  font-family: var(--serif);
+  font-size: 22px;
+  margin: 0;
+}
+
+.stateNote {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0 0 16px;
+  max-width: 56ch;
+}
+
+@media (max-width: 700px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .tile {
+    border-right: 0;
+  }
+
+  .wallboard {
+    min-height: 0;
+  }
+}

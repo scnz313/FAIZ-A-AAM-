@@ -1,0 +1,249 @@
+/* Application status view — editorial status report layout. */
+
+.shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(44px, 6vw, 76px) clamp(24px, 6vw, 96px) clamp(72px, 9vw, 120px);
+}
+
+/* Loading / error states ------------------------------------------------ */
+
+.loadingLine {
+  margin: 0;
+  padding: 40px 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.errorLine {
+  margin: 0 0 18px;
+  color: var(--brick);
+  font-size: 14px;
+}
+
+.head {
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.headTitle {
+  margin: 10px 0 0;
+  font-family: var(--serif);
+  font-size: clamp(34px, 4.4vw, 52px);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+}
+
+.headLine {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 64ch;
+}
+
+.badgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: clamp(36px, 5vw, 64px);
+  margin-top: clamp(32px, 4vw, 48px);
+}
+
+.sectionTitle {
+  margin: 0 0 22px;
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 500;
+}
+
+/* Side details ------------------------------------------------------------ */
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.panelBlock {
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  background: var(--chalk);
+}
+
+.detailList {
+  margin: 14px 0 0;
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.detailRow:last-child {
+  border-bottom: 0;
+}
+
+.detailRow dt {
+  padding-top: 2px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detailRow dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.fee {
+  font-weight: 700;
+}
+
+/* Offer panel -------------------------------------------------------------- */
+
+.offerPanel {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--saffron);
+  background: var(--chalk);
+}
+
+.offerTitle {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.offerActions {
+  margin-top: 20px;
+}
+
+.sideNote {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.nextList {
+  margin: 12px 0 0;
+  padding-left: 16px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.backLink {
+  margin: 0;
+}
+
+/* Requested-change panel: prominent full-width callout below the header. */
+
+.changePanel {
+  position: relative;
+  margin-top: 26px;
+  padding: 20px 22px;
+  border: 1px solid var(--brick);
+  border-top: 3px solid var(--brick);
+  background: rgba(162, 59, 46, 0.06);
+}
+
+.changePanel::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 22px;
+  width: 8px;
+  height: 8px;
+  background: var(--brick);
+}
+
+.changeTitle {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.changeNote {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 64ch;
+}
+
+.changeActions {
+  margin-top: 16px;
+}
+
+/* Declined state: what happens next -------------------------------------- */
+
+.declinedPanel {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--brick);
+  background: var(--chalk);
+}
+
+.declinedTitle {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.declinedNote {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.enrolledPanel {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--willow);
+  background: var(--chalk);
+}
+
+.enrolledTitle {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+/* Withdrawal (policy pending) ------------------------------------------- */
+
+.withdrawBlock {
+  padding: 20px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

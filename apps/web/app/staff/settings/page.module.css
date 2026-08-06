@@ -1,0 +1,151 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+.sections {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.sectionHead {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.sectionTitle {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0 0 18px;
+}
+
+.loading {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  margin: 0;
+}
+
+.sectionBody {
+  display: grid;
+  gap: 14px;
+  max-width: 680px;
+}
+
+.savedBy {
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  margin: 20px 0 0;
+  padding-top: 12px;
+  text-transform: uppercase;
+}
+
+.controlWidth {
+  max-width: 380px;
+}
+
+.controlRow {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.controlRow .field {
+  flex: 1;
+}
+
+.datePair {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.toggleRow {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+}
+
+.toggle {
+  accent-color: var(--saffron);
+  flex: none;
+  height: 16px;
+  margin-top: 3px;
+  width: 16px;
+}
+
+.toggleCopy label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.toggleHelp {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 2px 0 0;
+  max-width: 52ch;
+}
+
+.saveRow {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.savedNote {
+  color: var(--saffron-deep);
+  font-size: 13px;
+  margin: 0;
+}
+
+.dangerZone {
+  border-color: var(--brick);
+}
+
+.dangerCopy {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 56ch;
+}
+
+.resetNote {
+  color: var(--brick);
+  font-size: 13px;
+  margin: 0;
+}
+
+.note {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  padding-top: 18px;
+}
+
+@media (max-width: 700px) {
+  .datePair {
+    grid-template-columns: 1fr;
+  }
+
+  .saveRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

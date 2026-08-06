@@ -1,0 +1,27 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 40px;
+}
+
+.head {
+  margin-bottom: 0;
+}
+
+.backLink {
+  justify-self: start;
+  margin: 0 0 18px;
+}
+
+.meta {
+  margin-top: 8px;
+}
+
+.notFoundIntro {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 56ch;
+}

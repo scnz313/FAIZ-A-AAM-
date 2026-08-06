@@ -1,0 +1,89 @@
+/* Vacancy detail — ruled qualification and document lists, the deadline
+   row with its status badge, and the apply CTA. */
+
+.page {
+  background: var(--paper);
+}
+
+.section {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(48px, 8vw, 88px) clamp(24px, 6vw, 96px) 0;
+}
+
+.sectionEnd {
+  padding-bottom: clamp(56px, 8vw, 96px);
+}
+
+.head {
+  max-width: 720px;
+  margin-bottom: clamp(32px, 4vw, 48px);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(30px, 3.2vw, 42px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Ruled lists ---------------------------------------------------------- */
+
+.ruledList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 720px;
+}
+
+.ruledItem {
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 16px 0;
+}
+
+/* Deadline -------------------------------------------------------------- */
+
+.deadlineRow {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  justify-content: space-between;
+  padding: 22px 0;
+}
+
+.deadlineValue {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 19px;
+  margin: 0;
+}
+
+/* CTA ------------------------------------------------------------------- */
+
+.cta {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 28px 0;
+}
+
+.ctaNote {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 52ch;
+}
+
+.conceptNote {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 clamp(24px, 6vw, 96px) clamp(56px, 8vw, 96px);
+}

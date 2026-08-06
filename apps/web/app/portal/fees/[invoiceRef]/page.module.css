@@ -1,0 +1,333 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 40px;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 4vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.backLink {
+  display: inline-block;
+  margin-bottom: 26px;
+}
+
+.pageHeader {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.metaLine {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 13px;
+  margin: 12px 0 0;
+}
+
+.demoLine {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  margin: 14px 0 0;
+}
+
+/* Items table --------------------------------------------------------------- */
+
+.amountHead,
+.amountCell {
+  text-align: right;
+}
+
+.concessionRow td {
+  color: var(--muted);
+}
+
+.totals {
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 22px 0 0;
+}
+
+.totals > div {
+  padding: 16px 20px;
+}
+
+.totals > div:first-child {
+  padding-left: 0;
+}
+
+.totals > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.totals dt {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.totals dd {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.totals .balanceCell dd {
+  color: var(--saffron-deep);
+}
+
+/* Payments ------------------------------------------------------------------- */
+
+.paymentList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.paymentRow {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 110px minmax(0, 1fr) 100px auto;
+  padding: 15px 0;
+}
+
+.paymentRef {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.paymentDesc strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.paymentDesc small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.paymentAmount {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Payment attempts ------------------------------------------------------------ */
+
+.attemptRow {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  padding: 15px 0;
+}
+
+.attemptDesc strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.attemptDesc small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.failureReason {
+  color: var(--saffron-deep);
+}
+
+.emptyState {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  margin: 0;
+}
+
+.policyNote {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 14px 0 0;
+}
+
+.receiptRecovery {
+  align-items: center;
+  color: var(--saffron-deep);
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 6px;
+}
+
+/* Access scope --------------------------------------------------------------- */
+
+.checkingNote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 26px;
+}
+
+.contextPanel {
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  margin: 0 0 26px;
+  padding: 20px 24px;
+}
+
+.contextPanelTitle {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.contextPanelNote {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 60ch;
+}
+
+.contextPanelActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+/* Paid state ----------------------------------------------------------------- */
+
+.paidBox {
+  align-items: center;
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.paidText {
+  font-size: 14px;
+  margin: 0;
+}
+
+/* Editorial not-found --------------------------------------------------------- */
+
+.notFound {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+  padding: 24px 0 40px;
+}
+
+.notFoundText {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 8px;
+  max-width: 48ch;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  :global(.facility-shell):has(.page) :global(.side-nav),
+  :global(.facility-shell):has(.page) :global(.nav-scrim),
+  :global(.facility-shell):has(.page) :global(.portal-topbar),
+  :global(.facility-shell):has(.page) :global(.demo-strip),
+  :global(.facility-shell):has(.page) :global(.folio) {
+    display: none !important;
+  }
+
+  :global(.facility-shell):has(.page) {
+    display: block;
+  }
+
+  :global(.facility-shell):has(.page) :global(.portal-main) {
+    max-width: none;
+    padding: 0;
+  }
+
+  .page {
+    display: block;
+  }
+
+  .backLink,
+  .headerActions,
+  .paymentsSection,
+  .attemptsSection,
+  .paymentAction,
+  .contextPanel,
+  .checkingNote {
+    display: none !important;
+  }
+
+  .invoiceSection {
+    break-inside: avoid;
+  }
+
+  .totals {
+    break-inside: avoid;
+  }
+}
+
+@media (max-width: 700px) {
+  .paymentRow {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .paymentRef {
+    grid-column: 1 / -1;
+  }
+
+  .attemptRow {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .attemptRow .paymentRef {
+    grid-column: 1 / -1;
+  }
+}

@@ -1,0 +1,86 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 40px;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 4vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.intro {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  max-width: 62ch;
+}
+
+/* Anchor tabs mirror the global .tabs button styling. */
+.tabLink {
+  border-bottom: 2px solid transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.tabLink:hover {
+  color: var(--ink);
+}
+
+.tabLinkActive {
+  border-bottom-color: var(--saffron);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.demoNote {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 10px;
+  line-height: 1.5;
+  margin: 0;
+  padding-top: 16px;
+}
+
+/* Publication rows linking to the published report pages. */
+.publicationList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.publicationRow {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  justify-content: space-between;
+  padding: 14px 2px;
+}
+
+.publicationRow:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.publicationMeta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 8px;
+}

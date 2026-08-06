@@ -1,0 +1,95 @@
+.story {
+  display: grid;
+  grid-template-columns: minmax(280px, 5fr) 7fr;
+  gap: clamp(40px, 6vw, 96px);
+  padding: clamp(72px, 9vw, 120px) clamp(48px, 8vw, 96px);
+  background: var(--paper);
+  scroll-margin-top: 24px;
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(32px, 3.6vw, 48px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+/* Text and photograph sit side by side inside the wide column. */
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 72px);
+  align-items: start;
+}
+
+.text {
+  min-width: 0;
+}
+
+.body p {
+  margin: 0 0 20px;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 19px;
+  line-height: 1.6;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+}
+
+.body .note {
+  margin-top: 30px;
+  font-family: var(--sans, system-ui, sans-serif);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.72));
+}
+
+/* Photograph in a hairline ink frame on the chalk plate. */
+.photo {
+  margin: 0;
+  padding: clamp(12px, 1.8vw, 22px);
+  border: 1px solid var(--line);
+  background: var(--chalk);
+}
+
+.photoFrame {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: var(--paper-deep);
+  /* Mughal elliptical arch — echoes the arch crest. */
+  border-radius: 50% 50% 4px 4px / 17% 17% 4px 4px;
+}
+
+.image {
+  object-fit: cover;
+}
+
+.caption {
+  margin-top: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Closing rule between the story and the leadership note, spanning
+   both columns. */
+.ornament {
+  grid-column: 1 / -1;
+  margin-top: 48px;
+}
+
+@media (max-width: 1000px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .story {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}

@@ -1,0 +1,88 @@
+/* Sign-in card ------------------------------------------------------------ */
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.actionNote {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Rejection summary — the honest demo-account hint. */
+.summary {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--brick);
+  border-radius: var(--radius);
+  background: rgba(162, 59, 46, 0.06);
+}
+
+.summary .field-error {
+  line-height: 1.5;
+}
+
+.demoLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Acceptance line shown before routing to verification. */
+.success {
+  padding: 16px 18px;
+  border: 1px solid var(--willow);
+  border-radius: var(--radius);
+  background: rgba(83, 109, 87, 0.08);
+  outline: none;
+}
+
+.success:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.successLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+/* Quiet links under the card. */
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.staffNote {
+  margin: 10px 0 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1.55;
+}

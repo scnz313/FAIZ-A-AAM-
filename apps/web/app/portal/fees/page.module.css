@@ -1,0 +1,412 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 36px;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 4vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.intro {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 14px 0 0;
+  max-width: 62ch;
+}
+
+.demoLine {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  margin: 14px 0 0;
+}
+
+/* Fee layout — mirrors the portal mockup: ink summary beside the ledger. */
+
+.feeLayout {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(280px, 32%) minmax(0, 1fr);
+}
+
+.feeSummary {
+  align-self: start;
+  background: var(--ink);
+  color: white;
+  padding: 34px;
+}
+
+.balanceLine {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.bigAmount {
+  font-family: var(--serif);
+  font-size: clamp(40px, 4.5vw, 54px);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0;
+}
+
+/* Ink-ground badge: brighter saffron on translucent wash, per mockup. */
+.feeSummary :global(.status-badge--watch) {
+  border-color: rgba(209, 132, 77, 0.4);
+  color: var(--saffron-soft);
+}
+
+.feeSummary :global(.status-dot--watch) {
+  background: var(--saffron-soft);
+}
+
+.summaryMuted {
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 14px 0 0;
+}
+
+.amountRule {
+  background: rgba(255, 255, 255, 0.14);
+  height: 1px;
+  margin: 28px 0 10px;
+}
+
+.feeBreakdown {
+  margin: 0;
+}
+
+.feeBreakdown > div {
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  padding: 16px 0;
+}
+
+.feeBreakdown dt,
+.feeBreakdown dd {
+  margin: 0;
+}
+
+.feeBreakdown dd {
+  font-weight: 700;
+}
+
+.feeBreakdown .concession {
+  color: var(--willow-bright);
+}
+
+.paymentNote {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+  line-height: 1.6;
+  margin: 15px 0 0;
+  text-align: center;
+}
+
+.paymentNote span {
+  color: var(--willow-bright);
+  margin-right: 4px;
+}
+
+/* Ledger panel ------------------------------------------------------------ */
+
+.ledgerPanel {
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  min-width: 0;
+  padding: 31px 32px 22px;
+}
+
+.ledgerHeading {
+  align-items: flex-end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.ledgerHeading .section-label {
+  margin-bottom: 8px;
+}
+
+.ledgerTitle {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.ledgerTabs {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 24px;
+  margin-top: 26px;
+}
+
+.ledgerTabs a {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0 0 12px;
+}
+
+.ledgerTabs a:hover {
+  color: var(--ink);
+}
+
+.ledgerTabs a.active {
+  border-bottom: 2px solid var(--saffron);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ledgerTable {
+  min-width: 860px;
+}
+
+/* Row link in the first cell, matching staff queue rows. */
+.rowLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  color: var(--saffron-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rowLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.desc strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.desc small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.cell {
+  font-size: 13px;
+  text-align: right;
+}
+
+.balanceCell {
+  font-weight: 700;
+}
+
+.emptyState {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  padding: 20px 2px;
+}
+
+.ledgerFoot {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding-top: 16px;
+}
+
+.ledgerFoot p {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+}
+
+.statement {
+  display: inline-flex;
+  flex: none;
+}
+
+.statementPreview {
+  border-top: 1px solid var(--line-strong);
+  margin-top: 36px;
+  outline: none;
+  padding-top: 28px;
+}
+
+.statementHeader {
+  align-items: flex-end;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+}
+
+.statementTitle {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.statementActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.statementNote,
+.statementFooter {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 14px 0 0;
+  max-width: 72ch;
+}
+
+.statementMeta {
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 24px 0;
+}
+
+.statementMeta > div {
+  padding: 14px 18px 14px 0;
+}
+
+.statementMeta > div + div {
+  border-left: 1px solid var(--line);
+  padding-left: 18px;
+}
+
+.statementMeta dt {
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin: 0 0 5px;
+  text-transform: uppercase;
+}
+
+.statementMeta dd {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.statementTable {
+  min-width: 760px;
+}
+
+.statementTable tfoot {
+  border-top: 2px solid var(--line-strong);
+}
+
+.statementTable tfoot th,
+.statementTable tfoot td {
+  font-weight: 700;
+}
+
+.statementFooter {
+  font-size: 11px;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  :global(.facility-shell):has(.statementPreview) :global(.side-nav),
+  :global(.facility-shell):has(.statementPreview) :global(.nav-scrim),
+  :global(.facility-shell):has(.statementPreview) :global(.portal-topbar),
+  :global(.facility-shell):has(.statementPreview) :global(.demo-strip),
+  :global(.facility-shell):has(.statementPreview) :global(.folio) {
+    display: none !important;
+  }
+
+  :global(.facility-shell):has(.statementPreview) {
+    display: block;
+  }
+
+  :global(.facility-shell):has(.statementPreview) :global(.portal-main) {
+    max-width: none;
+    padding: 0;
+  }
+
+  .feeLayout {
+    display: none !important;
+  }
+
+  .statementPreview {
+    border: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .statementActions {
+    display: none !important;
+  }
+
+  .statementTable {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .feeLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .ledgerTable .hideSmall {
+    display: none;
+  }
+
+  .statementHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .statementMeta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statementMeta > div + div {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .statementMeta > div:nth-child(even) {
+    border-left: 1px solid var(--line);
+    padding-left: 18px;
+  }
+
+  .ledgerFoot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

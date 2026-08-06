@@ -1,0 +1,176 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin-bottom: 24px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 210px;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tableMeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.countLine {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+}
+
+.rowButton {
+  background: none;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+
+.rowButton:hover {
+  text-decoration-color: var(--saffron);
+}
+
+.rowButton:focus-visible {
+  box-shadow: 0 0 0 2px rgba(185, 104, 50, 0.35);
+}
+
+.rowSelectable {
+  cursor: pointer;
+}
+
+.rowSelectable:hover td {
+  background: var(--cream);
+}
+
+.rowSelected td {
+  background: #f6f0e3;
+}
+
+.rowSelected .rowButton {
+  text-decoration-color: var(--saffron);
+}
+
+.batteryDot {
+  background: var(--saffron);
+  display: inline-block;
+  height: 7px;
+  margin-right: 7px;
+  vertical-align: 1px;
+  width: 7px;
+}
+
+.detailHead {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.detailTitle {
+  font-family: var(--serif);
+  font-size: 25px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.detailRef {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.detailGrid {
+  display: grid;
+  gap: 0 26px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 0;
+}
+
+.detailCell {
+  border-top: 1px solid #e8e3da;
+  padding: 11px 0;
+}
+
+.detailCell dt {
+  color: var(--ink-soft);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 5px;
+  text-transform: uppercase;
+}
+
+.detailCell dd {
+  font-size: 12px;
+  margin: 0;
+}
+
+.currentLine {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.currentValue {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.currentBand {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+}
+
+.loadingNote {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+}
+
+.sparkWrap {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 18px;
+}
+
+.spark {
+  margin-top: 10px;
+  max-width: 640px;
+}
+
+@media (max-width: 700px) {
+  .field {
+    min-width: 100%;
+  }
+}

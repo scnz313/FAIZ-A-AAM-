@@ -1,0 +1,149 @@
+/* Careers index — open positions as a ruled tile-link index, muted
+   closed archive, ruled how-we-hire steps and the retention panel. */
+
+.page {
+  background: var(--paper);
+}
+
+/* Sections ------------------------------------------------------------ */
+
+.section {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(48px, 8vw, 88px) clamp(24px, 6vw, 96px) 0;
+}
+
+.head {
+  max-width: 720px;
+  margin-bottom: clamp(36px, 4vw, 56px);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(30px, 3.2vw, 42px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Open positions — stacked tile-link rows with collapsed hairlines ------ */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list > li + li {
+  margin-top: -1px;
+}
+
+.row {
+  border-radius: 0;
+}
+
+/* Closed positions — muted archive rows inside a panel ----------------- */
+
+.closedPanel {
+  padding: 8px 28px 26px;
+}
+
+.closedRow {
+  padding: 22px 0 4px;
+}
+
+.closedRow + .closedRow {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+}
+
+.closedHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.closedTitle {
+  color: var(--ink-soft);
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 19px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.closedMeta {
+  color: var(--ink-faint);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+.closedNote {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0 0;
+  max-width: 68ch;
+}
+
+/* How we hire — four ruled steps ---------------------------------------- */
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 52px 1fr;
+  padding: 24px 0;
+}
+
+.stepNum {
+  color: var(--saffron-deep);
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.stepTitle {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 19px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.stepLine {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 6px 0 0;
+  max-width: 64ch;
+}
+
+/* Retention note -------------------------------------------------------- */
+
+.retention {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 17px;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 60ch;
+}
+
+.retentionSub {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin: 10px 0 0;
+}
+
+.conceptNote {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 clamp(24px, 6vw, 96px) clamp(56px, 8vw, 96px);
+}

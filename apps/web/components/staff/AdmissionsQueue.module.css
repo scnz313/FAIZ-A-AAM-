@@ -1,0 +1,41 @@
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.tabCount {
+  margin-left: var(--space-1);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.queueTable {
+  min-width: 720px;
+}
+
+.rowLink {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  color: var(--saffron-deep);
+}
+
+.flag {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--saffron-deep);
+}
+
+.empty {
+  margin: var(--space-5) 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}

@@ -1,0 +1,45 @@
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35em;
+  margin: var(--space-2) 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint, var(--ink-soft));
+}
+
+.line strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ref {
+  font-variant-numeric: tabular-nums;
+}
+
+.pending {
+  color: var(--saffron, #b96832);
+}
+
+.error {
+  color: var(--danger, #a03b2c);
+}
+
+.retry {
+  margin-left: var(--space-2);
+}
+
+@media (max-width: 700px) {
+  .line {
+    font-size: 13px;
+  }
+}

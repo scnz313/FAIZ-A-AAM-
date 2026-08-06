@@ -1,0 +1,86 @@
+/* Recovery step -------------------------------------------------------------- */
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.actionNote {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.back {
+  margin: 22px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+/* Recovery-result panel ------------------------------------------------------ */
+
+.success {
+  padding: 18px 20px;
+  border: 1px solid var(--willow);
+  border-radius: var(--radius);
+  background: rgba(83, 109, 87, 0.08);
+  outline: none;
+}
+
+.success:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.successTitle {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.successLine {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.successLine strong {
+  font-size: 16px;
+}
+
+.demoCode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--saffron);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.demoCode strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.successNote {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}

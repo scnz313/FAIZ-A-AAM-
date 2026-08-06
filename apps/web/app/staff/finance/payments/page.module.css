@@ -1,0 +1,51 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+.sectionHead {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sectionHead h2 {
+  margin: 0;
+}
+
+.paymentsTable {
+  min-width: 940px;
+}
+
+.refCell {
+  white-space: nowrap;
+}
+
+.refCell :global(.demo-badge) {
+  margin-left: 8px;
+}
+
+.ruleNote {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.ruleNote p {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.ruleNote p + p {
+  margin-top: 8px;
+}

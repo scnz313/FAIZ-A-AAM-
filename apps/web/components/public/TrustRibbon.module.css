@@ -1,0 +1,19 @@
+.ribbon {
+  margin: 26px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.link {
+  color: rgba(255, 255, 255, 0.78);
+  text-decoration: underline;
+  text-decoration-color: var(--saffron);
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--saffron-bright, #d1844d);
+}

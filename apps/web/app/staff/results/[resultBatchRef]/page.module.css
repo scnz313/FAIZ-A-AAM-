@@ -1,0 +1,95 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+.loading {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+.backLink {
+  margin: 0 0 18px;
+}
+
+.meta {
+  margin-top: 8px;
+}
+
+.badgeRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* Ruled version-history list. */
+.versionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.versionRow {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 90px) minmax(0, 1fr);
+  padding: 14px 2px;
+}
+
+.versionRow:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.versionNum {
+  color: var(--saffron-deep);
+  font-family: var(--serif);
+  font-size: 18px;
+}
+
+.versionCopy {
+  display: grid;
+  gap: 3px;
+}
+
+.versionNote {
+  font-size: 14px;
+}
+
+.versionCopy small {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.noVersions {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.ruleNote {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.ruleNote p {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.ruleNote p + p {
+  margin-top: 8px;
+}

@@ -1,0 +1,28 @@
+{
+  "name": "fass-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Faiz Aam School Platform — modular monolith (Next.js web app + shared contracts). Public site, applicant journeys, family portal, staff workspaces, and the Supabase backend foundation (plan.md B0–B8).",
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/web",
+    "build": "npm run build -w apps/web",
+    "start": "npm run start -w apps/web",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "node scripts/critical-journeys.cjs",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase db test",
+    "db:types": "supabase gen types typescript --local > apps/web/lib/supabase/database.types.ts"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "devDependencies": {
+    "supabase": "^2.111.0"
+  }
+}

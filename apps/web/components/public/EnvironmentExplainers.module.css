@@ -1,0 +1,84 @@
+.section {
+  padding: clamp(72px, 9vw, 120px) clamp(48px, 8vw, 96px);
+  background: var(--paper);
+}
+
+.head {
+  max-width: 720px;
+  margin-bottom: clamp(40px, 5vw, 64px);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(28px, 3.4vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.rowHead {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) 1.15fr 1.15fr;
+  gap: 32px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) 1.15fr 1.15fr;
+  gap: 32px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Labelled group: spans the meaning / why columns, keeping the 3-column rhythm. */
+.row > div {
+  display: grid;
+  gap: 32px;
+  grid-column: 2 / -1;
+  grid-template-columns: 1.15fr 1.15fr;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.metric {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.meaning,
+.why {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+}
+
+@media (max-width: 700px) {
+  .rowHead {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 20px 0;
+  }
+
+  .row > div {
+    gap: 8px;
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+  }
+}

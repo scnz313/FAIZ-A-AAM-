@@ -1,0 +1,509 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+.backLink {
+  margin: 0 0 18px;
+}
+
+.meta {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}
+
+.badgeRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.reviewer {
+  color: var(--ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  margin: 10px 0 0;
+  text-transform: uppercase;
+}
+
+.grid {
+  align-items: start;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+}
+
+.column {
+  display: grid;
+  gap: 24px;
+}
+
+.panel {
+  padding: var(--space-5);
+}
+
+/* Definition rows: hairline-separated label/value pairs. */
+.detailList {
+  margin: 0;
+}
+
+.detailRow {
+  display: grid;
+  gap: 4px 16px;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  padding: 10px 0;
+}
+
+.detailRow + .detailRow {
+  border-top: 1px solid var(--line);
+}
+
+.detailRow dt {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.detailRow dd {
+  font-size: 14px;
+  margin: 0;
+  min-width: 0;
+}
+
+.documentRow dd {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.fileName {
+  color: var(--ink-soft);
+  font-family: var(--serif);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.documentButton {
+  min-height: 44px;
+}
+
+/* Ruled timeline: square markers on a hairline rail, operational tone. */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timelineItem {
+  border-left: 1px solid var(--line);
+  margin-left: 4px;
+  padding: 0 0 20px 20px;
+  position: relative;
+}
+
+.timelineItem:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+
+.marker {
+  background: var(--ink-faint);
+  height: 8px;
+  left: -4px;
+  position: absolute;
+  top: 3px;
+  width: 8px;
+}
+
+.itemDone .marker {
+  background: var(--willow);
+}
+
+.itemCurrent .marker {
+  background: var(--saffron);
+}
+
+.itemDone .timelineLabel {
+  color: var(--ink-soft);
+}
+
+.itemCurrent .timelineLabel {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.itemPending .timelineLabel {
+  color: var(--ink-faint);
+}
+
+.timelineLabel {
+  font-size: 14px;
+  margin: 0;
+}
+
+.timelineMeta {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin: 3px 0 0;
+}
+
+/* Scorecard rows: static criterion scores on hairlines. */
+.scorecardHead {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.scoreRow {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.scoreRow + .scoreRow {
+  border-top: 1px solid var(--line);
+}
+
+.scoreLabel {
+  font-size: 14px;
+}
+
+.scoreValue {
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 18px;
+}
+
+.panelNote {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+
+/* Decision actions and the recorded-decision live line. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.liveLine {
+  color: var(--saffron-deep);
+  font-size: 13px;
+  margin: 14px 0 0;
+  min-height: 1.4em;
+}
+
+.note {
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 14px 0 0;
+  padding-top: 12px;
+}
+
+.ruleNote {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.ruleNote p {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Refreshing/refresh-error lines under the header. */
+.refreshLine {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+
+.refreshErrorRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.refreshErrorRow p {
+  margin: 0;
+}
+
+/* Recorded decision notes under each timeline stage. */
+.timelineNote {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+/* Decision form, confirmation summary, and error/retry block. */
+.decisionBox {
+  margin-top: 14px;
+}
+
+.decisionForm {
+  display: grid;
+  gap: 12px;
+}
+
+.decisionTitle {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0 0 6px;
+}
+
+.decisionText {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.summaryList {
+  border-bottom: 1px solid var(--line);
+  margin: 0 0 14px;
+}
+
+.summaryRow {
+  display: grid;
+  gap: 4px 16px;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  padding: 8px 0;
+}
+
+.summaryRow + .summaryRow {
+  border-top: 1px solid var(--line);
+}
+
+.summaryRow dt {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.summaryRow dd {
+  font-size: 14px;
+  margin: 0;
+}
+
+.actionErrorBlock {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.actionErrorBlock p {
+  margin: 0;
+}
+
+.readOnlyNote {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 14px 0 0;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .detailRow {
+    gap: 2px;
+    grid-template-columns: 1fr;
+  }
+}
+
+.previewDialog {
+  background: var(--chalk);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  margin: auto;
+  max-height: calc(100vh - 32px);
+  max-width: min(640px, calc(100% - 32px));
+  padding: 0;
+  width: 640px;
+}
+
+.previewDialog::backdrop {
+  background: rgb(11 28 42 / 58%);
+}
+
+.previewContent {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: clamp(20px, 4vw, 32px);
+}
+
+.previewHeader {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding-bottom: 18px;
+}
+
+.previewTitle {
+  font-size: clamp(23px, 4vw, 30px);
+  margin: 0;
+}
+
+.previewClose,
+.previewActions .button {
+  min-height: 44px;
+}
+
+.previewMeta {
+  display: grid;
+  gap: 0 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 20px 0 0;
+}
+
+.previewMeta > div {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+
+.previewMeta dt {
+  color: var(--ink-soft);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.previewMeta dd {
+  font-size: 13px;
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.previewControl {
+  display: grid;
+  gap: 7px;
+  margin-top: 20px;
+}
+
+.previewControl label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.previewState {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 20px;
+}
+
+.previewState[data-state="missing"] {
+  border-top-color: var(--saffron);
+}
+
+.previewState[data-state="access-denied"] {
+  border-top-color: var(--brick-deep);
+}
+
+.previewState p {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.previewStateTitle {
+  color: var(--ink) !important;
+  font-family: var(--serif);
+  font-size: 18px !important;
+  margin-bottom: 4px !important;
+}
+
+.previewSheet {
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  min-height: 150px;
+  padding: 20px;
+}
+
+.previewSheet strong {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.previewSheet span:last-child {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.previewWatermark {
+  color: var(--saffron-deep);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.downloadMessage {
+  background: var(--paper);
+  border-left: 3px solid var(--saffron);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 18px 0 0;
+  padding: 10px 12px;
+}
+
+.previewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+@media (max-width: 560px) {
+  .previewHeader {
+    flex-direction: column;
+  }
+
+  .previewMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .previewActions .button {
+    width: 100%;
+  }
+}

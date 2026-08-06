@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Faiz E Aam — grounded landing image concepts</title>
+  <style>
+    :root {
+      --ink: #173a3a;
+      --muted: #6b7977;
+      --paper: #f5f1e8;
+      --cream: #fbf8f1;
+      --green: #1b7d70;
+      --blue: #285f8c;
+      --gold: #d6a34b;
+      --line: rgba(23,58,58,.18);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 40px;
+      background: #d9ddd6;
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+    .board {
+      width: 1600px;
+      height: 900px;
+      margin: 0 auto 40px;
+      overflow: hidden;
+      position: relative;
+      background: var(--paper);
+    }
+    .label {
+      position: absolute;
+      left: 54px;
+      top: 34px;
+      z-index: 3;
+      font: 700 12px/1.2 Arial, sans-serif;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 42% 58%;
+    }
+    .hero-copy {
+      padding: 150px 68px 70px 88px;
+      position: relative;
+    }
+    .hero-copy::after {
+      content: "";
+      position: absolute;
+      width: 130px;
+      height: 4px;
+      left: 88px;
+      bottom: 78px;
+      background: var(--gold);
+    }
+    .eyebrow {
+      font: 700 14px/1.3 Arial, sans-serif;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 34px;
+    }
+    h1 {
+      margin: 0;
+      max-width: 510px;
+      font-size: 78px;
+      line-height: .98;
+      font-weight: 400;
+      letter-spacing: -.04em;
+    }
+    .dek {
+      max-width: 430px;
+      margin: 30px 0 0;
+      color: var(--muted);
+      font: 18px/1.55 Arial, sans-serif;
+    }
+    .hero-image {
+      height: 900px;
+      position: relative;
+    }
+    .hero-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      display: block;
+      filter: saturate(.9) contrast(1.02);
+    }
+    .hero-image::before {
+      content: "";
+      position: absolute;
+      z-index: 1;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(20,57,57,.15), transparent 38%);
+      pointer-events: none;
+    }
+    .hero-stamp {
+      position: absolute;
+      z-index: 2;
+      right: 48px;
+      bottom: 48px;
+      width: 118px;
+      height: 118px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.75);
+      color: white;
+      text-align: center;
+      font: 700 11px/1.25 Arial, sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .story {
+      background: var(--cream);
+      padding: 94px 90px;
+    }
+    .story-grid {
+      display: grid;
+      grid-template-columns: 58% 42%;
+      gap: 76px;
+      align-items: center;
+      height: 100%;
+    }
+    .story-photo {
+      height: 650px;
+      position: relative;
+      overflow: hidden;
+    }
+    .story-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: saturate(.68) sepia(.12) contrast(1.08);
+      display: block;
+    }
+    .story-photo::after {
+      content: "FAIZ E AAM / BANDIPORA";
+      position: absolute;
+      left: 26px;
+      bottom: 24px;
+      padding: 9px 12px;
+      background: rgba(251,248,241,.9);
+      color: var(--ink);
+      font: 700 10px/1 Arial, sans-serif;
+      letter-spacing: .15em;
+    }
+    .story-copy { padding-right: 24px; }
+    .story-copy h2 {
+      margin: 12px 0 22px;
+      font-size: 62px;
+      line-height: 1;
+      font-weight: 400;
+      letter-spacing: -.04em;
+    }
+    .story-copy p {
+      max-width: 390px;
+      color: var(--muted);
+      font: 18px/1.6 Arial, sans-serif;
+    }
+    .rule { width: 92px; height: 3px; background: var(--gold); margin-top: 34px; }
+    .admission {
+      background: var(--blue);
+      color: #f8f4ea;
+      display: grid;
+      grid-template-columns: 55% 45%;
+    }
+    .admission-copy { padding: 116px 80px 80px 94px; }
+    .admission-copy .eyebrow { color: #e5c277; }
+    .admission-copy h2 {
+      max-width: 660px;
+      margin: 0;
+      font-size: 72px;
+      line-height: 1.02;
+      font-weight: 400;
+      letter-spacing: -.045em;
+    }
+    .admission-copy p {
+      max-width: 520px;
+      margin: 30px 0 0;
+      color: rgba(248,244,234,.76);
+      font: 17px/1.55 Arial, sans-serif;
+    }
+    .admission-meta {
+      margin-top: 72px;
+      display: flex;
+      gap: 48px;
+      font: 700 12px/1.3 Arial, sans-serif;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .admission-image { position: relative; }
+    .admission-image img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 45% center;
+      mix-blend-mode: screen;
+      opacity: .88;
+      filter: grayscale(1) contrast(1.15);
+    }
+    .admission-image::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, var(--blue) 0%, rgba(40,95,140,.45) 18%, transparent 48%);
+    }
+  </style>
+</head>
+<body>
+  <section class="board hero" id="hero-wide">
+    <div class="hero-copy">
+      <div class="label">Concept 01 · Homepage hero</div>
+      <div class="eyebrow">Faiz E Aam Secondary School · Bandipora</div>
+      <h1>Rooted in place. Open to possibility.</h1>
+      <p class="dek">A calm, editorial landing image that keeps the real school at the centre and leaves room for the admission journey.</p>
+    </div>
+    <div class="hero-image">
+      <img src="../faiz-e-aam-generated-hero.png" alt="Generated Faiz E Aam-inspired courtyard" />
+      <div class="hero-stamp">Darul Uloom<br />Raheemiyyah</div>
+    </div>
+  </section>
+
+  <section class="board story" id="story-editorial">
+    <div class="label">Concept 02 · Story panel</div>
+    <div class="story-grid">
+      <div class="story-photo"><img src="../faiz-e-aam-generated-hero.png" alt="Generated Faiz E Aam-inspired courtyard" /></div>
+      <div class="story-copy">
+        <div class="eyebrow">A school with a visible rhythm</div>
+        <h2>Learning is a shared courtyard.</h2>
+        <p>Use the actual campus as an editorial anchor: honest texture, a human scale, and a clear line into academics, activities, results, and parent services.</p>
+        <div class="rule"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="board admission" id="admission-crop">
+    <div class="admission-copy">
+      <div class="label">Concept 03 · Admissions callout</div>
+      <div class="eyebrow">Admissions 2026–27</div>
+      <h2>Begin with a place that feels known.</h2>
+      <p>For admission pages, the same reference becomes a quiet monochrome texture behind one useful action: enquire, register, or continue an application.</p>
+      <div class="admission-meta"><span>Nursery → XII</span><span>Bandipora, J&amp;K</span></div>
+    </div>
+    <div class="admission-image"><img src="../faiz-e-aam-generated-hero.png" alt="Generated Faiz E Aam-inspired courtyard" /></div>
+  </section>
+</body>
+</html>

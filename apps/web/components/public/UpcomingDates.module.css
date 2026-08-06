@@ -1,0 +1,102 @@
+.section {
+  padding: clamp(72px, 9vw, 120px) clamp(48px, 8vw, 96px);
+  background: var(--paper);
+}
+
+.head {
+  margin-bottom: clamp(32px, 4vw, 48px);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(32px, 3.6vw, 48px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  align-items: baseline;
+  gap: 24px;
+  padding: 22px 0 22px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+/* Saffron tick, drawn in on hover like a ruled calendar entry. */
+.row::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 0;
+  width: 3px;
+  background: var(--saffron);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 0.2s ease;
+}
+
+.row:hover::before,
+.row:focus-within::before {
+  transform: scaleY(1);
+}
+
+.day {
+  display: block;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.month {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.72));
+}
+
+.label {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.note {
+  font-size: 11px;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.72));
+}
+
+@media (max-width: 700px) {
+  .row {
+    grid-template-columns: 72px 1fr;
+  }
+
+  .note {
+    grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row::before {
+    transition: none;
+  }
+}

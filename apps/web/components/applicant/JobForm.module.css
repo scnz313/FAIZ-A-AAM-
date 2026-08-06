@@ -1,0 +1,446 @@
+/* Job application shell — ink progress rail, chalk form workspace and a
+   right-hand context column, following the career mockup. No cards, no
+   gradients: hairline rules and the palette. */
+
+.shell {
+  background: var(--paper);
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 260px;
+  min-height: 70vh;
+}
+
+/* ------------------------------------------------------------------ */
+/* Progress rail (ink)                                                 */
+/* ------------------------------------------------------------------ */
+
+.rail {
+  background: var(--ink);
+  color: var(--chalk);
+  display: flex;
+  flex-direction: column;
+  padding: 40px 34px 30px;
+}
+
+.railLabel {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  margin: 0 0 14px;
+  text-transform: uppercase;
+}
+
+.railTitle {
+  color: #fff;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 27px;
+  font-weight: 400;
+  line-height: 1.12;
+  margin: 0;
+}
+
+.railTitle em {
+  color: var(--saffron-bright);
+  display: block;
+  font-size: 13px;
+  font-style: normal;
+  margin-top: 6px;
+}
+
+.railList {
+  list-style: none;
+  margin: 34px 0 0;
+  padding: 0;
+  position: relative;
+}
+
+.railList::before {
+  background: var(--rail-line);
+  bottom: 30px;
+  content: "";
+  left: 13px;
+  position: absolute;
+  top: 22px;
+  width: 1px;
+}
+
+.railItem {
+  align-items: center;
+  color: var(--chalk-soft);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 28px 1fr;
+  margin-bottom: 22px;
+  position: relative;
+}
+
+.railItem > span {
+  align-items: center;
+  background: var(--ink);
+  border: 1px solid var(--chalk-muted);
+  border-radius: 50%;
+  display: flex;
+  font-size: 10px;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+  z-index: 1;
+}
+
+.railItem strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.railItem small {
+  display: block;
+  font-size: 10px;
+  margin-top: 3px;
+  opacity: 0.85;
+}
+
+.railItemDone,
+.railItemCurrent {
+  color: #fff;
+}
+
+.railItemDone > span {
+  background: var(--willow);
+  border-color: var(--willow);
+}
+
+.railItemCurrent > span {
+  background: var(--saffron-deep);
+  border-color: var(--saffron-deep);
+  color: var(--chalk);
+}
+
+.railHelp {
+  border-top: 1px solid var(--rail-line);
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+.railHelp strong {
+  color: #fff;
+  display: block;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.railHelp p {
+  color: var(--chalk-soft);
+  font-size: 10px;
+  line-height: 1.55;
+  margin: 6px 0 10px;
+}
+
+.railHelp a {
+  color: var(--chalk-soft);
+  font-size: 10px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Form workspace (chalk)                                              */
+/* ------------------------------------------------------------------ */
+
+.workspace {
+  background: var(--chalk);
+  padding: 42px clamp(28px, 4vw, 64px) 0;
+}
+
+.errorSummary {
+  background: #f9efed;
+  border: 1px solid var(--brick);
+  margin-bottom: 26px;
+  padding: 16px 18px;
+}
+
+.errorSummary p {
+  color: var(--brick-deep);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.errorSummary ul {
+  color: var(--brick-deep);
+  font-size: 13px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.errorSummary li {
+  line-height: 1.55;
+  margin: 3px 0;
+}
+
+/* Recoverable submit failure: brick callout; the submit button stays
+   enabled so the applicant can retry. */
+.submitError {
+  margin: 0 0 22px;
+  padding: 14px 18px;
+  border: 1px solid var(--brick);
+  border-top: 2px solid var(--brick);
+  background: #f9efed;
+  color: var(--brick-deep);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.draftRecovery {
+  border-top: 3px solid var(--saffron);
+  margin-bottom: 22px;
+  outline: none;
+}
+
+.draftRecoveryStale {
+  border-color: var(--saffron-deep);
+}
+
+.draftRecoveryLegacy {
+  border-color: var(--willow);
+}
+
+.draftRecoveryTitle {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.recoveryCopy,
+.storageNotice p {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 8px 0 0;
+}
+
+.recoveryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.storageNotice {
+  border-left: 3px solid var(--brick);
+  margin-bottom: 22px;
+}
+
+.storageNoticeTitle {
+  color: var(--brick-deep) !important;
+  font-size: 13px !important;
+  font-weight: 600;
+  margin-top: 0 !important;
+}
+
+.formIntro {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 22px;
+}
+
+.formTitle {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(28px, 3vw, 36px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.formIntro > p:last-child {
+  color: var(--ink-soft);
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 14px;
+  font-style: italic;
+  margin: 8px 0 0;
+}
+
+.form {
+  display: grid;
+  gap: 20px 24px;
+  grid-template-columns: 1fr 1fr;
+  padding: 26px 0 40px;
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.required {
+  color: var(--saffron-deep);
+}
+
+.fileInput {
+  padding: 7px 10px;
+}
+
+.docHeading {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.consent {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+}
+
+.consent input {
+  accent-color: var(--saffron-deep);
+  height: 18px;
+  margin-top: 1px;
+  width: 18px;
+}
+
+.consent span {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.actions {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 22px 0 30px;
+}
+
+.actionsRight {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.savedNote {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+  max-width: 28em;
+}
+
+/* ------------------------------------------------------------------ */
+/* Application context (right column)                                  */
+/* ------------------------------------------------------------------ */
+
+.context {
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  padding: 42px 26px;
+}
+
+.contextBlock {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+  padding-bottom: 20px;
+}
+
+.contextTitle {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 17px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.contextSmall {
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+.docList {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 10px 0 0;
+  padding-left: 16px;
+}
+
+.privacyNote {
+  align-items: flex-start;
+  background: var(--chalk);
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding: 14px 16px;
+}
+
+.privacyNote p {
+  color: var(--willow-soft);
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                          */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 1000px) {
+  .shell {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .context {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .shell {
+    display: block;
+  }
+
+  .rail {
+    display: none;
+  }
+
+  .workspace {
+    padding: 30px 20px 0;
+  }
+
+  .form {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actionsRight {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .actionsRight > :last-child {
+    width: 100%;
+  }
+
+  .savedNote {
+    max-width: none;
+  }
+
+  .recoveryActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recoveryActions > * {
+    width: 100%;
+  }
+}

@@ -1,0 +1,105 @@
+/* Public grievance form: editorial panel with ruled contact rows. */
+
+.wrap {
+  max-width: 760px;
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.errorSummary {
+  color: var(--brick);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.contactRow {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.form .consentLabel {
+  align-items: flex-start;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 400;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.consentLabel input {
+  accent-color: var(--saffron);
+  margin-top: 2px;
+  width: auto;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.actionNote {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.demoNote {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 10px;
+  line-height: 1.55;
+  margin: 22px 0 0;
+  padding-top: 14px;
+}
+
+.success {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 760px;
+  outline: none;
+}
+
+.success:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.successTitle {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+
+.successLine {
+  font-size: 15px;
+  margin: 0;
+}
+
+.successNote {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 12px;
+  max-width: 52ch;
+}
+
+@media (max-width: 640px) {
+  .contactRow {
+    grid-template-columns: 1fr;
+  }
+}

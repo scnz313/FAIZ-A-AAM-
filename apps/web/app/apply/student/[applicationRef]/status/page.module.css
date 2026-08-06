@@ -1,0 +1,5 @@
+/* Application status page — paper ground around the shared status view. */
+
+.page {
+  background: var(--paper);
+}

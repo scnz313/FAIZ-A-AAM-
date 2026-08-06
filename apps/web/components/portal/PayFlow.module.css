@@ -1,0 +1,220 @@
+.flow {
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  outline: none;
+  padding: 26px 28px;
+}
+
+/* Compact status line — the only live region in the checkout island. */
+.liveLine {
+  color: var(--saffron-deep);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0 0 14px;
+  min-height: 1.4em;
+}
+
+.flow:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.flowHead {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.flowHead .section-label {
+  margin-bottom: 10px;
+}
+
+.flowTitle {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.flowRef {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+
+.methodList {
+  border: 0;
+  margin: 22px 0 0;
+  padding: 0;
+}
+
+.methodLegend {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.methodOption {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  padding: 14px 4px;
+}
+
+.methodOption:last-of-type {
+  border-bottom: 0;
+}
+
+.methodOption input {
+  accent-color: var(--saffron);
+  margin-top: 3px;
+}
+
+.methodCopy strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.methodCopy small {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.flowNote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 18px 0 0;
+  max-width: 58ch;
+}
+
+/* Deterministic demo-gateway scenario control — muted by design. */
+.scenario {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
+.scenario label {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scenarioTag {
+  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.scenario .select {
+  font-size: 12px;
+  padding: 7px 34px 7px 10px;
+}
+
+/* Outcome blocks: failed / cancelled / delayed / recoverable error. */
+.stateBlock {
+  margin-top: 22px;
+}
+
+.stateTitle {
+  font-family: var(--serif);
+  font-size: 22px;
+  margin: 0;
+}
+
+.stateText {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0 0;
+  max-width: 52ch;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.processing {
+  margin-top: 22px;
+}
+
+.processingLine {
+  font-family: var(--serif);
+  font-size: 22px;
+  margin: 0;
+}
+
+.processingNote {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 8px 0 0;
+  max-width: 52ch;
+}
+
+.success {
+  margin-top: 22px;
+}
+
+.successMark {
+  color: var(--willow);
+  font-size: 26px;
+  line-height: 1;
+  margin: 0;
+}
+
+.successTitle {
+  font-family: var(--serif);
+  font-size: 22px;
+  margin: 6px 0 0;
+}
+
+.successMeta {
+  border-top: 1px solid var(--line);
+  margin: 16px 0 0;
+}
+
+.successMeta > div {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  font-size: 13px;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.successMeta dt {
+  color: var(--ink-soft);
+  margin: 0;
+}
+
+.successMeta dd {
+  font-weight: 600;
+  margin: 0;
+}
+
+.successLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 18px 0 0;
+}

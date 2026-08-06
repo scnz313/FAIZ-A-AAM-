@@ -1,0 +1,229 @@
+.sectionHead {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sectionHead h2 {
+  margin: 0;
+}
+
+.versionLine {
+  font-size: 15px;
+  margin: 0 0 22px;
+}
+
+.classSelector {
+  margin: 0 0 18px;
+  max-width: 240px;
+}
+
+.versionLine strong {
+  font-weight: 600;
+}
+
+.changeHeading {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  margin: 18px 0 10px;
+  text-transform: uppercase;
+}
+
+.changeLog {
+  border-top: 1px solid var(--line);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.changeRow {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  font-size: 13px;
+  gap: 14px;
+  padding: 10px 2px;
+}
+
+.changeVersion {
+  color: var(--ink-soft);
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 32px;
+}
+
+.conflictIntro {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 14px;
+  max-width: 70ch;
+}
+
+.conflictStrip {
+  align-items: center;
+  display: flex;
+  gap: 12px 20px;
+  justify-content: space-between;
+}
+
+.conflictStrip + .conflictStrip {
+  margin-top: 8px;
+}
+
+.conflictCopy {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.conflictMeta {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin: 3px 0 0;
+  opacity: 0.85;
+  text-transform: uppercase;
+}
+
+.none {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.resolvePanel {
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--saffron);
+  margin-top: 16px;
+  padding: 14px 16px;
+}
+
+.resolveWhy {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 8px 0;
+  max-width: 70ch;
+}
+
+.resolveAssignment {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.resolveRule {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+  max-width: 70ch;
+}
+
+.resolveActions {
+  display: grid;
+  gap: 8px;
+}
+
+.reasonLabel {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+.required {
+  color: var(--saffron-deep);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reasonInput {
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.resolveButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.editorIntro {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 70ch;
+}
+
+.actionRow {
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.publishPanel {
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--saffron);
+  margin-top: 16px;
+  padding: 14px 16px;
+}
+
+.publishWhy {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 8px 0 12px;
+  max-width: 70ch;
+}
+
+.live {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin: 0;
+  min-height: 1.4em;
+}
+
+.readOnlyNote {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 60ch;
+}
+
+.dateSheetTable {
+  min-width: 620px;
+}
+
+.publishRow {
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+@media (max-width: 700px) {
+  .conflictStrip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

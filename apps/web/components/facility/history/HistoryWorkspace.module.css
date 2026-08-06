@@ -1,0 +1,74 @@
+.controls {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 34px;
+  justify-content: space-between;
+  margin-bottom: 26px;
+}
+
+.zoneField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+}
+
+.tabBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tabLabel,
+.zoneField label {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.panelHead {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.panelTitle {
+  font-family: var(--serif);
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.chartWrap {
+  min-width: 0;
+}
+
+.skeleton {
+  background: #ece7dc;
+  height: 260px;
+  width: 100%;
+}
+
+.skeletonWrap {
+  padding: 4px 0 8px;
+}
+
+.loadingNote {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 12px 0 0;
+}
+
+.statNote {
+  color: var(--muted);
+  font-size: 9px;
+  margin: 4px 0 0;
+}

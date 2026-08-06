@@ -1,0 +1,136 @@
+.pageHeader {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+
+.receiptPage :global(.faas-print-bar) {
+  display: none;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 4vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.demoLine {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  margin: 0;
+}
+
+.notFound {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+  padding: 24px 0 40px;
+}
+
+.notFoundText {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 8px;
+  max-width: 48ch;
+}
+
+.recoveryActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.liveNotice {
+  color: var(--saffron-deep);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Access scope --------------------------------------------------------------- */
+
+.checkingNote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 26px;
+}
+
+.contextPanel {
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  margin: 0 0 26px;
+  padding: 20px 24px;
+}
+
+.contextPanelTitle {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.contextPanelNote {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 60ch;
+}
+
+.contextPanelActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+/* The receipt sheet (inside ReceiptPanel) is the only thing that prints;
+   this header and the portal chrome stay on screen. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  :global(.facility-shell):has(.receiptPage) :global(.side-nav),
+  :global(.facility-shell):has(.receiptPage) :global(.nav-scrim),
+  :global(.facility-shell):has(.receiptPage) :global(.portal-topbar),
+  :global(.facility-shell):has(.receiptPage) :global(.demo-strip),
+  :global(.facility-shell):has(.receiptPage) :global(.folio) {
+    display: none !important;
+  }
+
+  :global(.facility-shell):has(.receiptPage) {
+    display: block;
+  }
+
+  :global(.facility-shell):has(.receiptPage) :global(.portal-main) {
+    max-width: none;
+    padding: 0;
+  }
+
+  .pageHeader,
+  .contextPanel,
+  .checkingNote,
+  .receiptPage :global(.faas-print-bar) {
+    display: none !important;
+  }
+}

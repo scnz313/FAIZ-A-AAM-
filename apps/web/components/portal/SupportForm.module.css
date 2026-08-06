@@ -1,0 +1,194 @@
+.stack {
+  display: grid;
+  gap: 20px;
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.errorSummary {
+  color: var(--brick);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.form .consentLabel {
+  align-items: flex-start;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 400;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.consent input {
+  accent-color: var(--saffron);
+  margin-top: 2px;
+  width: auto;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.actionNote {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+/* Just-submitted record: reference, status badge and live thread. */
+
+.success {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  outline: none;
+}
+
+.success:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.recordHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.successTitle {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+
+.successLine {
+  font-size: 15px;
+  margin: 0;
+}
+
+.successNote {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 12px;
+  max-width: 52ch;
+}
+
+/* Requester-side thread (submission + responses only — never staff notes). */
+
+.thread {
+  list-style: none;
+  margin: 8px 0 14px;
+  padding: 0;
+  width: 100%;
+}
+
+.threadEntry {
+  border-top: 1px solid var(--line);
+  padding: 12px 0 2px;
+}
+
+.threadText {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.threadMeta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+
+.threadBy {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.threadEmpty {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 4px 0 14px;
+}
+
+/* Track-a-reference panel. */
+
+.tracker {
+  display: grid;
+  gap: 10px;
+}
+
+.trackerTitle {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.trackerNote {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.trackerForm {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.trackerInputWrap {
+  display: grid;
+  flex: 1 1 260px;
+  gap: 6px;
+}
+
+.trackerInputWrap .field-error {
+  margin-top: -2px;
+}
+
+.tracked {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 14px;
+}
+
+.trackedRef {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.trackedSubject {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.tracked .thread {
+  margin-bottom: 0;
+}

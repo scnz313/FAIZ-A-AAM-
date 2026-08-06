@@ -1,0 +1,81 @@
+.publisherGrid {
+  align-items: start;
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+}
+
+.panelHead {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panelTitle {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.table {
+  min-width: 880px;
+}
+
+.cellTitle {
+  font-weight: 600;
+}
+
+.cellActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.liveNote {
+  color: var(--saffron-deep);
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.formGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.checkRow {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  font-size: 14px;
+}
+
+.check {
+  accent-color: var(--saffron);
+  height: 16px;
+  width: 16px;
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 1000px) {
+  .publisherGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+}

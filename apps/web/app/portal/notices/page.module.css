@@ -1,0 +1,168 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 40px;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(30px, 4vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.intro {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  max-width: 62ch;
+}
+
+/* Anchor tabs mirror the global .tabs button styling. */
+.tabLink {
+  border-bottom: 2px solid transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.tabLink:hover {
+  color: var(--ink);
+}
+
+.tabLinkActive {
+  border-bottom-color: var(--saffron);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.rows {
+  margin-top: 14px;
+}
+
+.row {
+  border-bottom: 1px solid var(--line);
+}
+
+/* Urgent rows carry the persistent URGENT badge in the title line. */
+
+.row summary {
+  cursor: pointer;
+  display: block;
+  list-style: none;
+  padding: 16px 0;
+}
+
+.row summary::-webkit-details-marker {
+  display: none;
+}
+
+.row summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.rowMeta {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.category {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.metaRight {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.date {
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.marker {
+  color: var(--ink-faint);
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.row[open] .marker {
+  transform: rotate(45deg);
+}
+
+.titleLine {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.titleLine strong {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.excerpt {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.body {
+  border-top: 1px dashed var(--line);
+  margin: 0;
+  padding: 14px 0 20px;
+}
+
+.body p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 10px;
+  max-width: 64ch;
+}
+
+.body p:last-child {
+  margin-bottom: 0;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+  padding: 18px 2px;
+}
+
+.demoNote {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 10px;
+  line-height: 1.5;
+  margin: 0;
+  padding-top: 16px;
+}

@@ -1,0 +1,58 @@
+/* Expandable line items in the invoice Ref cell. */
+
+.lines summary {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  list-style: none;
+}
+
+.lines summary::-webkit-details-marker {
+  display: none;
+}
+
+.lines summary::before {
+  color: var(--ink-soft);
+  content: "+";
+  font-family: var(--sans);
+}
+
+.lines[open] summary::before {
+  content: "−";
+}
+
+.lineCount {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.lineItems {
+  border-left: 1px solid var(--line);
+  margin: 12px 0 4px 7px;
+  padding: 2px 0 2px 14px;
+}
+
+.lineItem {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.concession {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.lineTotal {
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 6px;
+  padding-top: 6px;
+}

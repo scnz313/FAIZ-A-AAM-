@@ -1,0 +1,74 @@
+/* Homepage composition styles (learning stages + section rhythm). */
+
+.stages {
+  padding: clamp(72px, 9vw, 120px) clamp(48px, 8vw, 96px);
+  background: var(--chalk);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.stagesHead {
+  max-width: 720px;
+  margin-bottom: clamp(40px, 5vw, 64px);
+}
+
+.stagesHeading {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(32px, 3.6vw, 48px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+}
+
+.stageList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stageRow {
+  display: grid;
+  grid-template-columns: minmax(220px, 5fr) 7fr;
+  align-items: baseline;
+  gap: 32px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.stageRow:last-child {
+  border-bottom: 0;
+}
+
+.stageName {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.stageClasses {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.72));
+}
+
+.stageLine {
+  max-width: 560px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+}
+
+@media (max-width: 700px) {
+  .stageRow {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 22px 0;
+  }
+}

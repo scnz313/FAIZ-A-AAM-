@@ -1,0 +1,242 @@
+.workspace {
+  display: grid;
+  gap: 34px;
+}
+
+.header {
+  margin-bottom: 0;
+}
+
+.backLink {
+  margin: 0 0 18px;
+}
+
+.meta {
+  margin-top: 8px;
+}
+
+.badgeRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.loading {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+/* ---- Marks sheet ---- */
+
+.entryTable {
+  min-width: 720px;
+}
+
+.invalidRow td {
+  border-bottom-color: rgba(162, 59, 46, 0.35);
+}
+
+.inputCell {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.markInput {
+  min-height: 38px;
+  width: 96px;
+}
+
+.remarkInput {
+  min-height: 38px;
+  min-width: 240px;
+}
+
+/* Muted italic tag on rows that are still blank. */
+.notEntered {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* Squared grade chip — same mark as the published report. */
+.grade {
+  align-items: center;
+  background: rgba(83, 109, 87, 0.12);
+  color: var(--willow);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  height: 28px;
+  justify-content: center;
+  min-width: 30px;
+  padding: 0 6px;
+}
+
+.gradeEmpty {
+  color: var(--muted);
+}
+
+.remark {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+/* ---- Error summary ---- */
+
+.errorSummary {
+  background: rgba(162, 59, 46, 0.06);
+  border: 1px solid var(--brick);
+  padding: 16px 20px;
+}
+
+.errorTitle {
+  color: var(--brick-deep);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.errorList {
+  color: var(--brick-deep);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+/* ---- Returned / confirm / success panels ---- */
+
+.returnedPanel {
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brick);
+  padding: 18px 20px;
+}
+
+.returnedReason {
+  font-family: var(--serif);
+  font-size: 17px;
+  margin: 0;
+}
+
+.returnedHint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 8px 0 0;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.confirmPanel {
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  max-width: 560px;
+  padding: 18px 20px;
+}
+
+.confirmLabel {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.confirmText {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.confirmHelp {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.publishSuccess {
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 14px;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding-top: 16px;
+}
+
+/* ---- Version history (same ruled list as the batch detail page) ---- */
+
+.versionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.versionRow {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 90px) minmax(0, 1fr);
+  padding: 14px 2px;
+}
+
+.versionRow:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.versionNum {
+  color: var(--saffron-deep);
+  font-family: var(--serif);
+  font-size: 18px;
+}
+
+.versionCopy {
+  display: grid;
+  gap: 3px;
+}
+
+.versionNote {
+  font-size: 14px;
+}
+
+.versionCopy small {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.noVersions {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.live {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin: 0;
+  min-height: 1.4em;
+}

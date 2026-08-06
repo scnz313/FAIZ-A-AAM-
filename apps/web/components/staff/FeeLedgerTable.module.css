@@ -1,0 +1,37 @@
+.sectionHead {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sectionHead h2 {
+  margin: 0;
+}
+
+.ledgerTable {
+  min-width: 1080px;
+}
+
+/* Group headings shown on the "All" tab. */
+.ledgerTable tr.groupRow {
+  border-bottom: 0;
+}
+
+.ledgerTable tr.groupRow > td {
+  border-top: 1px solid var(--line-strong);
+  padding: 18px 0 6px;
+}
+
+.groupCount {
+  color: var(--ink-soft);
+  font-size: 11px;
+  margin-left: 10px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 24px 0 0;
+}

@@ -1,0 +1,67 @@
+/* ================================================================== */
+/* Design tokens — Faiz Aam design system                              */
+/* The single source of truth for colour, type, spacing and status.    */
+/* Loaded by app/layout.tsx before globals.css.                        */
+/* ================================================================== */
+
+:root {
+  /* Core palette ------------------------------------------------------ */
+  --ink: #0b1c2a; /* deep ink navy — primary surfaces, primary buttons   */
+  --ink-2: #14293b; /* hover ink, used by .button--primary:hover          */
+  --paper: #f6f2e9; /* page ground — warm unbleached paper                */
+  --saffron: #b96832; /* brand accent — rules, focus, active states        */
+  --saffron-deep: #8c4a1e; /* deep saffron — saffron text on paper surfaces  */
+  --willow: #536d57; /* calm green — "good" status                        */
+  --chalk: #ffffff; /* raised surface — panels, sidebar, badges           */
+  --brick: #a23b2e; /* alert red — threshold crossings                    */
+  --brick-deep: #7e2b20; /* severe red — critical strips, danger buttons    */
+  --ink-soft: #5a6670; /* secondary text on paper                          */
+  --ink-faint: #5c6670; /* tertiary text, offline status                    */
+  --line: rgba(11, 28, 42, 0.09); /* hairline rules — fine, quiet           */
+  --line-strong: rgba(11, 28, 42, 0.2); /* stronger rules, crosshair        */
+  --paper-deep: #f1ecdf; /* deeper paper for inset bands                    */
+  --focus: #b96832; /* visible focus ring (WCAG 2.2 AA)                  */
+
+  --radius: 6px; /* softly-rounded controls — clean, never pills       */
+
+  /* Spacing scale — 4 px base ------------------------------------------ */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* Chalk-tint scale for ink-ground rails and instrument readouts -------- */
+  --chalk-soft: #9fb1bb; /* muted chalk text on ink                            */
+  --chalk-muted: #5f7680; /* rail bullets and borders on ink                   */
+  --rail-line: rgba(159, 177, 187, 0.22); /* hairline rules on ink rails   */
+  --willow-soft: #56645a; /* deep willow text on pale grounds                  */
+  --saffron-soft: #e0a06c; /* softer saffron accents on ink                    */
+  --willow-bright: #8eb698; /* brighter willow accents on ink                  */
+
+  /* Status semantics — app-wide, do not remap per screen -------------- */
+  --status-good: var(--willow);
+  --status-watch: var(--saffron);
+  --status-alert: var(--brick);
+  --status-severe: var(--brick-deep);
+  --status-neutral: var(--ink-soft);
+  --status-offline: var(--ink-faint);
+
+  /* Typography --------------------------------------------------------- */
+  /* --font-display / --font-sans are set by next/font in app/layout.tsx.
+     The aliases below resolve through them so every consumer (including
+     module CSS written against the original mockup names) picks up the
+     loaded webfonts, with editorial fallbacks when fonts are absent.    */
+  --serif: var(--font-display, Georgia, "Times New Roman", serif);
+  --sans: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
+  /* Nastaliq Urdu for wordmarks — set by next/font in app/layout.tsx. */
+  --urdu: var(--font-urdu, Georgia, serif);
+
+  /* Legacy aliases kept for module CSS written against design/styles.css */
+  --cream: var(--chalk);
+  --saffron-bright: #d1844d; /* brighter saffron for accents on ink          */
+  --muted: #5a6670; /* muted text on paper — AA 4.5+ against --paper      */
+}

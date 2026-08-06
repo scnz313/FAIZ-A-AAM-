@@ -1,0 +1,70 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+.panelHead {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panelTitle {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.liveNote {
+  color: var(--saffron-deep);
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
+.loading {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  margin: 0;
+}
+
+.table {
+  min-width: 780px;
+}
+
+.pageLink {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.pageLink:hover {
+  color: var(--saffron);
+}
+
+.cellAction {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.note {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  padding-top: 18px;
+}

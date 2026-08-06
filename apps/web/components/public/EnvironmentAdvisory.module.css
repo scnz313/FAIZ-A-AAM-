@@ -1,0 +1,65 @@
+.section {
+  padding: clamp(72px, 9vw, 120px) clamp(48px, 8vw, 96px);
+  background: var(--paper);
+}
+
+.panel {
+  padding: clamp(28px, 4vw, 48px);
+}
+
+.heading {
+  margin: 0 0 16px;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(28px, 3.4vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.intro {
+  max-width: 640px;
+  margin: 0 0 28px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+}
+
+.bands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bandRow {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  align-items: baseline;
+  gap: 24px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.bandRow:last-child {
+  border-bottom: 0;
+}
+
+.bandRow p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+}
+
+.note {
+  margin: 28px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.72));
+}
+
+@media (max-width: 700px) {
+  .bandRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

@@ -1,0 +1,45 @@
+.inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 40px;
+}
+
+.text {
+  max-width: 680px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.date {
+  display: inline-block;
+  margin-right: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--chalk);
+}
+
+.reading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.demoTag {
+  border: 1px dashed var(--saffron);
+  border-radius: var(--radius);
+  color: var(--chalk);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-color: rgba(255, 253, 248, 0.72);
+  text-transform: uppercase;
+}

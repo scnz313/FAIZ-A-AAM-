@@ -1,0 +1,85 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+/* Vacancy summary line under the deck: ruled, tabular counts. */
+.summary {
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  margin: 16px 0 0;
+  padding-top: 14px;
+}
+
+.summary strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sectionHead {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sectionHead h2 {
+  margin: 0;
+}
+
+.queueTable {
+  min-width: 880px;
+}
+
+/* The ref anchor stretches over the whole row, so the entire row is a link. */
+.queueRow {
+  position: relative;
+}
+
+.queueRow:hover {
+  background: var(--paper-deep);
+}
+
+.rowLink {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.rowLink::after {
+  content: "";
+  inset: 0;
+  position: absolute;
+}
+
+.queueRow:hover .rowLink {
+  color: var(--saffron-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rowLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ruleNote {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.ruleNote p {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}

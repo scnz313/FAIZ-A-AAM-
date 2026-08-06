@@ -1,0 +1,88 @@
+/* Academics page composition. */
+
+.page {
+  background: var(--paper);
+}
+
+.examGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.exam {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.examName {
+  margin: 0 0 10px;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.examNum {
+  margin-right: 10px;
+  color: var(--saffron-deep);
+  font-size: 17px;
+}
+
+.examBody {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+.examNote {
+  margin: var(--space-6) 0 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.dayPanel {
+  max-width: 720px;
+}
+
+/* Framed artwork band under the school-day table. */
+.artBand {
+  max-width: 720px;
+  margin: var(--space-6) 0 0;
+  border: 1px solid var(--line);
+  background: var(--chalk);
+}
+
+.art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.artCaption {
+  margin: 0;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.dayNote {
+  max-width: 720px;
+  margin: var(--space-4) 0 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 700px) {
+  .examGrid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}

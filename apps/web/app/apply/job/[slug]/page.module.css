@@ -1,0 +1,39 @@
+/* Apply route frame — the page renders its own header and footer (this
+   route lives outside the public layout), so the frame pins the footer
+   and carries the closed-vacancy notice. */
+
+.frame {
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.frame :global(.public-footer) {
+  margin-top: auto;
+}
+
+.closed {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(64px, 10vw, 120px) clamp(24px, 6vw, 96px);
+}
+
+.closedTitle {
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 16px 0 0;
+}
+
+.closedDeck {
+  color: var(--ink-soft);
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 18px;
+  font-style: italic;
+  line-height: 1.55;
+  margin: 14px 0 28px;
+  max-width: 46ch;
+}

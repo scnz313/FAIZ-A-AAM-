@@ -1,0 +1,101 @@
+/* Offer acceptance island on the application status view. */
+
+/* Text-first callout: quiet willow box, accent carried by a top
+   hairline and a small saffron square marker instead of a left bar. */
+.acceptedBlock {
+  position: relative;
+  padding: 16px 18px;
+  border: 1px solid var(--willow);
+  border-top: 2px solid var(--willow);
+  background: rgba(83, 109, 87, 0.08);
+}
+
+.acceptedBlock::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 18px;
+  width: 8px;
+  height: 8px;
+  background: var(--saffron);
+}
+
+.acceptedTitle {
+  margin: 0 0 5px;
+  color: var(--willow);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.acceptedNote {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.acceptHint {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Offer action row ------------------------------------------------------- */
+
+.offerButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Inline confirmation ---------------------------------------------------- */
+
+.confirmBlock {
+  padding: 16px 18px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper);
+}
+
+.confirmTitle {
+  margin: 0 0 8px;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.declineHint {
+  margin: 0 0 10px;
+  color: var(--brick);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.noteLabel {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.noteOptional {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.confirmError {
+  margin: 10px 0 0;
+  color: var(--brick);
+  font-size: 12px;
+  line-height: 1.5;
+}

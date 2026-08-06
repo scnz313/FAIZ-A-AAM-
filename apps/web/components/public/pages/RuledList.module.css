@@ -1,0 +1,70 @@
+/* Ruled editorial list — term column against a detail column, hairline
+   separated rows. Collapses to one column below 700px. */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(220px, 4fr) 7fr;
+  align-items: baseline;
+  gap: 32px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.termCol {
+  min-width: 0;
+}
+
+.num {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--saffron-deep);
+  font-size: 19px;
+  line-height: 1;
+}
+
+.term {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.sub {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.detail {
+  max-width: 560px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.detail p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 700px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 22px 0;
+  }
+}

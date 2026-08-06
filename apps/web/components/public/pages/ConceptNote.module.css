@@ -1,0 +1,29 @@
+/* Closing concept-note panel, aligned to the page column. */
+
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 clamp(24px, 6vw, 96px) clamp(48px, 8vw, 96px);
+}
+
+.note {
+  max-width: 720px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 10px;
+}
+
+.text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.extra {
+  color: var(--ink);
+}

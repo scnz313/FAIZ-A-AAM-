@@ -1,0 +1,76 @@
+/* Link-child request --------------------------------------------------------- */
+
+.wrap {
+  max-width: 640px;
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.formNote {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--saffron);
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.actionNote {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Pending-request panel ------------------------------------------------------- */
+
+.success {
+  max-width: 640px;
+  outline: none;
+}
+
+.success:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.successTitle {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.successLine {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.successLine strong {
+  font-size: 16px;
+}
+
+.successNote {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.successActions {
+  margin-top: 18px;
+}

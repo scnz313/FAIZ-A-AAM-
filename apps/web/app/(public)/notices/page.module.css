@@ -1,0 +1,316 @@
+.body {
+  padding: clamp(32px, 6vw, 72px) clamp(24px, 6vw, 96px) clamp(64px, 8vw, 96px);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.filter {
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--chalk);
+}
+
+.filter:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.filter.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--chalk);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-5) 0;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+/* Urgent rows are marked by the saffron underline on the title and the
+   persistent "Urgent" badge in the row meta. */
+.urgent .rowLink strong {
+  text-decoration: underline;
+  text-decoration-color: var(--saffron);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.rowDate {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.rowLink {
+  display: grid;
+  gap: var(--space-1);
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.rowLink strong {
+  font-family: var(--font-display, var(--serif));
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.rowLink:hover strong {
+  text-decoration: underline;
+  text-decoration-color: var(--saffron);
+  text-underline-offset: 4px;
+}
+
+.rowExcerpt {
+  font-size: 14px;
+  color: var(--ink-soft);
+  max-width: 64ch;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-size: 14px;
+  margin: var(--space-6) 0;
+}
+
+/* Downloads --------------------------------------------------------------- */
+
+.downloads {
+  margin-top: var(--space-8);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-6);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.downloadsTitle {
+  margin: 0 0 22px;
+  font-family: var(--serif);
+  font-size: clamp(26px, 3.2vw, 34px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+
+.downloadName {
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.downloadNote {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 1.5em;
+}
+
+.downloadButton {
+  min-height: 44px;
+}
+
+.previewDialog {
+  background: var(--chalk);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  margin: auto;
+  max-height: calc(100vh - 32px);
+  max-width: min(640px, calc(100% - 32px));
+  padding: 0;
+  width: 640px;
+}
+
+.previewDialog::backdrop {
+  background: rgb(11 28 42 / 58%);
+}
+
+.previewContent {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: clamp(20px, 4vw, 32px);
+}
+
+.previewHeader {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding-bottom: 18px;
+}
+
+.previewTitle {
+  font-size: clamp(23px, 4vw, 30px);
+  margin: 0;
+}
+
+.previewClose,
+.previewActions .button {
+  min-height: 44px;
+}
+
+.previewMeta {
+  display: grid;
+  gap: 0 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 20px 0 0;
+}
+
+.previewMeta > div {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+
+.previewMeta dt {
+  color: var(--ink-soft);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.previewMeta dd {
+  font-size: 13px;
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.previewControl {
+  display: grid;
+  gap: 7px;
+  margin-top: 20px;
+}
+
+.previewControl label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.previewState {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 20px;
+}
+
+.previewState[data-state="missing"] {
+  border-top-color: var(--saffron);
+}
+
+.previewState[data-state="access-denied"] {
+  border-top-color: var(--brick-deep);
+}
+
+.previewState p {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.previewStateTitle {
+  color: var(--ink) !important;
+  font-family: var(--serif);
+  font-size: 18px !important;
+  margin-bottom: 4px !important;
+}
+
+.previewSheet {
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  min-height: 150px;
+  padding: 20px;
+}
+
+.previewSheet strong {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.previewSheet span:last-child {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.previewWatermark {
+  color: var(--saffron-deep);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.downloadMessage {
+  background: var(--paper);
+  border-left: 3px solid var(--saffron);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 18px 0 0;
+  padding: 10px 12px;
+}
+
+.previewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+@media (max-width: 560px) {
+  .previewHeader {
+    flex-direction: column;
+  }
+
+  .previewMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .previewActions .button {
+    width: 100%;
+  }
+}
+
+.note {
+  margin-top: var(--space-8);
+  font-size: 12px;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-4);
+}

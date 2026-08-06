@@ -1,0 +1,22 @@
+/* Editorial page section: shares PageIntro's horizontal rhythm so the
+   page reads as one printed column. */
+
+.section {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(48px, 8vw, 96px) clamp(24px, 6vw, 96px);
+}
+
+.head {
+  max-width: 720px;
+  margin-bottom: clamp(32px, 5vw, 56px);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(28px, 3.4vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}

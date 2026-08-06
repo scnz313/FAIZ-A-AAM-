@@ -1,0 +1,107 @@
+.editor {
+  margin-top: 18px;
+}
+
+.dayTabs {
+  margin-bottom: 16px;
+}
+
+.meta {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-bottom: 10px;
+}
+
+.editedCount {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin: 0;
+}
+
+.previewNote {
+  color: var(--saffron-deep);
+  font-size: 12px;
+  margin: 0;
+}
+
+.blockedStrip {
+  margin-bottom: 12px;
+}
+
+.blockedMessage {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.blockedDetail {
+  font-size: 12px;
+  margin: 4px 0 0;
+  opacity: 0.85;
+}
+
+.editorTable {
+  min-width: 760px;
+}
+
+.editorTable th[scope="row"] {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.editorTable input[type="text"],
+.editorTable select {
+  width: 100%;
+  min-width: 130px;
+}
+
+.kindRow {
+  color: var(--muted);
+}
+
+.kindRow td,
+.kindRow th {
+  font-size: 13px;
+}
+
+.changedRow {
+  background: rgba(185, 104, 50, 0.08);
+}
+
+.changedNote {
+  color: var(--saffron-deep);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.statusCell {
+  color: var(--ink-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.fieldError {
+  color: var(--brick-deep);
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.invalid {
+  border-color: var(--brick) !important;
+}
+
+@media (max-width: 700px) {
+  .editorTable {
+    min-width: 620px;
+  }
+}

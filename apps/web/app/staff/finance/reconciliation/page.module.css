@@ -1,0 +1,66 @@
+.page {
+  grid-template-columns: minmax(0, 1fr);
+  display: grid;
+  gap: 44px;
+}
+
+/* The global workspace-header margin is absorbed by the grid gap. */
+.header {
+  margin-bottom: 0;
+}
+
+.sectionHead {
+  align-items: baseline;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sectionHead h2 {
+  margin: 0;
+}
+
+.reconTable {
+  min-width: 880px;
+}
+
+.cellNote {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.runBar {
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding-top: 16px;
+}
+
+.runResult {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin: 0;
+  min-height: 1.4em;
+}
+
+.ruleNote {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.ruleNote p {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.ruleNote p + p {
+  margin-top: 8px;
+}

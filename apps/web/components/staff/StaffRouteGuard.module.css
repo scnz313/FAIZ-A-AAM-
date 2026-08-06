@@ -1,0 +1,27 @@
+.denial {
+  max-width: 640px;
+  padding: var(--space-6) 0;
+}
+
+.title {
+  margin: var(--space-2) 0 var(--space-3);
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.line {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}

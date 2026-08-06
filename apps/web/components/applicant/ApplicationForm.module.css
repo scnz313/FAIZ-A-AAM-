@@ -1,0 +1,326 @@
+/* Application form workspace — the centrepiece of the application centre. */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--chalk);
+}
+
+.inner {
+  flex: 1;
+  padding: clamp(30px, 4vw, 54px) clamp(22px, 4vw, 64px) 0;
+}
+
+.intro {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 20px;
+}
+
+.introRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.stepHeading {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-size: clamp(30px, 3vw, 39px);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  outline: none;
+}
+
+.introLine {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  max-width: 58ch;
+}
+
+/* Requested-change editing notice: quiet saffron callout. */
+.editNote {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--saffron);
+  border-top: 2px solid var(--saffron);
+  background: rgba(185, 104, 50, 0.07);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.editNote strong {
+  color: var(--saffron-deep);
+}
+
+/* Text-first callout: quiet brick box, accent carried by a top
+   hairline and a brick square marker instead of a left bar. */
+.errorSummary {
+  position: relative;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--brick);
+  border-top: 2px solid var(--brick);
+  background: rgba(162, 59, 46, 0.06);
+}
+
+.errorSummary::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 16px;
+  width: 8px;
+  height: 8px;
+  background: var(--brick);
+}
+
+.errorSummaryTitle {
+  margin: 0 0 6px;
+  color: var(--brick);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.errorSummary ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--brick);
+  font-size: 13px;
+}
+
+.errorSummary li {
+  margin: 3px 0;
+}
+
+.form {
+  padding: 24px 0 0;
+}
+
+/* Field grid inside the form; the sticky action bar is a full-width
+   sibling row so the submit control stays part of the <form>. */
+.formFields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 24px;
+  padding-bottom: 44px;
+}
+
+.fieldFull {
+  grid-column: 1 / -1;
+}
+
+.checkGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.checkGroup legend {
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.checkRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.checkRow input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--saffron);
+}
+
+.fileInput {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.fileInput::file-selector-button {
+  margin-right: 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fileInput::file-selector-button:hover {
+  background: var(--ink);
+  color: var(--chalk);
+}
+
+.fileName {
+  margin: 6px 0 0;
+  color: var(--willow);
+  font-size: 12px;
+}
+
+/* Review summary -------------------------------------------------------- */
+
+.summarySection {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.summarySection:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.summaryTitle {
+  margin: 0 0 8px;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.summaryList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.summaryRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 220px) 1fr;
+  gap: 20px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.summaryRow:last-child {
+  border-bottom: 0;
+}
+
+.summaryRow dt {
+  padding-top: 2px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summaryRow dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Text-first callout: quiet paper box, accent carried by a top
+   hairline and a willow square marker instead of a left bar. */
+.declaration {
+  position: relative;
+  margin: 26px 0 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--willow);
+  background: var(--paper);
+}
+
+.declaration::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 20px;
+  width: 8px;
+  height: 8px;
+  background: var(--willow);
+}
+
+.declaration p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-family: var(--serif);
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.6;
+}
+
+/* Action bar ------------------------------------------------------------ */
+
+/* Recoverable submit failure: brick callout above the action bar with a
+   retry via the still-enabled submit button. */
+.submitError {
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--brick);
+  border-top: 2px solid var(--brick);
+  background: rgba(162, 59, 46, 0.06);
+  color: var(--brick);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.formActions {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 16px clamp(22px, 4vw, 64px);
+  border-top: 1px solid var(--line);
+  background: rgba(255, 253, 248, 0.97);
+}
+
+.actionsNote {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
+.actionsNote span {
+  color: var(--willow);
+}
+
+@media (max-width: 700px) {
+  .formFields {
+    grid-template-columns: 1fr;
+  }
+
+  .formActions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .actionsNote {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .introRow {
+    flex-direction: column;
+  }
+}

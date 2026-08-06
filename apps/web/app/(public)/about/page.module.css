@@ -1,0 +1,81 @@
+/* About page composition. */
+
+.page {
+  background: var(--paper);
+}
+
+.historyGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 72px);
+  align-items: start;
+}
+
+.story {
+  max-width: 65ch;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.story p {
+  margin: 0 0 1.1em;
+}
+
+.story p:last-child {
+  margin-bottom: 0;
+}
+
+.note {
+  margin: var(--space-6) 0 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.quote {
+  margin: var(--space-5) 0 var(--space-4);
+}
+
+.quoteText {
+  margin: 0;
+}
+
+.attribution {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/* Framed campus artwork beside the history column. */
+.artPanel {
+  margin: 8px 0 0;
+  border: 1px solid var(--line);
+  background: var(--chalk);
+}
+
+.art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.artCaption {
+  margin: 0;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1000px) {
+  .historyGrid {
+    grid-template-columns: 1fr;
+  }
+}

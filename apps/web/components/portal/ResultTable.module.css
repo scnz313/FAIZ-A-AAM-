@@ -1,0 +1,93 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.publication {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.versionNote {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 46ch;
+}
+
+.reportTitle {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 18px 0 0;
+}
+
+.subjectTable {
+  margin-top: 8px;
+}
+
+.subjectCell strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Squared grade chip — the willow-tinted marker from the academic mockup. */
+.grade {
+  align-items: center;
+  background: rgba(83, 109, 87, 0.12);
+  color: var(--willow);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  height: 28px;
+  justify-content: center;
+  min-width: 30px;
+  padding: 0 6px;
+}
+
+.remarkCell {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.summary {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+.summaryLine {
+  font-family: var(--serif);
+  font-size: 22px;
+  margin: 0;
+}
+
+.summaryNote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  max-width: 56ch;
+}
+
+.download {
+  align-items: flex-start;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+.downloadNote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}

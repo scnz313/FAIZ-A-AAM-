@@ -1,0 +1,289 @@
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 720px;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--chalk);
+}
+
+/* Decorative canvas -------------------------------------------------- */
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.canvas::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 7px;
+  background: var(--saffron);
+}
+
+/* Islamic girih tessellation — a whisper of pattern behind the text. */
+.pattern {
+  position: absolute;
+  inset: 0;
+}
+
+/* Texture sits behind the composition — fainter than before so the art
+   panel carries the hero now. */
+.grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+.watermark {
+  position: absolute;
+  top: 40px;
+  right: 4%;
+  opacity: 0.05;
+}
+
+/* Ghost wordmark behind the copy column (not the art panel) — far
+   lighter than the chalk text it sits behind, so legibility holds. */
+.ghost {
+  position: absolute;
+  top: 30%;
+  left: -2%;
+  color: rgba(255, 255, 255, 0.06);
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(120px, 15vw, 230px);
+  font-weight: 500;
+  letter-spacing: -0.075em;
+  line-height: 0.58;
+  text-align: left;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Foreground ---------------------------------------------------------- */
+
+.headerRow {
+  position: relative;
+  z-index: 3;
+  padding: 16px clamp(48px, 8vw, 96px) 0;
+}
+
+.body {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  /* 55 / 45 split: copy column, photograph column. */
+  grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+  align-items: end;
+  gap: clamp(40px, 5vw, 72px);
+  flex: 1;
+  padding: clamp(64px, 10vh, 128px) clamp(48px, 8vw, 96px) 64px;
+}
+
+.content {
+  min-width: 0;
+  animation: rise 0.7s ease both;
+}
+
+.content :global(.eyebrow) {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.title {
+  margin: 0;
+  color: var(--chalk);
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(50px, 5.6vw, 88px);
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  text-wrap: balance;
+}
+
+/* Printed deck line: serif italic, chalk, slightly softened. */
+.deck {
+  max-width: 440px;
+  margin: 28px 0 30px;
+  color: var(--chalk);
+  opacity: 0.92;
+  font-family: var(--font-display, Georgia, "Times New Roman", serif);
+  font-style: italic;
+  font-size: 20px;
+  line-height: 1.45;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 30px;
+}
+
+/* Saffron CTA: a quiet inner rule along the bottom edge, nothing else. */
+.cta {
+  position: relative;
+}
+
+.cta::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 6px;
+  height: 1px;
+  background: var(--line-strong);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.cta:hover::after,
+.cta:focus-visible::after {
+  opacity: 1;
+}
+
+.quietLink {
+  color: var(--chalk);
+}
+
+.quietLink:hover {
+  color: var(--saffron-bright, #d1844d);
+}
+
+.quietArrow {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.quietLink:hover .quietArrow,
+.quietLink:focus-visible .quietArrow {
+  transform: translateX(3px);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content {
+    animation: none;
+  }
+
+  .quietArrow {
+    transition: none;
+  }
+}
+
+/* Photo panel ---------------------------------------------------------- */
+
+/* Paper-deep framed plate with a 1px chalk rule; no shadow. The photo
+   keeps a 3:2 aspect and scales with the column; the slow ken-burns
+   drift is disabled under reduced motion. */
+.photoPanel {
+  margin: 0;
+  align-self: end;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  padding: clamp(16px, 2vw, 26px);
+  background: var(--paper-deep);
+}
+
+.photoFrame {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: var(--paper-deep);
+  /* Mughal elliptical arch: the photograph sits inside an arch frame. */
+  border-radius: 50% 50% 4px 4px / 17% 17% 4px 4px;
+}
+
+.photo {
+  object-fit: cover;
+  animation: ken-burns 26s ease-in-out infinite alternate;
+  transform-origin: 50% 42%;
+}
+
+.caption {
+  margin: 14px 2px 0;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo {
+    animation: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .body {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .photoPanel {
+    width: 100%;
+  }
+
+  .ghost {
+    left: -2%;
+    font-size: clamp(120px, 22vw, 200px);
+  }
+}
+
+@media (max-width: 700px) {
+  .grid,
+  .watermark {
+    display: none;
+  }
+
+  .headerRow {
+    padding: 14px 20px 0;
+  }
+
+  .body {
+    padding: 48px 20px 40px;
+    gap: 40px;
+  }
+
+  .title {
+    font-size: clamp(40px, 11.5vw, 56px);
+  }
+
+  .deck {
+    margin: 22px 0 24px;
+    font-size: 18px;
+  }
+
+  .actions {
+    gap: 22px;
+  }
+}
+
+/* Fine vector detail (wave strokes, figures, birds) disappears at small
+   render sizes where it would read as mud. The group is global because
+   it lives inside the art components' SVG — anchored to the scene's own
+   class to keep the module selector pure. */
+@media (max-width: 700px) {
+  .photoPanel :global(.art-detail) {
+    display: none;
+  }
+}

@@ -1,0 +1,39 @@
+/* Verify sign-in — public paper page with a centred verification card. */
+
+.page {
+  background: var(--paper);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1 0 auto;
+}
+
+.frame {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section {
+  padding: clamp(40px, 6vw, 72px) clamp(24px, 6vw, 96px) clamp(72px, 9vw, 120px);
+}
+
+.card {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: clamp(24px, 4vw, 36px);
+}
+
+.demoNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: 480px;
+  margin: 18px auto 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}

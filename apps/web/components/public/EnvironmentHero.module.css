@@ -1,0 +1,60 @@
+.hero {
+  padding: clamp(64px, 9vh, 100px) clamp(48px, 8vw, 96px) clamp(44px, 5vw, 60px);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.headRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(24px, 4vw, 56px);
+  align-items: start;
+}
+
+.headCol {
+  min-width: 0;
+}
+
+/* Quiet ink branch ornament at the head of the page, top-right. */
+.branch {
+  width: clamp(120px, 14vw, 200px);
+  height: auto;
+  justify-self: end;
+  color: var(--ink-soft);
+}
+
+.title {
+  margin: 0 0 26px;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: clamp(46px, 5.5vw, 78px);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.deck {
+  max-width: 640px;
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+}
+
+.folio {
+  margin: 30px 0 0;
+}
+
+@media (max-width: 700px) {
+  .headRow {
+    grid-template-columns: 1fr;
+  }
+
+  .branch {
+    width: 96px;
+    order: -1;
+    justify-self: start;
+    margin-bottom: 8px;
+  }
+}

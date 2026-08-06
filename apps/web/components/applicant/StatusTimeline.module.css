@@ -1,0 +1,90 @@
+/* Vertical ruled timeline for application status pages. */
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.timeline::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 4px;
+  width: 1px;
+  background: var(--line-strong);
+}
+
+.event {
+  display: grid;
+  grid-template-columns: 9px 1fr;
+  gap: 18px;
+  padding-bottom: 28px;
+  position: relative;
+}
+
+.event:last-child {
+  padding-bottom: 0;
+}
+
+.node {
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  background: var(--ink-faint);
+}
+
+.current .node {
+  background: var(--saffron);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin: 0;
+}
+
+.meta strong {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.meta span {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.currentTag {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.actor {
+  margin: 5px 0 0;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.note {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 62ch;
+}
