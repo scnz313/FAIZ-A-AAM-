@@ -80,6 +80,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      content_publish_notice: {
+        Args: { p_notice_id: string }
+        Returns: undefined
+      }
       enqueue_outbox: {
         Args: {
           p_event_key: string
@@ -128,6 +132,36 @@ export type Database = {
       is_guardian: { Args: never; Returns: boolean }
       is_pure_teacher: { Args: never; Returns: boolean }
       is_staff_aal2: { Args: never; Returns: boolean }
+      jobs_decide: {
+        Args: {
+          p_action: string
+          p_application_id: string
+          p_private_note?: string
+          p_reason?: string
+          p_scheduled_at?: string
+        }
+        Returns: undefined
+      }
+      jobs_submit: {
+        Args: {
+          p_application_id: string
+          p_expected_version?: number
+          p_snapshot: Json
+        }
+        Returns: string
+      }
+      links_approve: {
+        Args: { p_expected_version: number; p_link_id: string }
+        Returns: undefined
+      }
+      links_reject: {
+        Args: {
+          p_expected_version: number
+          p_link_id: string
+          p_reason: string
+        }
+        Returns: undefined
+      }
       mark_outbox_delivered: {
         Args: { p_event_key: string }
         Returns: Database["public"]["Tables"]["outbox_events"]["Row"]
@@ -151,9 +185,34 @@ export type Database = {
         }
         Returns: string
       }
+      results_correction_request: {
+        Args: { p_publication_id: string; p_reason: string }
+        Returns: undefined
+      }
+      results_moderate: {
+        Args: {
+          p_batch_id: string
+          p_expected_version?: number
+          p_note?: string
+          p_outcome: string
+        }
+        Returns: undefined
+      }
       results_publish_batch: {
         Args: { p_batch_id: string; p_expected_version: number }
         Returns: string
+      }
+      results_submit_marks: {
+        Args: { p_batch_id: string; p_expected_version: number; p_marks: Json }
+        Returns: undefined
+      }
+      results_withdraw: {
+        Args: { p_publication_id: string; p_reason: string }
+        Returns: undefined
+      }
+      support_respond: {
+        Args: { p_body: string; p_private?: boolean; p_request_id: string }
+        Returns: undefined
       }
       timetable_publish_version: {
         Args: { p_note?: string; p_version_id: string }

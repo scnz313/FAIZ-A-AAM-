@@ -22,13 +22,35 @@ insert into public.role_grants (account_id, role_code, status, effective_from) v
   ('10000000-0000-4000-8000-000000000003', 'admissions_officer', 'active', now()),
   ('10000000-0000-4000-8000-000000000003', 'result_publisher', 'active', now()),
   ('10000000-0000-4000-8000-000000000003', 'timetable_manager', 'active', now()),
-  ('10000000-0000-4000-8000-000000000003', 'finance_officer', 'active', now());
+  ('10000000-0000-4000-8000-000000000003', 'finance_officer', 'active', now()),
+  ('10000000-0000-4000-8000-000000000003', 'support_officer', 'active', now()),
+  ('10000000-0000-4000-8000-000000000003', 'content_publisher', 'active', now()),
+  ('10000000-0000-4000-8000-000000000003', 'hr_approver', 'active', now()),
+  ('10000000-0000-4000-8000-000000000003', 'exam_reviewer', 'active', now());
 
 -- The synthetic fee schedule must be approved before invoices can be issued,
 -- and the RLS-suite result batch (8-A Mathematics) must be 'approved' before
 -- the publisher RPC can release it. Both updates run as postgres (bypass RLS).
 update public.fee_schedule_versions set status = 'approved' where version = 1;
 update public.result_batches set status = 'approved' where status = 'draft';
+
+-- Setup rows for the remaining-commands section (000015): a support
+-- request and a published vacancy + job application. These inserts have no
+-- RLS path for the acting sessions, so they run as postgres. (The pending
+-- guardian link is created AFTER conversion below — the child student does
+-- not exist before it.)
+insert into public.support_requests (requester_account_id, category, subject)
+values ('10000000-0000-4000-8000-000000000001', 'fees', 'Payment question');
+
+insert into public.job_vacancies (title, department, current_status)
+values ('Teacher - Mathematics', 'Academics', 'published');
+insert into public.job_vacancy_versions (vacancy_id, version, terms, published_by_account_id)
+select id, 1, '{"title": "Teacher - Mathematics"}'::jsonb, '10000000-0000-4000-8000-000000000003'
+  from public.job_vacancies where title = 'Teacher - Mathematics';
+insert into public.job_applications
+  (vacancy_id, vacancy_version, owner_account_id, current_status, applicant_name)
+select v.id, 1, '10000000-0000-4000-8000-000000000001', 'draft', 'Sana Wani'
+  from public.job_vacancies v where v.title = 'Teacher - Mathematics';
 
 -- 2. Fictional application owned by Sana (guardian account s1).
 insert into public.admission_applications
@@ -180,6 +202,148 @@ begin
   assert app.timetable_publish_version(v_ttv) is not null, 'timetable publication ref returned';
   assert (select status from public.timetable_versions where id = v_ttv) = 'published',
     'timetable version published';
+end $$;
+
+reset role;
+
+-- The converted child now exists; create the pending guardian link (postgres
+-- context) and share its id through a session GUC.
+insert into public.guardian_student_links
+  (guardian_id, student_id, relationship_label, status, verification_source, version)
+select g.id, s.id, 'Parent', 'pending_verification', 'guardian_request', 1
+  from public.guardians g
+  cross join public.students s
+ where s.person_id in (select id from public.people where display_name = 'Test Child Wani');
+
+select set_config('fass.link_id',
+  (select id::text from public.guardian_student_links
+    where verification_source = 'guardian_request' limit 1), false);
+
+-- ===========================================================================
+-- Remaining commands (000015): links, support, content, careers, marks,
+-- moderation, withdrawal. Rania holds the functional roles; Firdous is the
+-- pure teacher; Sana is the guardian/applicant.
+-- ===========================================================================
+set role authenticated;
+select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', false);
+select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+
+do $$
+declare
+  v_denied boolean;
+  v_version uuid;
+  v_pub text;
+begin
+  -- Links: the pending link for the converted child; approve as support staff.
+  v_denied := false;
+  begin
+    perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', false);
+    perform app.links_approve(current_setting('fass.link_id', true)::uuid, 1);
+  exception when others then
+    v_denied := true;
+  end;
+  assert v_denied, 'teacher cannot approve links';
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', false);
+  perform app.links_approve(current_setting('fass.link_id', true)::uuid, 1);
+  assert (select status from public.guardian_student_links
+           where id = current_setting('fass.link_id', true)::uuid) = 'active',
+    'link approved by support staff';
+
+  -- Support: requester replies to their own thread; staff add private notes;
+  -- requester cannot add private notes.
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  perform app.support_respond((select id from public.support_requests limit 1), 'Please clarify the due date', false);
+  v_denied := false;
+  begin
+    perform app.support_respond((select id from public.support_requests limit 1), 'internal only', true);
+  exception when others then
+    v_denied := true;
+  end;
+  assert v_denied, 'requester cannot add private notes';
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', false);
+  perform app.support_respond((select id from public.support_requests limit 1), 'Noted, we will confirm shortly', false);
+  perform app.support_respond((select id from public.support_requests limit 1), 'case notes', true);
+  assert (select count(*) from public.support_messages) = 2, 'thread appended (requester + staff)';
+  assert (select count(*) from public.support_private_notes) = 1, 'private note stored separately';
+
+  -- Content: publish the scheduled seed notice (publisher only).
+  perform app.content_publish_notice(
+    (select n.id from public.notices n
+       join public.content_items ci on ci.id = n.content_item_id
+      where ci.slug = 'notice-annual-day' limit 1));
+  assert (select status from public.notices
+           where content_item_id in (select id from public.content_items where slug = 'notice-annual-day')) = 'published',
+    'scheduled notice published';
+
+  -- Careers: applicant submits (idempotent), HR decides.
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', false);
+  v_version := app.jobs_submit(
+    (select id from public.job_applications where applicant_name = 'Sana Wani' limit 1),
+    '{"experience": "5 years"}'::jsonb, 0);
+  assert v_version = app.jobs_submit(
+    (select id from public.job_applications where applicant_name = 'Sana Wani' limit 1),
+    '{"experience": "5 years"}'::jsonb, 0), 'job submit retry returns the same version';
+
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', false);
+  perform app.jobs_decide((select id from public.job_applications where applicant_name = 'Sana Wani' limit 1),
+                          'shortlist', 'Strong profile', null, null);
+  assert (select current_status from public.job_applications
+           where applicant_name = 'Sana Wani' limit 1) = 'shortlisted', 'job shortlisted by HR';
+
+  -- Marks: teacher (exact 8-A MAT scope) submits marks for a fresh batch;
+  -- moderator approves; publisher publishes; publisher withdraws.
+  insert into public.result_batches
+    (exam_definition_id, grade_section_id, subject_id, status, version)
+  select ed.id, ed.grade_section_id, s.id, 'draft', 1
+    from public.exam_definitions ed
+    cross join public.subjects s
+   where ed.term = 'midterm'
+     and ed.grade_section_id in (select id from public.grade_sections where section_label = 'A')
+     and s.code = 'MAT'
+     and not exists (
+       select 1 from public.result_batches rb
+        where rb.exam_definition_id = ed.id and rb.subject_id = s.id and rb.status = 'draft');
+
+  insert into public.result_rosters (batch_id, student_id, enrollment_id)
+  select rb.id, e.student_id, e.id
+    from public.result_batches rb
+    cross join public.enrollments e
+   where rb.status = 'draft'
+     and e.grade_section_id = rb.grade_section_id
+     and e.status = 'active';
+
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', false);
+  perform app.results_submit_marks(
+    (select id from public.result_batches where status = 'draft' limit 1),
+    (select jsonb_agg(jsonb_build_object(
+              'rosterId', r.id,
+              'componentId', (select ac.id from public.assessment_components ac
+                               join public.exam_definitions ed on ed.id = ac.exam_definition_id
+                              where ed.term = 'midterm' limit 1),
+              'obtained', 85))
+       from public.result_rosters r
+       join public.result_batches rb on rb.id = r.batch_id
+      where rb.status = 'draft'),
+    1);
+  assert (select status from public.result_batches where status = 'submitted') = 'submitted',
+    'teacher submitted marks (assignment scope)';
+
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', false);
+  perform app.results_moderate(
+    (select id from public.result_batches where status = 'submitted' limit 1),
+    'approved', 'Checked', 2);
+  assert (select status from public.result_batches
+           where status = 'approved' order by created_at desc limit 1) = 'approved',
+    'moderator approved the batch';
+
+  v_pub := app.results_publish_batch(
+    (select id from public.result_batches where status = 'approved' limit 1),
+    (select version from public.result_batches where status = 'approved' limit 1));
+  assert v_pub is not null, 'approved batch published';
+  perform app.results_withdraw(
+    (select id from public.result_publications where reference = v_pub), 'Duplicate entry');
+  assert (select status from public.result_publications where reference = v_pub) = 'withdrawn',
+    'publication withdrawn with reason';
 end $$;
 
 reset role;
