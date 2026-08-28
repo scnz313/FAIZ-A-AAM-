@@ -199,7 +199,7 @@ select ed.id, s.id, ed.term, 100, 1, 0
   join public.grade_sections gs on gs.id = ed.grade_section_id
   join public.subjects s on s.code in ('MAT', 'SCI', 'ENG', 'URD', 'KAS', 'SST', 'COM')
   where ed.term = 'midterm'
-on conflict (exam_definition_id, subject_id) do nothing;
+on conflict do nothing;
 
 -- Draft timetable for 8-A (Monday only; a draft is never visible to families).
 insert into public.timetable_versions (grade_section_id, status, version, effective_from)

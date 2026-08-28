@@ -53,6 +53,15 @@ select g.id, s.id, 'Parent', 'active', 'enrollment_invitation'
  where s.person_id in ('20000000-0000-4000-8000-000000000003',
                        '20000000-0000-4000-8000-000000000004');
 
+-- Capability fixtures are explicit: the same guardian link may be active while
+-- one business capability is restricted. Both synthetic children begin with
+-- the five launch capabilities so the positive matrix has a known baseline.
+insert into public.guardian_link_capabilities (link_id, capability)
+select l.id, c.capability
+  from public.guardian_student_links l
+ cross join (values ('academics'), ('finance'), ('documents'), ('notices'), ('profile')) as c(capability)
+on conflict do nothing;
+
 insert into public.staff_members (person_id, employment_status, title) values
   ('20000000-0000-4000-8000-000000000002', 'active', 'Teacher');
 
@@ -133,6 +142,84 @@ select 'invoice', i.id, 'receipt', 'invoice/' || i.id || '/receipt.pdf', 'receip
  where i.student_id in (select id from public.students
                          where person_id in ('20000000-0000-4000-8000-000000000003',
                                              '20000000-0000-4000-8000-000000000005'));
+
+-- 17-role authorization matrix actors. These use a disjoint synthetic UUID
+-- namespace so they cannot collide with the 1000... actors used by the RPC
+-- flow. Every matrix account has exactly one canonical role.
+insert into auth.users (id)
+select ('30000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid
+  from generate_series(1, 17) n
+on conflict do nothing;
+insert into public.people (id, given_name, family_name, display_name)
+select ('40000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+       'Matrix', 'Role ' || n::text, 'Matrix Role ' || n::text
+  from generate_series(1, 17) n
+on conflict do nothing;
+insert into public.user_accounts (id, person_id, status, verified_contact)
+select ('30000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+       ('40000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+       'active', 'matrix-' || n::text || '@example.in'
+  from generate_series(1, 17) n
+on conflict do nothing;
+insert into public.role_grants (account_id, role_code, status, effective_from)
+select ('30000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
+       (array['guardian','student','content_editor','content_publisher','admissions_officer','admissions_approver','finance_officer','finance_approver','hr_reviewer','hr_approver','teacher','exam_reviewer','result_publisher','timetable_manager','support_officer','auditor','system_administrator'])[n],
+       'active', now()
+  from generate_series(1, 17) n
+on conflict do nothing;
+insert into public.staff_members (person_id, employment_status, title)
+select person_id, 'active', 'Matrix staff' from public.user_accounts
+ where id >= '30000000-0000-4000-8000-000000000003'::uuid
+   and id <= '30000000-0000-4000-8000-000000000017'::uuid
+on conflict (person_id) do nothing;
+insert into public.guardians (person_id, status)
+select person_id, 'active' from public.user_accounts where id = '30000000-0000-4000-8000-000000000001'
+on conflict (person_id) do nothing;
+insert into public.guardian_student_links (guardian_id, student_id, relationship_label, status, verification_source)
+select g.id, s.id, 'Parent', 'active', 'staff_review'
+  from public.guardians g
+  join public.user_accounts ua on ua.person_id = g.person_id and ua.id = '30000000-0000-4000-8000-000000000001'
+  cross join public.students s
+ where s.person_id in ('20000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000004');
+insert into public.guardian_link_capabilities (link_id, capability)
+select l.id, c.capability from public.guardian_student_links l
+ cross join (values ('academics'),('finance'),('documents'),('notices'),('profile')) c(capability)
+ where l.guardian_id in (select g.id from public.guardians g join public.user_accounts ua on ua.person_id = g.person_id where ua.id = '30000000-0000-4000-8000-000000000001')
+on conflict do nothing;
+insert into public.students (person_id, status)
+select person_id, 'active' from public.user_accounts where id = '30000000-0000-4000-8000-000000000002'
+on conflict do nothing;
+insert into public.staff_assignments (staff_member_id, role_grant_id, academic_year_id, grade_section_id, subject_id, status, effective_from)
+select sm.id, rg.id, ay.id, gs.id, sub.id, 'active', now()
+  from public.staff_members sm
+  join public.people p on p.id = sm.person_id
+  join public.user_accounts ua on ua.person_id = p.id and ua.id = '30000000-0000-4000-8000-000000000011'
+  join public.role_grants rg on rg.account_id = ua.id and rg.role_code = 'teacher' and rg.status = 'active'
+  join public.academic_years ay on ay.label = '2026-27'
+  join public.grade_sections gs on gs.academic_year_id = ay.id and gs.section_label = 'A'
+  join public.grades g on g.id = gs.grade_id and g.code = '8'
+  join public.subjects sub on sub.code = 'MAT'
+on conflict do nothing;
+
+-- One record per protected business surface for positive role assertions.
+insert into public.admission_applications (owner_account_id, academic_year_id, grade_id, current_status, student_name, parent_name)
+select '10000000-0000-4000-8000-000000000001', ay.id, g.id, 'submitted', 'Matrix Applicant', 'Sana Wani'
+  from public.academic_years ay cross join public.grades g where ay.label = '2026-27' and g.code = '8';
+insert into public.job_vacancies (title, department, current_status) values ('Matrix Vacancy','HR','published');
+insert into public.job_vacancy_versions (vacancy_id, version, terms)
+select id, 1, '{"title":"Matrix Vacancy"}'::jsonb from public.job_vacancies where title = 'Matrix Vacancy';
+insert into public.job_applications (vacancy_id, vacancy_version, owner_account_id, current_status, applicant_name)
+select v.id, 1, '10000000-0000-4000-8000-000000000001', 'submitted', 'Matrix Applicant'
+  from public.job_vacancies v where v.title = 'Matrix Vacancy';
+insert into public.job_review_assignments (application_id, reviewer_account_id)
+select id, '30000000-0000-4000-8000-000000000009' from public.job_applications where applicant_name = 'Matrix Applicant';
+insert into public.support_requests (requester_account_id, category, subject)
+values ('30000000-0000-4000-8000-000000000015', 'general', 'Matrix support request');
+insert into public.reconciliation_runs (status, summary, created_by_account_id)
+values ('completed', '{"matrix":true}'::jsonb, '30000000-0000-4000-8000-000000000007');
+insert into public.content_versions (content_item_id, version, title, body, author_account_id, review_status)
+select id, 1, 'Matrix draft', '{"matrix":true}'::jsonb, '30000000-0000-4000-8000-000000000003', 'draft'
+  from public.content_items where slug = 'notice-admissions-2026-27';
 
 -- 3. Assertions.
 -- 3a. Anonymous: public notice visible; family/section notices and private
@@ -232,12 +319,89 @@ begin
             join public.grade_sections gs on gs.id = rb.grade_section_id
            where gs.section_label = 'C') = 0,
     'teacher never sees out-of-scope 9-C batches';
-  assert (select count(*) from public.invoices) = 2,
-    'staff (aal2) reads finance rows for operations';
+  assert (select count(*) from public.invoices) = 0,
+    'pure teacher (aal2) is denied finance rows';
 end $$;
 reset role;
 
--- 3d. No session (auth.uid() null): helpers deny and protected data is empty.
+-- 3d. Positive/negative matrix for every canonical role. Each actor proves
+-- one owned functional read and one unrelated-business denial.
+set role authenticated;
+do $$
+declare
+  v_codes text[] := array['guardian','student','content_editor','content_publisher','admissions_officer','admissions_approver','finance_officer','finance_approver','hr_reviewer','hr_approver','teacher','exam_reviewer','result_publisher','timetable_manager','support_officer','auditor','system_administrator'];
+  v_positive int;
+  v_finance int;
+begin
+  for i in 1..array_length(v_codes, 1) loop
+    perform set_config('request.jwt.claim.sub', ('30000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid::text, false);
+    perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+    case v_codes[i]
+      when 'guardian' then select count(*) into v_positive from public.enrollments;
+      when 'student' then select count(*) into v_positive from public.students;
+      when 'content_editor', 'content_publisher' then select count(*) into v_positive from public.content_versions;
+      when 'admissions_officer', 'admissions_approver' then select count(*) into v_positive from public.admission_applications;
+      when 'finance_officer', 'finance_approver' then select count(*) into v_positive from public.invoices;
+      when 'hr_reviewer', 'hr_approver' then select count(*) into v_positive from public.job_applications;
+      when 'teacher', 'exam_reviewer', 'result_publisher' then select count(*) into v_positive from public.result_batches;
+      when 'timetable_manager' then select count(*) into v_positive from public.timetable_versions;
+      when 'support_officer' then select count(*) into v_positive from public.support_requests;
+      when 'auditor' then select count(*) into v_positive from public.reconciliation_runs;
+      when 'system_administrator' then select count(*) into v_positive from public.settings_versions;
+    end case;
+    assert v_positive > 0, 'role positive read failed for ' || v_codes[i];
+    select count(*) into v_finance from public.invoices;
+    if v_codes[i] not in ('guardian','finance_officer','finance_approver') then
+      assert v_finance = 0, 'unrelated finance read leaked to ' || v_codes[i];
+    end if;
+  end loop;
+end $$;
+
+-- 3e. Guardian capability denial is independent of active-link status.
+reset role;
+delete from public.guardian_link_capabilities
+ where capability in ('finance', 'notices', 'profile')
+   and link_id in (
+     select l.id from public.guardian_student_links l
+      join public.guardians g on g.id = l.guardian_id
+      join public.user_accounts ua on ua.person_id = g.person_id
+     where ua.id = '30000000-0000-4000-8000-000000000001'
+   );
+set role authenticated;
+select set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000001', false);
+select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+do $$
+begin
+  assert (select count(*) from public.invoices) = 0, 'guardian finance capability is enforced';
+  assert (select count(*) from public.notices where status = 'published') = 1, 'public notice remains visible without guardian notices capability';
+  assert (select count(*) from public.students where id in (select l.student_id from public.guardian_student_links l join public.guardians g on g.id = l.guardian_id join public.user_accounts ua on ua.person_id = g.person_id where ua.id = '30000000-0000-4000-8000-000000000001')) = 0, 'guardian profile capability denies child students';
+  assert (select count(*) from public.people where id in (select s.person_id from public.students s join public.guardian_student_links l on l.student_id = s.id join public.guardians g on g.id = l.guardian_id join public.user_accounts ua on ua.person_id = g.person_id where ua.id = '30000000-0000-4000-8000-000000000001')) = 0, 'guardian profile capability denies child people';
+  assert (select count(*) from public.guardian_student_links where guardian_id in (select g.id from public.guardians g join public.user_accounts ua on ua.person_id = g.person_id where ua.id = '30000000-0000-4000-8000-000000000001')) = 2, 'guardian can still select linked children without profile capability';
+  assert (select count(*) from public.guardian_link_capabilities where link_id in (select l.id from public.guardian_student_links l join public.guardians g on g.id = l.guardian_id join public.user_accounts ua on ua.person_id = g.person_id where ua.id = '30000000-0000-4000-8000-000000000001')) = 4, 'guardian can still read remaining capability rows';
+end $$;
+
+reset role;
+insert into public.guardian_link_capabilities (link_id, capability)
+select l.id, c.capability
+  from public.guardian_student_links l
+  cross join (values ('finance'), ('notices'), ('profile')) c(capability)
+  join public.guardians g on g.id = l.guardian_id
+  join public.user_accounts ua on ua.person_id = g.person_id
+ where ua.id = '30000000-0000-4000-8000-000000000001'
+on conflict do nothing;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000001', false);
+select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+do $$
+begin
+  assert (select count(*) from public.invoices) = 1, 'guardian finance capability restores finance access';
+  assert (select count(*) from public.notices where status = 'published') = 2, 'guardian notices capability restores targeted notices';
+  assert (select count(*) from public.students where id in (select l.student_id from public.guardian_student_links l join public.guardians g on g.id = l.guardian_id join public.user_accounts ua on ua.person_id = g.person_id where ua.id = '30000000-0000-4000-8000-000000000001')) = 2, 'guardian profile capability restores child students';
+  assert (select count(*) from public.people where id in (select s.person_id from public.students s join public.guardian_student_links l on l.student_id = s.id join public.guardians g on g.id = l.guardian_id join public.user_accounts ua on ua.person_id = g.person_id where ua.id = '30000000-0000-4000-8000-000000000001')) = 2, 'guardian profile capability restores child people';
+end $$;
+
+-- 3f. No session (auth.uid() null): helpers deny and protected data is empty.
+reset role;
 select set_config('request.jwt.claim.sub', '', false);
 select set_config('request.jwt.claims', '', false);
 do $$
