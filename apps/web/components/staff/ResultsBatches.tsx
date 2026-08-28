@@ -9,11 +9,22 @@ import type { AssignmentScope } from "@/components/staff/MarksEntry";
 import { formatKolkata } from "@/modules/iot/domain";
 import { canRole } from "@/modules/services/staff-authorization";
 import { academicsService, ENTRY_BATCH_STATUS_META } from "@/modules/services/academics";
-import type { EntryBatch } from "@/modules/services/academics";
+import type { EntryBatch, EntryBatchStatus } from "@/modules/services/academics";
 
 import styles from "./ResultsBatches.module.css";
 
 const DEFAULT_ACTOR = "M. Wani (exam office)";
+
+const STATUS_FILTERS: ReadonlyArray<{ key: "all" | EntryBatchStatus; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "draft", label: "Draft" },
+  { key: "submitted", label: "Submitted" },
+  { key: "moderation", label: "Moderation" },
+  { key: "returned", label: "Returned" },
+  { key: "approved", label: "Approved" },
+  { key: "published", label: "Published" },
+  { key: "withdrawn", label: "Withdrawn" },
+];
 
 /**
  * Result batch queue: Entry → Moderation → Approved → Published, driven by
@@ -23,6 +34,7 @@ const DEFAULT_ACTOR = "M. Wani (exam office)";
  */
 export function ResultsBatches({ batches: initial = null }: { batches?: EntryBatch[] | null }) {
   const [batches, setBatches] = useState<EntryBatch[] | null>(initial);
+  const [filter, setFilter] = useState<"all" | EntryBatchStatus>("all");
   const [live, setLive] = useState("");
   const [busyRef, setBusyRef] = useState<string | null>(null);
   const [correctingRef, setCorrectingRef] = useState<string | null>(null);
@@ -49,9 +61,13 @@ export function ResultsBatches({ batches: initial = null }: { batches?: EntryBat
       return;
     }
     let cancelled = false;
-    void teacherAssignmentScope(summary.accountId).then((scope) => {
-      if (!cancelled) setAssignmentScope(scope);
-    });
+    void teacherAssignmentScope(summary.accountId)
+      .then((scope) => {
+        if (!cancelled) setAssignmentScope(scope);
+      })
+      .catch(() => {
+        if (!cancelled) setAssignmentScope([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -60,9 +76,14 @@ export function ResultsBatches({ batches: initial = null }: { batches?: EntryBat
 
   useEffect(() => {
     let cancelled = false;
-    void academicsService.listBatches().then((items) => {
-      if (!cancelled) setBatches(items);
-    });
+    void academicsService
+      .listBatches()
+      .then((items) => {
+        if (!cancelled) setBatches(items);
+      })
+      .catch(() => {
+        if (!cancelled) setBatches([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -139,6 +160,8 @@ export function ResultsBatches({ batches: initial = null }: { batches?: EntryBat
     await refresh();
   }
 
+  const visible = batches === null ? null : filter === "all" ? batches : batches.filter((b) => b.status === filter);
+
   return (
     <section aria-labelledby="batch-queue-heading">
       <div className={styles.sectionHead}>
@@ -148,9 +171,31 @@ export function ResultsBatches({ batches: initial = null }: { batches?: EntryBat
         <span className="demo-badge">Demo data</span>
       </div>
 
+      {batches !== null && (
+        <div className="tabs" role="group" aria-label="Filter batches by status">
+          {STATUS_FILTERS.map((tab) => {
+            const count = tab.key === "all" ? batches.length : batches.filter((b) => b.status === tab.key).length;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                aria-pressed={filter === tab.key}
+                className={filter === tab.key ? "active" : undefined}
+                onClick={() => setFilter(tab.key)}
+              >
+                {tab.label}
+                <span className={`num ${styles.tabCount}`}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="table--scroll">
-        {batches === null ? (
+        {visible === null ? (
           <p className={styles.live}>Loading batch queue…</p>
+        ) : visible.length === 0 ? (
+          <p className={styles.live}>No batches in this view.</p>
         ) : (
           <table className={`table ${styles.batchTable}`}>
             <thead>
@@ -160,13 +205,13 @@ export function ResultsBatches({ batches: initial = null }: { batches?: EntryBat
                 <th scope="col">Class</th>
                 <th scope="col">Subject</th>
                 <th scope="col">Status</th>
-                <th scope="col">Marks entered</th>
-                <th scope="col">Published at</th>
+                <th scope="col" className="num">Marks entered</th>
+                <th scope="col" className="num">Published at</th>
                 <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {batches.map((batch) => (
+              {visible.map((batch) => (
                 <BatchRow
                   key={batch.ref}
                   batch={batch}
@@ -368,7 +413,7 @@ function BatchRow({
           <td colSpan={8}>
             <div className="panel">
               <label className="sr-only" htmlFor={`correction-reason-${batch.ref}`}>
-                Reason for correction v{nextVersion}
+                Reason for correction v{nextVersion} (required)
               </label>
               <input
                 id={`correction-reason-${batch.ref}`}
@@ -376,7 +421,8 @@ function BatchRow({
                 type="text"
                 value={correctionReason}
                 onChange={(event) => onCorrectionReasonChange(event.target.value)}
-                placeholder={`Reason for correction v${nextVersion} — shown on the report`}
+                placeholder={`Reason for correction v${nextVersion} (required) — shown on the report`}
+                aria-required="true"
               />
               <div className={styles.actions}>
                 <Button variant="primary" onClick={() => onStartCorrection(batch.ref)} disabled={busy}>
@@ -395,7 +441,7 @@ function BatchRow({
           <td colSpan={8}>
             <div className="panel">
               <label className="sr-only" htmlFor={`withdraw-reason-${batch.ref}`}>
-                Reason for withdrawing v{batch.version}
+                Reason for withdrawing v{batch.version} (required)
               </label>
               <input
                 id={`withdraw-reason-${batch.ref}`}
@@ -403,7 +449,8 @@ function BatchRow({
                 type="text"
                 value={withdrawalReason}
                 onChange={(event) => onWithdrawalReasonChange(event.target.value)}
-                placeholder={`Reason for withdrawing v${batch.version} — the live report is removed`}
+                placeholder={`Reason for withdrawing v${batch.version} (required) — the live report is removed`}
+                aria-required="true"
               />
               <div className={styles.actions}>
                 <Button variant="danger" onClick={() => onWithdraw(batch.ref)} disabled={busy}>
@@ -422,7 +469,7 @@ function BatchRow({
           <td colSpan={8}>
             <div className="panel">
               <label className="sr-only" htmlFor={`return-reason-${batch.ref}`}>
-                Reason for returning {batch.ref}
+                Reason for returning {batch.ref} (required)
               </label>
               <input
                 id={`return-reason-${batch.ref}`}
@@ -431,6 +478,7 @@ function BatchRow({
                 value={returnReason}
                 onChange={(event) => onReturnReasonChange(event.target.value)}
                 placeholder="Why is the sheet back with the teacher? This reason is recorded on the batch."
+                aria-required="true"
               />
               <div className={styles.actions}>
                 <Button variant="primary" onClick={() => onReturn(batch.ref)} disabled={busy}>

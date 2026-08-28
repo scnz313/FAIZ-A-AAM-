@@ -4,9 +4,11 @@ import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { OverviewFinanceBand } from "@/components/portal/OverviewFinanceBand";
 import OverviewGreeting from "@/components/portal/OverviewGreeting";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
-import { FINANCE_DEMO_NOTE } from "@/modules/finance/demo";
+import { FINANCE_DEMO_NOTE } from "@/modules/services/finance";
 import { contentService } from "@/modules/services/content";
 import { formatKolkata } from "@/modules/iot/domain";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerContent } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -24,7 +26,7 @@ const QUICK_LINKS: ReadonlyArray<{ num: string; title: string; line: string; hre
 
 export default async function PortalOverviewPage() {
   /* Family-audience published notices — the same record the notices page reads. */
-  const notices = await contentService.listForAudience("family");
+  const notices = dataAdapter() === "supabase" ? await loadServerContent("family") : await contentService.listForAudience("family");
   const pinnedNotices = notices.filter((notice) => notice.urgent || notice.pinned);
 
   return (

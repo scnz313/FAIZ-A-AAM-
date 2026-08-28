@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { InvoiceStatus } from "@/modules/finance/demo";
-import { formatINR, INVOICE_STATUS_META } from "@/modules/finance/demo";
+import { formatINR, INVOICE_STATUS_META, type InvoiceStatus } from "@/modules/services/finance";
 import { formatKolkata } from "@/modules/iot/domain";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { InvoiceLines } from "@/components/staff/InvoiceLines";
@@ -73,11 +72,11 @@ export function FeeLedgerTable({ views }: { views: ReadonlyArray<InvoiceView> })
                 <th scope="col">Ref</th>
                 <th scope="col">Student</th>
                 <th scope="col">Term</th>
-                <th scope="col">Issued</th>
-                <th scope="col">Due</th>
-                <th scope="col">Total</th>
-                <th scope="col">Paid</th>
-                <th scope="col">Balance</th>
+                <th scope="col" className="num">Issued</th>
+                <th scope="col" className="num">Due</th>
+                <th scope="col" className="num">Total</th>
+                <th scope="col" className="num">Paid</th>
+                <th scope="col" className="num">Balance</th>
                 <th scope="col">Status</th>
               </tr>
             </thead>

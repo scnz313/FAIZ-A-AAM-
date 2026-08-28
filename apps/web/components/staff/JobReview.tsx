@@ -721,6 +721,7 @@ export function JobReview({
                             rows={3}
                             value={note}
                             disabled={processing}
+                            aria-required={DECISIONS[draft].noteRequired || undefined}
                             onChange={(event) => {
                               setNote(event.target.value);
                               if (noteError) setNoteError(null);

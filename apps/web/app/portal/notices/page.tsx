@@ -3,6 +3,8 @@ import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { contentService, noticeCategories, type ContentNotice } from "@/modules/services/content";
 import { formatKolkata } from "@/modules/iot/domain";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerContent } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -27,7 +29,7 @@ export default async function NoticesPage({ searchParams }: NoticesPageProps) {
 
   /* Published notices the family may see: public rows plus family-targeted
      rows — the same records the public site and staff workspaces read. */
-  const notices = await contentService.listForAudience("family");
+  const notices = dataAdapter() === "supabase" ? await loadServerContent("family") : await contentService.listForAudience("family");
   const visible = category === null ? notices : notices.filter((n) => n.category === category);
   const ordered = [...visible].sort(compareNotices);
 
@@ -64,7 +66,24 @@ export default async function NoticesPage({ searchParams }: NoticesPageProps) {
         </div>
 
         {ordered.length === 0 ? (
-          <p className={styles.empty}>No notices in this category yet.</p>
+          <div className="workspace-state">
+            <p className="workspace-state-title">No notices in this category</p>
+            {category === null ? (
+              <p className="workspace-state-note">
+                Nothing has been published for families yet. New notices appear here as soon as the office posts
+                them.
+              </p>
+            ) : (
+              <>
+                <p className="workspace-state-note">
+                  No {category} notices are posted right now. Try another category or view all notices.
+                </p>
+                <a className="link-arrow" href="/portal/notices">
+                  View all notices →
+                </a>
+              </>
+            )}
+          </div>
         ) : (
           <div className={styles.rows}>
             {ordered.map((notice) => (

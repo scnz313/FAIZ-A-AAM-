@@ -4,10 +4,8 @@ import { useMemo, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { demoNow } from "@/modules/demo/clock";
 import { formatKolkata } from "@/modules/iot/domain";
 import {
-  demoAuditEvents,
   type AuditAction,
   type AuditEvent,
   type AuditOutcome,
@@ -19,11 +17,18 @@ const ACTIONS: readonly AuditAction[] = [
   "Login",
   "Application reviewed",
   "Result published",
+  "Result withdrawn",
   "Payment reconciled",
+  "Payment posted",
   "Notice published",
   "Timetable changed",
   "Setting changed",
   "Invoice viewed",
+  "Link requested",
+  "Link approved",
+  "Link rejected",
+  "Link revoked",
+  "Enrollment converted",
 ];
 
 const OUTCOME_TONE: Record<AuditOutcome, "good" | "alert"> = {
@@ -62,7 +67,7 @@ const REF_RE = /^(INV|APP|JOB|GW)/;
  * seeded demo list is the fallback). No editing or deletion is offered
  * anywhere.
  */
-export function AuditExplorer({ events = demoAuditEvents }: { events?: readonly AuditEvent[] }) {
+export function AuditExplorer({ events = [] }: { events?: readonly AuditEvent[] }) {
   const [actor, setActor] = useState("all");
   const [action, setAction] = useState<"all" | AuditAction>("all");
   const [range, setRange] = useState<RangeKey>("30d");
@@ -71,7 +76,7 @@ export function AuditExplorer({ events = demoAuditEvents }: { events?: readonly 
 
   const visible = useMemo(() => {
     const days = RANGES.find((r) => r.key === range)?.days ?? 30;
-    const now = demoNow();
+    const now = new Date();
     return events.filter(
       (event) =>
         (actor === "all" || event.actor === actor) &&
@@ -174,9 +179,7 @@ export function AuditExplorer({ events = demoAuditEvents }: { events?: readonly 
               ))}
             </tbody>
           </table>
-          <p className={styles.demoNote}>
-            <span className="demo-badge">Demo events</span>
-          </p>
+          {events.length > 0 ? <p className={styles.demoNote}>Read-only audit projection · safe metadata only.</p> : null}
         </div>
       )}
     </div>

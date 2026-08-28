@@ -34,11 +34,9 @@
   margin-top: 10px;
 }
 
-.loading {
-  color: var(--muted);
-  font-family: var(--serif);
-  font-size: 14px;
-  margin: 0;
+.loadingBlock {
+  display: grid;
+  gap: 14px;
 }
 
 .row {

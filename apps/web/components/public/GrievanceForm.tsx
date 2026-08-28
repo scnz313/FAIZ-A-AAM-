@@ -242,6 +242,8 @@ export function GrievanceForm() {
               type="checkbox"
               checked={consent}
               onChange={(event) => setConsent(event.target.checked)}
+              aria-invalid={errors.consent !== undefined}
+              aria-describedby={errors.consent ? `${fieldId("consent")}-error` : undefined}
             />
             The school will use these details to respond to this concern.
           </label>

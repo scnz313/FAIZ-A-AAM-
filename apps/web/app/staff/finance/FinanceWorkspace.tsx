@@ -3,14 +3,12 @@
 import { useEffect, useState } from "react";
 
 import { FeeLedgerTable } from "@/components/staff/FeeLedgerTable";
-import { formatINR } from "@/modules/finance/demo";
+import { formatINR } from "@/modules/services/finance";
 import { formatKolkata } from "@/modules/iot/domain";
 import { financeService, type InvoiceView, type Receipt } from "@/modules/services/finance";
+import type { FinanceReconciliationProjectionRow } from "@/lib/supabase/domain";
 
 import styles from "./page.module.css";
-
-/** Demo-only: last reconciliation run before this demo session. */
-const LAST_RECONCILIATION_ISO = "2026-07-31T04:30:00Z";
 
 /**
  * Client island for the staff finance workspace. The server renders the
@@ -22,22 +20,29 @@ const LAST_RECONCILIATION_ISO = "2026-07-31T04:30:00Z";
 export function FinanceWorkspace({
   initialViews,
   initialReceipts,
+  initialReconciliation,
+  mode = "demo",
 }: {
   initialViews: InvoiceView[];
   initialReceipts: Receipt[];
+  initialReconciliation?: FinanceReconciliationProjectionRow[];
+  mode?: "demo" | "supabase";
 }) {
   const [views, setViews] = useState<InvoiceView[]>(initialViews);
   const [receipts, setReceipts] = useState<Receipt[]>(initialReceipts);
+  const [reconciliation] = useState<FinanceReconciliationProjectionRow[]>(initialReconciliation ?? []);
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([financeService.listAllInvoices(), financeService.listReceipts()]).then(
-      ([nextViews, nextReceipts]) => {
+    void Promise.all([financeService.listAllInvoices(), financeService.listReceipts()])
+      .then(([nextViews, nextReceipts]) => {
         if (cancelled) return;
         setViews(nextViews);
         setReceipts(nextReceipts);
-      },
-    );
+      })
+      .catch(() => {
+        if (cancelled) return;
+      });
     return () => {
       cancelled = true;
     };
@@ -47,16 +52,21 @@ export function FinanceWorkspace({
   const outstanding = views.reduce((sum, view) => sum + Math.max(0, view.balancePaise), 0);
   const lastReceiptRef = receipts[receipts.length - 1]?.ref ?? "—";
   const studentsOnLedger = new Set(views.map((view) => view.studentId)).size;
+  /* Count invoices with unpaid balances that need follow-up. */
+  const unpaidCount = views.filter((view) => view.status === "unpaid" || view.status === "overdue").length;
+  const recentReceipts = mode === "supabase"
+    ? reconciliation.reduce((sum, run) => sum + run.reconciliation_exceptions.filter((exception) => exception.status === "open").length, 0)
+    : receipts.length;
 
   const queue = [
     {
       label: "Invoices due soon",
-      count: views.filter((view) => view.status === "unpaid" || view.status === "overdue").length,
+      count: unpaidCount,
       href: "/staff/finance/invoices",
     },
     {
       label: "Payments to reconcile",
-      count: 2,
+      count: recentReceipts,
       href: "/staff/finance/payments",
     },
   ];
@@ -68,7 +78,7 @@ export function FinanceWorkspace({
           <h2 id="ledger-summary-heading" className="section-label">
             Ledger summary
           </h2>
-          <span className="demo-badge">Demo data</span>
+          <span className="demo-badge">{mode === "supabase" ? "Live projection" : "Demo data"}</span>
         </div>
         <div className="metric-grid">
           <div className="metric-cell">
@@ -97,7 +107,7 @@ export function FinanceWorkspace({
           <h2 id="finance-queue-heading" className="section-label">
             Queue
           </h2>
-          <span className="demo-badge">Demo data</span>
+          <span className="demo-badge">{mode === "supabase" ? "Live projection" : "Demo data"}</span>
         </div>
         <ul className={styles.queue}>
           {queue.map((item) => (
@@ -113,8 +123,7 @@ export function FinanceWorkspace({
           <li>
             <a className={styles.queueRow} href="/staff/finance/reconciliation">
               <p className={styles.queueCopy}>
-                Reconciliation run — last{" "}
-                <strong className="num">{formatKolkata(LAST_RECONCILIATION_ISO, { format: "day" })}</strong>
+                Reconciliation run — {reconciliation[0]?.run_at ? <strong className="num">last {formatKolkata(reconciliation[0].run_at, { format: "day" })}</strong> : <strong>not run</strong>}
               </p>
               <span className="link-arrow">Open →</span>
             </a>

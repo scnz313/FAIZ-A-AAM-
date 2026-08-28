@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import PageIntro from "@/components/public/PageIntro";
@@ -203,22 +203,50 @@ function NoticesBody() {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [items, setItems] = useState<ContentNotice[] | null>(null);
   const [downloads, setDownloads] = useState<DownloadItem[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   /* The published, public notice list and the file register come from the
-     content service — the same records the portal and staff workspaces read. */
-  useEffect(() => {
+     content service — the same records the portal and staff workspaces read.
+     A failed load shows a recoverable state; retry repeats the same read. */
+  const load = useCallback(() => {
+    setLoadFailed(false);
     let cancelled = false;
-    void Promise.all([contentService.listForAudience("public"), contentService.listDownloads()]).then(
-      ([list, files]) => {
+    void Promise.all([contentService.listForAudience("public"), contentService.listDownloads()])
+      .then(([list, files]) => {
         if (cancelled) return;
         setItems(list);
         setDownloads(files);
-      },
-    );
+      })
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true);
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => load(), [load]);
+
+  if (loadFailed) {
+    return (
+      <div className={styles.body}>
+        <div className={`panel ${styles.errorPanel}`} role="alert">
+          <p className={styles.emptyTitle}>Notices could not be loaded.</p>
+          <p className={styles.empty}>
+            The notice list did not load. Check your connection and try again — nothing was lost.
+          </p>
+          <div className={styles.errorActions}>
+            <button type="button" className="button button--primary" onClick={load}>
+              Try again
+            </button>
+            <a className="link-arrow" href="/">
+              Return to the school homepage →
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (items === null || downloads === null) {
     return (
@@ -241,7 +269,11 @@ function NoticesBody() {
   return (
     <div className={styles.body}>
       <nav className={styles.filters} aria-label="Filter notices by category">
-        <a className={active === null ? `${styles.filter} ${styles.active}` : styles.filter} href="/notices">
+        <a
+          className={active === null ? `${styles.filter} ${styles.active}` : styles.filter}
+          href="/notices"
+          aria-current={active === null ? "true" : undefined}
+        >
           All
         </a>
         {noticeCategories.map((item) => (
@@ -249,6 +281,7 @@ function NoticesBody() {
             key={item}
             className={active === item ? `${styles.filter} ${styles.active}` : styles.filter}
             href={`/notices?category=${item}`}
+            aria-current={active === item ? "true" : undefined}
           >
             {item}
           </a>

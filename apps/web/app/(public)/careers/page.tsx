@@ -5,6 +5,8 @@ import PageIntro from "@/components/public/PageIntro";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { CONTENT_DEMO_NOTE, vacancies, type Vacancy } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerVacancies } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -39,9 +41,10 @@ function qualificationExcerpt(vacancy: Vacancy): string {
   return rest.length > 0 ? `${first} · and ${rest.length} more` : first;
 }
 
-export default function CareersPage() {
-  const open = vacancies.filter((v) => v.status === "open");
-  const closed = vacancies.filter((v) => v.status === "closed");
+export default async function CareersPage() {
+  const records = dataAdapter() === "supabase" ? await loadServerVacancies() : vacancies;
+  const open = records.filter((v) => v.status === "open");
+  const closed = records.filter((v) => v.status === "closed");
 
   return (
     <div className={styles.page}>
@@ -137,9 +140,7 @@ export default function CareersPage() {
         </div>
       </section>
 
-      <div className={styles.conceptNote}>
-        <DemoNotice>{CONTENT_DEMO_NOTE}</DemoNotice>
-      </div>
+      {dataAdapter() === "demo" ? <div className={styles.conceptNote}><DemoNotice>{CONTENT_DEMO_NOTE}</DemoNotice></div> : null}
     </div>
   );
 }

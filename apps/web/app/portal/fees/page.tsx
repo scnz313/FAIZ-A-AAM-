@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 
 import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
-import { FINANCE_DEMO_NOTE } from "@/modules/finance/demo";
+import { FINANCE_DEMO_NOTE } from "@/modules/services/finance";
 import { financeService } from "@/modules/services/finance";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerActiveStudentInvoices } from "@/lib/supabase/server-loaders";
 
 import { FeeLedger, type LedgerFilter } from "./FeeLedger";
 import styles from "./page.module.css";
@@ -15,7 +17,8 @@ export const metadata: Metadata = {
 export default async function FeesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const { status } = await searchParams;
   const filter: LedgerFilter = status === "unpaid" || status === "paid" ? status : "all";
-  const initial = await financeService.listInvoices();
+  const supabaseMode = dataAdapter() === "supabase";
+  const initial = supabaseMode ? await loadServerActiveStudentInvoices() : await financeService.listInvoices();
 
   return (
     <div className={styles.page}>
@@ -28,7 +31,7 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
         </p>
         <ActiveChildLine />
         <p className={styles.demoLine}>
-          <span className="demo-badge">Demo data</span> {FINANCE_DEMO_NOTE}
+          <span className="demo-badge">{supabaseMode ? "Live ledger projection" : "Demo data"}</span>{supabaseMode ? " Authoritative invoice and payment records." : ` ${FINANCE_DEMO_NOTE}`}
         </p>
       </header>
 

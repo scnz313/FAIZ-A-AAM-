@@ -1,5 +1,4 @@
-import type { Invoice } from "@/modules/finance/demo";
-import { formatINR, invoiceTotal } from "@/modules/finance/demo";
+import { formatINR, invoiceTotal, type Invoice } from "@/modules/services/finance";
 
 import styles from "./InvoiceLines.module.css";
 

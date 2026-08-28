@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { StatusTone } from "@/components/ui/StatusBadge";
-import { FINANCE_DEMO_NOTE, formatINR } from "@/modules/finance/demo";
-import type { PaymentMethod } from "@/modules/finance/demo";
+import { FINANCE_DEMO_NOTE, formatINR, type PaymentMethod } from "@/modules/services/finance";
 import { financeService } from "@/modules/services/finance";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerInvoices, loadServerPaymentAttempts } from "@/lib/supabase/server-loaders";
 import { formatKolkata } from "@/modules/iot/domain";
 
 import styles from "./page.module.css";
@@ -23,7 +24,7 @@ type PaymentRow = {
   invoiceRef: string;
   status: PaymentStatus;
   receiptRef: string | null;
-  /** Fictional gateway attempt added for the demo queue. */
+  /** Demo-only marker; Supabase rows are always authoritative attempts. */
   demo?: boolean;
 };
 
@@ -34,7 +35,8 @@ const STATUS_META: Record<PaymentStatus, { label: string; tone: StatusTone }> = 
 };
 
 export default async function PaymentsPage() {
-  const views = await financeService.listAllInvoices();
+  const supabaseMode = dataAdapter() === "supabase";
+  const views = supabaseMode ? await loadServerInvoices() : await financeService.listAllInvoices();
 
   // Verified ledger payments derived from the service views, so the register
   // always agrees with the parent portal ledgers.
@@ -51,9 +53,20 @@ export default async function PaymentsPage() {
     })),
   );
 
-  // Fictional gateway attempts awaiting review — clearly marked as demo.
-  // A ref already posted to the ledger wins, so a session payment never
-  // renders twice with contradictory states.
+  const authoritativeAttempts: PaymentRow[] = supabaseMode
+    ? (await loadServerPaymentAttempts()).map((attempt) => ({
+        ref: attempt.reference,
+        studentName: "Linked student",
+        method: attempt.method as PaymentMethod,
+        amountPaise: attempt.amount_paise,
+        paidAtIso: attempt.updated_at,
+        invoiceRef: attempt.invoices?.reference ?? "—",
+        status: attempt.status === "succeeded" ? "success" : ["failed", "cancelled"].includes(attempt.status) ? "failed" : "pending",
+        receiptRef: null,
+      }))
+    : [];
+
+  // Demo-only gateway attempts remain visible only in demo mode.
   const demoAttempts: PaymentRow[] = [
     {
       ref: "PAY-2026-0301",
@@ -79,10 +92,10 @@ export default async function PaymentsPage() {
     },
   ];
 
-  const ledgerRefs = new Set(ledgerPayments.map((payment) => payment.ref));
+  const ledgerRefs = new Set([...ledgerPayments, ...authoritativeAttempts].map((payment) => payment.ref));
   const paymentRows: PaymentRow[] = [
     ...ledgerPayments,
-    ...demoAttempts.filter((row) => !ledgerRefs.has(row.ref)),
+    ...(supabaseMode ? authoritativeAttempts : demoAttempts.filter((row) => !ledgerRefs.has(row.ref))),
   ];
   return (
     <div className={styles.page}>
@@ -97,17 +110,20 @@ export default async function PaymentsPage() {
           <h2 id="payments-table-heading" className="section-label">
             Payment register
           </h2>
-          <span className="demo-badge">Demo data</span>
+          <span className="demo-badge">{supabaseMode ? "Live projection" : "Demo data"}</span>
         </div>
         <div className="table--scroll">
+          {paymentRows.length === 0 ? (
+            <p className={styles.ruleNote}>No payments in the register.</p>
+          ) : (
           <table className={`table ${styles.paymentsTable}`}>
             <thead>
               <tr>
                 <th scope="col">Ref</th>
                 <th scope="col">Student</th>
                 <th scope="col">Method</th>
-                <th scope="col">Amount</th>
-                <th scope="col">Date</th>
+                <th scope="col" className="num">Amount</th>
+                <th scope="col" className="num">Date</th>
                 <th scope="col">Invoice ref</th>
                 <th scope="col">Status</th>
                 <th scope="col">Receipt ref</th>
@@ -143,12 +159,13 @@ export default async function PaymentsPage() {
               ))}
             </tbody>
           </table>
+          )}
         </div>
       </section>
 
       <div className={styles.ruleNote}>
         <p>Browser redirects are never proof of payment — only verified events post to the ledger.</p>
-        <p>{FINANCE_DEMO_NOTE}</p>
+        {!supabaseMode ? <p>{FINANCE_DEMO_NOTE}</p> : <p>Payment attempts are the local sandbox projection; no browser return is treated as settlement.</p>}
       </div>
     </div>
   );

@@ -20,6 +20,15 @@
   line-height: 1.5;
 }
 
+/* Resend control with its cooldown note, kept on one quiet row. */
+.resendRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
 /* Rejection summary — the honest demo-account hint. */
 .summary {
   display: grid;

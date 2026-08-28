@@ -6,6 +6,8 @@ import { METRIC_META } from "@fass/contracts";
 import type { Alert, AlertSeverity, AlertStatus, Zone } from "@fass/contracts";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canRole } from "@/modules/services/staff-authorization";
 import { acknowledgeAlert, getAlerts, resolveAlert } from "@/lib/iot/api";
 import { ALERT_SEVERITY_LABELS, ALERT_STATUS_LABELS, formatKolkata } from "@/modules/iot/domain";
 import styles from "./AlertsWorkspace.module.css";
@@ -64,6 +66,8 @@ type AlertsWorkspaceProps = {
 };
 
 export function AlertsWorkspace({ zones, initialAlerts }: AlertsWorkspaceProps) {
+  const { summary } = useStaffContext();
+  const canManage = canRole(summary?.role ?? "", "facility.manage");
   const [alerts, setAlerts] = useState<Alert[] | null>(initialAlerts);
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -313,12 +317,12 @@ export function AlertsWorkspace({ zones, initialAlerts }: AlertsWorkspaceProps) 
                       <StatusBadge tone={STATUS_TONE[alert.status]}>{STATUS_LABELS[alert.status]}</StatusBadge>
                     </td>
                     <td className={styles.cellActions}>
-                      {alert.status === "open" && (
+                      {alert.status === "open" && canManage && (
                         <Button variant="quiet" onClick={() => void acknowledge(alert)}>
                           Acknowledge
                         </Button>
                       )}
-                      {alert.status === "acknowledged" && (
+                      {alert.status === "acknowledged" && canManage && (
                         <Button variant="quiet" onClick={() => openResolve(alert)}>
                           Resolve
                         </Button>
@@ -336,7 +340,7 @@ export function AlertsWorkspace({ zones, initialAlerts }: AlertsWorkspaceProps) 
                     <tr>
                       <td colSpan={8}>
                         <form className={styles.resolveForm} onSubmit={handleResolveSubmit(alert)}>
-                          <label htmlFor={`resolve-note-${alert.id}`}>Resolution note</label>
+                          <label htmlFor={`resolve-note-${alert.id}`}>Resolution note (required)</label>
                           <input
                             id={`resolve-note-${alert.id}`}
                             className={`input ${styles.resolveInput}`}
@@ -344,6 +348,7 @@ export function AlertsWorkspace({ zones, initialAlerts }: AlertsWorkspaceProps) 
                             value={resolveNote}
                             onChange={(event) => setResolveNote(event.target.value)}
                             placeholder="What brought the reading back in range?"
+                            aria-required="true"
                           />
                           <div className={styles.resolveActions}>
                             <Button variant="primary" type="submit" disabled={resolveNote.trim().length === 0}>

@@ -198,8 +198,8 @@ export default function DocumentsPage() {
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const { context, activeStudent } = useFamilyContext();
-  const childName = activeStudent ? activeStudent.student.displayName : "the linked demo student";
+  const { context, activeStudent, documentMetadata: seededMetadata } = useFamilyContext();
+  const childName = activeStudent ? activeStudent.student.displayName : "the linked student";
 
   /* The whole page reads the per-student document bundle through the
      documents service; report cards, receipts, and school-record references
@@ -212,7 +212,7 @@ export default function DocumentsPage() {
     void documentsService
       .listForStudent(context.accountId, activeStudent.student.id)
       .then((next) => {
-        if (!cancelled) setBundle(next);
+        if (!cancelled) setBundle(next.metadata !== undefined || seededMetadata.length === 0 ? next : { ...next, metadata: seededMetadata });
       })
       .catch((error) => {
         if (!cancelled) {
@@ -222,7 +222,7 @@ export default function DocumentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [context, activeStudent, reloadKey]);
+  }, [context, activeStudent, reloadKey, seededMetadata]);
 
   function openPreview(file: PreviewDocument, trigger: HTMLButtonElement) {
     triggerRef.current = trigger;
@@ -247,9 +247,13 @@ export default function DocumentsPage() {
           </button>
         </div>
       ) : bundle === null ? (
-        <p className={styles.loading} role="status">
-          Loading documents…
-        </p>
+        <div className={styles.loadingBlock} role="status" aria-busy="true">
+          <span className="sr-only">Loading documents…</span>
+          <span className="skeleton-rule" aria-hidden="true" />
+          <span className="skeleton-bar" style={{ width: "58%" }} aria-hidden="true" />
+          <span className="skeleton-bar" style={{ width: "74%" }} aria-hidden="true" />
+          <span className="skeleton-bar" style={{ width: "42%" }} aria-hidden="true" />
+        </div>
       ) : (
         <>
           <section aria-labelledby="report-cards-heading">
@@ -298,7 +302,18 @@ export default function DocumentsPage() {
             <h2 id="receipts-heading" className={styles.groupTitle}>
               Receipts
             </h2>
-            <div className={styles.rows}>
+            {bundle.receipts.length === 0 ? (
+              <div className="workspace-state">
+                <p className="workspace-state-title">No receipts yet</p>
+                <p className="workspace-state-note">
+                  Numbered receipts appear here after a payment is recorded for {childName}.
+                </p>
+                <a className="link-arrow" href="/portal/fees">
+                  Go to the fee ledger →
+                </a>
+              </div>
+            ) : (
+              <div className={styles.rows}>
               {bundle.receipts.map((receipt) => {
                 const document: PreviewDocument = {
                   id: `receipt-${receipt.ref}`,
@@ -333,7 +348,8 @@ export default function DocumentsPage() {
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
           </section>
 
           <section aria-labelledby="certificates-heading">

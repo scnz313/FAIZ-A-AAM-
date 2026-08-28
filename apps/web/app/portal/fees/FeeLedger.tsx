@@ -6,10 +6,11 @@ import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useFamilyContext } from "@/components/portal/FamilyContextProvider";
 import { gradeSectionLabel } from "@/modules/services/family-context";
-import { FINANCE_DEMO_NOTE, formatINR, INVOICE_STATUS_META } from "@/modules/finance/demo";
+import { FINANCE_DEMO_NOTE, formatINR, INVOICE_STATUS_META } from "@/modules/services/finance";
 import { demoTodayLabel } from "@/modules/demo/clock";
 import { formatKolkata } from "@/modules/iot/domain";
 import { financeService, type InvoiceView } from "@/modules/services/finance";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./page.module.css";
 
@@ -46,11 +47,13 @@ function filterViews(views: InvoiceView[], filter: LedgerFilter): InvoiceView[] 
  * for first paint; the provider resolves the real active child.
  */
 export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [views, setViews] = useState<InvoiceView[]>(initial);
   const [filter, setFilter] = useState<LedgerFilter>(initialFilter);
   const [statementOpen, setStatementOpen] = useState(false);
   const [statementNotice, setStatementNotice] = useState("");
   const statementPreviewRef = useRef<HTMLElement>(null);
+  const statementTriggerRef = useRef<HTMLButtonElement>(null);
   const { activeStudent } = useFamilyContext();
   const activeStudentId = activeStudent?.student.id;
   const studentLine = activeStudent
@@ -72,9 +75,14 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
   useEffect(() => {
     if (activeStudentId === undefined) return;
     let cancelled = false;
-    void financeService.listInvoices(activeStudentId).then((next) => {
-      if (!cancelled) setViews(next);
-    });
+    void financeService
+      .listInvoices(activeStudentId)
+      .then((next) => {
+        if (!cancelled) setViews(next);
+      })
+      .catch(() => {
+        if (!cancelled) return;
+      });
     return () => {
       cancelled = true;
     };
@@ -118,7 +126,18 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
   function closeStatement(): void {
     setStatementOpen(false);
     setStatementNotice("Printable statement preview closed.");
+    /* Return focus to the disclosure trigger so keyboard users are not
+       dropped at the top of the document. */
+    statementTriggerRef.current?.focus();
   }
+
+  /** Empty-state copy names the view and the next step, never just "empty". */
+  const emptyLine =
+    filter === "paid"
+      ? "No paid invoices yet — receipts appear here after your first payment."
+      : filter === "unpaid"
+        ? "Nothing outstanding — every invoice in this ledger is settled."
+        : "No invoices have been issued for this student yet. New term invoices appear here.";
 
   return (
     <>
@@ -129,7 +148,9 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
           <h2 id="fee-summary-title" className={`num ${styles.bigAmount}`}>
             {formatINR(totalOutstanding)}
           </h2>
-          <StatusBadge tone="watch">Due</StatusBadge>
+          <StatusBadge tone={totalOutstanding > 0 ? "watch" : "good"}>
+            {totalOutstanding > 0 ? "Due" : "Clear"}
+          </StatusBadge>
         </div>
         <p className={styles.summaryMuted}>
           Outstanding across {outstanding.length} invoices. Concessions already applied.
@@ -193,9 +214,9 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
               <tr>
                 <th scope="col">Reference</th>
                 <th scope="col">Term</th>
-                <th scope="col" className="num">Total</th>
-                <th scope="col" className="num">Paid</th>
-                <th scope="col" className="num">Balance</th>
+                <th scope="col" className={`num ${styles.numHead}`}>Total</th>
+                <th scope="col" className={`num ${styles.numHead}`}>Paid</th>
+                <th scope="col" className={`num ${styles.numHead}`}>Balance</th>
                 <th scope="col">Status</th>
               </tr>
             </thead>
@@ -203,7 +224,7 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
               {visible.length === 0 ? (
                 <tr>
                   <td colSpan={6} className={styles.emptyState}>
-                    No invoices in this view.
+                    {emptyLine}
                   </td>
                 </tr>
               ) : (
@@ -236,24 +257,25 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
           </table>
         </div>
 
-        <div className={styles.ledgerFoot}>
-          <p>Partial payments are allowed per school policy. Showing academic year 2026–27.</p>
-          <span className={styles.statement}>
-            <button
-              type="button"
-              className="button button--quiet button--small"
-              aria-controls="statement-preview"
-              aria-describedby="statement-demo-note"
-              aria-expanded={statementOpen}
-              onClick={openStatement}
-            >
-              ↓ Statement (PDF) — demo
-            </button>
-            <span id="statement-demo-note" className="sr-only">
-              Opens an on-page demo statement preview. No file is generated; use Print statement to open the browser print dialog.
+          <div className={styles.ledgerFoot}>
+            <p>Partial payments are allowed per school policy. Showing academic year 2026–27.</p>
+            <span className={styles.statement}>
+              <button
+                type="button"
+                ref={statementTriggerRef}
+                className="button button--quiet button--small"
+                aria-controls="statement-preview"
+                aria-describedby="statement-demo-note"
+                aria-expanded={statementOpen}
+                onClick={openStatement}
+              >
+                ↓ Statement (PDF) — demo
+              </button>
+              <span id="statement-demo-note" className="sr-only">
+                Opens an on-page demo statement preview. No file is generated; use Print statement to open the browser print dialog.
+              </span>
             </span>
-          </span>
-        </div>
+          </div>
         <p className="sr-only" role="status" aria-live="polite">
           {statementNotice}
         </p>
@@ -270,14 +292,14 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
         >
           <div className={styles.statementHeader}>
             <div>
-              <p className="section-label">Printable statement · demo</p>
+              <p className="section-label">Printable statement · {supabaseMode ? "ledger projection" : "demo"}</p>
               <h2 id="statement-preview-title" className={styles.statementTitle}>
                 Fee statement
               </h2>
             </div>
             <div className={styles.statementActions}>
               <button type="button" className="button button--quiet button--small" onClick={printStatement}>
-                Print statement — demo
+                Print statement{!supabaseMode ? " — demo" : ""}
               </button>
               <button type="button" className="button button--quiet button--small" onClick={closeStatement}>
                 Close preview
@@ -286,7 +308,7 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
           </div>
 
           <p className={styles.statementNote}>
-            {FINANCE_DEMO_NOTE} This preview represents the linked student&apos;s {statementFilterLabel.toLowerCase()} view.
+            {supabaseMode ? "Authoritative ledger projection for the linked student." : `${FINANCE_DEMO_NOTE} This preview represents the linked student&apos;s ${statementFilterLabel.toLowerCase()} view.`}
           </p>
 
           <dl className={styles.statementMeta}>
@@ -296,11 +318,11 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
             </div>
             <div>
               <dt>Academic year</dt>
-              <dd>2026–27</dd>
+              <dd>{activeStudent?.academicYear.label ?? "Not configured"}</dd>
             </div>
             <div>
               <dt>Prepared</dt>
-              <dd>{demoTodayLabel()}</dd>
+              <dd>{supabaseMode ? formatKolkata(new Date().toISOString(), { format: "day" }) : demoTodayLabel()}</dd>
             </div>
             <div>
               <dt>Ledger view</dt>
@@ -310,14 +332,14 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
 
           <div className="table--scroll">
             <table className={`table ${styles.statementTable}`}>
-              <caption className="sr-only">Printable fee statement for the linked demo student</caption>
+            <caption className="sr-only">Printable fee statement for the linked student</caption>
               <thead>
                 <tr>
                   <th scope="col">Reference</th>
                   <th scope="col">Term</th>
-                  <th scope="col" className="num">Total</th>
-                  <th scope="col" className="num">Paid</th>
-                  <th scope="col" className="num">Balance</th>
+                  <th scope="col" className={`num ${styles.numHead}`}>Total</th>
+                  <th scope="col" className={`num ${styles.numHead}`}>Paid</th>
+                  <th scope="col" className={`num ${styles.numHead}`}>Balance</th>
                   <th scope="col">Status</th>
                 </tr>
               </thead>
@@ -325,7 +347,7 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
                 {visible.length === 0 ? (
                   <tr>
                     <td colSpan={6} className={styles.emptyState}>
-                      No invoices in this view.
+                      {emptyLine}
                     </td>
                   </tr>
                 ) : (
@@ -354,7 +376,7 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
           </div>
 
           <p className={styles.statementFooter}>
-            Demo print view only. Official statements and PDF generation require the finance backend.
+            {supabaseMode ? "This view prints the current ledger projection; official PDF generation remains a backend capability." : "Demo print view only. Official statements and PDF generation require the finance backend."}
           </p>
         </section>
       ) : null}

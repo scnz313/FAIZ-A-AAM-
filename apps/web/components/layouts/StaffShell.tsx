@@ -10,7 +10,9 @@ import { demoTodayLabel } from "@/modules/demo/clock";
 import { identityService } from "@/modules/services/identity";
 import { roleLabel } from "@/modules/services/staff-context";
 import { canRole, type StaffAction } from "@/modules/services/staff-authorization";
-import { STAFF_NOTIFICATIONS } from "@/modules/notifications/demo";
+import { demoStaffNotifications } from "@/modules/notifications/demo";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
+import type { NotificationItem } from "@/modules/notifications/demo";
 
 import { NotificationBell } from "./NotificationBell";
 import styles from "./StaffShell.module.css";
@@ -73,7 +75,7 @@ const FOCUSABLE_SELECTOR = [
  * Below 1000px the sidebar becomes a keyboard-operable drawer opened from
  * the topbar Menu button.
  */
-export function StaffShell({ children }: { children: ReactNode }) {
+export function StaffShell({ children, initialNotifications }: { children: ReactNode; initialNotifications?: NotificationItem[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const {
@@ -346,7 +348,7 @@ export function StaffShell({ children }: { children: ReactNode }) {
             </button>
             <p className="eyebrow">Staff workspace</p>
             <div className="topbar-actions">
-              <NotificationBell items={STAFF_NOTIFICATIONS} />
+              <NotificationBell items={initialNotifications ?? (clientAdapterMode() === "supabase" ? [] : demoStaffNotifications())} accountId={identityId ?? undefined} />
               <span className="demo-badge">Demo data</span>
             </div>
           </div>

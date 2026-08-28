@@ -6,6 +6,8 @@ import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { CONTENT_DEMO_NOTE, vacancies } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerVacancies } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -15,7 +17,8 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { vacancySlug } = await params;
-  const vacancy = vacancies.find((v) => v.slug === vacancySlug);
+  const records = dataAdapter() === "supabase" ? await loadServerVacancies() : vacancies;
+  const vacancy = records.find((v) => v.slug === vacancySlug);
   return {
     title: vacancy ? vacancy.title : "Vacancy",
     description: vacancy?.description,
@@ -24,7 +27,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function VacancyDetailPage({ params }: Props) {
   const { vacancySlug } = await params;
-  const vacancy = vacancies.find((v) => v.slug === vacancySlug);
+  const records = dataAdapter() === "supabase" ? await loadServerVacancies() : vacancies;
+  const vacancy = records.find((v) => v.slug === vacancySlug);
 
   if (!vacancy) {
     return (
@@ -118,9 +122,7 @@ export default async function VacancyDetailPage({ params }: Props) {
         )}
       </section>
 
-      <div className={styles.conceptNote}>
-        <DemoNotice>{CONTENT_DEMO_NOTE}</DemoNotice>
-      </div>
+      {dataAdapter() === "demo" ? <div className={styles.conceptNote}><DemoNotice>{CONTENT_DEMO_NOTE}</DemoNotice></div> : null}
     </div>
   );
 }

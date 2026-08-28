@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
-import { formatINR } from "@/modules/finance/demo";
+import { formatINR } from "@/modules/services/finance";
 import {
   FinanceServiceError,
   financeService,
@@ -13,6 +13,7 @@ import {
   type PaymentAttempt,
   type Receipt,
 } from "@/modules/services/finance";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./PayFlow.module.css";
 
@@ -81,7 +82,8 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<FlowStep>("method");
   const [method, setMethod] = useState<CheckoutMethod>("UPI");
-  const [scenario, setScenario] = useState<DemoPaymentScenario>(() => getDemoScenario());
+  const supabaseMode = clientAdapterMode() === "supabase";
+  const [scenario, setScenario] = useState<DemoPaymentScenario>(() => supabaseMode ? "success" : getDemoScenario());
   const [attempt, setAttempt] = useState<PaymentAttempt | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [errorKind, setErrorKind] = useState<ErrorKind>("create");
@@ -99,6 +101,10 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
   // duplicate-safe "Check status again".
   useEffect(() => {
     if (step !== "gateway" && step !== "processing") return;
+    if (supabaseMode) {
+      void pollGateway();
+      return;
+    }
     const timer = setTimeout(() => {
       void pollGateway();
     }, GATEWAY_POLL_MS);
@@ -175,7 +181,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
     setStep("creating");
     setErrorMessage("");
     try {
-      const created = await financeService.createPaymentAttempt(invoiceRef, method, flowAmountPaise);
+      const created = await financeService.createPaymentAttempt(invoiceRef, method, flowAmountPaise, supabaseMode ? crypto.randomUUID() : undefined);
       attemptRef.current = created;
       setAttempt(created);
       setStep("gateway");
@@ -210,9 +216,9 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
       case "creating":
         return "Contacting the payment gateway…";
       case "gateway":
-        return "Handing off to the Demo gateway…";
+        return supabaseMode ? "Handing off to the local sandbox…" : "Handing off to the Demo gateway…";
       case "processing":
-        return "Processing with the Demo gateway — this takes a few seconds.";
+        return supabaseMode ? "Processing with the local sandbox — this takes a few seconds." : "Processing with the Demo gateway — this takes a few seconds.";
       case "delayed":
         return "The gateway has not confirmed the payment — we will confirm shortly.";
       case "failed":
@@ -251,7 +257,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
       </p>
       <div className={styles.flowHead}>
         <p className="section-label">Checkout · {term}</p>
-        <span className="demo-badge">Demo checkout</span>
+        <span className="demo-badge">{supabaseMode ? "Local sandbox" : "Demo checkout"}</span>
       </div>
       <h3 id="payflow-title" className={styles.flowTitle}>
         Pay {formatINR(flowAmountPaise)}
@@ -281,7 +287,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
             ))}
           </fieldset>
 
-          <div className={styles.scenario}>
+          {!supabaseMode ? <div className={styles.scenario}>
             <label htmlFor="payflow-scenario">
               Demo scenario <span className={styles.scenarioTag}>(demo scenario)</span>
             </label>
@@ -301,7 +307,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
                 </option>
               ))}
             </select>
-          </div>
+          </div> : null}
 
           <p className={styles.flowNote}>
             The school never stores card or UPI credentials — the gateway handles the payment.
@@ -324,7 +330,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
           </p>
           <p className={styles.processingNote}>
             {step === "creating"
-              ? "Creating a payment attempt with the Demo gateway."
+              ? supabaseMode ? "Creating a payment attempt in the local sandbox." : "Creating a payment attempt with the Demo gateway."
               : "The school server is posting the payment and issuing the receipt — this happens exactly once."}
           </p>
         </div>
@@ -333,11 +339,11 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
       {step === "gateway" || step === "processing" ? (
         <div className={styles.processing}>
           <p className={styles.processingLine}>
-            {step === "gateway" ? "Handing off to the Demo gateway…" : "Processing…"}
+            {step === "gateway" ? (supabaseMode ? "Handing off to the local sandbox…" : "Handing off to the Demo gateway…") : "Processing…"}
           </p>
           <p className={styles.processingNote}>
             {step === "gateway"
-              ? "Your payment is with the Demo gateway. Keep this window open — the result is confirmed here."
+              ? supabaseMode ? "Your payment is with the local sandbox. Keep this window open — the result is confirmed here." : "Your payment is with the Demo gateway. Keep this window open — the result is confirmed here."
               : "Your payment is confirmed only when the school server verifies it with the gateway."}
           </p>
         </div>
@@ -421,7 +427,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
           <p className={styles.successMark} aria-hidden="true">
             ✓
           </p>
-          <p className={styles.successTitle}>Payment recorded — demo</p>
+          <p className={styles.successTitle}>Payment recorded{!supabaseMode ? " — demo" : ""}</p>
           <dl className={styles.successMeta}>
             <div>
               <dt>Payment</dt>
@@ -449,8 +455,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
             </div>
           </dl>
           <p className={styles.flowNote}>
-            Demo — in production this redirects to the gateway and verifies the signed webhook before posting to
-            the ledger exactly once.
+            {supabaseMode ? "Local sandbox evidence is recorded by the server; the gateway provider remains deferred." : "Demo — in production this redirects to the gateway and verifies the signed webhook before posting to the ledger exactly once."}
           </p>
           <p className={styles.successLinks}>
             <a className="link-arrow" href={`/portal/receipts/${receipt.ref}`}>

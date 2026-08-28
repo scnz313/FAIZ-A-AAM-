@@ -7,7 +7,7 @@ import { ReceiptPanel } from "@/components/portal/ReceiptPanel";
 import Button from "@/components/ui/Button";
 import { useFamilyContext } from "@/components/portal/FamilyContextProvider";
 import { familyContextService, gradeSectionLabel, type StudentAccessScope } from "@/modules/services/family-context";
-import { FINANCE_DEMO_NOTE } from "@/modules/finance/demo";
+import { FINANCE_DEMO_NOTE } from "@/modules/services/finance";
 import { financeService, type Invoice, type Receipt } from "@/modules/services/finance";
 
 import styles from "./page.module.css";
@@ -61,10 +61,14 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    void loadReceiptData(receiptRef).then((data) => {
-      if (cancelled) return;
-      setState(data ? { status: "found", ...data } : { status: "missing" });
-    });
+    void loadReceiptData(receiptRef)
+      .then((data) => {
+        if (cancelled) return;
+        setState(data ? { status: "found", ...data } : { status: "missing" });
+      })
+      .catch(() => {
+        if (cancelled) return;
+      });
     return () => {
       cancelled = true;
     };
@@ -80,6 +84,9 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
       .classifyStudentAccess(context.accountId, state.receipt.studentId)
       .then((scope) => {
         if (!cancelled) setAccess(scope);
+      })
+      .catch(() => {
+        if (!cancelled) return;
       });
     return () => {
       cancelled = true;

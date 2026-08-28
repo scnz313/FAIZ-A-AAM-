@@ -11,6 +11,7 @@ import {
   type AccessibleStudentContext,
 } from "@/modules/services/family-context";
 import { identityService } from "@/modules/services/identity";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 type FamilyContextStatus = "loading" | "ready" | "error";
 
@@ -30,6 +31,15 @@ export type FamilyContextValue = {
   announcement: string | null;
   switchStudent: (studentId: string) => Promise<void>;
   retry: () => void;
+  /** Server-seeded document metadata for the active child; never a file URL. */
+  documentMetadata: Array<{ ref: string; category: string; filename: string; processingState: string; mimeType: string; sizeBytes: number }>;
+};
+
+export type FamilyContextInitialState = {
+  context: FamilyPortalContext;
+  students: AccessibleStudentContext[];
+  guardianName: string;
+  documentMetadata?: FamilyContextValue["documentMetadata"];
 };
 
 const FamilyContextContext = createContext<FamilyContextValue | null>(null);
@@ -42,18 +52,26 @@ const FamilyContextContext = createContext<FamilyContextValue | null>(null);
  * the seeded guardian account when no sign-in session exists; the backend
  * phase replaces that fallback with server authorization.
  */
-export function FamilyContextProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<FamilyContextStatus>("loading");
+export function FamilyContextProvider({
+  children,
+  initialState,
+}: {
+  children: ReactNode;
+  initialState?: FamilyContextInitialState;
+}) {
+  const [status, setStatus] = useState<FamilyContextStatus>(initialState ? "ready" : "loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [context, setContext] = useState<FamilyPortalContext | null>(null);
-  const [students, setStudents] = useState<AccessibleStudentContext[]>([]);
-  const [guardianName, setGuardianName] = useState<string | null>(null);
+  const [context, setContext] = useState<FamilyPortalContext | null>(initialState?.context ?? null);
+  const [students, setStudents] = useState<AccessibleStudentContext[]>(initialState?.students ?? []);
+  const [guardianName, setGuardianName] = useState<string | null>(initialState?.guardianName ?? null);
+  const [documentMetadata] = useState<FamilyContextValue["documentMetadata"]>(initialState?.documentMetadata ?? []);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    if (initialState !== undefined && reloadKey === 0) return;
     let cancelled = false;
     setStatus("loading");
     setErrorMessage(null);
@@ -61,6 +79,19 @@ export function FamilyContextProvider({ children }: { children: ReactNode }) {
 
     async function load(): Promise<void> {
       try {
+        if (clientAdapterMode() === "supabase") {
+          const [nextContext, nextStudents, summary] = await Promise.all([
+            familyContextService.getContext("server"),
+            familyContextService.listAccessibleStudentContexts("server"),
+            familyContextService.getAccountSummary("server"),
+          ]);
+          if (cancelled) return;
+          setContext(nextContext);
+          setStudents(nextStudents);
+          setGuardianName(summary.displayName);
+          setStatus("ready");
+          return;
+        }
         const session = await identityService.session();
         const resolvedAccountId =
           session !== null && session.role === "guardian" ? session.accountId : DEMO_GUARDIAN_ACCOUNT_ID;
@@ -87,7 +118,7 @@ export function FamilyContextProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [initialState, reloadKey]);
 
   const switchStudent = useCallback(
     async (studentId: string) => {
@@ -137,6 +168,7 @@ export function FamilyContextProvider({ children }: { children: ReactNode }) {
       announcement,
       switchStudent,
       retry,
+      documentMetadata,
     }),
     [
       status,
@@ -150,6 +182,7 @@ export function FamilyContextProvider({ children }: { children: ReactNode }) {
       announcement,
       switchStudent,
       retry,
+      documentMetadata,
     ],
   );
 

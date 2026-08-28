@@ -227,3 +227,21 @@
     flex-direction: column;
   }
 }
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.dateSheetTable th:global(.num),
+.dateSheetTable td:global(.num) {
+  text-align: right;
+}
+
+/* Override form fields lay out in a grid so day/period/kind read together. */
+.overrideFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px 18px;
+  margin-top: 14px;
+}
+
+.overrideNoteField {
+  grid-column: 1 / -1;
+}

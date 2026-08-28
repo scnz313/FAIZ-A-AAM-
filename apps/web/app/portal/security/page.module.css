@@ -73,6 +73,29 @@
   justify-self: end;
 }
 
+/* Inline destructive confirmation — names the object and keeps Cancel one
+   step away instead of a browser dialog. */
+.confirmBox {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  max-width: 260px;
+}
+
+.confirmText {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  text-align: right;
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .statusLine {
   align-items: center;
   border-top: 1px solid var(--line);
@@ -130,5 +153,14 @@
 
   .sessionAction {
     justify-self: start;
+  }
+
+  .confirmBox,
+  .confirmActions {
+    justify-items: start;
+  }
+
+  .confirmText {
+    text-align: left;
   }
 }

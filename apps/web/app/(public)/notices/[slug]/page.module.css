@@ -40,3 +40,17 @@
   font-size: 12px;
   color: var(--ink-soft);
 }
+
+/* Loading skeleton widths (bars come from the global .skeleton-bar). */
+.skeletonTitle {
+  max-width: 420px;
+  height: 28px;
+}
+
+.skeletonLine {
+  max-width: 68ch;
+}
+
+.skeletonLineShort {
+  max-width: 34ch;
+}

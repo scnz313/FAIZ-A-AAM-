@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
@@ -43,10 +43,28 @@ const SESSIONS: ReadonlyArray<SessionRow> = [
  */
 export default function SecurityPage() {
   const [signedOut, setSignedOut] = useState<Record<string, boolean>>({});
+  /* Sign-out is destructive: each row carries a local two-step confirmation
+     (never window.confirm) naming the exact device, with Cancel as the
+     focused, safe default. */
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
   const activeCount = SESSIONS.filter((session) => !signedOut[session.id]).length;
+
+  useEffect(() => {
+    if (confirmingId !== null) confirmRef.current?.focus();
+  }, [confirmingId]);
+
+  function beginConfirm(id: string) {
+    setConfirmingId(id);
+  }
+
+  function cancelConfirm(id: string) {
+    setConfirmingId((current) => (current === id ? null : current));
+  }
 
   function signOut(id: string) {
     setSignedOut((previous) => ({ ...previous, [id]: true }));
+    setConfirmingId(null);
   }
 
   return (
@@ -86,8 +104,31 @@ export default function SecurityPage() {
                 <div className={styles.sessionAction}>
                   {out ? (
                     <StatusBadge tone="neutral">Signed out (demo)</StatusBadge>
+                  ) : confirmingId === session.id ? (
+                    <div className={styles.confirmBox} role="group" aria-label={`Confirm sign out of ${session.device}`}>
+                      <p className={styles.confirmText}>
+                        Sign out <strong>{session.device}</strong>? Its access ends now.
+                      </p>
+                      <div className={styles.confirmActions}>
+                        <button
+                          ref={confirmRef}
+                          type="button"
+                          className="button button--quiet button--small"
+                          onClick={() => signOut(session.id)}
+                        >
+                          Yes, sign out
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--quiet button--small"
+                          onClick={() => cancelConfirm(session.id)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <Button variant="quiet" onClick={() => signOut(session.id)}>
+                    <Button variant="quiet" onClick={() => beginConfirm(session.id)}>
                       Sign out this session
                     </Button>
                   )}

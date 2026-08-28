@@ -9,7 +9,9 @@ import { Crest } from "@/components/ui/Crest";
 import { demoTodayLabel } from "@/modules/demo/clock";
 import { gradeSectionLabel } from "@/modules/services/family-context";
 import { identityService } from "@/modules/services/identity";
-import { GUARDIAN_NOTIFICATIONS } from "@/modules/notifications/demo";
+import { demoGuardianNotifications } from "@/modules/notifications/demo";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
+import type { NotificationItem } from "@/modules/notifications/demo";
 
 import { NotificationBell } from "./NotificationBell";
 import styles from "./PortalShell.module.css";
@@ -45,7 +47,7 @@ const FOCUSABLE_SELECTOR = [
  * sidebar becomes a keyboard-operable drawer opened from the topbar Menu
  * button.
  */
-export function PortalShell({ children }: { children: ReactNode }) {
+export function PortalShell({ children, initialNotifications }: { children: ReactNode; initialNotifications?: NotificationItem[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const { status, context, students, activeStudent, guardianName, switching, switchError, switchStudent, retry, announcement, errorMessage } =
@@ -262,7 +264,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
             </button>
             <p className="eyebrow">Parent portal</p>
             <div className="topbar-actions">
-              <NotificationBell items={GUARDIAN_NOTIFICATIONS} />
+              <NotificationBell items={initialNotifications ?? (clientAdapterMode() === "supabase" ? [] : demoGuardianNotifications())} accountId={context?.accountId ?? undefined} />
               <span className="demo-badge">Demo data</span>
               <a className="link-arrow" href="/portal/support">
                 Get help ↗

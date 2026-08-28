@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
 import JobStatusView from "./JobStatusView";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerJobByRef } from "@/lib/supabase/server-loaders";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -20,6 +22,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * component (JobStatusView) that fetches on mount; this page keeps the
  * server-only metadata (including noindex for application data).
  */
-export default function ApplicationStatusPage() {
-  return <JobStatusView />;
+export default async function ApplicationStatusPage({ params }: Props) {
+  const { slug } = await params;
+  const initial = dataAdapter() === "supabase" ? await loadServerJobByRef(slug) : undefined;
+  return <JobStatusView initial={initial} />;
 }

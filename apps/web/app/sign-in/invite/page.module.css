@@ -1,0 +1,28 @@
+.page {
+  background: var(--paper);
+  min-height: 100vh;
+}
+
+.main {
+  min-height: 70vh;
+  padding: 72px var(--gutter) 96px;
+}
+
+.frame {
+  margin: 0 auto;
+  max-width: 680px;
+}
+
+.section {
+  margin-top: 42px;
+}
+
+.card {
+  padding: clamp(22px, 4vw, 42px);
+}
+
+@media (max-width: 620px) {
+  .main {
+    padding-top: 42px;
+  }
+}

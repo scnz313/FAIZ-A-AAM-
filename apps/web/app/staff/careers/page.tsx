@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 
 import { CareersQueue } from "@/components/staff/CareersQueue";
-import { CONTENT_DEMO_NOTE, jobApplications, vacancies } from "@/modules/content/demo";
-import { fixtureApplicationRecord, type JobApplicationRecord } from "@/modules/services/careers";
+import { careersService } from "@/modules/services/careers";
 import { formatKolkata } from "@/modules/iot/domain";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerJobs, loadServerVacancies } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -11,17 +12,15 @@ export const metadata: Metadata = {
   title: "Careers · Staff",
 };
 
-const vacancyTitle = (slug: string) => vacancies.find((vacancy) => vacancy.slug === slug)?.title ?? slug;
-
-/** Server-rendered starting point; the queue refreshes from the demo session on mount. */
-const initialRecords: JobApplicationRecord[] = jobApplications
-  .map((row) => fixtureApplicationRecord(row.ref))
-  .filter((record): record is JobApplicationRecord => record !== null)
-  .sort((a, b) => b.submittedAtIso.localeCompare(a.submittedAtIso));
-
-export default function CareersPage() {
-  const open = vacancies.filter((vacancy) => vacancy.status === "open");
-  const closed = vacancies.length - open.length;
+export default async function CareersPage() {
+  const serverMode = dataAdapter() === "supabase";
+  const [allVacancies, initialRecords] = serverMode
+    ? await Promise.all([loadServerVacancies(), loadServerJobs()])
+    : await Promise.all([careersService.listVacancies(), careersService.listStaffRecords()]);
+  const vacancyTitles = Object.fromEntries(allVacancies.map((vacancy) => [vacancy.slug, vacancy.title]));
+  const openVacancies = allVacancies.filter((vacancy) => vacancy.status === "open");
+  const open = openVacancies;
+  const closed = allVacancies.length - open.length;
   const nearestDeadlineIso = open.map((vacancy) => vacancy.deadlineIso).sort()[0];
 
   return (
@@ -44,14 +43,12 @@ export default function CareersPage() {
           <h2 id="queue-heading" className="section-label">
             Recruitment queue
           </h2>
-          <span className="demo-badge">Demo data</span>
+          {!serverMode ? <span className="demo-badge">Demo data</span> : null}
         </div>
-        <CareersQueue initial={initialRecords} />
+        <CareersQueue initial={initialRecords} vacancyTitles={vacancyTitles} demoMode={!serverMode} />
       </section>
 
-      <div className={styles.ruleNote}>
-        <p>{CONTENT_DEMO_NOTE}</p>
-      </div>
+      {!serverMode ? <div className={styles.ruleNote}><p>Fictional demo recruitment records.</p></div> : null}
     </div>
   );
 }

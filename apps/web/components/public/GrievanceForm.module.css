@@ -34,8 +34,10 @@
 
 .consentLabel input {
   accent-color: var(--saffron);
+  flex: none;
   margin-top: 2px;
-  width: auto;
+  width: 16px;
+  height: 16px;
 }
 
 .actions {

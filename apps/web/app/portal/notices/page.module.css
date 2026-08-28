@@ -24,11 +24,14 @@
 
 /* Anchor tabs mirror the global .tabs button styling. */
 .tabLink {
+  align-items: center;
   border-bottom: 2px solid transparent;
   color: var(--ink-soft);
+  display: inline-flex;
   font-size: 13px;
-  margin-bottom: -1px;
-  padding: 8px 14px;
+  /* 44px touch target. */
+  min-height: 44px;
+  padding: 0 14px;
   text-decoration: none;
   transition: color 0.15s ease;
 }
@@ -145,13 +148,6 @@
 
 .body p:last-child {
   margin-bottom: 0;
-}
-
-.empty {
-  color: var(--muted);
-  font-size: 14px;
-  margin: 0;
-  padding: 18px 2px;
 }
 
 .demoNote {

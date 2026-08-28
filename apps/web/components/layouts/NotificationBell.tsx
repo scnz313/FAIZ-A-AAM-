@@ -65,9 +65,14 @@ export function NotificationBell({ items: initialItems, accountId }: { items: No
   useEffect(() => {
     if (!accountId) return;
     let cancelled = false;
-    void notificationsService.listForAccount(accountId).then((list) => {
-      if (!cancelled) setItems(list);
-    });
+    void notificationsService
+      .listForAccount(accountId)
+      .then((list) => {
+        if (!cancelled) setItems(list);
+      })
+      .catch(() => {
+        if (!cancelled) return;
+      });
     return () => {
       cancelled = true;
     };
@@ -108,7 +113,7 @@ export function NotificationBell({ items: initialItems, accountId }: { items: No
 
   const markAllRead = () => {
     if (accountId) {
-      void notificationsService.markAllRead(accountId).then((list) => setItems(list));
+      void notificationsService.markAllRead(accountId).then((list) => setItems(list)).catch(() => {});
     }
     setReadIds(new Set(items.map((item) => item.id)));
   };

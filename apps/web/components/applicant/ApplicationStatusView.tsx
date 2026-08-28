@@ -48,9 +48,9 @@ const WITHDRAWABLE: readonly ApplicationStatus[] = [
  * references show the honest not-in-records state. Offer accept/decline
  * responses and requested-change edits are recorded through the service.
  */
-export default function ApplicationStatusView({ applicationRef }: { applicationRef: string }) {
+export default function ApplicationStatusView({ applicationRef, initial }: { applicationRef: string; initial?: ApplicationRecord | null }) {
   const [loading, setLoading] = useState(true);
-  const [record, setRecord] = useState<ApplicationRecord | null>(null);
+  const [record, setRecord] = useState<ApplicationRecord | null>(initial ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [responding, setResponding] = useState(false);
   const [responseError, setResponseError] = useState<string | null>(null);
@@ -71,8 +71,12 @@ export default function ApplicationStatusView({ applicationRef }: { applicationR
   }, [applicationRef]);
 
   useEffect(() => {
+    if (initial !== undefined) {
+      setLoading(false);
+      return;
+    }
     load();
-  }, [load]);
+  }, [load, initial]);
 
   async function handleOfferResponse(accepted: boolean, note: string) {
     if (!record || responding) return;
@@ -193,6 +197,13 @@ export default function ApplicationStatusView({ applicationRef }: { applicationR
           </div>
         </section>
       ) : null}
+      {record.duplicateReview ? (
+        <section className={styles.changePanel} aria-labelledby="duplicate-review-heading">
+          <p className="section-label">School review required</p>
+          <h2 className={styles.changeTitle} id="duplicate-review-heading">Identity review in progress</h2>
+          <p className={styles.changeNote}>The school found a possible existing student match and will verify identity evidence before completing enrollment. Your application is not merged on name alone.</p>
+        </section>
+      ) : null}
 
       <div className={styles.grid}>
         <section className={styles.section} aria-labelledby="timeline-heading">
@@ -252,6 +263,8 @@ export default function ApplicationStatusView({ applicationRef }: { applicationR
                   grade={record.offer.grade}
                   session={record.offer.session}
                   accepted={record.offer.accepted}
+                  admissionFeePaise={record.offer.admissionFeePaise}
+                  acceptByIso={record.offer.acceptByIso}
                   busy={responding}
                   error={responseError}
                   onRespond={handleOfferResponse}

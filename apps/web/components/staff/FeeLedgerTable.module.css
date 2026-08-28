@@ -35,3 +35,9 @@
   font-size: 14px;
   margin: 24px 0 0;
 }
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.ledgerTable th:global(.num),
+.ledgerTable td:global(.num) {
+  text-align: right;
+}

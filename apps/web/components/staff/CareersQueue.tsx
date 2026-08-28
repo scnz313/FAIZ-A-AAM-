@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
-import { vacancies } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
 import {
   applicationReviewer,
@@ -26,16 +25,26 @@ const STATUS_TONE: Record<JobApplicationStatus, StatusTone> = {
   Withdrawn: "neutral",
 };
 
-const vacancyTitle = (slug: string) => vacancies.find((vacancy) => vacancy.slug === slug)?.title ?? slug;
+type FilterKey = "all" | JobApplicationStatus;
+
+const FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "Submitted", label: "Submitted" },
+  { key: "Eligibility review", label: "Eligibility" },
+  { key: "Shortlisted", label: "Shortlisted" },
+  { key: "Interview", label: "Interview" },
+  { key: "Offered", label: "Offered" },
+  { key: "Not selected", label: "Not selected" },
+  { key: "Withdrawn", label: "Withdrawn" },
+];
 
 /**
- * Staff recruitment queue. The server renders the fixture rows as the
- * `initial` state (SSR-safe); on mount the queue refreshes from
- * `careersService.listStaffRecords()` so staff decisions and applications
- * submitted in this browser session appear here too. All data is fictional.
+ * Staff recruitment queue. Vacancy titles arrive from the owning server
+ * loader/service; this component never imports fixture records.
  */
-export function CareersQueue({ initial }: { initial: JobApplicationRecord[] }) {
+export function CareersQueue({ initial, vacancyTitles, demoMode }: { initial: JobApplicationRecord[]; vacancyTitles: Record<string, string>; demoMode: boolean }) {
   const [records, setRecords] = useState<JobApplicationRecord[]>(initial);
+  const [filter, setFilter] = useState<FilterKey>("all");
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,8 +62,27 @@ export function CareersQueue({ initial }: { initial: JobApplicationRecord[] }) {
     void refresh();
   }, [refresh]);
 
+  const visible = filter === "all" ? records : records.filter((record) => record.status === filter);
+
   return (
     <>
+      <div className="tabs" role="group" aria-label="Filter applications by status">
+        {FILTERS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            aria-pressed={filter === tab.key}
+            className={filter === tab.key ? "active" : undefined}
+            onClick={() => setFilter(tab.key)}
+          >
+            {tab.label}
+            <span className={`num ${styles.tabCount}`}>
+              {tab.key === "all" ? records.length : records.filter((record) => record.status === tab.key).length}
+            </span>
+          </button>
+        ))}
+      </div>
+
       <div className="table--scroll">
         <table className={`table ${styles.queueTable}`}>
           <thead>
@@ -62,13 +90,13 @@ export function CareersQueue({ initial }: { initial: JobApplicationRecord[] }) {
               <th scope="col">Ref</th>
               <th scope="col">Candidate</th>
               <th scope="col">Vacancy</th>
-              <th scope="col">Submitted</th>
+              <th scope="col" className="num">Submitted</th>
               <th scope="col">Status</th>
               <th scope="col">Reviewer</th>
             </tr>
           </thead>
           <tbody>
-            {records.map((record) => (
+            {visible.map((record) => (
               <tr key={record.ref} className={styles.queueRow}>
                 <td>
                   <a className={styles.rowLink} href={`/staff/careers/${record.ref}`}>
@@ -76,7 +104,7 @@ export function CareersQueue({ initial }: { initial: JobApplicationRecord[] }) {
                   </a>
                 </td>
                 <td>{record.name}</td>
-                <td>{vacancyTitle(record.vacancySlug)}</td>
+                <td>{vacancyTitles[record.vacancySlug] ?? record.vacancySlug}</td>
                 <td className="num">{formatKolkata(record.submittedAtIso, { format: "day" })}</td>
                 <td>
                   <StatusBadge tone={STATUS_TONE[record.status]}>{record.status}</StatusBadge>
@@ -87,9 +115,10 @@ export function CareersQueue({ initial }: { initial: JobApplicationRecord[] }) {
           </tbody>
         </table>
       </div>
+      {visible.length === 0 ? <p className="field-help">No applications in this view.</p> : null}
       {refreshing ? (
         <p className="field-help" aria-live="polite">
-          Refreshing queue from the demo session…
+          {demoMode ? "Refreshing queue from the demo service…" : "Refreshing authorized recruitment queue…"}
         </p>
       ) : null}
       {error ? (

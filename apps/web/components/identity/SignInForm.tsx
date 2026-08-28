@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { adapterCall } from "@/modules/services/adapter-client";
 import { DEMO_PHONE, STAFF_DEMO_NOTE, identityService } from "@/modules/services/identity";
 
 import styles from "./SignInForm.module.css";
@@ -23,6 +24,10 @@ type SignInFormProps = {
 
 const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["identifier", "password", "code"];
 
+/** Minimum gap between OTP sends, so the button stays honest about when a
+ * fresh code can actually arrive. */
+const RESEND_COOLDOWN_SECONDS = 30;
+
 function fieldId(field: keyof FieldErrors): string {
   return `sign-in-${field}`;
 }
@@ -37,6 +42,7 @@ function fieldId(field: keyof FieldErrors): string {
  */
 export default function SignInForm({ adapter }: SignInFormProps) {
   const router = useRouter();
+  const [safeNext, setSafeNext] = useState("/portal");
   const supabaseMode = adapter === "supabase";
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -45,8 +51,16 @@ export default function SignInForm({ adapter }: SignInFormProps) {
   const [rejected, setRejected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
+  const [resentOnce, setResentOnce] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+  const [resending, setResending] = useState(false);
   const [nextStep, setNextStep] = useState(false);
   const statusRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const requestedNext = new URLSearchParams(window.location.search).get("next");
+    if (requestedNext !== null && requestedNext.startsWith("/") && !requestedNext.startsWith("//")) setSafeNext(requestedNext);
+  }, []);
 
   /* Route to verification once the acceptance line has been announced. */
   useEffect(() => {
@@ -73,21 +87,42 @@ export default function SignInForm({ adapter }: SignInFormProps) {
     return next;
   }
 
+  /* Count down the resend cooldown one second at a time. */
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setInterval(() => setResendIn((seconds) => (seconds <= 1 ? 0 : seconds - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [resendIn]);
+
   async function sendCode(): Promise<void> {
     const supabase = createSupabaseBrowserClient();
     const email = identifier.trim();
-    const redirectTo = `${window.location.origin}/auth/callback?next=/portal`;
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
-    });
-    if (error !== null) {
-      /* Generic response for known/unknown accounts (plan.md §4). */
-      setRejected("The code could not be sent right now — check the address and try again.");
-      return;
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`;
+    try {
+      await supabase.auth.signInWithOtp({
+        email,
+        /* Existing-account sign-in must never silently create an Auth user.
+         * Applicant registration is a separate server-controlled path. */
+        options: { emailRedirectTo: redirectTo, shouldCreateUser: false },
+      });
+    } catch {
+      /* Keep known/unknown/provider errors indistinguishable. The next verify
+       * step remains generic and will fail safely if no account exists. */
     }
     setCodeSent(true);
+    setResentOnce((already) => already || codeSent);
+    setResendIn(RESEND_COOLDOWN_SECONDS);
     setRejected(null);
+  }
+
+  async function handleResend(): Promise<void> {
+    if (resending || resendIn > 0) return;
+    setResending(true);
+    try {
+      await sendCode();
+    } finally {
+      setResending(false);
+    }
   }
 
   async function verifyCode(): Promise<void> {
@@ -101,7 +136,19 @@ export default function SignInForm({ adapter }: SignInFormProps) {
       setRejected("That code is not right — check it and try again.");
       return;
     }
-    router.push("/portal");
+    if (supabaseMode) {
+      /* Staff accounts continue to the TOTP gate (plan.md §4); everyone
+         else lands in the portal. A non-staff context is the normal case. */
+      try {
+        const staffCheck = await adapterCall<boolean>("identity.hasStaff");
+        router.push(staffCheck.ok && staffCheck.value ? `/sign-in/totp?next=${encodeURIComponent(safeNext)}` : safeNext);
+        return;
+      } catch {
+        /* Network hiccup after a successful sign-in still opens the portal;
+           server-side RLS re-authorizes every protected page anyway. */
+      }
+    }
+    router.push(safeNext);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -140,19 +187,16 @@ export default function SignInForm({ adapter }: SignInFormProps) {
       <p className="sr-only" role="status" aria-live="polite">
         {rejected !== null
           ? "Sign-in was not accepted. Check the details and try again."
-          : supabaseMode
-            ? "Sign-in form — a code is sent to your email."
-            : "Sign-in form — demo account only."}
+          : codeSent
+            ? resentOnce
+              ? "If an account exists, a new code has been sent to your email."
+              : "If an account exists, a 6-digit code has been sent to your email. Enter it below."
+            : supabaseMode
+              ? "Sign-in form — a code is sent to your email."
+              : "Sign-in form — demo account only."}
       </p>
 
-      {codeSent ? (
-        <section ref={statusRef} tabIndex={-1} className={styles.success} role="status" aria-live="polite">
-          <p className="section-label">Code sent</p>
-          <p className={styles.successLine}>
-            We&apos;ve emailed a 6-digit code to <strong>{identifier.trim()}</strong>. Enter it below to continue.
-          </p>
-        </section>
-      ) : nextStep ? (
+      {nextStep ? (
         <section
           ref={statusRef}
           tabIndex={-1}
@@ -166,7 +210,16 @@ export default function SignInForm({ adapter }: SignInFormProps) {
           </p>
         </section>
       ) : (
-        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+        <>
+          {codeSent ? (
+            <section ref={statusRef} tabIndex={-1} className={styles.success} role="status" aria-live="polite">
+              <p className="section-label">Code sent</p>
+              <p className={styles.successLine}>
+                If an account exists for <strong>{identifier.trim()}</strong>, we&apos;ve sent a 6-digit code. Enter it below to continue.
+              </p>
+            </section>
+          ) : null}
+          <form className={styles.form} onSubmit={handleSubmit} noValidate>
           {rejected !== null && (
             <div className={styles.summary} role="alert">
               <p className="field-error">{rejected}</p>
@@ -253,9 +306,20 @@ export default function SignInForm({ adapter }: SignInFormProps) {
                   {errors.code}
                 </p>
               )}
-              <p className={styles.actionNote}>
-                Demo environment: check the email inbox the code was sent to.
-              </p>
+              <div className={styles.resendRow}>
+                <Button
+                  variant="quiet"
+                  onClick={() => void handleResend()}
+                  disabled={resending || resendIn > 0}
+                >
+                  {resending ? "Sending…" : resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}
+                </Button>
+                <p className={styles.actionNote}>
+                  {resendIn > 0
+                    ? "You can request a fresh code when the countdown ends."
+                    : "No email yet? Request a new code — the newest one replaces the old."}
+                </p>
+              </div>
             </div>
           )}
 
@@ -273,10 +337,16 @@ export default function SignInForm({ adapter }: SignInFormProps) {
               <p className={styles.actionNote}>Demo account: {DEMO_PHONE} · any password of 6+ characters.</p>
             )}
           </div>
-        </form>
+          </form>
+        </>
       )}
 
       <div className={styles.links}>
+        {supabaseMode ? (
+          <a className="link-arrow" href="/register/applicant">
+            New applicant? Create an account →
+          </a>
+        ) : null}
         <a className="link-arrow" href="/sign-in/recovery">
           Forgot password →
         </a>

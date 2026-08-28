@@ -7,9 +7,9 @@ import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { contentService, noticeCategories, type ContentNotice, type NoticeCategory } from "@/modules/services/content";
-import { demoNowIso } from "@/modules/demo/clock";
 import { formatKolkata } from "@/modules/iot/domain";
 import { canRole } from "@/modules/services/staff-authorization";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./NoticePublisher.module.css";
 
@@ -38,7 +38,7 @@ const LIST_REPUBLISH_NOTE = "Published from the notices list (demo)";
 function rowStatus(notice: ContentNotice): RowStatus {
   if (notice.status === "expired") return "Expired";
   if (notice.status === "draft") return "Draft";
-  if (notice.scheduledForIso !== null && notice.scheduledForIso > demoNowIso()) return "Scheduled";
+  if (notice.scheduledForIso !== null && notice.scheduledForIso > new Date().toISOString()) return "Scheduled";
   return "Published";
 }
 
@@ -84,6 +84,10 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
   const [urgent, setUrgent] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [announcement, setAnnouncement] = useState<{ key: number; text: string } | null>(null);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState<NoticeCategory>("General");
+  const [editBody, setEditBody] = useState("");
 
   function announce(text: string) {
     setAnnouncement((prev) => ({ key: (prev?.key ?? 0) + 1, text }));
@@ -190,7 +194,43 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
   }
 
   function editRow(row: NoticeRow) {
-    announce(`The editor for "${row.title}" opens with the CMS backend.`);
+    setEditingSlug(row.key);
+    setEditTitle(row.title);
+    setEditCategory(row.category);
+    const notice = notices.find((n) => n.slug === row.key);
+    setEditBody(notice ? notice.body.join("\n") : "");
+  }
+
+  async function saveEdit() {
+    if (busy || editingSlug === null) return;
+    if (!editTitle.trim() || !editBody.trim()) {
+      announce("Title and body are required to save edits.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await contentService.editNotice(editingSlug, {
+        title: editTitle.trim(),
+        category: editCategory,
+        body: editBody.split("\n").filter((line) => line.trim() !== ""),
+      });
+      if (result.ok) {
+        await refreshRows();
+        announce(`Notice "${editTitle.trim()}" updated (demo).`);
+        cancelEdit();
+      } else {
+        announce(result.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancelEdit() {
+    setEditingSlug(null);
+    setEditTitle("");
+    setEditCategory("General");
+    setEditBody("");
   }
 
   return (
@@ -200,7 +240,7 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
           <h2 id="notice-list-heading" className={styles.panelTitle}>
             Notices
           </h2>
-          <span className="demo-badge">Demo data</span>
+      <span className="demo-badge">{clientAdapterMode() === "supabase" ? "Live projection" : "Demo data"}</span>
         </div>
 
         {announcement && (
@@ -217,9 +257,9 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
                 <th scope="col">Title</th>
                 <th scope="col">Category</th>
                 <th scope="col">Status</th>
-                <th scope="col">Published</th>
+                <th scope="col" className="num">Published</th>
                 <th scope="col">Owner</th>
-                <th scope="col">Review due</th>
+                <th scope="col" className="num">Review due</th>
                 <th scope="col">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -237,7 +277,7 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
                   <td>{row.owner}</td>
                   <td className="num">{row.reviewDue}</td>
                   <td className={styles.cellActions}>
-                    <Button variant="quiet" onClick={() => editRow(row)}>
+                    <Button variant="quiet" onClick={() => editRow(row)} disabled={busy || editingSlug !== null}>
                       Edit
                     </Button>
                     {canPublish ? (
@@ -251,6 +291,55 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
             </tbody>
           </table>
         </div>
+
+        {editingSlug !== null && (
+          <div className={styles.editPanel} aria-label={`Editing notice ${editTitle}`}>
+            <h3 className={styles.panelTitle}>Edit notice</h3>
+            <div className="field">
+              <label htmlFor="edit-title">Title</label>
+              <input
+                id="edit-title"
+                className="input"
+                type="text"
+                value={editTitle}
+                onChange={(event) => setEditTitle(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="edit-category">Category</label>
+              <select
+                id="edit-category"
+                className="select"
+                value={editCategory}
+                onChange={(event) => setEditCategory(event.target.value as NoticeCategory)}
+              >
+                {noticeCategories.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="edit-body">Body</label>
+              <textarea
+                id="edit-body"
+                className="textarea"
+                value={editBody}
+                onChange={(event) => setEditBody(event.target.value)}
+              />
+            </div>
+            <p className="field-help">Only draft and scheduled notices can be edited. Published notices must be unpublished first.</p>
+            <div className={styles.formActions}>
+              <Button variant="primary" disabled={busy} onClick={() => void saveEdit()}>
+                Save changes
+              </Button>
+              <Button variant="quiet" disabled={busy} onClick={cancelEdit}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="panel" aria-labelledby="publisher-heading">

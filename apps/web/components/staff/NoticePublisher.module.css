@@ -70,6 +70,14 @@
   gap: 10px;
 }
 
+.editPanel {
+  border-top: 1px solid var(--hairline);
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
 @media (max-width: 1000px) {
   .publisherGrid {
     grid-template-columns: 1fr;
@@ -78,4 +86,10 @@
   .formGrid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.table th:global(.num),
+.table td:global(.num) {
+  text-align: right;
 }

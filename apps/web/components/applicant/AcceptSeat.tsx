@@ -3,6 +3,8 @@
 import { useState } from "react";
 
 import Button from "@/components/ui/Button";
+import { formatINR } from "@/modules/finance/demo";
+import { formatKolkata } from "@/modules/iot/domain";
 
 import styles from "./AcceptSeat.module.css";
 
@@ -11,6 +13,10 @@ type AcceptSeatProps = {
   session: string;
   /** Whether the record already shows the seat as accepted (service state). */
   accepted: boolean;
+  /** Admission amount that falls due once the seat is accepted (integer paise). */
+  admissionFeePaise: number;
+  /** Last date the seat is held, shown with the fee in the confirm panel. */
+  acceptByIso: string;
   /** True while the offer response is being recorded by the service. */
   busy: boolean;
   /** Recoverable error from the last response attempt. */
@@ -28,7 +34,16 @@ type ConfirmKind = "accept" | "decline" | null;
  * fee step that follows are driven by persisted demo state, not a local
  * click. Demo-only — the backend will record responses server-side.
  */
-export default function AcceptSeat({ grade, session, accepted, busy, error, onRespond }: AcceptSeatProps) {
+export default function AcceptSeat({
+  grade,
+  session,
+  accepted,
+  admissionFeePaise,
+  acceptByIso,
+  busy,
+  error,
+  onRespond,
+}: AcceptSeatProps) {
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const [note, setNote] = useState("");
 
@@ -69,7 +84,13 @@ export default function AcceptSeat({ grade, session, accepted, busy, error, onRe
           </p>
           {confirm === "decline" ? (
             <p className={styles.declineHint}>Declining releases the seat to the next candidate. This cannot be undone.</p>
-          ) : null}
+          ) : (
+            <p className={styles.declineHint}>
+              On confirmation, the admission amount of{" "}
+              <strong className="num">{formatINR(admissionFeePaise)}</strong> falls due on your fee ledger — payable
+              by {formatKolkata(acceptByIso, { format: "day" })}. Enrollment completes only once it is recorded.
+            </p>
+          )}
           <label className={styles.noteLabel} htmlFor="offer-note">
             Note <span className={styles.noteOptional}>(optional)</span>
           </label>

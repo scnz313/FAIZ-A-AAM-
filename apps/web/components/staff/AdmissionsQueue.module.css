@@ -8,6 +8,30 @@
   margin-bottom: var(--space-4);
 }
 
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-bottom: var(--space-8);
+}
+
+.metric {
+  background: var(--chalk);
+  margin: 0;
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.metricNum {
+  font-family: var(--font-display, var(--serif));
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1;
+}
+
 .tabCount {
   margin-left: var(--space-1);
   font-size: 11px;
@@ -38,4 +62,22 @@
   margin: var(--space-5) 0;
   color: var(--ink-soft);
   font-size: 14px;
+}
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.queueTable th:global(.num),
+.queueTable td:global(.num) {
+  text-align: right;
+}
+
+@media (max-width: 1000px) {
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
 }

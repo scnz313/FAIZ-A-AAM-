@@ -5,13 +5,15 @@ import PageIntro from "@/components/public/PageIntro";
 import { ADMISSIONS_DEMO_NOTE } from "@/modules/admissions/demo";
 import { CONTENT_DEMO_NOTE, notices } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerPublicAdmissionConfiguration } from "@/lib/supabase/server-loaders";
+import { DEMO_ADMISSION_CONFIGURATION, type AdmissionConfiguration } from "@/modules/services/school-config";
 
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Admissions",
-  description:
-    "How to apply to Faiz Aam Secondary School: the admission process, eligibility, documents, and key dates for session 2026-27.",
+  description: "How to apply to Faiz Aam Secondary School: the admission process, eligibility, documents, and key dates.",
 };
 
 const STEPS = [
@@ -37,30 +39,14 @@ const STEPS = [
   },
 ];
 
-const ELIGIBILITY = [
-  {
-    title: "Age by grade",
-    line: "Children must meet the age rule for the class they are applying to, counted against the session's cut-off date.",
-    concept: true,
-  },
-  {
-    title: "Previous school report card",
-    line: "The last two years of report cards help the school confirm placement and continuity.",
-    concept: true,
-  },
-  {
-    title: "Documents",
-    line: "Birth certificate, student photograph, previous report card, and address proof.",
-    concept: true,
-  },
-  {
-    title: "Confirmed policy",
-    line: "Grade capacity, the age cut-off, and the full eligibility rules are published with the admission notice.",
-    concept: false,
-  },
-];
-
-export default function AdmissionsPage() {
+export default async function AdmissionsPage() {
+  const configuration: AdmissionConfiguration = dataAdapter() === "supabase"
+    ? await loadServerPublicAdmissionConfiguration()
+    : DEMO_ADMISSION_CONFIGURATION;
+  const currentYear = configuration.academicYears.find((year) => year.status === "current") ?? configuration.academicYears[0];
+  const openWindows = configuration.windows.filter((window) => window.status === "open" && window.academicYearId === currentYear?.id);
+  const classes = configuration.grades.filter((grade) => openWindows.some((window) => window.gradeId === grade.id)).map((grade) => grade.label);
+  const requirementLabels = configuration.documentRequirements.filter((requirement) => requirement.required && requirement.status === "active").map((requirement) => requirement.label);
   const admissionNotice = notices.find((notice) => notice.slug === "admissions-open-session-2027") ?? null;
 
   return (
@@ -68,7 +54,7 @@ export default function AdmissionsPage() {
       <PageIntro
         eyebrow="Admissions"
         title="Joining the school"
-        deck="Applications for session 2026-27 are open for classes 6 to 10."
+        deck={openWindows.length > 0 && currentYear ? `Applications for ${currentYear.label} are open for ${classes.join(", ") || "configured grades"}.` : "Admissions dates and eligible grades follow the school configuration."}
       />
 
       <section className={styles.section} aria-labelledby="how-heading">
@@ -93,7 +79,11 @@ export default function AdmissionsPage() {
           Who can apply.
         </h2>
         <ul className={styles.eligibilityList}>
-          {ELIGIBILITY.map((item) => (
+          {[
+            { title: "Age by grade", line: "Children must meet the age rule configured for the selected grade and session.", concept: false },
+            { title: "Documents", line: requirementLabels.length > 0 ? requirementLabels.join(", ") : "The current window has no published document checklist.", concept: false },
+            { title: "Capacity", line: openWindows.length > 0 ? "Capacity is managed per configured grade window and checked again before enrollment." : "Capacity is published only when the school confirms the admission window.", concept: false },
+          ].map((item) => (
             <li key={item.title} className={styles.eligibilityRow}>
               <strong className={styles.eligibilityTitle}>
                 {item.title}
@@ -110,13 +100,24 @@ export default function AdmissionsPage() {
         <h2 className={styles.sectionHeading} id="dates-heading">
           The admission calendar.
         </h2>
-        {admissionNotice ? (
+        {openWindows.length > 0 ? (
+          <article className={styles.noticeRow}>
+            <p className={styles.noticeDate}>{formatKolkata(openWindows[0]!.closesAtIso, { format: "full" })}</p>
+            <div>
+              <h3 className={styles.noticeTitle}>Current admission window</h3>
+              <p className={styles.noticeExcerpt}>{currentYear?.label} · {classes.join(", ") || "Configured grades"}</p>
+              <p className={styles.noticePolicy}>Applications close at the configured deadline shown above.</p>
+            </div>
+          </article>
+        ) : admissionNotice ? (
           <article className={styles.noticeRow}>
             <p className={styles.noticeDate}>{formatKolkata(admissionNotice.dateIso, { format: "full" })}</p>
             <div>
               <h3 className={styles.noticeTitle}>{admissionNotice.title}</h3>
               <p className={styles.noticeExcerpt}>{admissionNotice.excerpt}</p>
-              <p className={styles.noticePolicy}>{admissionNotice.body[1]}</p>
+              {admissionNotice.body[1] ? (
+                <p className={styles.noticePolicy}>{admissionNotice.body[1]}</p>
+              ) : null}
             </div>
           </article>
         ) : null}

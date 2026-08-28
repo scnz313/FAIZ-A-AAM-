@@ -6,6 +6,7 @@ import type { FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import { identityService } from "@/modules/services/identity";
 import type { RecoveryResult } from "@/modules/services/identity";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./RecoveryForm.module.css";
 
@@ -14,11 +15,12 @@ import styles from "./RecoveryForm.module.css";
  * adapter returns a recovery reference plus the fixed demo reset code, which
  * the UI shows inline (a real backend would send it by SMS/email).
  */
-export default function RecoveryForm() {
+export default function RecoveryForm({ adapter = clientAdapterMode() }: { adapter?: "demo" | "supabase" }) {
+  const supabaseMode = adapter === "supabase";
   const [identifier, setIdentifier] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<RecoveryResult | null>(null);
+  const [result, setResult] = useState<RecoveryResult | { generic: true } | null>(null);
   const successRef = useRef<HTMLElement>(null);
 
   /* Move focus to the recovery panel so it is announced and visible. */
@@ -36,7 +38,19 @@ export default function RecoveryForm() {
     setError(null);
     setSubmitting(true);
     try {
-      setResult(await identityService.startRecovery(identifier.trim()));
+      if (supabaseMode) {
+        const response = await fetch("/api/auth/recovery", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: identifier.trim() }),
+        });
+        if (!response.ok) throw new Error("Recovery is temporarily unavailable. Try again shortly.");
+        setResult({ generic: true });
+      } else {
+        setResult(await identityService.startRecovery(identifier.trim()));
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Recovery is temporarily unavailable. Try again shortly.");
     } finally {
       setSubmitting(false);
     }
@@ -46,17 +60,26 @@ export default function RecoveryForm() {
     return (
       <section ref={successRef} tabIndex={-1} className={styles.success} role="status" aria-live="polite">
         <p className="section-label">Recovery started</p>
-        <p className={styles.successTitle}>Reset reference issued</p>
-        <p className={styles.successLine}>
-          Reference <strong className="num">{result.ref}</strong>
-        </p>
-        <p className={styles.demoCode}>
-          <span className="demo-badge">Demo</span>
-          <span>
-            Your reset code is <strong className="num">{result.demoResetCode}</strong> — a real backend sends it by
-            SMS or email.
-          </span>
-        </p>
+        <p className={styles.successTitle}>{supabaseMode ? "Check your email" : "Reset reference issued"}</p>
+        {supabaseMode ? (
+          <p className={styles.successLine}>
+            If an account matches that contact, we&apos;ve sent recovery instructions. For your security, this message
+            is the same whether or not an account exists.
+          </p>
+        ) : (
+          <>
+            <p className={styles.successLine}>
+              Reference <strong className="num">{result && "ref" in result ? result.ref : "—"}</strong>
+            </p>
+            <p className={styles.demoCode}>
+              <span className="demo-badge">Demo</span>
+              <span>
+                Your reset code is <strong className="num">{result && "demoResetCode" in result ? result.demoResetCode : "—"}</strong> — a real backend sends it by
+                SMS or email.
+              </span>
+            </p>
+          </>
+        )}
         <p className={styles.successNote}>
           Use the code at the sign-in screen to reset the password. The office cannot reset passwords over the phone.
         </p>
@@ -109,7 +132,7 @@ export default function RecoveryForm() {
             {submitting ? "Starting recovery…" : "Start recovery"}
           </Button>
           <p className={styles.actionNote}>
-            Demo: any identifier is accepted here; the code is shown on the next panel.
+            {supabaseMode ? "We never reveal whether a contact is registered." : "Demo: any identifier is accepted here; the code is shown on the next panel."}
           </p>
         </div>
       </form>

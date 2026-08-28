@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canRole } from "@/modules/services/staff-authorization";
 import {
   familyContextService,
   type LinkRequestRow,
@@ -29,6 +30,7 @@ import styles from "./page.module.css";
  */
 export default function LinkRequestsPage() {
   const { summary } = useStaffContext();
+  const canVerify = canRole(summary?.role ?? "", "links.verify");
   const [requests, setRequests] = useState<LinkRequestRow[] | null>(null);
   const [graphLinks, setGraphLinks] = useState<LinkRequestSummary[] | null>(null);
   const [activeLinks, setActiveLinks] = useState<LinkRequestSummary[] | null>(null);
@@ -57,12 +59,20 @@ export default function LinkRequestsPage() {
       familyContextService.listLinkRequests(),
       familyContextService.listLinkRequestSummaries(),
       familyContextService.listActiveLinkSummaries(),
-    ]).then(([nextRequests, nextGraphLinks, nextActiveLinks]) => {
-      if (cancelled) return;
-      setRequests(nextRequests);
-      setGraphLinks(nextGraphLinks);
-      setActiveLinks(nextActiveLinks);
-    });
+    ])
+      .then(([nextRequests, nextGraphLinks, nextActiveLinks]) => {
+        if (cancelled) return;
+        setRequests(nextRequests);
+        setGraphLinks(nextGraphLinks);
+        setActiveLinks(nextActiveLinks);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRequests([]);
+          setGraphLinks([]);
+          setActiveLinks([]);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -241,6 +251,7 @@ export default function LinkRequestsPage() {
                   setReason("");
                   setReasonError(false);
                 }}
+                canVerify={canVerify}
               />
             </article>
           ))}
@@ -294,6 +305,7 @@ export default function LinkRequestsPage() {
                   setReason("");
                   setReasonError(false);
                 }}
+                canVerify={canVerify}
               />
             </article>
           ))}
@@ -342,7 +354,7 @@ export default function LinkRequestsPage() {
                     Cancel
                   </button>
                 </div>
-              ) : (
+              ) : canVerify ? (
                 <div className={styles.rowActions}>
                   <button
                     type="button"
@@ -353,7 +365,7 @@ export default function LinkRequestsPage() {
                     Revoke
                   </button>
                 </div>
-              )}
+              ) : null}
             </article>
           ))}
         </div>
@@ -412,6 +424,7 @@ function RequestActions({
   onReject,
   onRejectConfirm,
   onCancelReject,
+  canVerify,
 }: {
   id: string;
   busy: boolean;
@@ -423,8 +436,16 @@ function RequestActions({
   onReject: () => void;
   onRejectConfirm: () => void;
   onCancelReject: () => void;
+  canVerify: boolean;
 }) {
   if (!rejecting) {
+    if (!canVerify) {
+      return (
+        <div className={styles.rowActions}>
+          <span className={styles.readOnlyHint}>Read only</span>
+        </div>
+      );
+    }
     return (
       <div className={styles.rowActions}>
         <button type="button" className="button button--primary button--small" onClick={onApprove} disabled={busy}>
@@ -440,12 +461,13 @@ function RequestActions({
   return (
     <div className={styles.rejectBox}>
       <div className="field">
-        <label htmlFor={`reject-reason-${id}`}>Rejection reason</label>
+        <label htmlFor={`reject-reason-${id}`}>Rejection reason (required)</label>
         <textarea
           id={`reject-reason-${id}`}
           className="textarea"
           value={reason}
           onChange={(event) => onReasonChange(event.target.value)}
+          aria-required="true"
           aria-invalid={reasonError}
           aria-describedby={reasonError ? `reject-error-${id}` : undefined}
           placeholder="Why is this request being rejected? This reason is recorded on the request."

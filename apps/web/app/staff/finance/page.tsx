@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { FINANCE_DEMO_NOTE } from "@/modules/finance/demo";
+import { FINANCE_DEMO_NOTE } from "@/modules/services/finance";
 import { financeService } from "@/modules/services/finance";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerInvoices, loadServerReceipts, loadServerReconciliationProjection } from "@/lib/supabase/server-loaders";
 import { FinanceWorkspace } from "./FinanceWorkspace";
 
 import styles from "./page.module.css";
@@ -16,7 +18,12 @@ export const metadata: Metadata = {
  * family and staff balances agree.
  */
 export default async function FinancePage() {
-  const [views, receipts] = await Promise.all([financeService.listAllInvoices(), financeService.listReceipts()]);
+  const supabaseMode = dataAdapter() === "supabase";
+  const [views, receipts] =
+    supabaseMode
+      ? await Promise.all([loadServerInvoices(), loadServerReceipts()])
+      : await Promise.all([financeService.listAllInvoices(), financeService.listReceipts()]);
+  const reconciliation = supabaseMode ? await loadServerReconciliationProjection() : [];
 
   return (
     <div className={styles.page}>
@@ -26,11 +33,11 @@ export default async function FinancePage() {
         <p className="workspace-intro">Term ledger, payments, and reconciliation.</p>
       </header>
 
-      <FinanceWorkspace initialViews={views} initialReceipts={receipts} />
+      <FinanceWorkspace initialViews={views} initialReceipts={receipts} initialReconciliation={reconciliation} mode={supabaseMode ? "supabase" : "demo"} />
 
       <div className={styles.ruleNote}>
         <p>Financial entries are append-only; corrections create new lines.</p>
-        <p>{FINANCE_DEMO_NOTE}</p>
+        {!supabaseMode ? <p>{FINANCE_DEMO_NOTE}</p> : <p>Finance projections are sourced from the local sandbox ledger and database attempts.</p>}
       </div>
     </div>
   );

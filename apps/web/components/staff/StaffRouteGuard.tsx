@@ -12,7 +12,6 @@ import styles from "./StaffRouteGuard.module.css";
 /**
  * Route → required action. The marks-entry sub-route is matched separately
  * because it needs the teacher role (results.enter), not just results.view.
- * The isolated /staff/facility demonstrator stays ungated.
  */
 const ROUTE_ACTIONS: ReadonlyArray<{ prefix: string; action: StaffAction }> = [
   { prefix: "/staff/admissions", action: "admissions.view" },
@@ -27,10 +26,11 @@ const ROUTE_ACTIONS: ReadonlyArray<{ prefix: string; action: StaffAction }> = [
   { prefix: "/staff/audit", action: "audit.view" },
   { prefix: "/staff/settings", action: "settings.manage" },
   { prefix: "/staff/support", action: "support.view" },
+  { prefix: "/staff/facility", action: "facility.view" },
 ];
 
 function actionForPath(pathname: string): StaffAction | null {
-  if (pathname === "/staff" || pathname.startsWith("/staff/facility")) return null;
+  if (pathname === "/staff") return null;
   if (/^\/staff\/results\/[^/]+\/entry$/.test(pathname)) return "results.enter";
   const match = ROUTE_ACTIONS.find((entry) => pathname.startsWith(entry.prefix));
   return match?.action ?? null;

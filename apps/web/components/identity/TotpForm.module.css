@@ -1,0 +1,46 @@
+/* Staff TOTP form — reuses global field/input primitives. */
+
+.stepNote {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 16px;
+}
+
+.qr {
+  display: block;
+  margin: 0 auto 14px;
+  border: 1px solid var(--rule, #ddd);
+  border-radius: 4px;
+  background: #fff;
+  padding: 8px;
+}
+
+.secretKey {
+  display: block;
+  margin-top: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  background: var(--paper-deep, #f5f2ec);
+  border: 1px solid var(--rule, #ddd);
+  border-radius: 4px;
+}
+
+.codeInput {
+  letter-spacing: 0.35em;
+  font-size: 20px;
+  text-align: center;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.back {
+  margin-top: 22px;
+}

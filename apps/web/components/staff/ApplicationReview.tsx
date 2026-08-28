@@ -712,6 +712,7 @@ export function ApplicationReview({
                       onChange={(event) => setReason(event.target.value)}
                       disabled={processing}
                       ref={reasonRef}
+                      aria-required="true"
                       aria-describedby={validationError ? "decision-reason-error" : "decision-reason-help"}
                     />
                     <p id="decision-reason-help" className="field-help">

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 export type ButtonVariant = "primary" | "quiet" | "danger" | "small" | "saffron";
 
@@ -38,11 +38,15 @@ export default function Button({
     .join(" ");
 
   if (href !== undefined) {
+    /* A disabled anchor keeps its href for layout but must not navigate. */
+    const handleClick = disabled
+      ? (event: MouseEvent<HTMLAnchorElement>) => event.preventDefault()
+      : onClick;
     return (
       <a
         href={href}
         className={classes}
-        onClick={disabled ? undefined : onClick}
+        onClick={handleClick}
         aria-disabled={disabled || undefined}
       >
         {children}

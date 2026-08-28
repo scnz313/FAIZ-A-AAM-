@@ -61,16 +61,17 @@ function ResponseThread({ events }: { events: GrievanceEvent[] }) {
  * portal/public tracker shows the same status and thread. All actions are
  * demo-only and persist for the browser session; nothing is sent.
  */
-export function GrievanceInbox() {
+export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } = {}) {
   const { summary } = useStaffContext();
   const canRespond = canRole(summary?.role ?? "", "support.respond");
-  const [items, setItems] = useState<Grievance[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Grievance[]>(initialItems ?? []);
+  const [loading, setLoading] = useState(initialItems === undefined);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [selectedRef, setSelectedRef] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [resolveAfterSend, setResolveAfterSend] = useState(false);
+  const [privateNote, setPrivateNote] = useState(false);
   const [sending, setSending] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
 
@@ -81,18 +82,25 @@ export function GrievanceInbox() {
   /* Send/reopen may replace the response area — land focus after re-render. */
   const focusTarget = useRef<"heading" | "textarea" | null>(null);
 
-  /* Load the shared store once: fixtures plus any session submissions. */
   useEffect(() => {
+    if (initialItems !== undefined) return;
+    /* Load the authorized support projection once. */
     let cancelled = false;
-    supportService.listGrievances().then((list) => {
-      if (cancelled) return;
-      setItems(list);
-      setLoading(false);
-    });
+    supportService
+      .listGrievances()
+      .then((list) => {
+        if (cancelled) return;
+        setItems(list);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialItems]);
 
   /* Default selection: the most recent grievance, in arrival order. */
   useEffect(() => {
@@ -151,10 +159,13 @@ export function GrievanceInbox() {
     }
     setSending(true);
     try {
-      const updated = await supportService.respond(selected.ref, text, RESPONSE_AUTHOR, resolveAfterSend);
+      const updated = privateNote
+        ? await supportService.addPrivateNote(selected.ref, text, RESPONSE_AUTHOR)
+        : await supportService.respond(selected.ref, text, RESPONSE_AUTHOR, resolveAfterSend);
       setItems((prev) => prev.map((item) => (item.ref === updated.ref ? updated : item)));
       setDraft("");
       setResolveAfterSend(false);
+      setPrivateNote(false);
       setError(null);
       setLiveMessage(`Response recorded (demo) — ${updated.ref}`);
       focusTarget.current = resolveAfterSend ? "heading" : "textarea";
@@ -279,6 +290,14 @@ export function GrievanceInbox() {
                 {selected.subject}
               </h2>
               <p className={styles.detailMessage}>{selected.message}</p>
+              {selected.privateNotes && selected.privateNotes.length > 0 ? (
+                <section className={styles.response} aria-label="Staff private notes">
+                  <h3 className={styles.responseHeading}>Private notes</h3>
+                  <ul className={styles.thread}>
+                    {selected.privateNotes.map((note, index) => <li className={styles.threadEntry} key={`${note.atIso}-${index}`}><p className={styles.threadText}>{note.text}</p><p className={styles.threadMeta}><span className={styles.threadBy}>{note.by}</span><time className="num" dateTime={note.atIso}>{formatKolkata(note.atIso, { format: "full" })}</time></p></li>)}
+                  </ul>
+                </section>
+              ) : null}
 
               <dl className={styles.detailMeta}>
                 <div className={styles.detailMetaRow}>
@@ -316,7 +335,7 @@ export function GrievanceInbox() {
                   <h3 className={styles.responseHeading}>Response</h3>
                   <div className={`field ${error !== null ? "field--invalid" : ""}`}>
                     <label htmlFor="grievance-response">
-                      Response <span aria-hidden="true">*</span>
+                      {privateNote ? "Private note" : "Response"} <span aria-hidden="true">*</span>
                     </label>
                     <textarea
                       id="grievance-response"
@@ -346,6 +365,10 @@ export function GrievanceInbox() {
                       onChange={(event) => setResolveAfterSend(event.target.checked)}
                     />
                     Resolve after sending
+                  </label>
+                  <label className={styles.checkRow}>
+                    <input type="checkbox" checked={privateNote} onChange={(event) => { setPrivateNote(event.target.checked); if (event.target.checked) setResolveAfterSend(false); }} />
+                    Staff-only private note
                   </label>
 
                   <div className={styles.actions}>

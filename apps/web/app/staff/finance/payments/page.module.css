@@ -49,3 +49,9 @@
 .ruleNote p + p {
   margin-top: 8px;
 }
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.paymentsTable th:global(.num),
+.paymentsTable td:global(.num) {
+  text-align: right;
+}

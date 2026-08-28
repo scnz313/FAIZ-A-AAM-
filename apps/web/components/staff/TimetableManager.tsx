@@ -2,29 +2,34 @@
 
 import { useEffect, useState } from "react";
 import type { ExamSlot, Period } from "@/modules/academics/demo";
-import { timetableByDay, weekDays } from "@/modules/academics/demo";
 import Button from "@/components/ui/Button";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { canRole } from "@/modules/services/staff-authorization";
-import { demoNowIso } from "@/modules/demo/clock";
 import {
   deriveEditedKeys,
   fixtureVersion,
+  getEffectiveTimetable,
+  getTimetableDraftAsync,
   initialOpenConflicts,
-  isKnownTimetableClass,
-  listKnownClasses,
   suggestedResolve,
   TIMETABLE_CLASS,
   TIMETABLE_KNOWN_CLASSES,
+  TIMETABLE_WEEK_DAYS,
+  listTimetableClasses,
   timetableService,
+  saveTimetableDraftAsync,
+  timetableDemoNowIso,
   validateDraft,
   validateResolve,
   type DraftNote,
   type EditField,
   type TimetableConflict,
+  type TimetableOverride,
+  type TimetableOverrideKind,
   type TimetablePeriodEdit,
   type TimetableVersionEntry,
 } from "@/modules/services/timetable";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { TimetableEditor } from "./TimetableEditor";
 
 import styles from "./TimetableManager.module.css";
@@ -41,17 +46,10 @@ function formatDemoDate(iso: string): string {
   return DATE_FORMATTER.format(new Date(iso));
 }
 
-function loadWorkingTimetable(className: string): Record<string, Period[]> {
-  return timetableService.getTimetableDraft(className)?.periods ?? timetableService.effectiveTimetable(className) ?? {};
-}
-
-function loadBaselineTimetable(className: string): Record<string, Period[]> {
-  return timetableService.effectiveTimetable(className) ?? {};
-}
-
 /** Open conflicts are seeded from the 8-A fixture; classes without timetable data have nothing to check. */
 function loadOpenConflicts(className: string): TimetableConflict[] {
-  return isKnownTimetableClass(className) ? initialOpenConflicts() : [];
+  if (clientAdapterMode() === "supabase") return [];
+  return className === TIMETABLE_CLASS ? initialOpenConflicts() : [];
 }
 
 function assignmentText(periods: Record<string, Period[]>, day: string, time: string): string {
@@ -72,13 +70,12 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
   const { summary } = useStaffContext();
   const canManage = canRole(summary?.role ?? "", "timetable.manage");
   const [selectedClass, setSelectedClass] = useState<string>(TIMETABLE_KNOWN_CLASSES[0] ?? TIMETABLE_CLASS);
-  const [working, setWorking] = useState<Record<string, Period[]>>(() => loadWorkingTimetable(selectedClass));
-  const [baseline, setBaseline] = useState<Record<string, Period[]>>(() => loadBaselineTimetable(selectedClass));
-  const [editedKeys, setEditedKeys] = useState<ReadonlySet<string>>(() =>
-    new Set(deriveEditedKeys(loadWorkingTimetable(selectedClass), loadBaselineTimetable(selectedClass))),
-  );
-  const [draftNotes, setDraftNotes] = useState<DraftNote[]>(() => timetableService.getTimetableDraft(selectedClass)?.notes ?? []);
-  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(() => timetableService.getTimetableDraft(selectedClass)?.savedAtIso ?? null);
+  const [availableClasses, setAvailableClasses] = useState<string[]>([...TIMETABLE_KNOWN_CLASSES]);
+  const [working, setWorking] = useState<Record<string, Period[]>>({});
+  const [baseline, setBaseline] = useState<Record<string, Period[]>>({});
+  const [editedKeys, setEditedKeys] = useState<ReadonlySet<string>>(new Set());
+  const [draftNotes, setDraftNotes] = useState<DraftNote[]>([]);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [versions, setVersions] = useState<TimetableVersionEntry[]>([fixtureVersion]);
   const [openConflicts, setOpenConflicts] = useState<TimetableConflict[]>(() => loadOpenConflicts(selectedClass));
   const [resolveId, setResolveId] = useState<string | null>(null);
@@ -89,20 +86,71 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
   const [publishNote, setPublishNote] = useState("");
   const [publishFeedback, setPublishFeedback] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const [overrides, setOverrides] = useState<TimetableOverride[]>([]);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideDay, setOverrideDay] = useState("Monday");
+  const [overrideTime, setOverrideTime] = useState("");
+  const [overrideKind, setOverrideKind] = useState<TimetableOverrideKind>("substitute");
+  const [overrideTeacher, setOverrideTeacher] = useState("");
+  const [overrideSubject, setOverrideSubject] = useState("");
+  const [overrideRoom, setOverrideRoom] = useState("");
+  const [overrideNote, setOverrideNote] = useState("");
+  const [overrideFeedback, setOverrideFeedback] = useState("");
+  const [savingOverride, setSavingOverride] = useState(false);
+  const [revokingRef, setRevokingRef] = useState<string | null>(null);
   const [dateSheetPublished, setDateSheetPublished] = useState(false);
   const [dateSheetLive, setDateSheetLive] = useState("");
 
   useEffect(() => {
     let active = true;
-    void timetableService.getTimetableVersionList(selectedClass).then((list) => {
-      if (active) setVersions(list);
+    void listTimetableClasses().then((classes) => {
+      if (!active || classes.length === 0) return;
+      setAvailableClasses(classes);
+      setSelectedClass((current) => classes.includes(current) ? current : classes[0]!);
+    }).catch(() => { if (active) setAvailableClasses([]); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void timetableService.getTimetableVersionList(selectedClass)
+      .then((list) => {
+        if (active) setVersions(list);
+      })
+      .catch(() => {
+        if (!active) return;
+      });
+    void Promise.all([getEffectiveTimetable(selectedClass), getTimetableDraftAsync(selectedClass)]).then(([effective, draft]) => {
+      if (!active) return;
+      const nextBaseline = effective ?? {};
+      const nextWorking = draft?.periods ?? nextBaseline;
+      setBaseline(nextBaseline);
+      setWorking(nextWorking);
+      setEditedKeys(new Set(deriveEditedKeys(nextWorking, nextBaseline)));
+      setDraftNotes(draft?.notes ?? []);
+      setDraftSavedAt(draft?.savedAtIso ?? null);
+    }).catch(() => { if (active) { setBaseline({}); setWorking({}); } });
+    return () => {
+      active = false;
+    };
+  }, [selectedClass]);
+
+  useEffect(() => {
+    let active = true;
+    setOverrides(timetableService.listTimetableOverrides(selectedClass));
+    void timetableService.getDateSheetState(selectedClass).then((state) => {
+      if (!active) return;
+      setDateSheetPublished(state?.published ?? false);
+      setDateSheetLive(state ? `Date sheet v${state.version} published at ${formatDemoDate(state.publishedAtIso)} (demo session).` : "");
+    }).catch(() => {
+      if (active) setDateSheetPublished(false);
     });
     return () => {
       active = false;
     };
   }, [selectedClass]);
 
-  const isEmptyClass = !isKnownTimetableClass(selectedClass);
+  const isEmptyClass = availableClasses.length === 0 || !availableClasses.includes(selectedClass);
   const currentEntry = versions[0] ?? fixtureVersion;
   const targetVersion = currentEntry.version + 1;
   const resolving = openConflicts.find((conflict) => conflict.id === resolveId) ?? null;
@@ -112,7 +160,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
 
   function applyEdit(day: string, time: string, field: EditField, value: string) {
     const next: Record<string, Period[]> = {};
-    for (const d of weekDays) {
+    for (const d of TIMETABLE_WEEK_DAYS) {
       next[d] = (working[d] ?? []).map((period) =>
         d === day && period.time === time ? { ...period, [field]: value } : period,
       );
@@ -126,12 +174,18 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
   function selectClass(className: string) {
     if (className === selectedClass) return;
     setSelectedClass(className);
-    setWorking(loadWorkingTimetable(className));
-    setBaseline(loadBaselineTimetable(className));
-    setEditedKeys(new Set(deriveEditedKeys(loadWorkingTimetable(className), loadBaselineTimetable(className))));
-    const draft = timetableService.getTimetableDraft(className);
-    setDraftNotes(draft?.notes ?? []);
-    setDraftSavedAt(draft?.savedAtIso ?? null);
+    setWorking({});
+    setBaseline({});
+    setEditedKeys(new Set());
+    void Promise.all([getEffectiveTimetable(className), getTimetableDraftAsync(className)]).then(([effective, draft]) => {
+      const nextBaseline = effective ?? {};
+      const nextWorking = draft?.periods ?? nextBaseline;
+      setBaseline(nextBaseline);
+      setWorking(nextWorking);
+      setEditedKeys(new Set(deriveEditedKeys(nextWorking, nextBaseline)));
+      setDraftNotes(draft?.notes ?? []);
+      setDraftSavedAt(draft?.savedAtIso ?? null);
+    }).catch(() => { setBaseline({}); setWorking({}); });
     setOpenConflicts(loadOpenConflicts(className));
     setVersions([]);
     /* Clear transient UI state so nothing from the previous class lingers. */
@@ -142,14 +196,31 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
     setPublishOpen(false);
     setPublishNote("");
     setPublishFeedback("");
+    setOverrides([]);
+    setOverrideOpen(false);
+    setOverrideDay("Monday");
+    setOverrideTime("");
+    setOverrideKind("substitute");
+    setOverrideTeacher("");
+    setOverrideSubject("");
+    setOverrideRoom("");
+    setOverrideNote("");
+    setOverrideFeedback("");
+    setRevokingRef(null);
+    setDateSheetPublished(false);
+    setDateSheetLive("");
   }
 
-  function saveDraft() {
-    const draft = timetableService.saveTimetableDraft(working, draftNotes, selectedClass);
-    setDraftSavedAt(draft.savedAtIso);
-    setPublishFeedback(
-      `Draft for Class ${selectedClass} saved to the session (demo) — not published. It will be restored when you return.`,
-    );
+  async function saveDraft() {
+    try {
+      const draft = await saveTimetableDraftAsync(working, draftNotes, selectedClass);
+      setDraftSavedAt(draft.savedAtIso);
+      setPublishFeedback(clientAdapterMode() === "supabase"
+        ? `Draft for Class ${selectedClass} saved to the school timetable service — not published.`
+        : `Draft for Class ${selectedClass} saved to the session (demo) — not published. It will be restored when you return.`);
+    } catch (error) {
+      setPublishFeedback(`Draft save failed: ${error instanceof Error ? error.message : "unknown error"}.`);
+    }
   }
 
   function openResolve(conflict: TimetableConflict) {
@@ -174,7 +245,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       setResolveFeedback(result.error);
       return;
     }
-    const note: DraftNote = { conflictMessage: conflict.message, reason: resolveReason.trim(), atIso: demoNowIso() };
+    const note: DraftNote = { conflictMessage: conflict.message, reason: resolveReason.trim(), atIso: timetableDemoNowIso() };
     setDraftNotes((current) => [...current, note]);
     setOpenConflicts((current) => current.filter((item) => item.id !== conflict.id));
     setResolveId(null);
@@ -241,9 +312,82 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
     }
   }
 
-  function publishDateSheet() {
-    setDateSheetPublished(true);
-    setDateSheetLive("Mid-term date sheet published (demo).");
+  function openOverrideForm() {
+    setOverrideDay(TIMETABLE_WEEK_DAYS[0] ?? "Monday");
+    setOverrideTime("");
+    setOverrideKind("substitute");
+    setOverrideTeacher("");
+    setOverrideSubject("");
+    setOverrideRoom("");
+    setOverrideNote("");
+    setOverrideFeedback("");
+    setOverrideOpen(true);
+  }
+
+  async function confirmOverride() {
+    const dateIso = timetableService.demoDateForWeekday(overrideDay);
+    if (dateIso === null) {
+      setOverrideFeedback("Choose a day within the demo week (3–8 August 2026).");
+      return;
+    }
+    setSavingOverride(true);
+    setOverrideFeedback("Saving override…");
+    try {
+      const override = await timetableService.saveTimetableOverride(
+        {
+          dateIso,
+          time: overrideTime,
+          kind: overrideKind,
+          teacher: overrideKind === "substitute" ? overrideTeacher : undefined,
+          subject: overrideKind === "substitute" ? overrideSubject : undefined,
+          room: overrideKind === "room" ? overrideRoom : undefined,
+          note: overrideNote,
+        },
+        selectedClass,
+      );
+      setOverrides(timetableService.listTimetableOverrides(selectedClass));
+      setOverrideOpen(false);
+      setOverrideFeedback(
+        `${override.ref} recorded — ${override.day} ${override.time} ${override.kind} override applies only on ${override.dateIso} (demo session).`,
+      );
+    } catch (error) {
+      setOverrideFeedback(
+        `Override not saved: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    } finally {
+      setSavingOverride(false);
+    }
+  }
+
+  async function confirmRevokeOverride(ref: string) {
+    setRevokingRef(ref);
+    setOverrideFeedback(`Revoking ${ref}…`);
+    try {
+      await timetableService.revokeTimetableOverride(ref, selectedClass);
+      setOverrides(timetableService.listTimetableOverrides(selectedClass));
+      setOverrideFeedback(`${ref} revoked — the published base timetable reapplies on that date.`);
+    } catch (error) {
+      setOverrideFeedback(
+        `Revoke failed: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    } finally {
+      setRevokingRef(null);
+    }
+  }
+
+  async function publishDateSheet() {
+    setDateSheetLive("Publishing date sheet…");
+    try {
+      const state = await timetableService.publishDateSheet(selectedClass);
+      setDateSheetPublished(state.published);
+      setDateSheetLive(
+        `Date sheet v${state.version} published at ${formatDemoDate(state.publishedAtIso)} (demo session) — the portal reads this state.`,
+      );
+    } catch (error) {
+      setDateSheetLive(
+        `Date sheet not published: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    }
   }
 
   return (
@@ -268,7 +412,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
               onChange={(event) => selectClass(event.target.value)}
               disabled={publishing}
             >
-              {listKnownClasses().map((className) => (
+            {availableClasses.map((className) => (
                 <option key={className} value={className}>
                   {className}
                 </option>
@@ -344,8 +488,8 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
         ) : (
           <>
             <p className={styles.conflictIntro}>
-              Conflicts are detected live for the same teacher or room at the same day and time across Class 8-A and the
-              peer fixture (Class 9-B). A conflicting edit is blocked; resolving requires a reasoned change to the
+              Conflicts are detected live for the same teacher or room at the same day and time across Class {selectedClass} and the
+              peer fixture. A conflicting edit is blocked; resolving requires a reasoned change to the
               assignment.
             </p>
 
@@ -391,6 +535,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
                     rows={2}
                     value={resolveReason}
                     onChange={(event) => setResolveReason(event.target.value)}
+                    aria-required="true"
                     aria-describedby="resolve-feedback"
                   />
                   <div className={styles.resolveButtons}>
@@ -445,7 +590,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
             <TimetableEditor
               timetable={working}
               baseline={baseline}
-              weekDays={weekDays}
+              weekDays={TIMETABLE_WEEK_DAYS}
               editedKeys={editedKeys}
               preview={preview}
               onEdit={applyEdit}
@@ -491,6 +636,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
                   rows={3}
                   value={publishNote}
                   onChange={(event) => setPublishNote(event.target.value)}
+                  aria-required="true"
                 />
                 <div className={styles.resolveButtons}>
                   <Button variant="saffron" onClick={confirmPublish} disabled={publishing}>
@@ -502,6 +648,202 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
                 </div>
               </div>
             ) : null}
+          </>
+        )}
+      </section>
+
+      <section className="panel" aria-labelledby="timetable-overrides-heading">
+        <div className={styles.sectionHead}>
+          <h2 id="timetable-overrides-heading" className="section-label">
+            Overrides — Class {selectedClass}
+          </h2>
+          <span className="demo-badge">Demo data</span>
+        </div>
+
+        {isEmptyClass ? (
+          <div className="workspace-state">
+            <p className="workspace-state-title">No timetable yet</p>
+            <p className="workspace-state-note">
+              Class {selectedClass} has no published timetable in this demo, so date-specific overrides cannot be
+              applied yet.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className={styles.conflictIntro}>
+              A date-specific override replaces a teacher, room, subject, or the whole period on one date only — the
+              published base timetable is never rewritten. Overrides stay in history after revocation.
+            </p>
+
+            {overrides.length === 0 ? (
+              <p className={styles.none}>No overrides recorded for this session.</p>
+            ) : (
+              <ul className={styles.changeLog}>
+                {overrides.map((override) => (
+                  <li key={override.ref} className={styles.changeRow}>
+                    <span className={styles.changeVersion}>{override.ref}</span>
+                    <span>
+                      <strong>{override.day} {override.time}</strong> · {override.kind}
+                      {override.teacher !== undefined ? ` · ${override.teacher}` : ""}
+                      {override.subject !== undefined ? ` · ${override.subject}` : ""}
+                      {override.room !== undefined ? ` · ${override.room}` : ""}
+                      {" — "}{override.note}
+                      {override.revokedAtIso !== null ? (
+                        <span> · revoked</span>
+                      ) : canManage ? (
+                        <>
+                          {" "}
+                          <Button
+                            variant="quiet"
+                            disabled={revokingRef === override.ref}
+                            onClick={() => void confirmRevokeOverride(override.ref)}
+                          >
+                            {revokingRef === override.ref ? "Revoking…" : "Revoke"}
+                          </Button>
+                        </>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {canManage ? (
+              <>
+                <div className={styles.publishRow}>
+                  <Button variant="quiet" onClick={openOverrideForm} disabled={overrideOpen || savingOverride}>
+                    {overrideOpen ? "Override form open" : "Add date-specific override"}
+                  </Button>
+                </div>
+
+                {overrideOpen ? (
+                  <div className={styles.publishPanel}>
+                    <h3 className="section-label">Add an override for Class {selectedClass}</h3>
+                    <p className={styles.publishWhy}>
+                      Applies only on the chosen date in the demo week (3–8 August 2026). The base timetable for every
+                      other date is unchanged.
+                    </p>
+                    <div className={styles.overrideFields}>
+                      <div className="field">
+                        <label htmlFor="override-day">Day</label>
+                        <select
+                          id="override-day"
+                          className="select"
+                          value={overrideDay}
+                          onChange={(event) => {
+                            setOverrideDay(event.target.value);
+                            setOverrideTime("");
+                          }}
+                        >
+                          {TIMETABLE_WEEK_DAYS.map((day) => (
+                            <option key={day} value={day}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="override-time">Period</label>
+                        <select
+                          id="override-time"
+                          className="select"
+                          value={overrideTime}
+                          onChange={(event) => setOverrideTime(event.target.value)}
+                        >
+                          <option value="">Select a period…</option>
+                          {(working[overrideDay] ?? [])
+                            .filter((period) => period.kind !== "break" && period.kind !== "assembly")
+                            .map((period) => (
+                              <option key={period.time} value={period.time}>
+                                {period.time} — {period.subject} · {period.teacher}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="override-kind">Kind</label>
+                        <select
+                          id="override-kind"
+                          className="select"
+                          value={overrideKind}
+                          onChange={(event) => setOverrideKind(event.target.value as TimetableOverrideKind)}
+                        >
+                          <option value="substitute">Substitute teacher</option>
+                          <option value="room">Room change</option>
+                          <option value="cancellation">Cancellation</option>
+                          <option value="special">Special period</option>
+                        </select>
+                      </div>
+                      {overrideKind === "substitute" ? (
+                        <>
+                          <div className="field">
+                            <label htmlFor="override-teacher">Substitute teacher</label>
+                            <input
+                              id="override-teacher"
+                              className="input"
+                              type="text"
+                              value={overrideTeacher}
+                              onChange={(event) => setOverrideTeacher(event.target.value)}
+                              aria-required="true"
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor="override-subject">Subject</label>
+                            <input
+                              id="override-subject"
+                              className="input"
+                              type="text"
+                              value={overrideSubject}
+                              onChange={(event) => setOverrideSubject(event.target.value)}
+                              aria-required="true"
+                            />
+                          </div>
+                        </>
+                      ) : null}
+                      {overrideKind === "room" ? (
+                        <div className="field">
+                          <label htmlFor="override-room">Room</label>
+                          <input
+                            id="override-room"
+                            className="input"
+                            type="text"
+                            value={overrideRoom}
+                            onChange={(event) => setOverrideRoom(event.target.value)}
+                            aria-required="true"
+                          />
+                        </div>
+                      ) : null}
+                      <div className={`field ${styles.overrideNoteField}`}>
+                        <label htmlFor="override-note">Reason {overrideKind === "cancellation" ? "and what students should know" : ""}</label>
+                        <textarea
+                          id="override-note"
+                          className={styles.reasonInput}
+                          rows={2}
+                          value={overrideNote}
+                          onChange={(event) => setOverrideNote(event.target.value)}
+                          aria-required="true"
+                          aria-describedby="override-feedback"
+                        />
+                      </div>
+                    </div>
+                    <div className={styles.resolveButtons}>
+                      <Button variant="saffron" onClick={() => void confirmOverride()} disabled={savingOverride}>
+                        {savingOverride ? "Saving…" : "Record override"}
+                      </Button>
+                      <Button variant="quiet" onClick={() => setOverrideOpen(false)} disabled={savingOverride}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <p id="override-feedback" className={styles.live} role="status">
+                  {overrideFeedback}
+                </p>
+              </>
+            ) : (
+              <p className={styles.readOnlyNote} role="status">
+                View only — recording overrides requires the Timetable manager workspace.
+              </p>
+            )}
           </>
         )}
       </section>
@@ -518,10 +860,10 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
           <table className={`table ${styles.dateSheetTable}`}>
             <thead>
               <tr>
-                <th scope="col">Date</th>
+                <th scope="col" className="num">Date</th>
                 <th scope="col">Day</th>
                 <th scope="col">Subject</th>
-                <th scope="col">Time</th>
+                <th scope="col" className="num">Time</th>
                 <th scope="col">Room</th>
               </tr>
             </thead>

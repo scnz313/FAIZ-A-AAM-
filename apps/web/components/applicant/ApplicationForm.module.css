@@ -59,6 +59,37 @@
   color: var(--saffron-deep);
 }
 
+/* Local start-over confirmation — an inline panel with a safe default
+   ("Keep editing") instead of a browser confirm() dialog. */
+.resetConfirm {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--brick);
+  border-top: 2px solid var(--brick);
+  background: rgba(162, 59, 46, 0.06);
+}
+
+.resetTitle {
+  margin: 0 0 6px;
+  color: var(--brick);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.resetDesc {
+  margin: 0 0 12px;
+  max-width: 56ch;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.resetActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 /* Text-first callout: quiet brick box, accent carried by a top
    hairline and a brick square marker instead of a left bar. */
 .errorSummary {
@@ -304,6 +335,29 @@
 
 .actionsNote span {
   color: var(--willow);
+}
+
+/* Honest autosave failure: inline text-button retry inside the note. */
+.retryLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brick);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.retryLink:hover {
+  color: var(--ink);
+}
+
+.retryLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 @media (max-width: 700px) {

@@ -28,7 +28,7 @@ export default function ApplyStudentPage() {
               steps={APPLICATION_STEPS}
               current={currentStep}
               contextTitle={context.grade || "New application"}
-              contextSubtitle={context.session || "Session 2026-27"}
+              contextSubtitle={context.session || "Configured admission session"}
             />
           </aside>
 

@@ -92,13 +92,13 @@ function timelineFor(record: JobApplicationRecord): JobTimelineEvent[] {
  * applications resolve; everything else shows the honest not-in-records
  * state) and supports withdrawal with confirmation.
  */
-export default function JobStatusView() {
+export default function JobStatusView({ initial, initialVacancyTitle }: { initial?: JobApplicationRecord | null; initialVacancyTitle?: string | null }) {
   const params = useParams<{ slug: string }>();
   const applicationRef = params.slug ?? "";
 
-  const [loading, setLoading] = useState(true);
-  const [record, setRecord] = useState<JobApplicationRecord | null>(null);
-  const [vacancyTitle, setVacancyTitle] = useState<string | null>(null);
+  const [loading, setLoading] = useState(initial === undefined);
+  const [record, setRecord] = useState<JobApplicationRecord | null>(initial ?? null);
+  const [vacancyTitle, setVacancyTitle] = useState<string | null>(initialVacancyTitle ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -120,8 +120,9 @@ export default function JobStatusView() {
   }, [applicationRef]);
 
   useEffect(() => {
+    if (initial !== undefined) return;
     void load();
-  }, [load]);
+  }, [load, initial]);
 
   async function handleWithdraw() {
     if (!record || withdrawing) return;

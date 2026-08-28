@@ -1,5 +1,7 @@
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { contentService } from "@/modules/services/content";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerContent } from "@/lib/supabase/server-loaders";
 import { NoticePublisher } from "@/components/staff/NoticePublisher";
 
 import styles from "./page.module.css";
@@ -7,7 +9,7 @@ import styles from "./page.module.css";
 export default async function NoticesPage() {
   /* Every notice (published, draft, scheduled, expired) from the content
      service; the publisher writes back through the same service. */
-  const notices = await contentService.listForStaff();
+  const notices = dataAdapter() === "supabase" ? await loadServerContent("staff") : await contentService.listForStaff();
 
   return (
     <div className={styles.page}>

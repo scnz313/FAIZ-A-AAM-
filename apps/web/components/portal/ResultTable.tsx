@@ -48,8 +48,8 @@ export function ResultTable({ term, marks }: ResultTableProps) {
           <thead>
             <tr>
               <th scope="col">Subject</th>
-              <th scope="col">Max</th>
-              <th scope="col">Obtained</th>
+              <th scope="col" className={`num ${styles.numCol}`}>Max</th>
+              <th scope="col" className={`num ${styles.numCol}`}>Obtained</th>
               <th scope="col">Grade</th>
               <th scope="col">Teacher remark</th>
             </tr>
@@ -60,8 +60,8 @@ export function ResultTable({ term, marks }: ResultTableProps) {
                 <td className={styles.subjectCell}>
                   <strong>{mark.subject}</strong>
                 </td>
-                <td className="num">{mark.max}</td>
-                <td className="num">{mark.obtained}</td>
+                <td className={`num ${styles.numCol}`}>{mark.max}</td>
+                <td className={`num ${styles.numCol}`}>{mark.obtained}</td>
                 <td>
                   <span className={styles.grade}>{mark.grade}</span>
                 </td>

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 
 import { JobReview } from "@/components/staff/JobReview";
-import { CONTENT_DEMO_NOTE, vacancies } from "@/modules/content/demo";
-import { fixtureApplicationRecord } from "@/modules/services/careers";
+import { careersService } from "@/modules/services/careers";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerJobByRef, loadServerVacancies } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -16,9 +17,8 @@ export default async function ApplicationReviewPage({
   params: Promise<{ applicationRef: string }>;
 }) {
   const { applicationRef } = await params;
-  /* The shared fixture derivation, so the SSR initial record and the
-     client-side refresh always agree on the same starting state. */
-  const initial = fixtureApplicationRecord(applicationRef);
+  const serverMode = dataAdapter() === "supabase";
+  const initial = serverMode ? await loadServerJobByRef(applicationRef) : await careersService.getApplication(applicationRef);
 
   if (!initial) {
     return (
@@ -36,14 +36,14 @@ export default async function ApplicationReviewPage({
             References are checked against the recruitment register.
           </p>
         </header>
-        <div className={styles.ruleNote}>
-          <p>{CONTENT_DEMO_NOTE}</p>
-        </div>
+        {!serverMode ? <div className={styles.ruleNote}><p>Fictional demo recruitment records.</p></div> : null}
       </div>
     );
   }
 
-  const vacancy = vacancies.find((v) => v.slug === initial.vacancySlug);
+  const vacancy = serverMode
+    ? (await loadServerVacancies()).find((candidate) => candidate.slug === initial.vacancySlug)
+    : await careersService.getVacancy(initial.vacancySlug);
 
   return <JobReview applicationRef={initial.ref} initial={initial} vacancyTitle={vacancy?.title ?? initial.vacancySlug} />;
 }

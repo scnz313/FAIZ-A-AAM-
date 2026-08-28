@@ -5,6 +5,8 @@ import PageIntro from "@/components/public/PageIntro";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { contentService } from "@/modules/services/content";
 import { formatKolkata } from "@/modules/iot/domain";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerPublicContent } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -16,7 +18,9 @@ export default async function NoticeDetailPage({ params }: { params: Promise<{ s
   const { slug } = await params;
   /* Only published, public notices are served; drafts, expired rows, and
      family-targeted notices are never exposed through a public URL. */
-  const notice = await contentService.getNotice(slug, "public");
+  const notice = dataAdapter() === "supabase"
+    ? (await loadServerPublicContent()).find((candidate) => candidate.slug === slug && candidate.status === "published") ?? null
+    : await contentService.getNotice(slug, "public");
 
   if (!notice) {
     return (

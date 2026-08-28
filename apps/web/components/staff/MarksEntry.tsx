@@ -14,6 +14,9 @@ import styles from "./MarksEntry.module.css";
 
 const DEFAULT_ACTOR = "M. Wani (exam office)";
 
+/** Minimum reason length for return/correction/withdrawal decisions. */
+const REASON_MIN_LENGTH = 10;
+
 function cloneRows(rows: readonly MarksRow[]): MarksRow[] {
   return rows.map((row) => ({ ...row }));
 }
@@ -92,11 +95,14 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
   const [publishedRef, setPublishedRef] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState("");
+  const [returnReasonError, setReturnReasonError] = useState<string | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
   const [correctOpen, setCorrectOpen] = useState(false);
   const [correctionReason, setCorrectionReason] = useState("");
+  const [correctionReasonError, setCorrectionReasonError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawalReason, setWithdrawalReason] = useState("");
+  const [withdrawalReasonError, setWithdrawalReasonError] = useState<string | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
   const { summary } = useStaffContext();
   /* Phase-1 split: moderation actions (approve/return) belong to exam
@@ -116,10 +122,14 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
       return;
     }
     let cancelled = false;
-    void teacherAssignmentScope(summary.accountId).then((scope) => {
-      if (cancelled) return;
-      setAssignmentOk(assignmentsCoverBatch(scope, initialBatch.className, initialBatch.subject));
-    });
+    void teacherAssignmentScope(summary.accountId)
+      .then((scope) => {
+        if (cancelled) return;
+        setAssignmentOk(assignmentsCoverBatch(scope, initialBatch.className, initialBatch.subject));
+      })
+      .catch(() => {
+        if (cancelled) return;
+      });
     return () => {
       cancelled = true;
     };
@@ -128,16 +138,18 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([academicsService.getBatch(batchRef), academicsService.listVersions(batchRef)]).then(
-      ([nextBatch, nextVersions]) => {
+    void Promise.all([academicsService.getBatch(batchRef), academicsService.listVersions(batchRef)])
+      .then(([nextBatch, nextVersions]) => {
         if (cancelled) return;
         if (nextBatch) {
           setBatch(nextBatch);
           setRows(cloneRows(nextBatch.rows));
         }
         setVersions(nextVersions);
-      },
-    );
+      })
+      .catch(() => {
+        if (cancelled) return;
+      });
     return () => {
       cancelled = true;
     };
@@ -148,7 +160,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     setRows(cloneRows(next.rows));
     setFieldErrors({});
     setSubmitErrors([]);
-    void academicsService.listVersions(batchRef).then(setVersions);
+    void academicsService.listVersions(batchRef).then(setVersions).catch(() => {});
   }
 
   function focusSummary() {
@@ -222,6 +234,11 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
   }
 
   async function confirmReturn() {
+    if (returnReason.trim().length < REASON_MIN_LENGTH) {
+      setReturnReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required — it is recorded on the batch.`);
+      return;
+    }
+    setReturnReasonError(null);
     setBusy("return");
     const result = await academicsService.returnWithReason(batchRef, returnReason);
     setBusy(null);
@@ -251,6 +268,11 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
   }
 
   async function confirmCorrection() {
+    if (correctionReason.trim().length < REASON_MIN_LENGTH) {
+      setCorrectionReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required — it is recorded in the version history.`);
+      return;
+    }
+    setCorrectionReasonError(null);
     setBusy("correct");
     const result = await academicsService.startCorrection(batchRef, correctionReason, DEFAULT_ACTOR);
     setBusy(null);
@@ -265,6 +287,11 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
   }
 
   async function confirmWithdraw() {
+    if (withdrawalReason.trim().length < REASON_MIN_LENGTH) {
+      setWithdrawalReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required — it is recorded with the withdrawal.`);
+      return;
+    }
+    setWithdrawalReasonError(null);
     setBusy("withdraw");
     const result = await academicsService.withdrawPublication(batchRef, withdrawalReason, DEFAULT_ACTOR);
     setBusy(null);
@@ -464,10 +491,10 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
           {editable ? (
             <>
               <Button variant="quiet" onClick={saveDraft} disabled={busy !== null}>
-                Save draft
+                {busy === "save" ? "Saving draft…" : "Save draft"}
               </Button>
               <Button variant="primary" onClick={submitForModeration} disabled={busy !== null}>
-                Submit for moderation
+                {busy === "submit" ? "Submitting…" : "Submit for moderation"}
               </Button>
             </>
           ) : null}
@@ -501,19 +528,30 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         {returnOpen ? (
           <div className={styles.confirmPanel}>
             <label className={styles.confirmLabel} htmlFor="return-reason">
-              Reason for returning to entry
+              Reason for returning to entry (required)
             </label>
             <textarea
               id="return-reason"
-              className="textarea"
+              className={`textarea ${returnReasonError ? "field--invalid" : ""}`}
               value={returnReason}
-              onChange={(event) => setReturnReason(event.target.value)}
+              onChange={(event) => {
+                setReturnReason(event.target.value);
+                if (returnReasonError) setReturnReasonError(null);
+              }}
+              aria-required="true"
+              aria-invalid={returnReasonError ? true : undefined}
+              aria-describedby={returnReasonError ? "return-reason-error" : undefined}
             />
+            {returnReasonError ? (
+              <p id="return-reason-error" className="field-error" role="alert">
+                {returnReasonError}
+              </p>
+            ) : null}
             <div className={styles.confirmActions}>
               <Button variant="primary" onClick={confirmReturn} disabled={busy !== null}>
                 Return to entry
               </Button>
-              <Button variant="quiet" onClick={() => setReturnOpen(false)} disabled={busy !== null}>
+              <Button variant="quiet" onClick={() => { setReturnOpen(false); setReturnReasonError(null); }} disabled={busy !== null}>
                 Cancel
               </Button>
             </div>
@@ -542,14 +580,25 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         {correctOpen ? (
           <div className={styles.confirmPanel}>
             <label className={styles.confirmLabel} htmlFor="correction-reason">
-              Reason for correction v{nextVersion}
+              Reason for correction v{nextVersion} (required)
             </label>
             <textarea
               id="correction-reason"
-              className="textarea"
+              className={`textarea ${correctionReasonError ? "field--invalid" : ""}`}
               value={correctionReason}
-              onChange={(event) => setCorrectionReason(event.target.value)}
+              onChange={(event) => {
+                setCorrectionReason(event.target.value);
+                if (correctionReasonError) setCorrectionReasonError(null);
+              }}
+              aria-required="true"
+              aria-invalid={correctionReasonError ? true : undefined}
+              aria-describedby={correctionReasonError ? "correction-reason-error" : undefined}
             />
+            {correctionReasonError ? (
+              <p id="correction-reason-error" className="field-error" role="alert">
+                {correctionReasonError}
+              </p>
+            ) : null}
             <p className={styles.confirmHelp}>
               The correction opens a new editable version; the published report stays on record.
             </p>
@@ -557,7 +606,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
               <Button variant="primary" onClick={confirmCorrection} disabled={busy !== null}>
                 Start correction v{nextVersion}
               </Button>
-              <Button variant="quiet" onClick={() => setCorrectOpen(false)} disabled={busy !== null}>
+              <Button variant="quiet" onClick={() => { setCorrectOpen(false); setCorrectionReasonError(null); }} disabled={busy !== null}>
                 Cancel
               </Button>
             </div>
@@ -574,14 +623,25 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
               (demo).
             </p>
             <label className={styles.confirmLabel} htmlFor="withdraw-reason">
-              Reason for withdrawal
+              Reason for withdrawal (required)
             </label>
             <textarea
               id="withdraw-reason"
-              className="textarea"
+              className={`textarea ${withdrawalReasonError ? "field--invalid" : ""}`}
               value={withdrawalReason}
-              onChange={(event) => setWithdrawalReason(event.target.value)}
+              onChange={(event) => {
+                setWithdrawalReason(event.target.value);
+                if (withdrawalReasonError) setWithdrawalReasonError(null);
+              }}
+              aria-required="true"
+              aria-invalid={withdrawalReasonError ? true : undefined}
+              aria-describedby={withdrawalReasonError ? "withdraw-reason-error" : undefined}
             />
+            {withdrawalReasonError ? (
+              <p id="withdraw-reason-error" className="field-error" role="alert">
+                {withdrawalReasonError}
+              </p>
+            ) : null}
             <p className={styles.confirmHelp}>
               The reason is recorded in the version history and on the retained publication record.
             </p>
@@ -589,7 +649,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
               <Button variant="danger" onClick={confirmWithdraw} disabled={busy !== null}>
                 Withdraw v{batch.version}
               </Button>
-              <Button variant="quiet" onClick={() => setWithdrawOpen(false)} disabled={busy !== null}>
+              <Button variant="quiet" onClick={() => { setWithdrawOpen(false); setWithdrawalReasonError(null); }} disabled={busy !== null}>
                 Cancel
               </Button>
             </div>

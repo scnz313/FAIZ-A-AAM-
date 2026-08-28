@@ -161,10 +161,14 @@
 }
 
 .ledgerTabs a {
+  align-items: center;
   color: var(--ink-soft);
+  display: inline-flex;
   font-size: 12px;
   font-weight: 500;
-  padding: 0 0 12px;
+  /* 44px touch target on the tab strip. */
+  min-height: 44px;
+  padding: 0 2px 0;
 }
 
 .ledgerTabs a:hover {
@@ -213,6 +217,11 @@
 
 .cell {
   font-size: 13px;
+  text-align: right;
+}
+
+/* Money column headers follow their right-aligned cells. */
+.numHead {
   text-align: right;
 }
 

@@ -4,6 +4,8 @@ import JobForm from "@/components/applicant/JobForm";
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
 import { careersService } from "@/modules/services/careers";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerVacancies } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -19,7 +21,9 @@ export const metadata: Metadata = {
 
 export default async function ApplyJobPage({ params }: Props) {
   const { slug } = await params;
-  const vacancy = await careersService.getVacancy(slug);
+  const vacancy = dataAdapter() === "supabase"
+    ? (await loadServerVacancies()).find((candidate) => candidate.slug === slug) ?? null
+    : await careersService.getVacancy(slug);
   const open = vacancy?.status === "open";
 
   return (

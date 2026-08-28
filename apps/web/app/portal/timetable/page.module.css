@@ -22,6 +22,11 @@
   max-width: 62ch;
 }
 
+.loadingBlock {
+  display: grid;
+  gap: 14px;
+}
+
 .demoNote {
   align-items: center;
   border-top: 1px solid var(--line);

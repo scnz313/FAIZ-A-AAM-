@@ -40,6 +40,13 @@
   min-width: 880px;
 }
 
+/* Per-status tab counts, matching the admissions queue. */
+.tabCount {
+  color: var(--ink-soft);
+  font-size: 11px;
+  margin-left: 6px;
+}
+
 /* The ref anchor stretches over the whole row, so the entire row is a link. */
 .queueRow {
   position: relative;
@@ -82,4 +89,10 @@
   font-size: 14px;
   line-height: 1.55;
   margin: 0;
+}
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.queueTable th:global(.num),
+.queueTable td:global(.num) {
+  text-align: right;
 }

@@ -31,6 +31,11 @@
   margin-top: 8px;
 }
 
+/* Mark columns read against their right edge, headers included. */
+.numCol {
+  text-align: right;
+}
+
 .subjectCell strong {
   font-size: 14px;
   font-weight: 600;

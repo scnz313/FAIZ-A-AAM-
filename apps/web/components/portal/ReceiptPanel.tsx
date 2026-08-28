@@ -1,7 +1,6 @@
 "use client";
 
-import type { Invoice, Receipt } from "@/modules/finance/demo";
-import { formatINR } from "@/modules/finance/demo";
+import { formatINR, type Invoice, type Receipt } from "@/modules/services/finance";
 import { formatKolkata } from "@/modules/iot/domain";
 
 import styles from "./ReceiptPanel.module.css";

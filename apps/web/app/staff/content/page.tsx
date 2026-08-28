@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
+import { canRole } from "@/modules/services/staff-authorization";
 import {
   contentService,
   type ContentNotice,
@@ -38,16 +40,24 @@ export default function ContentPage() {
   const [pages, setPages] = useState<PublicPageRow[] | null>(null);
   const [notices, setNotices] = useState<ContentNotice[] | null>(null);
   const [announcement, setAnnouncement] = useState<{ key: number; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { summary } = useStaffContext();
+  const actor = summary?.displayName ?? "Content staff";
+  const canPublish = canRole(summary?.role ?? "", "content.publish");
 
   /* Both tables read through the content service — the notice rows include
      draft and expired states alongside the published list. */
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([contentService.listPublicPages(), contentService.listForStaff()]).then(([pageRows, noticeRows]) => {
-      if (cancelled) return;
-      setPages(pageRows);
-      setNotices(noticeRows);
-    });
+    void Promise.all([contentService.listPublicPages(), contentService.listForStaff()])
+      .then(([pageRows, noticeRows]) => {
+        if (cancelled) return;
+        setPages(pageRows);
+        setNotices(noticeRows);
+      })
+      .catch(() => {
+        if (!cancelled) setPages([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -57,14 +67,20 @@ export default function ContentPage() {
     setAnnouncement((prev) => ({ key: (prev?.key ?? 0) + 1, text }));
   }
 
-  function review(row: PublicPageRow) {
-    if (pages === null) return;
-    if (row.status === "In review") {
-      setPages((prev) => (prev ? prev.map((r) => (r.key === row.key ? { ...r, status: "Published" } : r)) : prev));
-      announce(`Page "${row.label}" marked reviewed (demo).`);
-    } else {
-      setPages((prev) => (prev ? prev.map((r) => (r.key === row.key ? { ...r, status: "In review" } : r)) : prev));
-      announce(`Page "${row.label}" marked in review (demo).`);
+  async function review(row: PublicPageRow) {
+    if (pages === null || busy) return;
+    setBusy(true);
+    try {
+      const nextStatus: PublicPageReviewStatus = row.status === "In review" ? "Published" : "In review";
+      const result = await contentService.setPublicPageStatus(row.key, nextStatus, actor);
+      if (result.ok) {
+        setPages((prev) => (prev ? prev.map((r) => (r.key === row.key ? result.value : r)) : prev));
+        announce(`Page "${row.label}" marked ${nextStatus.toLowerCase()} (demo).`);
+      } else {
+        announce(result.message);
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -102,7 +118,7 @@ export default function ContentPage() {
                 <tr>
                   <th scope="col">Page</th>
                   <th scope="col">Status</th>
-                  <th scope="col">Last reviewed</th>
+                  <th scope="col" className="num">Last reviewed</th>
                   <th scope="col">Owner</th>
                   <th scope="col">
                     <span className="sr-only">Action</span>
@@ -123,9 +139,13 @@ export default function ContentPage() {
                     <td className="num">{row.lastReviewed}</td>
                     <td>{row.owner}</td>
                     <td className={styles.cellAction}>
-                      <Button variant="quiet" onClick={() => review(row)}>
-                        {row.status === "In review" ? "Mark reviewed" : "Review"}
-                      </Button>
+                      {canPublish ? (
+                        <Button variant="quiet" disabled={busy} onClick={() => void review(row)}>
+                          {row.status === "In review" ? "Mark reviewed" : "Review"}
+                        </Button>
+                      ) : (
+                        <span aria-label="Read only">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -160,8 +180,8 @@ export default function ContentPage() {
                   <th scope="col" className="num">
                     Version
                   </th>
-                  <th scope="col">Published</th>
-                  <th scope="col">Review due</th>
+                  <th scope="col" className="num">Published</th>
+                  <th scope="col" className="num">Review due</th>
                 </tr>
               </thead>
               <tbody>

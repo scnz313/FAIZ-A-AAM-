@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 
 import { ApplicationReview } from "@/components/staff/ApplicationReview";
-import { staffApplications } from "@/modules/admissions/demo";
 import { admissionsService } from "@/modules/services/admissions";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerAdmissionByRef } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
@@ -18,8 +19,8 @@ export default async function StaffApplicationReviewPage({ params }: { params: P
      Records submitted earlier in the browser session are not readable
      server-side; the shell below lets the client load those, and unknown
      references land on the not-found state after the client resolves. */
-  const initial = await admissionsService.getApplication(applicationRef);
-  const reviewer = staffApplications.find((application) => application.ref === applicationRef)?.reviewer ?? "—";
+  const initial = dataAdapter() === "supabase" ? await loadServerAdmissionByRef(applicationRef) : await admissionsService.getApplication(applicationRef);
+  const reviewer = initial?.reviewer ?? initial?.reviewedByAccountId ?? "—";
 
   if (!initial) {
     return (

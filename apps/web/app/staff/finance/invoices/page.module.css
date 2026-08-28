@@ -48,3 +48,9 @@
   line-height: 1.55;
   margin: 0;
 }
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.invoiceTable th:global(.num),
+.invoiceTable td:global(.num) {
+  text-align: right;
+}

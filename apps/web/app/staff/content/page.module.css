@@ -68,3 +68,9 @@
   margin: 0;
   padding-top: 18px;
 }
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.table th:global(.num),
+.table td:global(.num) {
+  text-align: right;
+}

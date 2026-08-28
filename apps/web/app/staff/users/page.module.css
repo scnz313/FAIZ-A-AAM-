@@ -37,6 +37,16 @@
   margin: 0 0 14px;
 }
 
+.errorNote {
+  background: var(--alert-bg, #fef0f0);
+  border: 1px solid var(--alert-line, #f5c6c6);
+  border-radius: 4px;
+  color: var(--alert-ink, #8b1a1a);
+  font-size: 14px;
+  margin: 0;
+  padding: 12px 16px;
+}
+
 .loading {
   color: var(--muted);
   font-family: var(--serif);
@@ -68,6 +78,37 @@
   gap: 10px;
 }
 
+/* Invite result panel */
+.inviteResult {
+  border-color: var(--willow, #536d57);
+}
+
+.inviteResultCopy {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.oneTimeRef {
+  background: var(--paper, #f4efe5);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  font-family: var(--mono, monospace);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.inviteResultNote {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* Table */
 .table {
   min-width: 900px;
 }
@@ -99,6 +140,118 @@
   font-size: 13px;
 }
 
+/* Expandable detail row */
+.detailCell {
+  border-top: 0 !important;
+  padding: 0 !important;
+}
+
+.detailPanel {
+  background: var(--paper, #f4efe5);
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.detailHeading {
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.noGrants {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.grantList {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.grantItem {
+  align-items: flex-start;
+  background: var(--chalk, #fffdf8);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.grantInfo {
+  display: grid;
+  gap: 4px;
+}
+
+.grantInfo strong {
+  font-size: 14px;
+}
+
+.grantInfo .num {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.grantReason {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+/* Grant form */
+.grantForm {
+  border-top: 1px dashed var(--line-strong);
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.grantFormFields {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+}
+
+.grantFormActions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Revoke box */
+.revokeBox {
+  display: grid;
+  gap: 10px;
+  min-width: 320px;
+}
+
+.revokeActions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Suspend box */
+.accountActions {
+  border-top: 1px dashed var(--line-strong);
+  padding-top: 16px;
+}
+
+.suspendBox {
+  display: grid;
+  gap: 10px;
+}
+
+.suspendActions {
+  display: flex;
+  gap: 10px;
+}
+
 .note {
   border-top: 1px solid var(--line);
   color: var(--muted);
@@ -113,4 +266,18 @@
   .inviteFields {
     grid-template-columns: 1fr;
   }
+
+  .grantFormFields {
+    grid-template-columns: 1fr;
+  }
+
+  .grantItem {
+    flex-direction: column;
+  }
+}
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.table th:global(.num),
+.table td:global(.num) {
+  text-align: right;
 }

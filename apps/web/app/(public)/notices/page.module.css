@@ -101,6 +101,26 @@
   margin: var(--space-6) 0;
 }
 
+/* Failed-load recovery state — names what happened and offers the retry. */
+.errorPanel {
+  margin: var(--space-6) 0;
+}
+
+.emptyTitle {
+  margin: 0;
+  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.errorActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
 /* Downloads --------------------------------------------------------------- */
 
 .downloads {

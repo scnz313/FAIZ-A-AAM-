@@ -25,8 +25,12 @@ const FILTERS: ReadonlyArray<{ key: "all" | ApplicationStatus; label: string }> 
   { key: "all", label: "All" },
   { key: "Submitted", label: "Submitted" },
   { key: "Under review", label: "Under review" },
+  { key: "Changes requested", label: "Changes requested" },
   { key: "Assessment", label: "Assessment" },
   { key: "Offered", label: "Offered" },
+  { key: "Waitlisted", label: "Waitlisted" },
+  { key: "Declined", label: "Declined" },
+  { key: "Enrolled", label: "Enrolled" },
 ];
 
 /**
@@ -48,18 +52,50 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
       .then((records) => {
         if (!cancelled) setLiveRows(records);
       })
+      .catch(() => {
+        if (!cancelled) setLiveRows(rows);
+      })
       .finally(() => {
         if (!cancelled) setRefreshing(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rows]);
 
   const visible = filter === "all" ? liveRows : liveRows.filter((row) => row.status === filter);
 
+  /* Live metrics derived from the service data so session decisions and new
+     submissions are reflected immediately. */
+  const counts = {
+    submitted: liveRows.filter((r) => r.status === "Submitted" || r.status === "Under review").length,
+    assessment: liveRows.filter((r) => r.status === "Assessment").length,
+    offers: liveRows.filter((r) => r.status === "Offered").length,
+    flagged: liveRows.filter((r) => r.flagged).length,
+  };
+
   return (
-    <section aria-labelledby="queue-heading">
+    <>
+      <div className={styles.metrics}>
+        <p className={styles.metric}>
+          <span className="section-label">Submitted</span>
+          <strong className={`num ${styles.metricNum}`}>{counts.submitted}</strong>
+        </p>
+        <p className={styles.metric}>
+          <span className="section-label">Assessment</span>
+          <strong className={`num ${styles.metricNum}`}>{counts.assessment}</strong>
+        </p>
+        <p className={styles.metric}>
+          <span className="section-label">Offers</span>
+          <strong className={`num ${styles.metricNum}`}>{counts.offers}</strong>
+        </p>
+        <p className={styles.metric}>
+          <span className="section-label">Flagged</span>
+          <strong className={`num ${styles.metricNum}`}>{counts.flagged}</strong>
+        </p>
+      </div>
+
+      <section aria-labelledby="queue-heading">
       <div className={styles.sectionHead}>
         <h2 id="queue-heading" className="section-label">
           Application queue
@@ -95,7 +131,7 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
               <th scope="col">Ref</th>
               <th scope="col">Student</th>
               <th scope="col">Grade</th>
-              <th scope="col">Submitted</th>
+              <th scope="col" className="num">Submitted</th>
               <th scope="col">Status</th>
               <th scope="col">Reviewer</th>
             </tr>
@@ -126,5 +162,6 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
 
       {visible.length === 0 ? <p className={styles.empty}>No applications in this view.</p> : null}
     </section>
+    </>
   );
 }

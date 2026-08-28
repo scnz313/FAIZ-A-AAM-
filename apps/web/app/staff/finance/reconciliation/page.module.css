@@ -64,3 +64,9 @@
 .ruleNote p + p {
   margin-top: 8px;
 }
+
+/* Whole-cell numerics align right so columns of figures compare. */
+.reconTable th:global(.num),
+.reconTable td:global(.num) {
+  text-align: right;
+}

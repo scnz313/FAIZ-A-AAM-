@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { InvoiceLines } from "@/components/staff/InvoiceLines";
-import { FINANCE_DEMO_NOTE, formatINR, INVOICE_STATUS_META } from "@/modules/finance/demo";
+import { FINANCE_DEMO_NOTE, formatINR, INVOICE_STATUS_META } from "@/modules/services/finance";
 import { financeService } from "@/modules/services/finance";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerInvoices } from "@/lib/supabase/server-loaders";
 import { formatKolkata } from "@/modules/iot/domain";
+import { PrintButton } from "./PrintButton";
 
 import styles from "./page.module.css";
 
@@ -13,7 +15,8 @@ export const metadata: Metadata = {
 };
 
 export default async function InvoicesPage() {
-  const views = await financeService.listAllInvoices();
+  const supabaseMode = dataAdapter() === "supabase";
+  const views = supabaseMode ? await loadServerInvoices() : await financeService.listAllInvoices();
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
@@ -27,19 +30,22 @@ export default async function InvoicesPage() {
           <h2 id="invoice-table-heading" className="section-label">
             Invoice register
           </h2>
-          <span className="demo-badge">Demo data</span>
+          <span className="demo-badge">{supabaseMode ? "Live projection" : "Demo data"}</span>
         </div>
         <div className="table--scroll">
+          {views.length === 0 ? (
+            <p className={styles.footNote}>No invoices in the register.</p>
+          ) : (
           <table className={`table ${styles.invoiceTable}`}>
             <thead>
               <tr>
                 <th scope="col">Ref</th>
                 <th scope="col">Student</th>
                 <th scope="col">Term</th>
-                <th scope="col">Issued</th>
-                <th scope="col">Due</th>
-                <th scope="col">Total</th>
-                <th scope="col">Balance</th>
+                <th scope="col" className="num">Issued</th>
+                <th scope="col" className="num">Due</th>
+                <th scope="col" className="num">Total</th>
+                <th scope="col" className="num">Balance</th>
                 <th scope="col">Status</th>
                 <th scope="col">Actions</th>
               </tr>
@@ -61,13 +67,14 @@ export default async function InvoicesPage() {
                   </td>
                   <td>
                     <div className={styles.actions}>
-                      <Button variant="quiet">Print</Button>
+                      <PrintButton />
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          )}
         </div>
         <p className={styles.footNote}>
           Print is a demo placeholder — printable invoice copies arrive with the finance backend.
@@ -75,7 +82,7 @@ export default async function InvoicesPage() {
       </section>
 
       <div className={styles.ruleNote}>
-        <p>{FINANCE_DEMO_NOTE}</p>
+        {!supabaseMode ? <p>{FINANCE_DEMO_NOTE}</p> : <p>Invoice balances are derived from the authoritative ledger projection.</p>}
       </div>
     </div>
   );

@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
 import type { ProgressRailStep } from "@/components/applicant/ProgressRail";
 import { formatKolkata } from "@/modules/iot/domain";
 import { admissionsService, type ApplicationRecord } from "@/modules/services/admissions";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { sessionKey } from "@/modules/services/session";
+import { DEMO_ADMISSION_CONFIGURATION, schoolConfigService, type AdmissionConfiguration, type AdmissionDocumentRequirement } from "@/modules/services/school-config";
+import { uploadDocumentFile } from "@/modules/services/document-upload";
 
 import styles from "./ApplicationForm.module.css";
 
@@ -29,21 +32,23 @@ const STEP_INTRO: readonly string[] = [
   "The residential address where the family can be reached.",
   "The school the student currently attends, or last attended.",
   "Only what the admissions team needs in order to plan support. This section is sensitive and visible to fewer staff than the rest of the application.",
-  "Attach the required documents. In this demo only the file names are kept — nothing leaves your device.",
+  "Attach the required documents. Each requirement follows the school configuration for this application window.",
   "Check every section, then read and accept the declaration to submit.",
 ];
 
 /** Tab-session draft key; must match ResumeDraft's autosave key. */
 const STORAGE_KEY = sessionKey("application-draft");
 
-type DocKey = "birth" | "photo" | "reportCard" | "addressProof";
+type DocKey = string;
 
-const DOCS: readonly { key: DocKey; label: string; accept: string; help: string }[] = [
-  { key: "birth", label: "Birth certificate", accept: ".pdf,.jpg,.jpeg,.png", help: "PDF, JPG or PNG · up to 5 MB" },
-  { key: "photo", label: "Student photograph", accept: ".jpg,.jpeg,.png", help: "JPG or PNG · up to 5 MB" },
-  { key: "reportCard", label: "Previous report card", accept: ".pdf,.jpg,.jpeg,.png", help: "PDF, JPG or PNG · up to 5 MB" },
-  { key: "addressProof", label: "Address proof", accept: ".pdf,.jpg,.jpeg,.png", help: "PDF, JPG or PNG · up to 5 MB" },
-];
+function documentAccept(requirement: AdmissionDocumentRequirement): string {
+  return requirement.allowedMimeTypes.map((mime) => mime === "application/pdf" ? ".pdf" : mime === "image/jpeg" ? ".jpg,.jpeg" : mime === "image/png" ? ".png" : mime).join(",");
+}
+
+function documentHelp(requirement: AdmissionDocumentRequirement): string {
+  const types = requirement.allowedMimeTypes.map((mime) => mime === "application/pdf" ? "PDF" : mime === "image/jpeg" ? "JPG" : mime === "image/png" ? "PNG" : mime).join(", ");
+  return `${types} · up to ${Math.max(1, Math.round(requirement.maxBytes / (1024 * 1024)))} MB`;
+}
 
 const CONDITIONS: readonly { key: string; label: string }[] = [
   { key: "asthma", label: "Asthma or a respiratory condition" },
@@ -101,7 +106,7 @@ type Draft = {
   lastClassAttended: string;
   leavingCertificate: string;
   conditions: string[];
-  documents: Record<DocKey, string>;
+  documents: Record<string, string>;
   consent: boolean;
   savedAtIso?: string;
 };
@@ -148,7 +153,7 @@ function emptyDraft(): Draft {
     lastClassAttended: "",
     leavingCertificate: "",
     conditions: [],
-    documents: { birth: "", photo: "", reportCard: "", addressProof: "" },
+    documents: {},
     consent: false,
   };
 }
@@ -167,8 +172,8 @@ function sanitizeDraft(raw: unknown): Draft {
   }
   if (record.documents && typeof record.documents === "object") {
     const docs = record.documents as Record<string, unknown>;
-    for (const doc of DOCS) {
-      if (typeof docs[doc.key] === "string") draft.documents[doc.key] = docs[doc.key] as string;
+    for (const [key, value] of Object.entries(docs)) {
+      if (typeof value === "string") draft.documents[key] = value;
     }
   }
   if (typeof record.consent === "boolean") draft.consent = record.consent;
@@ -244,7 +249,7 @@ function restoreTabDraft(raw: unknown): { draft: Draft; step: number; savedAtIso
   return { draft, step, savedAtIso };
 }
 
-function validateStep(step: number, draft: Draft): Record<string, string> {
+function validateStep(step: number, draft: Draft, documents: readonly AdmissionDocumentRequirement[]): Record<string, string> {
   const errors: Record<string, string> = {};
   switch (step) {
     case 0:
@@ -280,8 +285,8 @@ function validateStep(step: number, draft: Draft): Record<string, string> {
       if (!draft.lastClassAttended) errors.lastClassAttended = "Select the class last attended.";
       break;
     case 6:
-      for (const doc of DOCS) {
-        if (!draft.documents[doc.key]) errors[`doc-${doc.key}`] = `Attach the ${doc.label.toLowerCase()}.`;
+      for (const doc of documents.filter((candidate) => candidate.required)) {
+        if (!draft.documents[doc.code]) errors[`doc-${doc.code}`] = `Attach the ${doc.label.toLowerCase()}.`;
       }
       break;
     case 7:
@@ -429,15 +434,31 @@ function draftFromRecord(record: ApplicationRecord): Draft {
  */
 export default function ApplicationForm({ onStepChange, onContextChange }: ApplicationFormProps) {
   const router = useRouter();
+  const supabaseMode = clientAdapterMode() === "supabase";
+  const [admissionConfiguration, setAdmissionConfiguration] = useState<AdmissionConfiguration | null>(() =>
+    supabaseMode ? null : DEMO_ADMISSION_CONFIGURATION,
+  );
+  const [configurationError, setConfigurationError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [currentStep, setCurrentStep] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  /* Autosave truthfulness: lastSavedIso holds an ISO timestamp (or null);
+     saveMessage carries non-timestamp status lines ("restored"); saveFailed
+     turns the indicator into an honest "Saving failed — retry". */
   const [lastSavedIso, setLastSavedIso] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editingRef, setEditingRef] = useState<string | null>(null);
+  /* Local start-over confirmation replaces a browser confirm() so the
+     destructive step keeps a visible context and a safe default. */
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [uploadStates, setUploadStates] = useState<Record<string, "uploading" | "ready" | "failed">>({});
 
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const startOverRef = useRef<HTMLButtonElement>(null);
+  const cancelResetRef = useRef<HTMLButtonElement>(null);
   const firstRender = useRef(true);
   const onStepChangeRef = useRef(onStepChange);
   const onContextChangeRef = useRef(onContextChange);
@@ -448,6 +469,32 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
   useEffect(() => {
     onContextChangeRef.current = onContextChange;
   });
+
+  useEffect(() => {
+    if (!supabaseMode) return;
+    let cancelled = false;
+    void schoolConfigService.getAdmissionConfiguration().then((configuration) => {
+      if (!cancelled) {
+        setAdmissionConfiguration(configuration);
+        setConfigurationError(null);
+      }
+    }).catch((error: unknown) => {
+      if (!cancelled && clientAdapterMode() === "supabase") {
+        setAdmissionConfiguration(null);
+        setConfigurationError(error instanceof Error ? error.message : "Admission configuration is unavailable.");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [supabaseMode]);
+
+  const documentRequirements = useMemo(
+    () => admissionConfiguration?.documentRequirements.filter((requirement) => requirement.status === "active") ?? [],
+    [admissionConfiguration],
+  );
+  const requiredDocumentRequirements = useMemo(
+    () => documentRequirements.filter((requirement) => requirement.required),
+    [documentRequirements],
+  );
 
   /* Restore a draft on mount: the ?edit=REF param loads the application's
      saved draft (or its recorded fields) for requested-change editing;
@@ -464,7 +511,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
           if (saved) {
             setEditingRef(editRef);
             setDraft(sanitizeDraft(saved));
-            setLastSavedIso("Draft restored for editing");
+            setSaveMessage("Draft restored for editing");
             return;
           }
           const record = await admissionsService.getApplication(editRef);
@@ -472,7 +519,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
           if (record) {
             setEditingRef(editRef);
             setDraft(draftFromRecord(record));
-            setLastSavedIso("Details restored from the submitted application");
+            setSaveMessage("Details restored from the submitted application");
           }
         } catch {
           /* Adapter unavailable — start with an empty form. */
@@ -483,17 +530,52 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
       };
     }
 
+    if (supabaseMode) return () => { cancelled = true; };
+
     try {
       const raw = window.sessionStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const restored = restoreTabDraft(JSON.parse(raw));
       setDraft(restored.draft);
       setCurrentStep(restored.step);
-      if (restored.savedAtIso) setLastSavedIso(restored.savedAtIso);
+      if (restored.savedAtIso) {
+        setLastSavedIso(restored.savedAtIso);
+        setSaveMessage("Draft restored");
+      }
     } catch {
       /* Unreadable draft — start fresh. */
     }
-  }, []);
+  }, [supabaseMode]);
+
+  const persistDraft = useCallback(() => {
+    if (editingRef || supabaseMode) {
+      void admissionsService
+        .saveDraft(editingRef ?? "new", draft)
+        .then((saved) => {
+          if (!editingRef && saved.draftRef) {
+            setEditingRef(saved.draftRef);
+            window.history.replaceState(null, "", `/apply/student?edit=${encodeURIComponent(saved.draftRef)}`);
+          }
+          setLastSavedIso(new Date().toISOString());
+          setSaveMessage(null);
+          setSaveFailed(false);
+        })
+        .catch(() => {
+          setSaveFailed(true);
+        });
+      return;
+    }
+    try {
+      const savedAtIso = new Date().toISOString();
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toTabDraft(draft, currentStep, savedAtIso)));
+      setLastSavedIso(savedAtIso);
+      setSaveMessage(null);
+      setSaveFailed(false);
+    } catch {
+      /* Storage unavailable — say so honestly instead of a stale "saved". */
+      setSaveFailed(true);
+    }
+  }, [draft, currentStep, editingRef, supabaseMode]);
 
   /* Autosave (debounced) on every change after the first render. Only
      non-sensitive fields plus section progress are persisted, and only to
@@ -505,25 +587,9 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
       firstRender.current = false;
       return;
     }
-    if (editingRef) {
-      const timer = window.setTimeout(() => {
-        void admissionsService.saveDraft(editingRef, draft).catch(() => {
-          /* Adapter unavailable — the form stays in memory only. */
-        });
-      }, 350);
-      return () => window.clearTimeout(timer);
-    }
-    const timer = window.setTimeout(() => {
-      try {
-        const savedAtIso = new Date().toISOString();
-        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toTabDraft(draft, currentStep, savedAtIso)));
-        setLastSavedIso(savedAtIso);
-      } catch {
-        /* Storage unavailable — the draft stays in memory only. */
-      }
-    }, 350);
+    const timer = window.setTimeout(persistDraft, 350);
     return () => window.clearTimeout(timer);
-  }, [draft, currentStep, editingRef]);
+  }, [persistDraft]);
 
   /* Focus the step heading whenever the step changes. */
   useEffect(() => {
@@ -544,6 +610,36 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     setDraft((current) => ({ ...current, documents: { ...current.documents, [key]: name } }));
   }
 
+  async function handleDocumentFile(key: DocKey, file: File | undefined) {
+    if (!file) return;
+    if (clientAdapterMode() === "demo") {
+      setDoc(key, file.name);
+      return;
+    }
+    setUploadStates((current) => ({ ...current, [key]: "uploading" }));
+    try {
+      /* The upload owner is durable before the browser requests a signed URL.
+       * The returned public application reference is reused for every later
+       * autosave/submit; no UUID is sent from this component. */
+      const saved = await admissionsService.saveDraft(editingRef ?? "new", draft);
+      const ownerRef = saved.draftRef ?? editingRef;
+      if (!ownerRef) throw new Error("Save the application draft before uploading a document.");
+      if (!editingRef) setEditingRef(ownerRef);
+      const result = await uploadDocumentFile({
+        ownerDomain: "admission_application",
+        ownerRecordRef: ownerRef,
+        attachmentCode: key,
+        file,
+        allowedMimeTypes: documentRequirements.find((requirement) => requirement.code === key)?.allowedMimeTypes,
+        maxBytes: documentRequirements.find((requirement) => requirement.code === key)?.maxBytes,
+      });
+      setDoc(key, result.documentRef);
+      setUploadStates((current) => ({ ...current, [key]: result.status === "ready" ? "ready" : "uploading" }));
+    } catch {
+      setUploadStates((current) => ({ ...current, [key]: "failed" }));
+    }
+  }
+
   function toggleCondition(key: string) {
     setDraft((current) => {
       if (key === "none") {
@@ -561,17 +657,47 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     window.setTimeout(() => document.getElementById(firstId)?.focus(), 0);
   }
 
+  /* While the confirmation is open, land focus on the safe default
+     ("Keep editing") and let Escape cancel back to the trigger. */
+  useEffect(() => {
+    if (!confirmingReset) return;
+    cancelResetRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setConfirmingReset(false);
+        startOverRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [confirmingReset]);
+
   function handleStartOver() {
-    if (!window.confirm("Clear the saved draft and start over?")) return;
-    try {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* Ignore storage failures. */
+    setConfirmingReset(true);
+  }
+
+  function handleCancelReset() {
+    setConfirmingReset(false);
+    startOverRef.current?.focus();
+  }
+
+  function handleConfirmReset() {
+    if (!supabaseMode) {
+      try {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* Ignore storage failures. */
+      }
     }
     setDraft(emptyDraft());
     setErrors({});
     setLastSavedIso(null);
+    setSaveMessage(null);
+    setSaveFailed(false);
     setCurrentStep(0);
+    setConfirmingReset(false);
+    headingRef.current?.focus();
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -580,7 +706,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
 
     /* Intermediate steps: validate this section, then continue. */
     if (currentStep < APPLICATION_STEPS.length - 1) {
-      const nextErrors = validateStep(currentStep, draft);
+      const nextErrors = validateStep(currentStep, draft, requiredDocumentRequirements);
       if (Object.keys(nextErrors).length > 0) {
         setErrors(nextErrors);
         focusFirstError(nextErrors);
@@ -593,7 +719,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
 
     /* Final step: validate everything; jump to the first invalid section. */
     for (let step = 0; step < APPLICATION_STEPS.length; step += 1) {
-      const stepErrors = validateStep(step, draft);
+      const stepErrors = validateStep(step, draft, requiredDocumentRequirements);
       if (Object.keys(stepErrors).length > 0) {
         setErrors(stepErrors);
         setCurrentStep(step);
@@ -605,12 +731,14 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await admissionsService.saveDraft(editingRef ?? "new", draft);
-      const { ref } = await admissionsService.submitApplication(draft);
-      try {
-        window.sessionStorage.removeItem(STORAGE_KEY);
-      } catch {
-        /* Ignore storage failures. */
+      const saved = await admissionsService.saveDraft(editingRef ?? "new", draft);
+      const { ref } = await admissionsService.submitApplication(draft, saved.draftRef ?? editingRef ?? undefined);
+      if (!supabaseMode) {
+        try {
+          window.sessionStorage.removeItem(STORAGE_KEY);
+        } catch {
+          /* Ignore storage failures. */
+        }
       }
       router.push(`/apply/student/${ref}/status`);
     } catch {
@@ -637,11 +765,17 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
               </h2>
               <p className={styles.introLine}>{STEP_INTRO[currentStep]}</p>
             </div>
-            <Button variant="quiet" onClick={handleStartOver}>
+            <button
+              ref={startOverRef}
+              type="button"
+              className="button button--quiet"
+              onClick={handleStartOver}
+              aria-expanded={confirmingReset}
+            >
               Start over
-            </Button>
+            </button>
           </div>
-          {editingRef ? (
+        {editingRef ? (
             <p className={styles.editNote} role="status">
               Editing application <strong>{editingRef}</strong> — your changes will be re-submitted for
               review after you submit them.
@@ -649,13 +783,37 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
           ) : null}
         </div>
 
+        {confirmingReset ? (
+          <section className={styles.resetConfirm} aria-labelledby="reset-confirm-title">
+            <p className={styles.resetTitle} id="reset-confirm-title">
+              Clear this draft and start over?
+            </p>
+            <p className={styles.resetDesc}>
+              This removes the saved draft from this browser and clears every answer in the form. A cleared
+              draft cannot be recovered.
+            </p>
+            <div className={styles.resetActions}>
+              <button ref={cancelResetRef} type="button" className="button" onClick={handleCancelReset}>
+                Keep editing
+              </button>
+              <button type="button" className="button button--danger" onClick={handleConfirmReset}>
+                Clear draft
+              </button>
+            </div>
+          </section>
+        ) : null}
+        {configurationError ? <p className={styles.submitError} role="alert">{configurationError}</p> : null}
+
         {errorItems.length > 0 ? (
           <div className={styles.errorSummary} role="alert">
             <p className={styles.errorSummaryTitle}>Please check the highlighted fields.</p>
             <ul>
               {errorItems.map(([id, message]) => (
                 <li key={id}>
-                  <strong>{ERROR_LABELS[id] ?? id}</strong> — {message}
+                  <strong>{ERROR_LABELS[id] ?? id}</strong> —{" "}
+                  <a href={`#${id}`} aria-label={`${ERROR_LABELS[id] ?? id}: ${message}`}>
+                    Review this answer
+                  </a>
                 </li>
               ))}
             </ul>
@@ -673,7 +831,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
                 error={errors.session}
                 value={draft.session}
                 onChange={(value) => update({ session: value })}
-                options={[{ value: "2026-27", label: "Session 2026-27" }]}
+                options={(admissionConfiguration?.academicYears ?? []).map((year) => ({ value: year.label.replace(/[–—]/g, "-"), label: `Session ${year.label.replace(/[–—]/g, "-")}` }))}
                 placeholder="Select session"
               />
               <SelectField
@@ -684,7 +842,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
                 help="Grade capacity follows the school's confirmed admission policy."
                 value={draft.grade}
                 onChange={(value) => update({ grade: value })}
-                options={[6, 7, 8, 9, 10].map((n) => ({ value: `Class ${n}`, label: `Class ${n}` }))}
+                options={(admissionConfiguration?.grades ?? []).map((grade) => ({ value: grade.label, label: grade.label }))}
                 placeholder="Select class"
               />
             </>
@@ -900,26 +1058,26 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
 
           {currentStep === 6 ? (
             <>
-              {DOCS.map((doc) => (
-                <Field key={doc.key} id={`doc-${doc.key}`} label={doc.label} required error={errors[`doc-${doc.key}`]} help={doc.help}>
+              {requiredDocumentRequirements.map((doc) => (
+                <Field key={doc.code} id={`doc-${doc.code}`} label={doc.label} required error={errors[`doc-${doc.code}`]} help={documentHelp(doc)}>
                   <input
-                    id={`doc-${doc.key}`}
+                    id={`doc-${doc.code}`}
                     className={styles.fileInput}
                     type="file"
-                    accept={doc.accept}
-                    onChange={(event) => setDoc(doc.key, event.target.files?.[0]?.name ?? "")}
-                    aria-describedby={describedBy(`doc-${doc.key}`, errors[`doc-${doc.key}`], doc.help)}
-                    aria-invalid={errors[`doc-${doc.key}`] ? true : undefined}
+                    accept={documentAccept(doc)}
+                    onChange={(event) => void handleDocumentFile(doc.code, event.target.files?.[0])}
+                    aria-describedby={describedBy(`doc-${doc.code}`, errors[`doc-${doc.code}`], documentHelp(doc))}
+                    aria-invalid={errors[`doc-${doc.code}`] ? true : undefined}
                   />
-                  {draft.documents[doc.key] ? (
+                  {draft.documents[doc.code] ? (
                     <p className={styles.fileName} aria-live="polite">
-                      Attached: {draft.documents[doc.key]}
+                      {uploadStates[doc.code] === "uploading" ? "Uploading…" : uploadStates[doc.code] === "failed" ? "Upload failed — choose the file again." : `Attached: ${draft.documents[doc.code]}`}
                     </p>
                   ) : null}
                 </Field>
               ))}
               <p className={`${styles.fieldFull} field-help`}>
-                Only the file names are kept in this demo — no file content is read or transmitted.
+                {clientAdapterMode() === "demo" ? "Only file names are kept in this demo — no file content is read or transmitted." : "Files are uploaded to private storage and remain pending scan until the server marks them ready."}
               </p>
             </>
           ) : null}
@@ -1048,10 +1206,10 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
                 <section className={styles.summarySection} aria-label="Documents summary">
                   <h3 className={styles.summaryTitle}>Documents</h3>
                   <dl className={styles.summaryList}>
-                    {DOCS.map((doc) => (
-                      <div className={styles.summaryRow} key={doc.key}>
+                    {requiredDocumentRequirements.map((doc) => (
+                      <div className={styles.summaryRow} key={doc.code}>
                         <dt>{doc.label}</dt>
-                        <dd>{draft.documents[doc.key] || "Not attached"}</dd>
+                        <dd>{draft.documents[doc.code] || "Not attached"}</dd>
                       </div>
                     ))}
                   </dl>
@@ -1089,7 +1247,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
 
                 <p className="field-help">
                   Submitting creates the application and issues a reference number. The submitted form cannot be
-                  edited afterwards.
+                  edited afterwards. The submit button activates once you tick the declaration.
                 </p>
               </div>
             </>
@@ -1107,7 +1265,16 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
               ← Back
             </Button>
             <p className={styles.actionsNote} aria-live="polite">
-              {lastSavedIso ? (
+              {saveFailed ? (
+                <>
+                  Saving failed —{" "}
+                  <button type="button" className={styles.retryLink} onClick={persistDraft}>
+                    retry
+                  </button>
+                </>
+              ) : saveMessage ? (
+                saveMessage
+              ) : lastSavedIso ? (
                 <>
                   <span aria-hidden="true">✓</span> Draft saved {formatKolkata(lastSavedIso, { format: "time" })}
                 </>
@@ -1115,7 +1282,11 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
                 "Draft autosaves in this browser"
               )}
             </p>
-            <Button type="submit" variant="primary" disabled={submitting}>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={submitting || (isLastStep && !draft.consent)}
+            >
               {submitting ? "Submitting…" : isLastStep ? "Submit application" : "Save & continue →"}
             </Button>
           </div>

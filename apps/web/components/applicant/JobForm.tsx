@@ -10,6 +10,8 @@ import { demoNowIso } from "@/modules/demo/clock";
 import { formatKolkata } from "@/modules/iot/domain";
 import { careersService } from "@/modules/services/careers";
 import { sessionKey } from "@/modules/services/session";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
+import { uploadDocumentFile } from "@/modules/services/document-upload";
 
 import styles from "./JobForm.module.css";
 
@@ -181,6 +183,7 @@ function isStaleDraft(savedAtIso: string): boolean {
 }
 
 function writeDraftEnvelope(draftKey: string, step: number, values: Values): string | null {
+  if (clientAdapterMode() === "supabase") return null;
   const savedAtIso = demoNowIso();
   try {
     window.sessionStorage.setItem(draftKey, JSON.stringify({ step, values: toDraftValues(values), savedAtIso }));
@@ -269,7 +272,8 @@ function FieldShell({ id, label, required, error, full, help, children }: FieldS
 
 export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
   const router = useRouter();
-  const draftKey = sessionKey(`job-draft:${vacancy.slug}`);
+  const supabaseMode = clientAdapterMode() === "supabase";
+  const draftKey = supabaseMode ? "" : sessionKey(`job-draft:${vacancy.slug}`);
 
   const [step, setStep] = useState(0);
   const [values, setValues] = useState<Values>(emptyValues);
@@ -283,6 +287,8 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
   const [focusIntro, setFocusIntro] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [applicationRef, setApplicationRef] = useState<string | null>(null);
+  const [uploadStates, setUploadStates] = useState<Record<string, "uploading" | "ready" | "failed">>({});
 
   const introRef = useRef<HTMLHeadingElement>(null);
   const recoveryRef = useRef<HTMLElement>(null);
@@ -296,6 +302,24 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
     setDraftRecovery(null);
     setStorageIssue(null);
     setAutosavePaused(false);
+
+    if (supabaseMode) {
+      void careersService.getDraft(vacancy.slug).then((saved) => {
+        if (saved) {
+          setApplicationRef(saved.ref);
+          setValues(saved.draft);
+          setLastSavedIso(saved.savedAtIso);
+          setAutosaveStatus("restored");
+        }
+        setRestored(true);
+      }).catch(() => {
+        setAutosaveStatus("unavailable");
+        setStorageIssue("unavailable");
+        setAutosavePaused(true);
+        setRestored(true);
+      });
+      return;
+    }
 
     try {
       const raw = window.sessionStorage.getItem(draftKey);
@@ -335,12 +359,12 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
       setAutosavePaused(true);
     }
     setRestored(true);
-  }, [draftKey]);
+  }, [draftKey, supabaseMode, vacancy.slug]);
 
   /* Autosave the draft on every change, debounced. A restored stale/legacy
      draft stays paused until the applicant chooses a recovery action. */
   useEffect(() => {
-    if (!restored) return;
+    if (!restored || supabaseMode) return;
     if (skipInitialAutosaveRef.current) {
       skipInitialAutosaveRef.current = false;
       return;
@@ -362,7 +386,7 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
       }
     }, 350);
     return () => window.clearTimeout(t);
-  }, [step, values, restored, draftKey, autosavePaused]);
+  }, [step, values, restored, draftKey, autosavePaused, supabaseMode]);
 
   /* Move keyboard and screen-reader focus to the step heading. */
   useEffect(() => {
@@ -404,6 +428,26 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
     });
   }
 
+  async function handleDocumentFile(doc: string, file: File | undefined) {
+    if (!file) return;
+    if (!supabaseMode) {
+      setDocument(doc, file.name);
+      return;
+    }
+    setUploadStates((current) => ({ ...current, [doc]: "uploading" }));
+    try {
+      const saved = await careersService.saveDraft(vacancy.slug, values, applicationRef ?? undefined);
+      const ownerRef = saved.draftRef ?? applicationRef;
+      if (!ownerRef) throw new Error("Save the application draft before uploading a document.");
+      setApplicationRef(ownerRef);
+      const uploaded = await uploadDocumentFile({ ownerDomain: "job_application", ownerRecordRef: ownerRef, attachmentCode: doc, file });
+      setDocument(doc, uploaded.documentRef);
+      setUploadStates((current) => ({ ...current, [doc]: uploaded.status === "ready" ? "ready" : "uploading" }));
+    } catch {
+      setUploadStates((current) => ({ ...current, [doc]: "failed" }));
+    }
+  }
+
   function reviewDraft() {
     setErrors({});
     setStep(STEPS.length - 1);
@@ -423,6 +467,18 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
   }
 
   function saveNow() {
+    if (supabaseMode) {
+      void careersService.saveDraft(vacancy.slug, values, applicationRef ?? undefined).then((saved) => {
+        if (saved.draftRef) setApplicationRef(saved.draftRef);
+        setLastSavedIso(saved.savedAtIso);
+        setAutosaveStatus("saved");
+        setDraftRecovery(null);
+      }).catch(() => {
+        setAutosaveStatus("unavailable");
+        setStorageIssue("write");
+      });
+      return;
+    }
     const savedAtIso = writeDraftEnvelope(draftKey, step, values);
     if (!savedAtIso) {
       setAutosaveStatus("unavailable");
@@ -441,10 +497,12 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
 
   function startOver() {
     let cleared = true;
-    try {
-      window.sessionStorage.removeItem(draftKey);
-    } catch {
-      cleared = false;
+    if (!supabaseMode) {
+      try {
+        window.sessionStorage.removeItem(draftKey);
+      } catch {
+        cleared = false;
+      }
     }
 
     skipInitialAutosaveRef.current = true;
@@ -483,12 +541,14 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await careersService.saveDraft(vacancy.slug, values);
-      const { ref } = await careersService.submitApplication(vacancy.slug, values);
-      try {
-        window.sessionStorage.removeItem(draftKey);
-      } catch {
-        /* Ignore storage failures on submit. */
+      const saved = await careersService.saveDraft(vacancy.slug, values, applicationRef ?? undefined);
+      const { ref } = await careersService.submitApplication(vacancy.slug, values, saved.draftRef ?? applicationRef ?? undefined);
+      if (!supabaseMode) {
+        try {
+          window.sessionStorage.removeItem(draftKey);
+        } catch {
+          /* Ignore storage failures on submit. */
+        }
       }
       router.push(`/apply/job/${ref}/status`);
     } catch {
@@ -501,7 +561,13 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
 
   const current = STEPS[step]!;
   const isLast = step === STEPS.length - 1;
-  const errorList = Object.values(errors);
+  /* Error-summary entries resolve each error key to its field id so every
+     line is an anchor link that moves focus to the invalid control. */
+  const errorEntries = Object.entries(errors).map(([key, message]) => ({
+    key,
+    message,
+    target: key.startsWith("doc:") ? `doc-${vacancy.documents.indexOf(key.slice(4))}` : key,
+  }));
   const autosaveCopy =
     autosaveStatus === "unavailable"
       ? "Autosave unavailable — changes stay on this page only"
@@ -550,6 +616,7 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
                 className={`${styles.railItem} ${state === "done" ? styles.railItemDone : ""} ${
                   state === "current" ? styles.railItemCurrent : ""
                 }`}
+                aria-current={state === "current" ? "step" : undefined}
               >
                 <span aria-hidden="true">{state === "done" ? "✓" : String(i + 1).padStart(2, "0")}</span>
                 <div>
@@ -569,12 +636,16 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
 
       {/* Form workspace ------------------------------------------------ */}
       <section className={styles.workspace} aria-label="Application form">
-        {errorList.length > 0 ? (
+        {errorEntries.length > 0 ? (
           <div className={styles.errorSummary} role="alert">
             <p>Please correct the following before continuing.</p>
             <ul>
-              {errorList.map((message) => (
-                <li key={message}>{message}</li>
+              {errorEntries.map(({ key, message, target }) => (
+                <li key={key}>
+                  <a href={`#${target}`} aria-label={message}>
+                    Review this answer
+                  </a>
+                </li>
               ))}
             </ul>
           </div>
@@ -768,7 +839,7 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
                   Documents required <span aria-hidden="true">*</span>
                 </p>
                 <p className="field-help">
-                  Select each file. Only the file name is recorded — nothing is uploaded in this concept interface.
+                  {supabaseMode ? "Select each file. Files upload to private storage and remain pending scan until the scanner marks them ready." : "Select each file. Only the file name is recorded in this demo; nothing leaves your device."}
                 </p>
               </div>
               {vacancy.documents.map((doc, i) => {
@@ -784,12 +855,12 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
                       id={fieldId}
                       className={`input ${styles.fileInput}`}
                       type="file"
-                      onChange={(e) => setDocument(doc, e.target.files?.[0]?.name ?? "")}
+                      onChange={(e) => void handleDocumentFile(doc, e.target.files?.[0])}
                       aria-describedby={error ? `${fieldId}-error` : values.documents[doc] ? `${fieldId}-help` : undefined}
                     />
                     {values.documents[doc] ? (
                       <p className="field-help" id={`${fieldId}-help`}>
-                        Selected: {values.documents[doc]}
+                        {uploadStates[doc] === "uploading" ? "Uploading…" : uploadStates[doc] === "failed" ? "Upload failed — choose the file again." : `Selected: ${values.documents[doc]}`}
                       </p>
                     ) : null}
                     {error ? (
@@ -871,6 +942,7 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
                     retained for the period stated in the vacancy, then deleted or anonymised.
                   </span>
                 </label>
+                <p className="field-help">The submit button activates once you tick this declaration.</p>
                 {errors.consent ? (
                   <p className="field-error" id="consent-error">
                     {errors.consent}
@@ -900,7 +972,7 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
                 {autosaveStatus === "saved" ? "✓ " : ""}
                 {autosaveCopy}
               </p>
-              <Button variant="primary" type="submit" disabled={submitting}>
+              <Button variant="primary" type="submit" disabled={submitting || (isLast && !values.consent)}>
                 {isLast ? (submitting ? "Submitting…" : "Submit application →") : "Save & continue →"}
               </Button>
             </div>
@@ -913,7 +985,7 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
         <div className={styles.contextBlock}>
           <p className="section-label">Application status</p>
           <p className={styles.contextTitle}>Draft</p>
-          <p className={styles.contextSmall}>Saved in this browser. A reference is issued on submission.</p>
+          <p className={styles.contextSmall}>{supabaseMode ? "Saved to your application record across devices." : "Saved in this browser. A reference is issued on submission."}</p>
         </div>
         <div className={styles.contextBlock}>
           <p className="section-label">Vacancy</p>

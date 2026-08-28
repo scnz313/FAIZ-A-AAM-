@@ -11,6 +11,7 @@ import {
 } from "@/modules/services/staff-authorization";
 import { DEMO_STAFF_ACCOUNT_ID, staffContextService, type StaffWorkspaceSummary } from "@/modules/services/staff-context";
 import { identityService } from "@/modules/services/identity";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
 
 type StaffContextStatus = "loading" | "ready" | "error";
@@ -41,6 +42,12 @@ export type StaffContextValue = {
   retry: () => void;
 };
 
+export type StaffContextInitialState = {
+  summary: StaffWorkspaceSummary;
+  workspaces: RoleGrant[];
+  identityId: string;
+};
+
 const StaffContextContext = createContext<StaffContextValue | null>(null);
 
 /**
@@ -50,18 +57,25 @@ const StaffContextContext = createContext<StaffContextValue | null>(null);
  * the previous workspace. The backend phase replaces the demo account
  * fallback with server authorization and session identity.
  */
-export function StaffContextProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<StaffContextStatus>("loading");
+export function StaffContextProvider({
+  children,
+  initialState,
+}: {
+  children: ReactNode;
+  initialState?: StaffContextInitialState;
+}) {
+  const [status, setStatus] = useState<StaffContextStatus>(initialState ? "ready" : "loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [summary, setSummary] = useState<StaffWorkspaceSummary | null>(null);
-  const [workspaces, setWorkspaces] = useState<RoleGrant[]>([]);
-  const [identityId, setIdentityId] = useState<string | null>(null);
+  const [summary, setSummary] = useState<StaffWorkspaceSummary | null>(initialState?.summary ?? null);
+  const [workspaces, setWorkspaces] = useState<RoleGrant[]>(initialState?.workspaces ?? []);
+  const [identityId, setIdentityId] = useState<string | null>(initialState?.identityId ?? null);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    if (initialState !== undefined && reloadKey === 0) return;
     let cancelled = false;
     setStatus("loading");
     setErrorMessage(null);
@@ -69,6 +83,18 @@ export function StaffContextProvider({ children }: { children: ReactNode }) {
 
     async function load(): Promise<void> {
       try {
+        if (clientAdapterMode() === "supabase") {
+          const [nextSummary, nextWorkspaces] = await Promise.all([
+            staffContextService.getWorkspaceSummary("server"),
+            staffContextService.listGrantedWorkspaces("server"),
+          ]);
+          if (cancelled) return;
+          setSummary(nextSummary);
+          setWorkspaces(nextWorkspaces);
+          setIdentityId(nextSummary.accountId);
+          setStatus("ready");
+          return;
+        }
         /* Staff sign-in does not exist in the demo — the seeded staff account
            stands in until the identity backend issues staff sessions. The
            demo identity picker persists its selection for the session. */
@@ -104,7 +130,7 @@ export function StaffContextProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [initialState, reloadKey]);
 
   const switchWorkspace = useCallback(
     async (roleGrantId: string) => {
@@ -133,6 +159,10 @@ export function StaffContextProvider({ children }: { children: ReactNode }) {
   const switchIdentity = useCallback(
     async (accountId: string) => {
       if (accountId === identityId) return;
+      if (clientAdapterMode() === "supabase") {
+        setSwitchError("Staff identity switching is available only in the demo adapter.");
+        return;
+      }
       setSwitching(true);
       setSwitchError(null);
       try {
@@ -168,7 +198,7 @@ export function StaffContextProvider({ children }: { children: ReactNode }) {
       summary,
       workspaces,
       identityId,
-      demoIdentities: DEMO_STAFF_IDENTITIES,
+      demoIdentities: clientAdapterMode() === "supabase" ? [] : DEMO_STAFF_IDENTITIES,
       switching,
       switchError,
       announcement,

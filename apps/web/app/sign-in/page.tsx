@@ -19,11 +19,19 @@ export const metadata: Metadata = {
  * composes its own public frame (light header + footer) around the editorial
  * PageIntro and the sign-in card. With the Supabase adapter active the card
  * runs the real email-OTP flow; in demo mode it keeps the honest prototype
- * flow (nothing is protected yet).
+ * flow (nothing is protected yet). `?error=auth` comes back from the auth
+ * callback when an email link has expired or was already used — the page
+ * says so honestly and points at the restart path below.
  */
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
   const adapter = dataAdapter();
   const supabaseLive = adapter === "supabase";
+  const authLinkExpired = params.error === "auth";
   return (
     <div className={styles.page}>
       <PublicHeader tone="light" />
@@ -37,6 +45,12 @@ export default function SignInPage() {
             UI demo — authentication arrives with the backend. No data is protected.
           </p>
         )}
+        {authLinkExpired ? (
+          <p className={`alert-strip alert-strip--warning ${styles.alertStrip}`} role="alert">
+            That sign-in link has expired or was already used. Start again below — enter your email and request a
+            fresh code. Your account is safe; nothing needs to be fixed first.
+          </p>
+        ) : null}
         <div className={styles.frame}>
           <PageIntro
             eyebrow="Family portal"

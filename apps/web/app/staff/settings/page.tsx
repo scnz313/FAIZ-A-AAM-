@@ -5,6 +5,8 @@ import type { FormEvent, ReactNode } from "react";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canRole } from "@/modules/services/staff-authorization";
 import { formatKolkata } from "@/modules/iot/domain";
 import { settingsService, type PolicyPendingKey, type SettingsView } from "@/modules/services/settings";
 
@@ -71,6 +73,8 @@ function ToggleRow({ id, checked, onChange, disabled = false, help, children }: 
 }
 
 export default function SettingsPage() {
+  const { summary } = useStaffContext();
+  const canManage = canRole(summary?.role ?? "", "settings.manage");
   const [view, setView] = useState<SettingsView | null>(null);
   const [gradingScheme, setGradingScheme] = useState("Letter grades (A1–E2)");
   const [twoReviewers, setTwoReviewers] = useState(true);
@@ -78,6 +82,8 @@ export default function SettingsPage() {
   const [emailSender, setEmailSender] = useState("notices@faizaam.example");
   const [savedNote, setSavedNote] = useState<{ key: number; text: string } | null>(null);
   const [resetNote, setResetNote] = useState<{ key: number; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   /* The form is seeded from the settings service view; policy-pending
      sections stay visibly flagged until the school confirms them. */
@@ -90,18 +96,44 @@ export default function SettingsPage() {
       setTwoReviewers(next.resultsPolicy.publicationRequiresTwoReviewers);
       setExpiryDays(next.noticeDefaults.defaultExpiryDays);
       setEmailSender(next.noticeDefaults.emailSender);
-    });
+    })
+      .catch(() => {
+        if (!cancelled) setSaveError("Could not load settings.");
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  function handleSave(event: FormEvent<HTMLFormElement>) {
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSavedNote((prev) => ({
-      key: (prev?.key ?? 0) + 1,
-      text: "Saved (demo) — changes are versioned and audited.",
-    }));
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const actor = summary?.displayName ?? "System administrator";
+      const updated = await settingsService.saveSettings(
+        {
+          resultsPolicy: {
+            gradingScheme,
+            publicationRequiresTwoReviewers: twoReviewers,
+          },
+          noticeDefaults: {
+            defaultExpiryDays: expiryDays,
+            emailSender,
+          },
+        },
+        actor,
+      );
+      setView(updated);
+      setSavedNote((prev) => ({
+        key: (prev?.key ?? 0) + 1,
+        text: "Saved — changes are versioned and audited.",
+      }));
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleReset() {
@@ -278,9 +310,14 @@ export default function SettingsPage() {
         </Section>
 
         <div className={styles.saveRow}>
-          <Button variant="primary" type="submit">
-            Save changes
+          <Button variant="primary" type="submit" disabled={saving || !canManage}>
+            {saving ? "Saving…" : canManage ? "Save changes" : "Read only"}
           </Button>
+          {saveError && (
+            <p className={styles.savedNote} role="alert" style={{ color: "var(--alert-ink, #8b1a1a)" }}>
+              {saveError}
+            </p>
+          )}
           {savedNote && (
             <p key={savedNote.key} className={styles.savedNote} aria-live="polite">
               {savedNote.text}
@@ -298,7 +335,7 @@ export default function SettingsPage() {
             Reset the demo dataset to its initial state. Nothing is deleted — this is a fictional demo.
           </p>
           <div>
-            <Button variant="danger" onClick={handleReset}>
+            <Button variant="danger" onClick={handleReset} disabled={!canManage}>
               Reset demo data
             </Button>
           </div>

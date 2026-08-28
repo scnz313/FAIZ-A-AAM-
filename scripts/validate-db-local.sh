@@ -95,4 +95,13 @@ echo "== transactional RPC suite (plan.md §8)"
 
 psql -h /tmp -p "$PGPORT" -U postgres -d "$DB" -t -c "select 'rpc suite: '||result from (select result from (select 'RPC SUITE PASSED' as result) x) y;"
 
+echo "== Slice 4 results/timetable release suite"
+"${PSQL[@]}" -q -f scripts/validate-results-timetable-release.sql
+
+echo "== Slice 5 operational facade suite"
+"${PSQL[@]}" -q -f supabase/tests/database/slice5-operational.test.sql
+
+echo "== Slice 6 provider-job integrity suite"
+"${PSQL[@]}" -q -f supabase/tests/database/slice6-provider-jobs.test.sql
+
 echo "ALL LOCAL DATABASE CHECKS PASSED"

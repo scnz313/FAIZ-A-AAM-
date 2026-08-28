@@ -32,6 +32,14 @@
   margin-bottom: 18px;
 }
 
+/* Mode and day tabs are global buttons; give them a 44px touch target
+   inside this workspace without touching the shared stylesheet. */
+.workspace :global(.tabs button) {
+  align-items: center;
+  display: inline-flex;
+  min-height: 44px;
+}
+
 /* Period list — mirrors the mockup's ruled period rows. */
 .periods {
   list-style: none;

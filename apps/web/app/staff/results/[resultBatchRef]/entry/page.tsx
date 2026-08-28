@@ -4,12 +4,16 @@ import { notFound } from "next/navigation";
 import { MarksEntry } from "@/components/staff/MarksEntry";
 import { ACADEMICS_DEMO_NOTE } from "@/modules/academics/demo";
 import { academicsService } from "@/modules/services/academics";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerResultBatch } from "@/lib/supabase/server-loaders";
 
 import styles from "./page.module.css";
 
 export async function generateMetadata({ params }: { params: Promise<{ resultBatchRef: string }> }): Promise<Metadata> {
   const { resultBatchRef } = await params;
-  const batch = await academicsService.getBatch(resultBatchRef);
+  const batch = dataAdapter() === "supabase"
+    ? await loadServerResultBatch(resultBatchRef) as Awaited<ReturnType<typeof academicsService.getBatch>>
+    : await academicsService.getBatch(resultBatchRef);
   return {
     title: batch ? `Marks entry · ${batch.exam} · ${batch.className}` : "Marks entry · Staff",
   };
@@ -21,7 +25,9 @@ export async function generateMetadata({ params }: { params: Promise<{ resultBat
  */
 export default async function MarksEntryPage({ params }: { params: Promise<{ resultBatchRef: string }> }) {
   const { resultBatchRef } = await params;
-  const batch = await academicsService.getBatch(resultBatchRef);
+  const batch = dataAdapter() === "supabase"
+    ? await loadServerResultBatch(resultBatchRef) as Awaited<ReturnType<typeof academicsService.getBatch>>
+    : await academicsService.getBatch(resultBatchRef);
   if (!batch) notFound();
 
   return (
