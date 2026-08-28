@@ -11,18 +11,21 @@
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
     "start": "npm run start -w apps/web",
-    "typecheck": "npm run typecheck --workspaces",
+    "typecheck": "npm run typegen -w apps/web && npm run typecheck --workspaces",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "node scripts/critical-journeys.cjs",
     "db:reset": "supabase db reset",
     "db:test": "supabase db test",
-    "db:types": "supabase gen types typescript --local > apps/web/lib/supabase/database.types.ts"
+    "db:types": "supabase gen types typescript --local > apps/web/lib/supabase/database.types.ts",
+    "check:cutover": "node scripts/check-supabase-cutover.cjs"
   },
   "engines": {
     "node": "22.x"
   },
   "devDependencies": {
+    "axe-core": "^4.13.0",
+    "playwright": "^1.62.1",
     "supabase": "^2.111.0"
   }
 }

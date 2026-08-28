@@ -14,6 +14,7 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL("./", import.meta.url)),
       "@fass/contracts": fileURLToPath(new URL("../../packages/contracts/src/index.ts", import.meta.url)),
+      "server-only": fileURLToPath(new URL("./test/server-only.ts", import.meta.url)),
     },
   },
   test: {

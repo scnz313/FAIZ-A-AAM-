@@ -72,6 +72,7 @@ const routes = [
   "/staff/settings",
   "/staff/support",
   "/staff/link-requests",
+  "/sign-in/invite",
   "/ui-states",
 ];
 

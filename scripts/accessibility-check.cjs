@@ -91,6 +91,7 @@ const ROUTES = [
   "/staff/support",
   "/staff/link-requests",
   "/sign-in",
+  "/sign-in/invite",
   "/sign-in/verify",
   "/sign-in/recovery",
   "/session-expired",

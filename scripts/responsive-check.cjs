@@ -39,6 +39,7 @@ const routes = [
   "/staff/finance",
   "/staff/link-requests",
   "/staff/support",
+  "/sign-in/invite",
   "/ui-states",
 ];
 

@@ -6,9 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "typegen": "next typegen",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
     "@fass/contracts": "*",
@@ -16,7 +17,8 @@
     "@supabase/supabase-js": "^2.112.2",
     "next": "^15.5.4",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "svix": "^1.99.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

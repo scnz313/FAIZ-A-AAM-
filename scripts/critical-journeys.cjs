@@ -656,7 +656,7 @@ async function staleVersionRecovery(page) {
   /* The portal still shows the v1 published report — history is never
      rewritten and the family keeps the last valid publication. */
   await page.goto(`${BASE}/portal/results`, { waitUntil: "networkidle" });
-  await page.getByText("Publications", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText("Released reports", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
   await page.getByText(/PUB-2026-001/).first().waitFor({ state: "visible", timeout: TIMEOUT });
 }
 
