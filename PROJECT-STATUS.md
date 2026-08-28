@@ -182,7 +182,7 @@ rechecked against the staging migration ledger before it is relied upon.
 
 ## Current blockers
 
-1. The linked FASS Supabase project has not been re-verified in this implementation run; read its migration ledger before applying local-only migrations `000016–000030`.
+1. **C5.1 read-only ledger check attempted 28 Aug 2026 — BLOCKED on the pooler connection.** The Supabase management API is reachable (the CLI lists the linked `FAIZ E AAM` project `jxegiamjcawdywqyutdz`), but the direct database pooler connection times out (`Failed to create login role: Connection terminated due to connection timeout`), so `supabase migration list --linked` cannot read the remote `schema_migrations` ledger. No local-only migration was applied. **Region finding:** the linked project lives in **West EU (Ireland)**, while plan.md §1 requires a dedicated synthetic-data staging project in `ap-south-1` (Mumbai) — the staging project decision must be revisited (create/relocate the Mumbai staging project, or record an approved exception) before any migration apply.
 2. The machine runs Node 24 while the project pins Node 22; use Node 22 in CI and staging verification.
 3. Resend SMTP, verified sender domain, webhook secret, and cron secret are not configured for staging.
 4. A payment gateway/merchant account and school finance policy are still unapproved.
@@ -329,6 +329,21 @@ The frontend and local backend/provider gates have passed. Do not claim staging 
 
 Every entry below is historical context only. It cannot override the current
 matrix, validation table, blockers, or C0–C5 execution order above.
+
+- **2026-08-28 (C5.0 source-control checkpoint — 6 reviewable commits from the dirty tree):** Audited the entire dirty working tree (248 files: 166 modified + 82 untracked) and committed it in six reviewable groups:
+
+  1. `feat(database)` — migrations `000016–000030` + results-release/slice-5/slice-6 pgTAP suites + seed + DB validators (22 files).
+  2. `feat(facades)` — Supabase-mode service facades, `/api/adapter` registry, server loaders, identity-server auth routes, finance server mapping, contract tests (58 files).
+  3. `feat(providers)` — outbox worker, Resend/Svix webhook, PDF renderer, document/support providers, provider tests (23 files).
+  4. `feat(ui)` — portal/staff/applicant/public integration: identity routes, timetable overrides + date-sheet publish, role-gated actions, empty/error states, service tests, override browser journey (123 files).
+  5. `docs` — PROJECT-STATUS/plan/blueprint/spec/README/UI-completion updates, VERCEL-READINESS, COMPLETE-FEATURE-PROMPT (10 files).
+  6. `chore(tooling)` — Playwright/axe pins, cutover guard, vercel.json cron contract, `.env.example` names, and the safe audit fix (nanoid 3.3.18 + Next 15.5.24 patch) (12 files).
+
+  **Security/quality audit (all clear):** no secrets in the diff or untracked files (the only base64-looking strings are package-lock SRI integrity hashes); `.env.local` confirmed git-ignored; no logs, archives, `.DS_Store`, or temp artifacts; no obsolete files found. **Dependency risk:** `npm audit` reduced from 4 high to 1 high — the remaining `postcss` advisory requires the breaking Next 16 upgrade and stays documented (blocker 6).
+
+  **Full gate re-run from the reviewed HEAD (`50fd7d4`), all VERIFIED:** typecheck ✓ · lint 0 issues ✓ · 394 web + 47 contract tests ✓ · 76-route production build ✓ · protected-path cutover guard ✓ · 22/22 critical browser journeys ✓ · scratch PostgreSQL applies `000001–000030` from zero and passes the RLS/RPC, results-release, slice-5 operational, and slice-6 provider-job suites ✓ ("ALL LOCAL DATABASE CHECKS PASSED").
+
+  **C5.1 read-only staging ledger check (attempted, BLOCKED):** `supabase projects list` works (management API reachable; linked project `FAIZ E AAM` `jxegiamjcawdywqyutdz`), but the pooler connection times out, so the remote migration ledger could not be read. No migration was applied. Region discrepancy recorded: linked project is West EU (Ireland) vs the plan.md Mumbai (`ap-south-1`) staging requirement.
 
 - **2026-08-28 (feature-by-feature local verification — every workflow tested in demo mode):** Systematically exercised EVERY feature area in the browser against the local demo runtime (no database or email service — everything is the deterministic demo adapter) and fixed every defect found. 16 feature areas, ~90 browser checks, plus the existing 22 critical journeys:
 
