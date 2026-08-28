@@ -31,9 +31,12 @@ export type EmailSender = (input: SendEmailInput) => Promise<SendEmailResult>;
 /** Server-only Resend sender. Throws typed errors; callers map them. */
 export function createResendSender(): EmailSender {
   const apiKey = process.env.RESEND_API_KEY?.trim() || null;
-  const from = process.env.EMAIL_FROM?.trim() || "onboarding@resend.dev";
+  const from = process.env.EMAIL_FROM?.trim() || null;
   if (apiKey === null) {
     throw new Error("RESEND_API_KEY is not configured on the server.");
+  }
+  if (from === null) {
+    throw new Error("EMAIL_FROM is not configured on the server.");
   }
 
   return async (input) => {
@@ -61,8 +64,9 @@ export function createResendSender(): EmailSender {
     }
 
     const detail = await response.text().catch(() => "");
-    const permanent = response.status >= 400 && response.status < 500;
-    // 4xx = reject the message (invalid recipient/from); 5xx/429 = retryable.
+    // Resend rate limits (429) and every 5xx response are retryable. Other
+    // 4xx responses are permanent recipient/from/payload failures.
+    const permanent = response.status >= 400 && response.status < 500 && response.status !== 429;
     throw new Error(
       `${permanent ? "Permanent" : "Transient"}:Resend ${response.status} ${detail.slice(0, 300)}`,
     );

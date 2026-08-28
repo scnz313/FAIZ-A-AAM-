@@ -183,3 +183,75 @@ export function supportResponseEmail(input: { threadRef: string }) {
     }),
   };
 }
+
+type GenericNotificationInput = { targetRef: string; subject: string; eyebrow: string; title: string; body: string; path?: string };
+
+function genericNotificationEmail(input: GenericNotificationInput) {
+  const { appUrl } = requireAppEnv();
+  return {
+    subject: input.subject,
+    html: shell({
+      eyebrow: input.eyebrow,
+      title: input.title,
+      cta: { label: "Open the school portal", href: `${appUrl}${input.path ?? "/portal"}` },
+      paragraphs: [`${escapeHtml(input.body)} Reference: <strong>${escapeHtml(input.targetRef)}</strong>.`],
+    }),
+  };
+}
+
+/** Retained event templates use safe references and authenticated links only. */
+export function applicationChangesRequestedEmail(input: { applicationRef: string }) {
+  return genericNotificationEmail({ targetRef: input.applicationRef, subject: `Application ${input.applicationRef} needs an update`, eyebrow: "Admissions", title: "An application update is ready", body: "The admissions office has requested an update to your application", path: `/apply/student/${encodeURIComponent(input.applicationRef)}/status` });
+}
+
+export function jobApplicationSubmittedEmail(input: { applicationRef: string }) {
+  return genericNotificationEmail({ targetRef: input.applicationRef, subject: `Job application ${input.applicationRef} received`, eyebrow: "Careers", title: "Your job application has been received", body: "Your vacancy application is now in the school recruitment queue", path: `/apply/job/${encodeURIComponent(input.applicationRef)}/status` });
+}
+
+export function jobApplicationStatusEmail(input: { applicationRef: string }) {
+  return genericNotificationEmail({ targetRef: input.applicationRef, subject: `Job application ${input.applicationRef} updated`, eyebrow: "Careers", title: "Your application status has changed", body: "There is a new safe status update for your vacancy application", path: `/apply/job/${encodeURIComponent(input.applicationRef)}/status` });
+}
+
+export function paymentStatusEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "Your school payment status is updated", eyebrow: "Fees", title: "A payment record has been updated", body: "Sign in to review the current payment and receipt status", path: "/portal/fees" });
+}
+
+export function refundStatusEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "Your school refund status is updated", eyebrow: "Fees", title: "A refund record has been updated", body: "Sign in to review the current refund status", path: "/portal/fees" });
+}
+
+export function resultCorrectionEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "A results record has been corrected", eyebrow: "Results", title: "A corrected result is available", body: "Sign in to view the latest published result version", path: "/portal/results" });
+}
+
+export function resultWithdrawnEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "A results record is temporarily unavailable", eyebrow: "Results", title: "A result publication has changed", body: "Sign in to review the current publication status", path: "/portal/results" });
+}
+
+export function examDateSheetEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "An exam date sheet is available", eyebrow: "Timetable", title: "Exam dates are updated", body: "Sign in to view the published exam schedule", path: "/portal/timetable" });
+}
+
+export function timetableOverrideEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "A timetable change is available", eyebrow: "Timetable", title: "A class schedule has a change", body: "Sign in to view the date-specific timetable update", path: "/portal/timetable" });
+}
+
+export function linkStatusEmail(input: { reference: string; approved: boolean }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: input.approved ? "A family link is ready" : "A family link request was updated", eyebrow: "Family access", title: input.approved ? "A student link is now active" : "A student link request has an update", body: input.approved ? "Your linked student is now available in the family portal" : "Sign in to review the safe status of your family link request", path: "/portal" });
+}
+
+export function noticePublishedEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "A school notice is available", eyebrow: "School notice", title: "There is a new school notice", body: "Sign in to review the current notice", path: "/portal/notices" });
+}
+
+export function securityUpdateEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "Your school account security was updated", eyebrow: "Security", title: "Your account security has changed", body: "Sign in to review the current account and access status", path: "/portal/security" });
+}
+
+export function staffInvitationEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "A school staff invitation is ready", eyebrow: "School account", title: "Your school invitation is ready", body: "Use the secure invitation flow to continue account setup", path: "/sign-in/invite" });
+}
+
+export function contentNoticeEmail(input: { reference: string }) {
+  return noticePublishedEmail({ reference: input.reference });
+}

@@ -1,115 +1,152 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sha256 } from "@/lib/supabase/outbox-worker";
+import { verifyResendWebhook } from "@/lib/email/webhook";
+import { providerLog } from "@/lib/observability/log";
 
-/**
- * Verified Resend webhook (plan.md §9).
- *
- * Rules enforced here:
- * - HMAC-SHA256 signature verification over `${svix-id}.${timestamp}.${body}`
- *   (Resend/Svix format) before any payload is trusted; timestamp drift is
- *   rejected.
- * - `svix-id` is unique (`resend_webhook_events`): at-least-once and
- *   out-of-order deliveries are deduplicated before any side effect.
- * - Bounce/complaint events disable further non-essential mail via
- *   `email_suppressions` (hashed address).
- * - Delivery failure never changes the underlying application, payment,
- *   result, timetable, or support state.
- */
+export const runtime = "nodejs";
 
-function verifySignature(secret: string, body: string, header: string | null, svixId: string | null, timestamp: string | null): boolean {
-  if (header === null || svixId === null || timestamp === null) return false;
-  const parts = header.split(",");
-  const versionPart = parts.find((part) => part.startsWith("v1="));
-  if (versionPart === undefined) return false;
-  const signature = versionPart.slice(3);
+type ResendPayload = {
+  type?: string;
+  data?: {
+    email_id?: string;
+    to?: string[];
+    created_at?: string;
+  };
+};
 
-  const signedContent = `${svixId}.${timestamp}.${body}`;
-  const expectedHmac = createHmac("sha256", secret).update(signedContent).digest();
-  const provided = Buffer.from(signature, "base64");
-  if (provided.length !== expectedHmac.length) return false;
-  return timingSafeEqual(provided, expectedHmac);
+function response(body: Record<string, unknown>, status = 200, correlationId = crypto.randomUUID()) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId },
+  });
 }
 
-export async function POST(request: NextRequest) {
-  const webhookSecret = process.env.RESEND_WEBHOOK_SECRET?.trim() || null;
-  if (webhookSecret === null) {
-    return NextResponse.json({ ok: false, error: "RESEND_WEBHOOK_SECRET is not configured" }, { status: 503 });
+function deliveryProjection(eventType: string): { status: string; rank: number } | null {
+  const type = eventType.toLowerCase();
+  if (type.includes("bounced")) return { status: "bounced", rank: 40 };
+  if (type.includes("complained") || type.includes("complaint")) return { status: "complained", rank: 40 };
+  if (type.includes("suppressed")) return { status: "suppressed", rank: 40 };
+  if (type.includes("delivered")) return { status: "delivered", rank: 30 };
+  if (type.includes("delivery_delayed") || type.includes("delayed")) return { status: "failed", rank: 10 };
+  if (type.includes("failed") || type.includes("failure")) return { status: "failed", rank: 20 };
+  return null;
+}
+
+async function projectDelivery(
+  admin: SupabaseClient,
+  payload: ResendPayload,
+  eventType: string,
+  eventAt: string,
+): Promise<void> {
+  const emailId = payload.data?.email_id;
+  const projection = deliveryProjection(eventType);
+  if (projection !== null && typeof emailId === "string" && emailId.length > 0) {
+    const { data: delivery } = await admin
+      .from("notification_deliveries")
+      .select("id, status, provider_event_at, provider_event_rank")
+      .eq("provider_message_id", emailId)
+      .maybeSingle();
+    if (delivery !== null) {
+      const currentAt = delivery.provider_event_at ? new Date(delivery.provider_event_at).getTime() : 0;
+      const nextAt = new Date(eventAt).getTime();
+      const isNewer = projection.rank > delivery.provider_event_rank || (projection.rank === delivery.provider_event_rank && nextAt >= currentAt);
+      if (isNewer) {
+        const { error } = await admin.from("notification_deliveries").update({
+          status: projection.status,
+          provider_event_at: eventAt,
+          provider_event_rank: projection.rank,
+          failure_class: projection.status === "failed" ? "provider" : null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", delivery.id);
+        if (error !== null) throw new Error("delivery status could not be recorded");
+      }
+    }
   }
+
+  if (projection?.status === "bounced" || projection?.status === "complained" || projection?.status === "suppressed") {
+    for (const address of payload.data?.to ?? []) {
+      if (typeof address !== "string" || address.trim().length === 0) continue;
+      const { error } = await admin.from("email_suppressions").upsert({
+        email_hash: sha256(address.toLowerCase().trim()),
+        reason: projection.status === "complained" ? "complaint" : "hard_bounce",
+        created_by_account_id: null,
+        note: `resend webhook ${eventType}`,
+      }, { onConflict: "email_hash", ignoreDuplicates: true });
+      if (error !== null) throw new Error("email suppression could not be recorded");
+    }
+  }
+}
+
+/** Resend/Svix ingestion. Failed receipts remain retryable. */
+export async function POST(request: NextRequest) {
+  const correlationId = crypto.randomUUID();
+  const webhookSecret = process.env.RESEND_WEBHOOK_SECRET?.trim() || null;
+  if (webhookSecret === null) return response({ ok: false, error: "Webhook delivery is not configured." }, 503, correlationId);
 
   const rawBody = await request.text();
   const svixId = request.headers.get("svix-id");
   const svixTimestamp = request.headers.get("svix-timestamp");
   const svixSignature = request.headers.get("svix-signature");
-
-  if (!verifySignature(webhookSecret, rawBody, svixSignature, svixId, svixTimestamp)) {
-    return NextResponse.json({ ok: false, error: "invalid signature" }, { status: 401 });
+  if (!verifyResendWebhook(webhookSecret, rawBody, { id: svixId, timestamp: svixTimestamp, signature: svixSignature })) {
+    return response({ ok: false, error: "invalid signature" }, 401, correlationId);
   }
+  if (svixId === null || svixTimestamp === null) return response({ ok: false, error: "invalid webhook headers" }, 400, correlationId);
 
-  const payload = JSON.parse(rawBody) as {
-    type?: string;
-    data?: { email_id?: string; to?: string[]; created_at?: string };
-  };
-  const eventType = payload.type ?? "unknown";
+  let payload: ResendPayload;
+  try {
+    payload = JSON.parse(rawBody) as ResendPayload;
+  } catch {
+    return response({ ok: false, error: "invalid payload" }, 400, correlationId);
+  }
+  const eventType = typeof payload.type === "string" ? payload.type : "unknown";
+  const eventAt = typeof payload.data?.created_at === "string" && Number.isFinite(new Date(payload.data.created_at).getTime())
+    ? new Date(payload.data.created_at).toISOString()
+    : new Date().toISOString();
   const payloadHash = sha256(rawBody);
-
   const admin = createSupabaseAdminClient();
+  const db = admin as unknown as SupabaseClient;
 
-  // At-least-once dedup BEFORE any side effect.
-  const { error: dedupError } = await admin.from("resend_webhook_events").insert({
-    svix_id: svixId ?? "",
-    event_time: payload.data?.created_at ?? new Date().toISOString(),
-    event_type: eventType,
-    payload_hash: payloadHash,
-    normalized: payload,
-  });
-  if (dedupError !== null) {
-    if (dedupError.code === "23505") {
-      return NextResponse.json({ ok: true, duplicate: true });
+  const { data: existing, error: existingError } = await db.from("resend_webhook_events").select("id, status, attempts").eq("svix_id", svixId).maybeSingle();
+  if (existingError !== null) return response({ ok: false, error: "Webhook receipt lookup failed." }, 500, correlationId);
+  if (existing?.status === "processed") return response({ ok: true, duplicate: true }, 200, correlationId);
+
+  let receipt: { id: string; status: string; attempts: number } | null = null;
+  if (existing !== null) {
+    const { data: updated, error } = await db.from("resend_webhook_events").update({ status: "processing", attempts: existing.attempts + 1, last_error: null, next_attempt_at: null }).eq("id", existing.id).select("id, status, attempts").single();
+    if (error !== null || updated === null) return response({ ok: false, error: "Webhook receipt could not be claimed." }, 500, correlationId);
+    receipt = updated;
+  } else {
+    const { data: inserted, error } = await db.from("resend_webhook_events").insert({
+      svix_id: svixId,
+      event_time: eventAt,
+      event_type: eventType,
+      payload_hash: payloadHash,
+      normalized: payload,
+      status: "processing",
+      attempts: 1,
+      received_at: new Date().toISOString(),
+    }).select("id, status, attempts").single();
+    if (error !== null || inserted === null) {
+      if (error?.code === "23505") return response({ ok: true, duplicate: true }, 200, correlationId);
+      return response({ ok: false, error: "Webhook event could not be recorded." }, 500, correlationId);
     }
-    return NextResponse.json({ ok: false, error: dedupError.message }, { status: 500 });
+    receipt = inserted;
   }
 
-  const emailId = payload.data?.email_id;
-  if (typeof emailId === "string" && emailId.length > 0) {
-    const status = eventType.includes("bounced")
-      ? "bounced"
-      : eventType.includes("complained")
-        ? "complained"
-        : eventType.includes("delivered")
-          ? "delivered"
-          : null;
-    if (status !== null) {
-      const { error: updateError } = await admin
-        .from("notification_deliveries")
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq("provider_message_id", emailId);
-      if (updateError !== null) {
-        return NextResponse.json({ ok: false, error: updateError.message }, { status: 500 });
-      }
-
-      if (status === "bounced" || status === "complained") {
-        const address = payload.data?.to?.[0] ?? null;
-        if (typeof address === "string" && address.length > 0) {
-          const { error: suppressionError } = await admin.from("email_suppressions").upsert(
-            {
-              email_hash: sha256(address.toLowerCase().trim()),
-              reason: status === "bounced" ? "hard_bounce" : "complaint",
-              created_by_account_id: null,
-              note: `webhook ${eventType}`,
-            },
-            { onConflict: "email_hash", ignoreDuplicates: true },
-          );
-          if (suppressionError !== null) {
-            return NextResponse.json({ ok: false, error: suppressionError.message }, { status: 500 });
-          }
-        }
-      }
-    }
+  try {
+    await projectDelivery(db, payload, eventType, eventAt);
+    const { error } = await db.from("resend_webhook_events").update({ status: "processed", processed_at: new Date().toISOString(), next_attempt_at: null }).eq("id", receipt.id);
+    if (error !== null) throw new Error("webhook receipt could not be completed");
+    providerLog({ event: "resend.webhook", correlationId, outcome: "succeeded", targetType: eventType, targetReference: svixId });
+    return response({ ok: true }, 200, correlationId);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "webhook projection failed";
+    await db.from("resend_webhook_events").update({ status: "failed", last_error: detail.slice(0, 500), next_attempt_at: new Date(Date.now() + 60_000).toISOString() }).eq("id", receipt.id);
+    providerLog({ event: "resend.webhook", correlationId, outcome: "failed", targetType: eventType, targetReference: svixId });
+    return response({ ok: false, error: "Webhook projection failed; retry will be accepted." }, 500, correlationId);
   }
-
-  return NextResponse.json({ ok: true });
 }

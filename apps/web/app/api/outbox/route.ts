@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { requireCronSecretEnv } from "@/lib/supabase/env";
 import { processOutboxBatch } from "@/lib/supabase/outbox-worker";
+import { providerLog } from "@/lib/observability/log";
+
+export const runtime = "nodejs";
 
 /**
  * Protected outbox dispatcher (plan.md §8, §11 B6/B8).
@@ -14,41 +16,37 @@ import { processOutboxBatch } from "@/lib/supabase/outbox-worker";
  * delivered / exponential-retry semantics. Returns the worker summary; the
  * domain records never change because a delivery failed.
  */
-export async function POST(request: NextRequest) {
+function authorized(request: NextRequest, secret: string): boolean {
+  return request.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+async function run(request: NextRequest) {
+  const correlationId = crypto.randomUUID();
   const cronSecret = process.env.CRON_SECRET?.trim() || null;
   if (cronSecret === null) {
-    return NextResponse.json({ ok: false, error: "CRON_SECRET is not configured" }, { status: 503 });
+    return NextResponse.json({ ok: false, error: "Outbox scheduler is not configured.", correlationId }, { status: 503, headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId } });
   }
-  const auth = request.headers.get("authorization") ?? "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
-  const headerSecret = request.headers.get("x-cron-secret") ?? "";
-  if (bearer !== cronSecret && headerSecret !== cronSecret) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  if (!authorized(request, cronSecret)) {
+    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId } });
   }
 
   try {
+    const startedAt = Date.now();
     const admin = createSupabaseAdminClient();
     const summary = await processOutboxBatch({ admin, batchSize: 20 });
-    return NextResponse.json({ ok: true, ...summary });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "outbox processing failed";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    providerLog({ event: "outbox.batch", correlationId, outcome: "succeeded", durationMs: Date.now() - startedAt, values: { claimed: summary.claimed, delivered: summary.delivered, failed: summary.permanentFailed + summary.transientFailed } });
+    return NextResponse.json({ ok: true, ...summary }, { headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId } });
+  } catch {
+    providerLog({ event: "outbox.batch", correlationId, outcome: "failed" });
+    return NextResponse.json({ ok: false, error: "Outbox processing failed.", correlationId }, { status: 500, headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId } });
   }
 }
 
-/** Health probe for the scheduler: same secret, no side effects. */
+export async function POST(request: NextRequest) {
+  return run(request);
+}
+
+/** Vercel Cron invokes GET; it is the same bounded, protected worker. */
 export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET?.trim() || null;
-  if (cronSecret === null) {
-    return NextResponse.json({ ok: false, error: "CRON_SECRET is not configured" }, { status: 503 });
-  }
-  const auth = request.headers.get("authorization") ?? "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
-  if (bearer !== cronSecret) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
-  return NextResponse.json({ ok: true, service: "outbox" });
+  return run(request);
 }
-
-// Referenced so environments that validate env at boot surface the config.
-void requireCronSecretEnv;
