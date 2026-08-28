@@ -2,7 +2,7 @@
 
 ## 1. Summary and locked decisions
 
-The frontend handoff is now sufficiently complete to begin backend foundation work. The backend will use:
+The frontend handoff and first backend foundation are complete enough for a controlled application cutover. The backend will use:
 
 - Supabase PostgreSQL, Auth, and private Storage.
 - A dedicated synthetic-data FASS staging project in `ap-south-1` (Mumbai).
@@ -15,11 +15,333 @@ The frontend handoff is now sufficiently complete to begin backend foundation wo
 
 Current environment findings:
 
-- `.env.example` currently contains local-only database examples and IoT variables; it does not contain the expected Supabase or Resend variables.
-- The connected Supabase account currently shows two unrelated MyRental projects and no FASS project. Neither MyRental database will be reused.
+- `.env.example` contains names/placeholders only, including the server/browser adapter mirror; real values remain in `.env.local` or managed environments.
+- The repository is linked to the dedicated `FAIZ E AAM` Supabase project, but the current environment could not re-verify its health/migration ledger because DNS/connection checks failed. Do not claim new migrations live until that check succeeds.
 - Real secrets must never be placed in `.env.example`.
-- The installed Supabase CLI is `2.58.5`; upgrade and pin a current version that supports the security/performance advisor workflow before migrations begin.
+- Supabase CLI `2.111.0`, `@supabase/ssr@0.12.4`, and `@supabase/supabase-js@2.112.2` are pinned in the workspace.
 - Pin Node.js 22 LTS for local, CI, and Vercel. Current Supabase packages have dropped Node 20 support, and recent Supabase changes also require explicit Data API exposure decisions. Review the [Supabase changelog](https://supabase.com/changelog) before every platform phase.
+
+## Current execution checkpoint — C0–C5
+
+### C0 — verified locally
+
+- Entry: the existing dirty frontend/backend working set is preserved and no new UI scope is introduced.
+- Affected modules: QA dependencies/scripts, Next type generation, lint/build commands, database validator, and test fixtures.
+- Playwright `1.62.1` and axe-core `4.13.0` are pinned; browser gates run without external `NODE_PATH` installations.
+- `next typegen` runs before TypeScript; lint is zero-warning; the current build generates 76 routes.
+- Current application gates: 394 web tests, 47 contract tests, 22/22 critical journeys, 54-route accessibility, focus smoke, 176 responsive pairs, 66-route/91-href link crawl, and the Supabase protected-path cutover guard.
+- Scratch PostgreSQL applies migrations `000001–000030` and passes the RLS/RPC, release, operational, and provider-job suites.
+- Tests: run typecheck, lint, unit/contract tests, build, browser journeys, accessibility, focus, responsive, link crawl, scratch migrations, RLS, and transactional RPC suites.
+- Exit: all local gates are reproducible from the current checkout and the working tree is ready for review without applying migrations remotely.
+
+### C1 — verified locally
+
+- Entry: C0 local gates pass and the role/identity migration set is reviewed in the dirty worktree.
+- Affected modules: `000020` role policies, `000017` invitation lifecycle, account suspension/reactivation, and `000021` private Storage bucket/policy setup.
+- `000020_role_boundary_hardening.sql` removes system-administrator substitution for functional business roles while preserving access administration.
+- Staff invitation role/scope storage and acceptance, account suspension, and reactivation are transactional and tested.
+- `000021_private_storage_buckets.sql` creates private bucket/policy configuration when the Supabase Storage schema is present and safely skips it in the scratch validator.
+- Tests: positive/negative RLS, pure system-administrator business denial, teacher finance denial, invitation expiry/reuse/wrong-contact/duplicate cases, atomic suspension, and reactivation without automatic re-grant.
+- Exit: C1 is locally verified; remote migration-ledger verification remains a required gate before any staging apply.
+
+### C2 — application facade cutover — VERIFIED LOCALLY
+
+#### C2.0 — working-tree checkpoint
+
+- Entry: C0/C1 local gates pass and the current dirty tree is inventoried.
+- Affected modules: migrations/server domain code, facade adapters, UI fixes, tests, and documentation are reviewed as separate units; no unrelated dirty change may be folded into the slice.
+- Work: group the current changes without resetting or overwriting them; record the exact local-only migration set and the remote-ledger blocker.
+- Test: `git status`, `git diff --check`, typecheck, lint, unit tests, and scratch database suites.
+- Exit: a reviewable checkpoint exists before any staging migration or global adapter switch.
+
+#### C2.1 — identity, configuration, and context
+
+- Entry: role-boundary migration and invitation lifecycle pass locally.
+- Work: persist active staff workspace and active child selection; add academic-year/grade/section/subject/period/policy reads; complete staff invitation acceptance UI and account lifecycle; enforce applicant, guardian, staff, and TOTP route protection.
+- Affected modules: identity, family context, staff context, users, school configuration, auth layouts, `/api/adapter`.
+- Tests: Supabase-mode family/staff contract tests plus unauthenticated denial,
+  `aal1` staff denial, `aal2` access, revoked grant, revoked guardian link,
+  wrong workspace, wrong child, and context persistence.
+- Local checkpoint: request-scoped selection cookies, server-seeded provider
+  hydration, typed school-configuration reads, local staff invitation
+  acceptance, adapter mismatch checks, and the denial contract suite are now
+  implemented and verified without contacting a database. The staging/session
+  proof in the exit condition remains pending.
+- Exit: real Supabase sessions resolve one authorized family/staff context and never render demo identity data.
+
+#### C2.2 — admissions → finance → enrollment — VERIFIED LOCALLY
+
+- Entry: C2.1 context and ownership checks pass.
+- Work: `000022_c2_admissions_enrollment_facade.sql`; transactional server draft upsert/versioning, authoritative readiness, create-or-match enrollment conversion, admissions/finance/enrollment domain mappers, applicant server draft references, offer/invoice/payment/retry branches, and guardian-link projection.
+- Affected modules: `apps/web/modules/services/admissions.ts`, `finance.ts`, `enrollment.ts`, `lib/supabase/domain.ts`, `/api/adapter`, applicant autosave, and server loaders.
+- Tests: cross-device draft, duplicate submit, requested changes/version history, offer retry, payment/invoice retry, conversion retry, wrong-owner denial, maker/checker, and link projection; scratch RLS/RPC from zero.
+- Exit: verified locally. Staging/real-session proof remains pending; migrations `000016–000030` remain local-only.
+
+#### C2.3 — results and timetable — VERIFIED LOCALLY
+
+- Entry: enrollment and active assignment scopes are server-resolved.
+- Work: `000023_c2_results_timetable_facade.sql`; result draft save/correction request+decision, immutable publication preservation, timetable revision/draft/validation/publication supersession, overrides, exam date-sheet commands, rich result/timetable reads, async timetable facade methods, and server loaders.
+- Affected modules: `academics.ts`, `timetable.ts`, result/timetable adapter operations, portal/staff timetable reads, and result batch/detail mappers.
+- Tests: exact class/subject scope, `aal1` denial, reviewer/publisher separation, stale draft, immutable publication/correction supersession, teacher/room hard conflict, override isolation, section-scoped portal propagation, and Supabase contract mappers; scratch validator assertions pass.
+- Exit: verified locally. Staging/real-session proof remains pending.
+
+#### C2.4 — remaining operational domains — VERIFIED LOCALLY
+
+- Entry: C2.2 and C2.3 projections are authoritative and their contract tests pass.
+- Affected modules: careers, content/notices, support, settings, audit, notifications/outbox, document projections, and all remaining portal/staff loaders.
+- Work: `000024_c2_operational_facades.sql`; career drafts/withdrawal/version-safe HR decisions/reviewer assignment/scorecard/interview commands; immutable content draft/review/publish/unpublish; requester-safe support plus public intake/rate limiting/private notes/reopen/assign; optimistic settings save; read-only audit RPC; per-account notification list/mark projection; authorized document metadata (`clean`→`ready`); public support route and server loaders.
+- Affected modules: careers/content/support/settings/audit/notifications/documents services, `/api/adapter`, `/api/support/public`, protected shells, and server loader projections.
+- Tests: applicant ownership/withdrawal, cross-device recovery, content mapper and publisher denial, private-note denial, public intake denial/rate limit, notification/audit/settings projections, document scope, outbox retry/idempotency, static cutover guard; scratch validator applies all migrations and passes.
+- Exit: verified locally. Provider scan/finalisation, Resend, staging sessions, and global adapter switch remain pending.
+
+#### C2.5 — global adapter cutover — LOCAL GUARD VERIFIED; STAGING PENDING
+
+- Entry: every protected facade has a server loader or `/api/adapter` branch, matching contract tests, and a projection refresh proof.
+- Affected modules: runtime adapter registry, all protected route layouts/loaders, client context providers, session-storage helpers, and staging environment configuration.
+- Work: remove operational demo/session state while retaining safe temporary form input and UI preferences; set both `FASS_DATA_ADAPTER` and `NEXT_PUBLIC_FASS_DATA_ADAPTER` to `supabase` only in staging.
+- Tests: all real-session browser journeys, negative authorization tests, stale-version tests, cross-module parity checks, clean-checkout build, and `npm run check:cutover` for operational demo/session reads.
+- Exit: staging is globally Supabase-backed and remains `VERIFIED`, not `RELEASED`; no protected request can silently fall back to demo data.
+
+### C3 — private Storage and documents — PROVIDER-READY LOCALLY; STAGING PENDING
+
+- Entry: C2.5 staging adapter gate passes for document metadata and generated-PDF commands.
+- Affected modules: `storage.objects` buckets/policies, document upload-intent/finalisation/download routes, scan adapter, PDF worker, document projections, retention jobs, and signed URL delivery.
+- Work: finish scan/finalisation and document-processing projections; enforce random object keys, checksum/type/size validation, scan states, retention class, and upload-before-ready ordering.
+- Tests: private bucket policy, wrong guardian/student/staff scope, revoked link, expired signed URL, guessed object key, quarantined/failed scan, duplicate generation, and PDF readiness/retry.
+- Exit: every authorized document upload/download and generated receipt/report path is recoverable, audited, signed, and backed by a ready/quarantined state in staging.
+
+### C4 — Resend and outbox provider gate — PROVIDER-READY LOCALLY; CONFIGURATION PENDING
+
+- Entry: C2.5 is globally Supabase-backed and C3 document notifications have stable event payloads.
+- Affected modules: Resend SMTP/Auth, Resend API adapter/templates, signed webhook route, outbox worker/cron, suppression and delivery projections, invitation and notification services.
+- Work: configure SMTP for Supabase Auth, verified sender domain, API key, webhook secret, and cron secret; add/verify invitation, application, payment, enrollment, results, timetable, link, and support templates without sensitive previews.
+- Tests: duplicate `svix-id`, out-of-order events, bounce/complaint suppression, transient retry/backoff, permanent failure, cron authentication, recipient resolution, and idempotent outbox delivery.
+- Exit: staging email delivery and suppression are `VERIFIED` with provider evidence; no sensitive marks, balances, documents, or applicant details appear in subjects/previews.
+
+### C5 — staging, Vercel, and production — ACTIVE NEXT GATE
+
+The next phase is environment activation and evidence collection, not feature
+development. Complete the following stages in order. Never skip from a local
+green gate directly to production.
+
+#### C5 external prerequisites
+
+| Input | Owner | Required before | Stop condition |
+|---|---|---|---|
+| Confirmed synthetic Supabase staging project and operator access | Supabase/project owner | C5.1 | Project identity, ownership, data classification, or ledger is uncertain |
+| Node 22 runtime and pinned CLI/toolchain | Engineering owner | C5.0/C5.2 | Local/CI/staging use a materially different runtime |
+| Approved staging URLs and domain/subdomains | School/domain owner | C5.3 | Auth redirects, webhook, or preview URL cannot be allowlisted |
+| Private Storage ownership and scanner service | Storage/security owner | C5.4 | Scanner or retention/legal-hold policy is unapproved |
+| CAPTCHA provider for anonymous support intake | Security/support owner | C5.3/C5.7 | Production-like public intake would use the local fake or bypass verification |
+| Resend sender domain, SMTP/API ownership, and webhook access | Messaging owner | C5.5 | Sender/domain is unverified or secrets are unavailable |
+| Cron secret and scheduler ownership | Operations owner | C5.5 | Worker cannot be invoked securely or monitored for freshness |
+| School finance policy and merchant ownership | Finance owner | real gateway only | Provider, settlement, refunds, receipts, or reconciliation ownership is unapproved |
+| Vercel team/project ownership and preview environment | Deployment owner | C5.9 | Project/account or environment-variable ownership is uncertain |
+| Backup/restore target and responsible operator | Operations/data owner | C5.2/C5.8 | No recoverable pre-migration point or isolated rehearsal target exists |
+
+Secrets are supplied through the relevant provider/Vercel/Supabase secret
+manager. They are never written into this plan, chat, `.env.example`, logs,
+screenshots, or browser-visible variables.
+
+#### C5.0 — freeze, review, and source-control checkpoint
+
+- **Entry:** local migrations `000001–000030`, tests, build, browser checks,
+  provider contracts, and the cutover guard are green in `PROJECT-STATUS.md`.
+- **Work:** inspect the complete dirty tree; separate migrations/database tests,
+  application facades/loaders, provider/worker code, UI integration, and
+  documentation into coherent review units. Review `.env.example`, generated
+  assets, untracked files, and dependency changes. Do not commit `.env.local`,
+  provider payloads, screenshots containing private data, or test secrets.
+- **Required evidence:** reviewed diff summary, `git diff --check`, secret scan,
+  lockfile review, local gate output, and commit IDs for the exact staging
+  candidate.
+- **Exit:** one reviewed commit or ordered commit series identifies the staging
+  candidate. The working tree contains no unexplained application change.
+
+#### C5.1 — confirm staging ownership and reconcile the migration ledger
+
+- **Entry:** C5.0 passes; the linked project is confirmed as synthetic-data
+  staging and the operator has explicit authority to inspect it.
+- **Read-only first:** record the project reference, region, owner/team,
+  environment label, Data API schemas, Auth URLs, Storage buckets, and backup
+  capability. Run `npx supabase migration list --linked` and compare every
+  local timestamp with `supabase_migrations.schema_migrations`.
+- **Decision rules:** expect remote history through `000015` only. Stop if the
+  project is production, contains non-fictional data, has unknown migrations,
+  or the schema and ledger disagree. Do not run `migration repair` merely to
+  make the table look aligned; it changes history only and requires a separate
+  evidence-backed approval.
+- **Required evidence:** saved ledger comparison, project ownership/region
+  confirmation, synthetic-data confirmation, and a written apply/stop decision.
+- **Exit:** migrations `000016–000030` are proven absent and safe to apply, or
+  the phase is marked `BLOCKED` with the exact divergence.
+
+#### C5.2 — apply staging migrations and regenerate database types
+
+- **Entry:** C5.1 proves the ledger is aligned and a backup/restore point exists.
+- **Preflight:** run `npx supabase db push --linked --dry-run`; review the exact
+  ordered list and confirm no seed is included implicitly.
+- **Apply:** one authorised operator runs `npx supabase db push --linked` once.
+  Do not hand-create tables in Studio and do not use `--include-all` or
+  `--include-seed` unless the ledger review explicitly requires it.
+- **Verify:** re-run `npx supabase migration list --linked`; generate types with
+  `npx supabase gen types --linked --lang typescript --schema public --schema app`
+  into a temporary file, review the diff, then update
+  `apps/web/lib/supabase/database.types.ts` deliberately.
+- **Database gates:** run the fictional live integration suite, RLS positive and
+  negative matrix, RPC/provider-job assertions, and Data API exposure checks.
+  Run Supabase Security and Performance Advisors; triage every finding,
+  especially exposed SECURITY DEFINER functions, RLS gaps, public buckets,
+  sensitive columns, and unindexed foreign keys.
+- **Required evidence:** before/after ledger, applied migration list, generated
+  type diff, advisor export, database test output, and rollback/forward-fix note.
+- **Exit:** staging database/schema is `VERIFIED`; application runtime is still
+  not globally switched.
+
+#### C5.3 — configure and verify Supabase Auth and real session boundaries
+
+- **Entry:** C5.2 passes and staging uses fictional users only.
+- **Configure:** approved site URL/redirect allowlist, email OTP/magic-link
+  behavior, staff invitation redirect, recovery redirect, TOTP MFA, session/JWT
+  policy, publishable/secret keys, and Resend SMTP for Auth mail. Keep anonymous
+  staff signup impossible and existing-account OTP on `shouldCreateUser: false`.
+- **Journeys:** applicant registration/verification/recovery; guardian sign-in
+  and child switch; staff invite acceptance and AAL1→AAL2 TOTP; account
+  suspension/reactivation; revoked grant; expired/used/revoked invite; revoked
+  guardian link; wrong child, role, assignment, and workspace denial.
+- **Required evidence:** fictional account references, sanitized Auth logs,
+  route outcomes, AAL proof, and immediate access removal after revocation.
+- **Exit:** identity and authorization are `VERIFIED` in staging. No other
+  provider is inferred verified from Auth success.
+
+#### C5.4 — activate private Storage, scanning, and generated PDFs
+
+- **Entry:** C5.3 passes; private bucket ownership and scanner provider are
+  approved.
+- **Configure:** private `fass-private-documents` and
+  `fass-generated-documents` buckets, `storage.objects` policies, scanner URL
+  and secret, retention schedule, legal-hold behavior, and short signed-download
+  lifetime. No bucket or object path becomes public.
+- **Journeys:** admission and job upload intent→signed upload→server stat→scan;
+  ready/quarantined/failed recovery; wrong owner/guardian/staff; revoked link;
+  guessed path; expired signed URL; duplicate finalisation; orphan cleanup;
+  receipt and report-card generation with upload-before-ready and duplicate-safe
+  retry.
+- **Required evidence:** bucket/policy export, scan events, checksum/type/size
+  evidence, signed URL expiry, generated-document references, and retention job
+  record. Never store file contents or signed URLs in documentation.
+- **Exit:** private documents and generated PDFs are `VERIFIED` in staging.
+
+#### C5.5 — activate Resend, webhook delivery, outbox, and cron
+
+- **Entry:** C5.3 passes and the staging sender domain is verified.
+- **Configure:** Resend API key, `EMAIL_FROM`, official Svix webhook secret and
+  endpoint, `CRON_SECRET`, suppression policy, and Vercel/staging cron caller.
+  Vercel Cron calls the configured path with HTTP GET; the endpoint must require
+  `Authorization: Bearer <CRON_SECRET>`.
+- **Journeys:** one fictional delivery for every retained template family;
+  retry existing transient failures; HTTP 429/5xx backoff; permanent failure;
+  duplicate `svix-id`; failed webhook replay; out-of-order delivered/bounced/
+  complained events; suppression; in-app projection; worker concurrency and
+  freshness.
+- **Privacy checks:** subjects and previews contain no marks, balances, document
+  contents, medical data, or full applicant details. Logs contain correlation
+  references, never addresses, payloads, or secrets.
+- **Required evidence:** provider message IDs, delivery rows, webhook receipts,
+  suppression hashes, cron invocation, worker run/freshness, and safe log sample.
+- **Exit:** Resend/outbox/cron is `VERIFIED` in staging.
+
+#### C5.6 — finance policy gate and sandbox acceptance
+
+- **Entry:** C5.3 passes; the school has not yet approved a real gateway.
+- **Work:** keep the provider-neutral database sandbox visibly labelled. Verify
+  invoice parity, reload-safe attempt recovery, exactly-once payment/receipt,
+  concession/adjustment maker-checker, refund request/approval/posting, and
+  reconciliation import/exception/resolve.
+- **Decision boundary:** do not install Stripe or another gateway until merchant
+  ownership, settlement account, fees, refund rules, webhook ownership, receipt
+  numbering, and reconciliation responsibility are approved in writing.
+- **Exit:** finance sandbox is `VERIFIED`; real payment remains `BLOCKED` unless
+  a separate approved gateway implementation and live sandbox gate pass.
+
+#### C5.7 — global staging adapter switch and vertical acceptance
+
+- **Entry:** C5.2–C5.6 pass for every enabled provider.
+- **Configure together:** set `FASS_DATA_ADAPTER=supabase` and
+  `NEXT_PUBLIC_FASS_DATA_ADAPTER=supabase` in staging. A mismatch is a failed
+  deployment. Demo remains available only in local/design environments.
+- **Run end to end:** public content; applicant registration and both application
+  types; admission→offer→invoice→payment→readiness→enrollment; guardian context,
+  fees, receipts, documents, notices, support, results release/correction, and
+  timetable/override/date sheet; all staff queues and maker-checker flows;
+  notifications, audit, settings activation, Storage, PDF, and outbox.
+- **Negative/recovery gate:** unauthenticated, AAL1, wrong role/scope/child,
+  revoked grant/link, stale version, duplicate retry, provider outage,
+  quarantined document, expired URL, and delayed job recovery.
+- **Quality gate:** clean checkout, Node 22, migrations from zero, generated
+  types with no unexplained diff, tests, typecheck, zero-warning lint, build,
+  cutover guard, browser journeys, accessibility, focus, responsive sweep, link
+  crawl, and `/api/health` with a fresh worker.
+- **Exit:** staging is globally Supabase-backed and `VERIFIED`, never
+  `RELEASED`.
+
+#### C5.8 — backup and restore rehearsal
+
+- **Entry:** C5.7 passes and the staging dataset remains fictional.
+- **Work:** capture the approved database and Storage backup mechanism, restore
+  into an isolated rehearsal target, verify migration history, row counts,
+  private-object integrity, RLS, Auth linkage assumptions, and critical reads.
+  Record RPO/RTO, responsible operator, and forward-fix procedure.
+- **Exit:** a dated restore record proves the system can recover without making
+  private objects public or silently losing append-only history.
+
+#### C5.9 — Vercel preview against staging
+
+- **Entry:** C5.7 and C5.8 pass; the repository candidate is committed.
+- **Configure:** create/link the Vercel project with Node 22 and Preview-only
+  staging variables. Mark server secrets sensitive. Confirm `vercel.json` cron,
+  function runtime, Auth redirect URLs, webhook URL, and `/api/health`.
+- **Build rule:** public Supabase variables are embedded at build time. Preview
+  and production therefore use separate builds from the same reviewed commit;
+  do not promote a staging-wired artifact into production.
+- **Verify:** inspect deployment/build logs; run the complete staging browser
+  and provider gate on the preview URL; check cron, webhook, safe logs, function
+  timeouts, worker freshness, and no secret exposure in browser bundles.
+- **Exit:** Vercel Preview is `VERIFIED` against staging. Production remains
+  `NOT STARTED`.
+
+#### C5.10 — production creation and release
+
+- **Entry:** preview/staging is verified, school decisions are approved, and a
+  release/rollback owner is named.
+- **Work:** create a separate production Supabase project; apply `000001–000030`
+  from zero; configure approved school data, Auth, private Storage/scanner,
+  Resend, cron, domain, monitoring, backups, and—only if separately approved—a
+  payment gateway. Build production from the same reviewed commit with
+  production public variables.
+- **Release gate:** repeat advisors, types, RLS/RPC/provider tests, real-session
+  smoke journeys, health/worker checks, restore readiness, observability, and
+  rollback/forward-fix review. Begin with controlled fictional/operator records
+  before importing approved school data.
+- **Exit:** mark production `RELEASED` only after deployment and post-deploy
+  checks pass. A successful build or preview is not a release.
+
+### C5 evidence register
+
+For each C5 stage, add one dated entry to `PROJECT-STATUS.md` containing:
+
+- environment and project/deployment identifier;
+- reviewed commit and migration range;
+- sanitized commands and test suites run;
+- pass/fail counts and provider evidence references;
+- advisor findings and disposition;
+- backup/restore evidence;
+- unresolved blockers and named owner;
+- rollback or forward-fix decision.
+
+Never paste credentials, tokens, raw Auth links, email addresses, signed Storage
+URLs, provider payloads, or private school/student data into the evidence
+register.
 
 ## 2. Target architecture
 
@@ -68,7 +390,10 @@ RESEND_API_KEY=
 RESEND_WEBHOOK_SECRET=
 EMAIL_FROM=
 CRON_SECRET=
+DOCUMENT_SCANNER_URL=
+DOCUMENT_SCANNER_SECRET=
 FASS_DATA_ADAPTER=demo
+NEXT_PUBLIC_FASS_DATA_ADAPTER=demo
 ```
 
 Additional rules:
@@ -491,18 +816,30 @@ Runtime switching:
 
 ```text
 FASS_DATA_ADAPTER=demo | supabase
+NEXT_PUBLIC_FASS_DATA_ADAPTER=demo | supabase
 ```
 
 Rules:
 
 - Demo remains available for isolated design/tests.
 - Staging and production use `supabase`.
+- Startup validation must reject mismatched server/public adapter values.
 - Do not dual-write to demo and Supabase.
 - Do not run different connected domains against different adapters in one runtime.
 - Supabase adapter and demo adapter must pass the same contract test suite.
+- Supabase mode must never silently fall back to demo records or operational
+  session state.
+- Server Components use direct server loaders or the server adapter boundary;
+  Client Components use `/api/adapter`; protected pages never use an
+  unauthenticated relative server fetch.
 - Remove browser `sessionStorage` operational state after the global Supabase cutover, retaining only safe UI preferences and temporary unsent form state.
 
-## 11. Backend implementation phases
+## 11. Historical backend implementation phases
+
+The original B0–B8 roadmap below is retained as architectural history. The
+active implementation order is C0–C5 in the current checkpoint above; it
+overrides stale “not started” or “not applied” wording in the historical
+sections.
 
 ### B0 — Supabase and migration foundation
 
@@ -680,5 +1017,5 @@ Final staging gate:
 - The official school email domain and sender addresses remain pending.
 - School decisions for admission policy, fees/refunds, result rules, timetable configuration, retention, and guardian verification remain policy-pending.
 - No real student, guardian, applicant, job, financial, result, or document data enters staging.
-- Facility/IoT remains isolated and receives no backend tables in this project phase.
+- Facility/IoT remains isolated and receives no application tables in this project phase.
 - Production deployment requires version-controlled source, reviewed migrations, approved policies, separate production credentials, and verified restore capability.

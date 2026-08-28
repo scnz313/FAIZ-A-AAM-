@@ -4,17 +4,20 @@ This repository is the design and engineering foundation for an integrated schoo
 
 ## Read before implementation
 
-1. [`AGENTS.md`](AGENTS.md) — persistent instructions for every AI agent and developer.
-2. [`PROJECT-BLUEPRINT.md`](PROJECT-BLUEPRINT.md) — canonical feature, workflow, architecture, data, security, test, and delivery plan.
-3. [`PROJECT-STATUS.md`](PROJECT-STATUS.md) — current implementation truth, blockers, and next phase.
-4. [`FEATURE-INTEGRATION-SPEC.md`](FEATURE-INTEGRATION-SPEC.md) — detailed user relationships, shared context, feature connections, synchronization, and integration tests.
-5. [`UI-COMPLETION-PLAN.md`](UI-COMPLETION-PLAN.md) — active frontend integration sequence and acceptance criteria.
-6. [`plan.md`](plan.md) — ordered execution plan for the current completion phases (pointer index only).
-7. [`design/UX-BLUEPRINT.md`](design/UX-BLUEPRINT.md) — visual and interaction direction.
+Read [`AGENTS.md`](AGENTS.md) first for the mandatory sequence and change rules.
+The canonical sequence is:
+
+1. [`PROJECT-BLUEPRINT.md`](PROJECT-BLUEPRINT.md) — product scope, architecture, workflows, data, permissions, quality gates, and delivery order.
+2. [`PROJECT-STATUS.md`](PROJECT-STATUS.md) — current implementation truth, blockers, and verified evidence.
+3. [`plan.md`](plan.md) — active C0–C5 Supabase cutover order, entry conditions, exit criteria, and staging gate.
+4. [`FEATURE-INTEGRATION-SPEC.md`](FEATURE-INTEGRATION-SPEC.md) — relationships, shared context, synchronization, feature contracts, and integration tests.
+5. [`UI-COMPLETION-PLAN.md`](UI-COMPLETION-PLAN.md) — completed frontend reference and route-level acceptance evidence.
+6. [`design/UX-BLUEPRINT.md`](design/UX-BLUEPRINT.md) — visual and interaction direction.
+7. [`design/RESEARCH-NOTES.md`](design/RESEARCH-NOTES.md) — implementation research for payments, privacy, disclosure, accessibility, authentication, and uploads.
 
 ## Current state
 
-The repository contains a broad, validated frontend prototype for the public site, applicant journeys, family portal, and staff workspace, plus an optional campus-environment demonstrator excluded from core navigation and launch checks. The active phase is **frontend completion and integration per `plan.md`**: role/scope authorization, workflow integrity, cross-module event propagation, contract freeze, and the full handoff gate — all with deterministic demo adapters. The shared guardian/student context spine, service boundaries, admission→fee→enrollment conversion, and staff role scoping are implemented and tested; the canonical grant model (maker/checker splits), remaining workflow repairs, and the contract freeze are in progress. No backend, database, real authorization, or production deployment exists. See `PROJECT-STATUS.md` for evidence, `plan.md` for the ordered execution plan, and `FEATURE-INTEGRATION-SPEC.md` for the target behavior.
+The repository contains a validated frontend and a locally verified Supabase/provider-ready implementation through migration `000030`. **C5 staging and provider activation is now the active gate.** Start with source-control review and staging-ledger reconciliation; do not start with Vercel or a provider credential. The runtime remains demo by default, and no remote migration, provider configuration, deployment, or production release is claimed. See [`PROJECT-STATUS.md`](PROJECT-STATUS.md) for evidence and blockers; only [`plan.md`](plan.md) defines the C5.0–C5.10 execution order.
 
 ## Architecture in one sentence
 

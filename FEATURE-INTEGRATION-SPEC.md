@@ -1,8 +1,8 @@
 # Feature Integration and Relationship Specification
 
-Version: 1.0  
-Date: 5 August 2026  
-Status: Approved target contract; current implementation differences are recorded in `PROJECT-STATUS.md`.
+Version: 1.2
+Date: 24 August 2026
+Status: Approved target contract; the current Supabase cutover delta is recorded in `PROJECT-STATUS.md`.
 
 This is the detailed product contract for how Faiz Aam School users, records, features, and UI states connect. It expands `PROJECT-BLUEPRINT.md`; it never overrides the blueprint. Every agent must read this file before changing a core feature, portal context, service contract, data model, or staff workflow.
 
@@ -31,24 +31,42 @@ The optional campus-environment demonstrator is isolated. It must not create dep
 
 ## 2. Code-audit baseline
 
-The 5 August 2026 audit found a strong, broad frontend with passing quality gates, but not yet a unified production data model. The baseline below was refreshed when the frontend completion plan (`plan.md`) took effect: the shared context spine, service boundaries, admission→fee→enrollment conversion, and staff role scoping are now implemented as deterministic demo adapters; the canonical grant model, workflow repairs, event propagation, and contract freeze remain.
+### Current implementation checkpoint — 24 August 2026
+
+- Supabase migrations `000001–000015` are the committed remote foundation; local migrations `000016–000030` implement the complete application cutover, role/capability hardening, identity/context lifecycle, authoritative admissions/careers/enrollment/uploads, result report releases, timetable revisions, operational workflows, and provider-job integrity.
+- The scratch PostgreSQL 17 validator passes all migrations and the RLS, RPC, result-release, timetable, operational, and provider-job suites from zero.
+- Supabase Auth SSR, AAL/TOTP, server route guards/loaders, private Storage/PDF/scanner boundaries, official Svix verification, Resend/outbox adapters, cron, health, and per-account projections are implemented locally and covered with fakes. They still require staging credentials and real-provider evidence.
+- The staff/system-administrator role boundary is hardened locally: system administration does not substitute for functional business grants, pure teachers cannot read finance, and maker/checker/self-approval denials are covered by local tests.
+- The runtime remains `FASS_DATA_ADAPTER=demo`; the static cutover guard is green, but staging must set both adapter variables together and prove real sessions before the runtime changes globally.
+- Staging/global Supabase and provider verification is pending. Storage, Resend, payment selection, Vercel, restore, and production remain external gates; this file is not evidence that they are live.
+
+The 5 August 2026 audit found a strong, broad frontend with passing quality gates,
+but not yet a unified production data model. The baseline below remains the
+normative product contract; current implementation state is the checkpoint above
+and the evidence matrix in `PROJECT-STATUS.md`. Shared context, service
+boundaries, admission→fee→enrollment demo behavior, role-boundary hardening,
+workflow repairs, event propagation, and contract tests are retained locally,
+while the remaining Supabase facade gaps are explicitly listed below.
 
 | Area | What the current UI proves | What is not yet integrated |
 |---|---|---|
-| Identity | Demo guardian sign-in, verification, recovery, session (stable account/person/guardian ids, expired-session sign-out), and pending link request through typed services | No protected routes (indexing-only noindex/robots), staff authentication, invitations, or server reauthorization; identity link requests still write a separate store from the relationship graph |
-| Portal context | Shared family-context provider drives the shell and every child-scoped page; two linked children switch together; unlinked children are denied | Server reauthorization; dirty-form switch confirmation; wrong-child resource handling for records of another authorized child |
-| Admissions | Draft, submit, status, requested-change edit, staff decisions, offer response, and the admission-fee invoice handoff | Verified applicant ownership, officer/approver maker-checker split, immutable submitted snapshots, and versioned applicant corrections |
+| Identity | Demo guardian sign-in, verification, recovery, session (stable account/person/guardian ids, expired-session sign-out), and pending link request through typed services | Server route guards/AAL claims, staff invitation acceptance UI, and C2.1 context projections are local; staging session proof and remaining link projection remain |
+| Portal context | Shared family-context provider drives the shell and every child-scoped page; two linked children switch together; unlinked children are denied | Server-resolved family context and revocation revalidation are partial; active-child persistence and wrong-child resource handling must be completed in C2.1 |
+| Admissions | Draft, submit, status, requested-change edit, staff decisions, offer response, and the admission-fee invoice handoff | C2.2 local Supabase facade maps owned/staff rows, server drafts, immutable versions, decisions, offers, and readiness; staging session proof remains |
 | Admission fee | Accepted offers issue one invoice through `financeService`; the shared checkout posts once with a receipt; readiness gates enrollment conversion | Real gateway adapters, waiver/refund rules, and conversion committed as one transaction (demo commits all changes together) |
-| Careers | Draft, submit, status, withdrawal, and staff decisions through one demo service | Applicant identity ownership, private documents, reviewer assignment, HR reviewer/approver split, scorecards, staff-account invitation |
+| Careers | Draft, submit, status, withdrawal, and staff decisions through one demo service | C2.4 local facade adds server drafts/withdrawal, version-safe HR decisions, reviewer assignment/scorecard/interview commands; private Storage files and staging proof remain |
 | Family finance | Ledgers keyed by student; portal fees/receipts/overview read the service for the active child; staff finance reads the same service with parity | Officer/approver maker-checker boundary for adjustments/refunds; wrong-child resource handling |
-| Results | Per-student published snapshots on the portal; staff entry/moderation/approval/publication/correction with versioning | Canonical batch model (class/section/subject/term/version with student rows), reviewer/publisher grant split, publication withdrawal, immutable published versions |
-| Timetable | One `timetableService` facade serves portal and staff; class derives from the active enrollment | Authorised year/class/section/type selection, manager-only editing with conflict validation, overrides vs base-version edits |
-| Notices/content | One `contentService` owns status/audience/version; public/portal/publisher read the same record | Editor/publisher grant split (draft vs publish), scheduled delivery, audience propagation |
-| Documents | `documentsService` returns per-student metadata bundles; preview/missing/denied states | Private object store, document authorization, generated PDF, signed delivery, retention workflow |
-| Support | Public/portal submission and staff response share one demo thread | Authenticated requester ownership, staff-private notes, assignment/SLA, notification, support-grant scoping |
-| Users/settings/audit | Typed demo adapters drive the staff pages; settings read service values | Grant changes through `usersService`, settings saves with expected-version checks, audit ingestion from every consequential operation |
+| Results | Per-student published snapshots on the portal; staff entry/moderation/approval/publication/correction with versioning | C2.3 local facade maps canonical batches, marks, versions, publications, corrections, and snapshots; reviewer/publisher and immutable-publication checks remain to prove in staging |
+| Timetable | One `timetableService` facade serves portal and staff; class derives from the active enrollment | C2.3 local async facade maps effective/draft versions, hard conflicts, supersession, overrides, and exam date sheets; staging proof remains |
+| Notices/content | One `contentService` owns status/audience/version; public/portal/publisher read the same record | C2.4 local immutable content draft/review/publish/unpublish commands and public/family/staff projection; scheduled/provider delivery remains |
+| Documents | `documentsService` returns per-student metadata bundles; preview/missing/denied states | Private Storage routes and generated PDF upload plumbing exist locally; scan/finalisation, signed delivery policy, retention workflow, and complete document projection remain |
+| Support | Public/portal submission and staff response share one demo thread | C2.4 local requester-safe/staff-private projections, public intake/rate limit, reopen/assign commands; SLA/provider notification remains |
+| Users/settings/audit | Typed demo adapters drive the staff pages; settings read service values | C2.4 settings optimistic save, PostgreSQL read-only audit projection, and per-account notification list/mark branches; staging identity/email proof remains |
 
-These differences are the frontend integration backlog. A passing visual or demo-flow test must not be used as evidence that the corresponding server, relationship, authorization, or cross-module contract exists.
+These differences are the remaining implementation and Supabase-cutover gaps,
+not a new UI backlog. A passing visual or demo-flow test must not be used as
+evidence that the corresponding server, relationship, authorization, or
+cross-module contract exists.
 
 ## 3. Canonical identity and relationship model
 

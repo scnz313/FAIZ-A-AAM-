@@ -1,15 +1,15 @@
 # Frontend Integration Plan — Faiz Aam School Platform
 
-Status: active  
+Status: completed frontend reference; backend cutover tracked in `plan.md` C0–C5
 Owner: product/UI implementation team  
 Audit date: 5 August 2026  
-Phase: frontend completion per `plan.md` (canonical grants, workflow integrity, event propagation, contract freeze, handoff gate)
+Phase: frontend completion verified; Supabase application cutover is the active phase
 
-This is the execution plan for the current phase. `PROJECT-BLUEPRINT.md` defines the product, `FEATURE-INTEGRATION-SPEC.md` defines detailed relationships and synchronization, `plan.md` is the pointer-index of the ordered completion phases, and `PROJECT-STATUS.md` records what is actually verified.
+This document is the completed frontend integration reference. `PROJECT-BLUEPRINT.md` defines the product, `FEATURE-INTEGRATION-SPEC.md` defines detailed relationships and synchronization, `plan.md` defines the active Supabase cutover, and `PROJECT-STATUS.md` records what is actually verified.
 
-> **Active next work (from `plan.md`):** Phases 0–5 are implemented and verified in the current environment: Phase 0 baseline/privacy (archive + manifest, sitemap/robots/noindex, fail-closed guard, workspace-selector grant ids), Phase 1 canonical role/scope model with maker/checker splits (canonical grants 311–316, four demo identities, admissions reviewer/approver separation, results approve/publish/enter gating, content editor/publisher split), Phase 2 workflow repairs (results batch subject + teacher class+subject scope + queue-level moderator return + `withdrawPublication` versioned withdrawal, timetable known classes 8-A/9-C with manager-only selector and honest empty state, admissions maker/checker), Phase 3 family context + link-state unification (one `LinkRequestRecord` store: guardian requests flow into the staff queue, approve creates the active link exactly once, revoke ends access; `classifyStudentAccess` current/other/none wired into invoice + receipt pages), Phase 4 deterministic outbox + append-only audit (one event per payment post / conversion / publish / withdraw / content publish / link decision; retries never duplicate), Phase 5 applicant draft policy (sessionStorage drafts with sensitive-field stripping) + backend-neutral contracts (`packages/contracts` core types + 47 tests) + handoff matrix. Phase 6 (full verification gate) ran: typecheck, lint, 216 web + 47 contract tests, 62-page build, 22/22 critical journeys (incl. the complete teacher entry → moderator return → approve → publish → portal chain, timetable manager publish reaching the portal, and family → staff payment parity), 53-route axe scan, focus smoke, route/link crawl, 168-pair responsive sweep — all passed; evidence recorded in `PROJECT-STATUS.md`.
+> **Archived frontend handoff:** This file preserves the completed UI scope, route-level acceptance criteria, and demo-contract decisions. Historical implementation evidence belongs in `PROJECT-STATUS.md`; the active execution order is only `plan.md` C2–C5.
 
-This is the execution plan for the current phase. `PROJECT-BLUEPRINT.md` defines the product, `FEATURE-INTEGRATION-SPEC.md` defines detailed relationships and synchronization, and `PROJECT-STATUS.md` records what is actually verified.
+The frontend handoff gate is complete. Do not add visual features here unless the product blueprint changes; continue implementation from `plan.md` C0–C5.
 
 ## 1. Goal and phase boundary
 
@@ -26,7 +26,9 @@ Frontend integration is complete only when:
 - denial, validation, conflict, processing, retry, partial-success, and recovery states are reviewable;
 - tests prove isolation and propagation, not only route rendering.
 
-This phase does not provide production security, real payments, permanent uploads, email/SMS, or a database. Do not select a database, auth provider, payment gateway, CMS, storage provider, or notification provider merely to complete this UI phase.
+The completed frontend phase did not provide production security, real payments,
+permanent uploads, email/SMS, or a database. Those concerns are now governed by
+the active Supabase cutover in `plan.md`; do not reopen frontend-only scope.
 
 ## 2. Current code-audit truth
 
@@ -124,7 +126,7 @@ route/page
 
 **Exit:** both portal and staff shells render from services, not constants; context survives route navigation within the demo session.
 
-**Status — implemented and verified (5 August 2026):** identity sessions carry stable account/person/guardian IDs and expired sessions sign out; sign-out clears identity plus relationship context; `familyContextService` exposes student contexts, account summaries, and link-request summaries; `staffContextService` exposes workspace summaries with role labels and assignments; `FamilyContextProvider`/`StaffContextProvider` wrap the portal/staff layouts; `PortalShell` renders the two-child selector, context strip, and service sign-out; `StaffShell` renders the workspace switcher and role/year/assignment context. Proof: 112 tests across 15 files, 62-page build, 8/8 critical journeys, 53-route axe scan, 168-pair responsive sweep.
+**Archived frontend reference (historical, 5 August 2026; see PROJECT-STATUS.md):** identity sessions carry stable account/person/guardian IDs and expired sessions sign out; sign-out clears identity plus relationship context; `familyContextService` exposes student contexts, account summaries, and link-request summaries; `staffContextService` exposes workspace summaries with role labels and assignments; `FamilyContextProvider`/`StaffContextProvider` wrap the portal/staff layouts; `PortalShell` renders the two-child selector, context strip, and service sign-out; `StaffShell` renders the workspace switcher and role/year/assignment context. Historical acceptance evidence (see PROJECT-STATUS.md): 112 tests across 15 files, 62-page build, 8/8 critical journeys, 53-route axe scan, 168-pair responsive sweep.
 
 ### I1 — linked-child synchronization
 
@@ -136,7 +138,7 @@ route/page
 
 **Exit:** a two-child browser journey proves every portal module changes together and an unlinked child reference is denied.
 
-**Status — spine implemented and verified (5 August 2026):** `ActiveChildLine` shows the active child on overview, fees, invoice, receipt, results, timetable, notices, documents, profile, and support; switching persists across navigation and an unlinked child is denied with the previous selection preserved; `/staff/link-requests` provides the pending-link status view and deterministic approval/rejection path (journey-verified). Remaining I1 items — clearing stale invoice/term/document selections and per-student ledger/result/timetable data — move into `I2`, which parameterizes the domain services by student/enrollment context.
+**Archived frontend reference (historical, 5 August 2026; see PROJECT-STATUS.md):** `ActiveChildLine` shows the active child on overview, fees, invoice, receipt, results, timetable, notices, documents, profile, and support; switching persists across navigation and an unlinked child is denied with the previous selection preserved; `/staff/link-requests` provides the pending-link status view and deterministic approval/rejection path (journey-verified). Remaining I1 items — clearing stale invoice/term/document selections and per-student ledger/result/timetable data — move into `I2`, which parameterizes the domain services by student/enrollment context.
 
 ### I2 — service-boundary consolidation
 
@@ -149,7 +151,7 @@ route/page
 
 **Exit:** static analysis shows operational pages consume service boundaries; parity tests pass for shared records.
 
-**Status — implemented and verified (5 August 2026):** finance ledgers are parameterized by student (`listInvoices(studentId)` / `listAllInvoices()` for staff) with per-student receipts and two demo ledgers; portal fees/receipts/overview read the service for the active child and staff finance pages aggregate both students with parity tests. Portal results render the per-student published snapshot (`academicsService.getStudentResultSnapshot`) with distinct fictional snapshots per child. Timetable is one facade (`timetableService`, formerly `timetable-demo.ts`) serving portal and staff; the academics timetable stub was removed. Typed demo adapters `contentService` (notice status/audience/version), `documentsService` (per-student bundles), `notificationsService` (per-account read state, demo clock), `usersService`, `settingsService`, and `auditService` drive their pages; the portal overview reads the active child's ledger and family-audience notices through services. Proof: 150 tests across 21 files, 62-page build, 8/8 critical journeys, 53-route axe scan, 168-pair responsive sweep, clean route/link crawl, and an in-browser parity check (child switch changes overview band + ledger; staff finance shows both students).
+**Archived frontend reference (historical, 5 August 2026; see PROJECT-STATUS.md):** finance ledgers are parameterized by student (`listInvoices(studentId)` / `listAllInvoices()` for staff) with per-student receipts and two demo ledgers; portal fees/receipts/overview read the service for the active child and staff finance pages aggregate both students with parity tests. Portal results render the per-student published snapshot (`academicsService.getStudentResultSnapshot`) with distinct fictional snapshots per child. Timetable is one facade (`timetableService`, formerly `timetable-demo.ts`) serving portal and staff; the academics timetable stub was removed. Typed demo adapters `contentService` (notice status/audience/version), `documentsService` (per-student bundles), `notificationsService` (per-account read state, demo clock), `usersService`, `settingsService`, and `auditService` drive their pages; the portal overview reads the active child's ledger and family-audience notices through services. Historical acceptance evidence (see PROJECT-STATUS.md): 150 tests across 21 files, 62-page build, 8/8 critical journeys, 53-route axe scan, 168-pair responsive sweep, clean route/link crawl, and an in-browser parity check (child switch changes overview band + ledger; staff finance shows both students).
 
 ### I3 — admissions to finance to enrollment
 
@@ -162,7 +164,7 @@ route/page
 
 **Exit:** accepting and paying an offered seat updates finance and admissions, converts once on retry, and makes the enrolled child available to the correct guardian context.
 
-**Status — implemented and verified (5 August 2026):** accepting an offer issues one admission invoice (`financeService.createAdmissionInvoice`, idempotent per applicant); `AdmissionFeeStep` renders the ledger amount and pays through the shared `PayFlow` (attempt → processing → confirmed, exactly one payment and one receipt); `enrollmentConversionService.getEnrollmentReadiness` derives readiness from offer acceptance + fee paid + documents + capacity + final approval; `convertApplication` converts idempotently — creating the person/student/enrollment and activating the guardian link for fresh applications, or matching the already-enrolled child for an application that was already converted (spec: “creates or matches”, never duplicates), adopting the admission invoice into the new student's ledger, and marking the application Enrolled with its permanent references; the applicant acknowledgement shows the student reference, enrollment reference, and the portal link (or the honest pending-invitation state). Proof: 157 tests across 22 files (new enrollment-conversion suite), 62-page build, 9/9 critical journeys (new admission-to-enrollment journey), 53-route axe scan, 168-pair responsive sweep, clean route/link crawl.
+**Archived frontend reference (historical, 5 August 2026; see PROJECT-STATUS.md):** accepting an offer issues one admission invoice (`financeService.createAdmissionInvoice`, idempotent per applicant); `AdmissionFeeStep` renders the ledger amount and pays through the shared `PayFlow` (attempt → processing → confirmed, exactly one payment and one receipt); `enrollmentConversionService.getEnrollmentReadiness` derives readiness from offer acceptance + fee paid + documents + capacity + final approval; `convertApplication` converts idempotently — creating the person/student/enrollment and activating the guardian link for fresh applications, or matching the already-enrolled child for an application that was already converted (spec: “creates or matches”, never duplicates), adopting the admission invoice into the new student's ledger, and marking the application Enrolled with its permanent references; the applicant acknowledgement shows the student reference, enrollment reference, and the portal link (or the honest pending-invitation state). Historical acceptance evidence (see PROJECT-STATUS.md): 157 tests across 22 files (new enrollment-conversion suite), 62-page build, 9/9 critical journeys (new admission-to-enrollment journey), 53-route axe scan, 168-pair responsive sweep, clean route/link crawl.
 
 ### I4 — teacher and staff assignment scope
 
@@ -175,7 +177,7 @@ route/page
 
 **Exit:** navigation, data, action controls, and service outcomes agree for each retained role.
 
-**Status — implemented and verified (5 August 2026):** `staff-authorization` maps roles to actions (home/admissions/careers/finance/results view+enter+publish/timetable view+manage/content publish/links.verify/users/audit/settings/support); the staff shell filters navigation by the ACTIVE workspace and adds a session-persistent demo identity picker (Sana Wani — finance/results/admissions; Firdous Ahmad — teacher; Aisha Lone — content/support/audit/admin); `StaffRouteGuard` denies every staff route by role with a direct workspace-switch when another granted workspace can do the job (marks-entry requires the teacher role); teacher marks entry is additionally scoped to the teacher's assigned classes (wrong-assignment denial); results approve/publish/correction are gated to publishers and entry links to teachers; the timetable editor is read-only for non-managers; support response is gated to support officers; the staff home dashboard (band, queues, quick links) is filtered by role. Proof: 163 tests across 23 files (new authorization suite), 62-page build, 11/11 critical journeys (incl. staff role denial + identity switching and teacher assignment scope), 53-route axe scan, 168-pair responsive sweep, clean route/link crawl. Visual refinement pass applied on top (finer hairlines, white surfaces, softly rounded controls) and every gate re-run.
+**Archived frontend reference (historical, 5 August 2026; see PROJECT-STATUS.md):** `staff-authorization` maps roles to actions (home/admissions/careers/finance/results view+enter+publish/timetable view+manage/content publish/links.verify/users/audit/settings/support); the staff shell filters navigation by the ACTIVE workspace and adds a session-persistent demo identity picker (Sana Wani — finance/results/admissions; Firdous Ahmad — teacher; Aisha Lone — content/support/audit/admin); `StaffRouteGuard` denies every staff route by role with a direct workspace-switch when another granted workspace can do the job (marks-entry requires the teacher role); teacher marks entry is additionally scoped to the teacher's assigned classes (wrong-assignment denial); results approve/publish/correction are gated to publishers and entry links to teachers; the timetable editor is read-only for non-managers; support response is gated to support officers; the staff home dashboard (band, queues, quick links) is filtered by role. Historical acceptance evidence (see PROJECT-STATUS.md): 163 tests across 23 files (new authorization suite), 62-page build, 11/11 critical journeys (incl. staff role denial + identity switching and teacher assignment scope), 53-route axe scan, 168-pair responsive sweep, clean route/link crawl. Visual refinement pass applied on top (finer hairlines, white surfaces, softly rounded controls) and every gate re-run.
 
 **Rebaselined per `plan.md` phases (6 August 2026):** the canonical grant model replaced the I4 matrix (Phase 1): every role holds exactly its maker/checker actions — content_editor drafts / content_publisher publishes; admissions_officer reviews / admissions_approver decides (self-approval rejected with the same actor account); finance_officer operates / finance_approver approves; hr_reviewer scores / hr_approver advances/offers; teacher enters assigned class+subject marks only; exam_reviewer moderates; result_publisher releases and corrects; timetable_manager manages; support_officer responds and verifies guardian links (`links.verify` limited to support + system administrator); auditor reads; system_administrator holds configuration/access grants only. Four demo identities (Sana, Firdous, Aisha, Rania Mir) exercise the split; admissions decisions and results entry/publish are journey-verified across the maker/checker boundary. The I4 status above remains the shell-level spine; Phase-1 grants are the authoritative action model.
 
@@ -308,20 +310,17 @@ Do not start broad backend implementation until:
 7. backend provider choices have named owners, environments, credentials, and acceptance tests;
 8. `PROJECT-STATUS.md` accurately separates UI verification from production readiness.
 
-## 9. Current execution record
+## 9. Historical acceptance reference
 
-### Completed and retained
+The frontend acceptance record is archived here for context. Current
+implementation status, test counts, build output, and release evidence belong
+only in `PROJECT-STATUS.md`; they must not be inferred from this completed
+reference. The route, accessibility, focus, responsive, and cross-module
+journey criteria remain the required UI contract for regressions.
 
-- Editorial public, applicant, portal, and staff UI system.
-- Self-contained deterministic demo services and primary journeys.
-- 87 passing tests across 11 web test files (baseline) — now 216 web tests across 29 files plus 47 contract tests.
-- Warning-free production build with 62 generated pages.
-- Route crawl: 65 route cases, 91 unique internal hrefs, zero failures.
-- Critical journeys: 22/22 pass (added content-publish denial, teacher subject denial, timetable read-only, wrong-child resource scope, link revocation, results maker/checker, duplicate-safe payment retry, correction versioning, teacher entry → moderator return → approve → publish → portal publication, timetable manager publish → portal v2, family payment → staff ledger parity).
-- Accessibility: 53 routes, zero automated violations.
-- Focus smoke: shared drawer, skip link, document dialog, and statement preview pass.
-- Responsive sweep: 168 viewport/route pairs, zero reported overflow/runtime problems.
+### Active work pointer
 
-### Active next work
-
-Per `plan.md`, phases 0–5 are implemented and Phase 6 evidence is recorded in `PROJECT-STATUS.md`. The remaining work is the backend handoff gate (§8): no backend selection or implementation starts until the school decisions in `FEATURE-INTEGRATION-SPEC.md` §11 are approved and `PROJECT-STATUS.md` reflects the verified UI state.
+Frontend work is archived as complete. The local backend/provider implementation
+through migration `000030` is verified; continue with `plan.md` C5 staging/provider
+verification. Results, timetable, and remaining operational facade work is no
+longer a UI backlog; real provider and deployment evidence remains in C5.

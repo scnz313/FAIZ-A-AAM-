@@ -1,11 +1,12 @@
 # Backend Handoff Matrix — Faiz Aam School Platform
 
-Serves the `UI-COMPLETION-PLAN.md` backend handoff gate (I6): every service operation the
-frontend prototype performs is listed with its owning service, actor/scope requirements,
-input/output schemas, validation, state transition, idempotency key, expected version,
-audit event, outbox event, and recovery behavior. Backend implementation must satisfy this
-matrix before any operation is considered done; the frontend demo adapters are replaced
-wholesale behind these contracts.
+Serves the completed frontend/local-backend handoff and the active `plan.md` C5
+staging gate: every service operation the UI performs is listed with its owning
+service, actor/scope requirements, input/output schemas, validation, state
+transition, idempotency key, expected version, audit event, outbox event, and
+recovery behavior. A domain is complete only after its server loader or
+`/api/adapter` branch satisfies this matrix; demo adapters remain available for
+isolated design/tests but are never a fallback in Supabase mode.
 
 Schema sources: `packages/contracts/src/core.ts` and `packages/contracts/src/relationships.ts`.
 
@@ -18,11 +19,11 @@ Schema sources: `packages/contracts/src/core.ts` and `packages/contracts/src/rel
 | Command meta | `commandMetaSchema` / `CommandMeta` | `idempotencyKey` (string), `expectedVersion`? (int ≥ 0) |
 | Money | `moneySchema` / `Money` | `amountPaise` (int ≥ 0), `currency: "INR"` |
 | Public reference | `publicReferenceSchema` / `PublicReference` | non-empty string (`APP-2026-0424`, `INV-2026-0103`); display/search only, never authorization |
-| Service result | `serviceResultSchema<T>` / `ServiceResult<T>` | `{ ok: true; value: T }` \| `{ ok: false; errors: ServiceError[] }` |
+| Service result | `serviceResultSchema<T>` / `ServiceResult<T>` | success/failure envelope with `httpStatus`, `correlationRef`, `retryable`, and optional authoritative `currentVersion` / `currentState` |
 | Service error | `serviceErrorSchema` / `ServiceError` | `code` (`ErrorCode`), `message`, `field`?, `retryable`? |
 | Error codes | `errorCodeSchema` / `ErrorCode` | `unauthenticated`, `forbidden`, `not-found`, `validation`, `stale-version`, `conflict`, `duplicate`, `retryable`, `unavailable` |
 | Domain event | `domainEventSchema` / `DomainEvent` | `id` (uuid), `type`, `correlationId`, `atIso`, `payload` (record) |
-| Outbox record | `outboxRecordSchema` / `OutboxRecord` | `id`, `eventId` (uuid), `status: "pending" \| "delivered"`, `attempts`, `nextAttemptAtIso`?, `createdAtIso` |
+| Outbox record | `outboxRecordSchema` / `OutboxRecord` | durable pending/processing/delivered/failed state, attempts, next-attempt time, last error, and correlation evidence |
 | Audit event | `auditEventSchema` / `AuditEvent` | `id`, `atIso`, `actorAccountId`, `action`, `targetKind`, `targetRef`, `reason`?, `beforeVersion`?, `afterVersion`?, `correlationId`? |
 | Paged result | `pagedResultSchema<T>` / `PagedResult<T>` | `items: T[]`, `page` (≥ 1), `pageSize` (≥ 1), `total` (≥ 0) |
 
@@ -40,6 +41,46 @@ Cross-cutting rules (from `FEATURE-INTEGRATION-SPEC.md` §4–5):
 - All timestamps are UTC ISO-8601 (`atIso`); presentation converts to `Asia/Kolkata`.
 - `retryable` errors may be retried with the same `idempotencyKey`; the result is
   identical on retry. `stale-version` and `conflict` require user review, not retry.
+
+## Current cutover checkpoint
+
+This matrix is intentionally split between the contract inventory below and the
+implementation state in `PROJECT-STATUS.md`:
+
+- **C0–C4 locally verified:** migrations `000001–000030`, RLS/RPC denial tests,
+  all retained domain facades, Storage/scanner/PDF jobs, Resend/Svix/outbox
+  contracts, cron, health, and the protected-path cutover guard pass locally.
+- **Live status:** migrations `000001–000015` were historically verified on the
+  linked project; `000016–000030` are local-only until the staging ledger is
+  re-read. No global Supabase switch is authorised yet.
+
+### C5 activation ownership
+
+| Boundary | Configuration owner | Application evidence required before global staging switch |
+|---|---|---|
+| Supabase project and migrations | Project owner + migration operator | Project identity, ledger before/after, dry-run/apply output, generated types, RLS/RPC tests, advisors |
+| Auth | Identity administrator | Redirect allowlist, OTP/recovery/invite/TOTP journeys, AAL and revocation denials |
+| Storage/scanner/PDF | Storage/security owner | Private policies, scan states, checksum/type/size evidence, signed expiry, generation retry |
+| Resend/outbox/cron | Messaging/domain owner | Sender/domain, SMTP/API/webhook/cron, retry/suppression, safe logs, worker freshness |
+| Finance | School finance owner | Sandbox parity, maker-checker adjustments/refunds, reconciliation; written decision before real gateway |
+| Vercel preview | Deployment owner | Reviewed commit, staging-only env, Node 22 build, health, post-deploy gates, no secret exposure |
+| Production | School owner + release owner | Separate project/build, approved data/policies, restore readiness, release and rollback record |
+
+## Identity, account, and context operations
+
+These contracts are implemented locally. C5 must prove that they resolve the
+authenticated actor server-side with real staging sessions, preserve selected
+context, and invalidate already-loaded protected data after revocation.
+
+| Operation | Status | Required contract and denial coverage |
+|---|---|---|
+| `context.family` | Locally verified; staging pending | Read active guardian links, child/enrollment/year/capabilities, pending link state, and active-child selection; deny unauthenticated, wrong guardian, revoked link, and unlinked child; return only the authorised family projection. |
+| `context.staff` | Locally verified; staging pending | Read active account, staff member, role grants, scopes, assignments, selected workspace, and AAL requirement; deny `aal1`, revoked grant, ended assignment, and wrong workspace. |
+| `users.list` | Locally verified; staging pending | Return scoped staff directory without secrets or invite tokens; system administrator only; preserve neutral not-found/forbidden behavior. |
+| `users.invites.create` | Locally verified; provider pending | Store intended role, scope, inviter, reason, and provider invitation reference; only system administrator may invite staff; retry is idempotent and delivery failure does not create a second invite. |
+| `users.invites.accept` | Locally verified; staging pending | Verify provider-bound Auth subject/contact, expiry, reuse, revocation, wrong contact, and duplicate-account cases; transactionally link person/account/staff/grant/assignment/audit/outbox rows. |
+| `accounts.suspend` / `accounts.reactivate` | Locally verified | Suspend atomically and revalidate sessions; reactivation does not re-grant roles automatically; every later grant is an explicit audited command. |
+| `documents.upload-intent` / `documents.download` | Provider-ready locally; staging pending | Resolve owning application/student/assignment/module grant before issuing intent or signed URL; opaque object keys, server stat/checksum/type/size, scan state, short expiry, wrong-scope denial, and no public bucket access. |
 
 ## Admissions — owning service: **admissions** (one source of truth: application state and submitted versions)
 
@@ -112,4 +153,52 @@ notifications, enrollment conversion.
 
 | Operation | Actor / scope | Input → Output | Validation | State transition | Idempotency key / expected version | Audit event | Outbox event | Recovery |
 |---|---|---|---|---|---|---|---|---|
-| Invite user | `system_administrator` (staff) or HR approver where configured | `{ person, roleGrant, scope, reason }` + `CommandMeta` → `ServiceResult<{ account, grant }>` | Role valid; scope within the inviter's scope; no duplicate pending/active grant for the same account + role | None → account `invited` + grant `requested`/`granted` (one transaction with audit) | Key `invite:{email}:{role}` — duplicate pending/active invite → `duplicate` | `user.invited` (grant, reason, scope) | `user.invited` (invitation email/SMS delivery via outbox) | Retry returns the same account/grant; invitation delivery failure never creates a second invite; revocation is a separate append-only grant state |
+| Invite staff user | `system_administrator` only; support officers may issue guardian/applicant recovery invitations but not staff grants | `{ person, roleGrant, scope, reason }` + `CommandMeta` → `ServiceResult<{ account, grant }>` | Role valid; scope within the inviter's scope; no duplicate pending/active grant for the same account + role | None → account `invited` + grant `requested`/`granted` (one transaction with audit) | Key `invite:{email}:{role}` — duplicate pending/active invite → `duplicate` | `user.invited` (grant, reason, scope) | `user.invited` (invitation email/SMS delivery via outbox) | Retry returns the same account/grant; invitation delivery failure never creates a second invite; revocation is a separate append-only grant state |
+
+## Local operation groups — verified locally; C5 staging evidence remains
+
+The following local operations now have Supabase domain/adapter branches,
+mapper/denial/retry tests, and scratch migration/RPC evidence. They remain
+unverified against real staging sessions until C5.7.
+
+- **Admissions → finance → enrollment:** draft save/resume, submit/status,
+  requested changes, officer review, approver decision, offer response, invoice
+  and payment-attempt reads/writes, readiness, and idempotent conversion.
+- **Results:** batch/roster reads, teacher marks, submission, moderation,
+  publication, withdrawal/correction, immutable versions, and per-student portal
+  snapshots.
+- **Timetable:** draft/save, conflict validation, publish, effective versions,
+  overrides, date sheets, and assignment-scoped teacher/portal reads.
+- **Careers:** cross-device drafts, applicant withdrawal, owned history,
+  reviewer assignments, scorecards, interviews, and decision projections.
+- **Content/notices:** create/edit/review/schedule/unpublish, audience projection,
+  public reads, and notification projection.
+- **Support:** requester create/read/reopen, staff assignment, public replies,
+  private notes, and SLA/status projections.
+- **Settings, audit, and notifications:** effective versioned settings reads and
+  writes, PostgreSQL audit reads, per-account notification projection/read state,
+  and outbox delivery/retry status.
+- **Documents/PDF:** scan adapter states (`pending_scan`, `ready`, `quarantined`,
+  `failed`), upload finalisation, generated-PDF upload-before-ready, retention,
+  signed delivery, and duplicate generation protection. Metadata mapping is
+  local; real Storage/scanner/PDF evidence is required in C5.4.
+
+## Staging facade acceptance criteria
+
+For each operation group, the implementation slice is not complete until:
+
+1. Server Components use an authenticated server loader or server adapter
+   boundary, and Client Components use the same-origin `/api/adapter` gateway.
+2. Demo and Supabase contract tests agree on success, validation, denial,
+   stale-version, idempotent retry, and recoverable failure envelopes.
+3. The write returns authoritative server state, records audit/outbox effects,
+   and refreshes every affected portal/staff projection.
+4. Revoked grants/links remove already-loaded protected data on the next render;
+   no operational `sessionStorage` or silent demo fallback remains in Supabase
+   mode.
+5. The corresponding real-session browser journey passes in C5 before the
+   global staging adapter switch is accepted.
+
+Storage/Resend provider configuration, remote migration-ledger verification,
+advisors, restore rehearsal, and Vercel preparation are C5 gates and require
+their own environment evidence.

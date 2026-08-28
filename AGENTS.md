@@ -8,10 +8,11 @@ Before making any project change, read:
 
 1. `PROJECT-BLUEPRINT.md` — canonical product scope, architecture, workflows, data model, permissions, quality gates, and delivery order.
 2. `PROJECT-STATUS.md` — current implementation state, completed work, active phase, blockers, and unresolved decisions.
-3. `FEATURE-INTEGRATION-SPEC.md` — canonical detailed relationships, role/scope rules, active student context, cross-module synchronization, feature contracts, and required integration tests.
-4. `UI-COMPLETION-PLAN.md` — current frontend integration sequence, route-level acceptance criteria, and backend handoff gate.
-5. `design/UX-BLUEPRINT.md` — visual direction, component map, and user-experience rules for relevant UI work.
-6. `design/RESEARCH-NOTES.md` — regulatory and implementation research when working on payments, privacy, disclosure, accessibility, authentication, or uploads.
+3. `plan.md` — active C0–C5 Supabase cutover order, entry conditions, exit criteria, and staging gate.
+4. `FEATURE-INTEGRATION-SPEC.md` — canonical detailed relationships, role/scope rules, active student context, cross-module synchronization, feature contracts, and required integration tests.
+5. `UI-COMPLETION-PLAN.md` — completed frontend integration reference and route-level acceptance evidence.
+6. `design/UX-BLUEPRINT.md` — visual direction, component map, and user-experience rules for relevant UI work.
+7. `design/RESEARCH-NOTES.md` — regulatory and implementation research when working on payments, privacy, disclosure, accessibility, authentication, or uploads.
 
 Do not begin implementation from a user prompt alone. Reconcile the request with these files first.
 
@@ -23,9 +24,10 @@ When instructions disagree, use this order:
 2. `PROJECT-BLUEPRINT.md`.
 3. `FEATURE-INTEGRATION-SPEC.md` for detailed feature, relationship, context, and synchronization behavior.
 4. `PROJECT-STATUS.md` for facts about what is currently implemented.
-5. `UI-COMPLETION-PLAN.md` for the active frontend sequence and acceptance criteria.
-6. `design/UX-BLUEPRINT.md` for visual and interaction decisions.
-7. Existing code and tests.
+5. `plan.md` for active backend execution order and cutover gates.
+6. `UI-COMPLETION-PLAN.md` for completed frontend evidence.
+7. `design/UX-BLUEPRINT.md` for visual and interaction decisions.
+8. Existing code and tests.
 
 If code disagrees with the blueprint, do not silently copy the inconsistency. Report it and either align the code or update the blueprint when the user has changed the intended behavior.
 
@@ -42,6 +44,40 @@ If code disagrees with the blueprint, do not silently copy the inconsistency. Re
 - Financial entries, submitted applications, published results, and audit events are append-only or versioned. Never silently overwrite their history.
 - Do not add Redis, GraphQL, Kafka, a second backend, a mobile app, an LMS, transport tracking, attendance, payroll, or chat unless the blueprint is explicitly expanded.
 - Do not expose student results, documents, application data, or fee records through public search or predictable identifiers.
+
+## Active phase — C5 staging and provider activation
+
+The frontend handoff and the local C0–C4/provider-ready implementation through
+migration `000030` are complete. The active work is the external C5 gate in
+`plan.md`; do not add features or redesign the UI while staging evidence is
+being established.
+
+Before editing:
+
+1. Inspect `git status` and preserve unrelated dirty-worktree changes.
+2. Re-read the staging migration ledger before applying any migration `000016–000030`.
+3. Review and commit the dirty working set in coherent migration, facade, provider, UI, and documentation units.
+4. Preserve the demo adapter for design/tests, but prohibit demo-record fallback when Supabase mode is active.
+5. Configure one staging provider boundary at a time and run its fake contract plus real staging journey before marking it verified.
+6. Run advisors, generated-type diff, real-session authorization, backup/restore, browser, accessibility, and health gates in staging.
+7. Update `PROJECT-STATUS.md` only after current-environment evidence passes; local evidence never proves staging or release.
+8. Do not create production or deploy Vercel until staging is verified.
+9. Keep provider configuration and deployment changes reviewable; never combine unrelated existing changes.
+
+Execute C5 strictly in the `plan.md` order: C5.0 source checkpoint → C5.1
+ledger reconciliation → C5.2 staging migrations/types/advisors → C5.3 Auth →
+C5.4 Storage/PDF → C5.5 Resend/outbox/cron → C5.6 finance sandbox → C5.7
+global staging acceptance → C5.8 restore rehearsal → C5.9 Vercel preview →
+C5.10 production. If a stage fails, stop at that stage and record the evidence;
+later-stage success cannot compensate for an earlier failed gate.
+
+### Supabase completion rules
+
+- Server Components use direct server loaders or the request-aware server adapter boundary.
+- Client Components use the same-origin `/api/adapter` gateway.
+- Protected records never use an unauthenticated relative server fetch.
+- Supabase mode never reads operational `sessionStorage` or silently falls back to fixtures.
+- A facade is complete only when its demo and Supabase contract tests agree and its affected projections are verified.
 
 ## UI guardrails
 

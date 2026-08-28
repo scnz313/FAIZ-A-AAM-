@@ -1,8 +1,8 @@
 # Faiz Aam School Platform — Canonical Project Blueprint
 
-Version: 1.2  
-Date: 5 August 2026  
-Status: Approved product baseline; frontend integration and school-specific decisions remain in progress.
+Version: 1.3
+Date: 24 August 2026
+Status: Approved product baseline; local implementation is provider-ready, while staging verification and school-specific decisions remain in progress.
 
 This is the canonical product and engineering contract for the Faiz Aam School website and portal. It defines what must be built, how each feature behaves, how modules integrate, and what “done” means. Future AI agents and developers must read this file before changing the project.
 
@@ -10,8 +10,9 @@ Supporting documents:
 
 - `AGENTS.md` — mandatory AI/developer instructions.
 - `PROJECT-STATUS.md` — what is actually implemented and verified now.
+- `plan.md` — active C0–C5 Supabase cutover order, gates, and provider handoff sequence.
 - `FEATURE-INTEGRATION-SPEC.md` — detailed user relationships, shared contexts, feature connections, synchronization, and integration tests.
-- `UI-COMPLETION-PLAN.md` — active frontend integration order and backend handoff gate.
+- `UI-COMPLETION-PLAN.md` — completed frontend reference and route-level acceptance evidence.
 - `design/UX-BLUEPRINT.md` — UI direction and component mapping.
 - `design/RESEARCH-NOTES.md` — research and primary implementation sources.
 
@@ -1536,9 +1537,12 @@ Secrets are environment-managed and rotated after exposure. `.env.example` conta
 
 ## 15. Implementation roadmap
 
-The phases prioritize working user journeys over route count. Finish the current frontend phase before choosing or connecting backend providers.
+The product phases prioritize working user journeys over route count. The UI
+phase below is retained as a completed product reference; active execution is
+the C0–C5 Supabase cutover in `plan.md`. This blueprint remains normative for
+scope and architecture, not a progress log.
 
-### Phase UI — frontend integration and contract freeze (current)
+### Phase UI — frontend integration and contract freeze (completed reference)
 
 - Preserve the validated editorial UI, completed self-contained demo journeys, typed domain-service work, test suite, and quality gates.
 - Add shared typed person, student, guardian, staff, enrollment, role/assignment, and portal-context contracts.
@@ -1558,6 +1562,15 @@ The phases prioritize working user journeys over route count. Finish the current
 - Typecheck, warning-free production build, lint, unit/component tests, critical browser E2E tests, route crawl, accessibility checks, and responsive checks pass.
 - `PROJECT-STATUS.md` records exact evidence and remaining frontend-integration and backend limitations.
 - School owners approve the reduced launch scope and the configuration decisions required for Phase 0.
+
+### Execution pointer
+
+Read `plan.md` for the only active C0–C5 execution sequence. Do not add UI
+features or apply local-only migrations merely because this historical roadmap
+still contains backend phase headings below.
+
+The Phase 0–6 descriptions that follow are retained as historical architecture
+and product scope; their status and order are not authoritative.
 
 ### Phase 0 — decisions and project foundation
 

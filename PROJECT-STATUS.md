@@ -1,45 +1,60 @@
 # Project Status — Faiz Aam School Platform
 
-Last updated: 6 August 2026  
-Current phase: backend development (plan.md B1–B6 database layer complete; app integration next)  
-Release state: not deployed; no backend or production authorization exists
+Last updated: 28 August 2026
+Current phase: C5 staging/provider activation gate; local implementation through Slice 6 is verified
+Release state: not deployed; staging backend exists historically, production authorization/deployment does not
 
 ## Current state
 
-The repository contains a broad, polished frontend prototype for the public site, applicant journeys, family portal, and staff workspaces. The retained self-contained demo journeys are functional and the current frontend quality gates pass. Execution follows `plan.md` (pointer index in this repo): privacy controls, canonical role/scope authorization, workflow integrity, cross-module event propagation, contract freeze, and the full handoff gate — all before backend selection. Phases 0–5 are implemented; the Phase 6 verification gate ran against the current checkout with fresh build and the evidence below.
+The repository contains the completed frontend reference, the committed remote Supabase foundation through migration `000015`, and a local-only provider-ready working set through migration `000030`. The demo adapter remains the default runtime. C0/C1, the C2 application cutover, and the local implementations for Storage/PDF, Resend/outbox, cron, health, and Vercel readiness are verified locally with fakes and scratch PostgreSQL. No remote Supabase, Storage, Resend, payment, or Vercel action was performed. Staging and production are not verified.
 
-## Rollback baseline (no Git)
+| Area | Demo UI | Database/RPC | Application cutover | Live verification |
+|---|---|---|---|---|
+| Identity, invitations, contexts | `VERIFIED` | `VERIFIED` locally through `000026` | `VERIFIED` locally | `NOT STARTED` for current staging credentials |
+| Admissions, careers, enrollment, uploads | `VERIFIED` | `VERIFIED` locally through `000027` | `VERIFIED` locally; provider calls use fakes | `NOT STARTED` |
+| Results and timetable | `VERIFIED` | `VERIFIED` locally through `000028` | `VERIFIED` locally, including report releases | `NOT STARTED` |
+| Finance, content, support, settings, users, audit, notifications | `VERIFIED` | `VERIFIED` locally through `000029` | `VERIFIED` locally | `NOT STARTED` |
+| Storage, PDF, Resend, outbox, cron, health | Demo/fake contracts `VERIFIED` | `VERIFIED` locally through `000030` | Provider-ready; credentials/configuration `BLOCKED` | `NOT STARTED` |
+| Vercel and production | N/A | N/A | Readiness config only | `NOT STARTED` |
+
+## Source-control and rollback baseline
 
 - Archive: `/Users/fin./Desktop/FASS-archive/fass-pre-change-20260806-142412.tar.gz` (source tree; `node_modules`, `.next`, and `package-lock.json` excluded).
 - SHA-256: `3a1a97b064851c53242bce3fe0cd85315190dcfbc3b20934243849ee2631e0d4` (manifest: `fass-pre-change-20260806-142412.sha256` in the same directory).
-- The archive is never edited; it is the rollback baseline for the current change cycle.
+- Git is now the review/rollback baseline. `origin/master` currently ends at `86676dc`; the working tree contains the local C0–C5 implementation and must be reviewed before commit.
+- The archive is never edited; it remains an additional pre-Git rollback baseline.
 
-The system is not yet an integrated school platform. The portal now runs on a shared relationship/context spine with student-scoped services (finance, results, timetable, documents, notices, notifications), admission-fee payment is part of the finance ledger, admissions converts to a permanent student/enrollment/guardian link idempotently, and staff role/assignment enforcement is canonical at the UI/service layer with maker/checker splits. Staff authentication, protected documents, database persistence, provider integrations, and server authorization are `NOT STARTED`.
+The system is not yet a released school platform. Local code now covers all retained workflows and provider boundaries without Supabase-mode fixture fallback. Real Storage scanning, live Resend delivery/webhooks, a payment-gateway decision, staging sessions/advisors/restore proof, Vercel preview, and production deployment remain external gates.
 
-The authoritative target for those connections is `FEATURE-INTEGRATION-SPEC.md`. The ordered frontend work is in `UI-COMPLETION-PLAN.md`.
+The authoritative product and relationship target is `FEATURE-INTEGRATION-SPEC.md`. The frontend is an archived reference in `UI-COMPLETION-PLAN.md`; the only active execution order is `plan.md` C0–C5.
 
-## Backend foundation (plan.md B0)
+## Backend foundation and current cutover
 
-The frontend handoff gate passed (22/22 journeys) and `plan.md` is now the Supabase Backend Blueprint (phases B0–B8). B0 completed in this environment:
+The frontend handoff gate passed. `plan.md` is the active C0–C5 Supabase cutover plan; the B0–B8 sections retained there and below are historical architecture. The local foundation includes:
 
 - **Version-controlled source established**: `git init` + baseline commit `4edf099` (the pre-change tarball archive remains the untouched rollback baseline).
 - **Secrets hygiene**: `.env.example` corrected to names and placeholders only; real Supabase keys that had been copied into it were removed. Those exposed keys MUST be rotated (plan.md §3).
 - **Pinning**: Node 22 (engines + `.nvmrc`), Supabase CLI `2.111.0` as a root devDependency (up from global 2.58.5), `@supabase/ssr@0.12.4`, `@supabase/supabase-js@2.112.2`.
 - **Supabase workspace**: `supabase/config.toml` (Realtime and Edge Functions disabled per the v1 locks), foundation migration `000001_foundation.sql` (conventions, `app.new_ref` reference generation, `app.touch_updated_at`, append-only blocker, optimistic-version pattern documented; tables: `audit_events`, `outbox_events`, `idempotency_records`, `webhook_receipts`, `resend_webhook_events`, `rate_limit_buckets`, `job_runs`, `role_definitions`; RLS enabled with deny-by-default; SECURITY DEFINER helpers `record_audit`, `enqueue_outbox`, `claim_outbox` (SKIP LOCKED), `mark_outbox_delivered`, `fail_outbox` with exponential backoff), deterministic `seed.sql` (17 canonical role codes), pgTAP `tests/database/foundation.test.sql` (22 assertions).
 - **Application interface**: `lib/supabase/env.ts` (adapter + env validation), `client.ts` (browser), `server.ts` (SSR, Next 15 cookie convention), `admin.ts` (secret-key, RLS-bypass restricted), `database.types.ts` placeholder for generated types; `db:reset` / `db:test` / `db:types` npm scripts.
-- Gates re-run after the scaffolding: typecheck, lint, 216 web + 47 contract tests, 62-page build — all passed.
+- The original foundation gates are retained as historical evidence; current gate counts are recorded only in the validation table below.
 
-**B0 exit not yet proven**: the schema cannot yet reset locally because there is no Docker on this machine and no `fass-staging` project exists. Remaining B0 items — staging project creation, local/remote reset + type generation, security/performance advisors — are `BLOCKED` on environment/credentials (see below).
+**C0–C4 local implementation exit is verified**: migrations `000001–000030` apply from zero. The RLS/RPC suites, Slice 4 results/timetable release suite, Slice 5 operational suite, and Slice 6 provider-job suite pass. The latest application gate is 394 web tests, 47 contract tests, typecheck, zero-warning lint, a green protected-path cutover guard, and a 76-route production build. Remote migration/advisor/provider verification remains intentionally deferred.
 
-## Backend development — B1–B6 database layer (identity through content/documents)
+## Historical backend foundation evidence (B1–B6 architecture slices)
 
-B1 data layer completed and validated locally (see below) plus the **auth foundation**: session-refresh `middleware.ts` (demo-mode pass-through), `/auth/callback` code exchange with safe same-origin redirect, server actor resolver `lib/auth/actor.ts` (fresh `getUser()` + `user_accounts` + active `role_grants` + `access_revalidation` security version — `user_metadata` never authorization), and an adapter-aware sign-in card running the real email-OTP flow behind `FASS_DATA_ADAPTER=supabase` (demo flow untouched; 22/22 journeys still pass).
+B1–B6 database and auth work below is retained as historical implementation evidence. Current readiness is governed by the matrix and C2 sequence above; historical live-project claims are not current live verification.
 
-Next B1 steps: Resend SMTP configuration on the project (blocked on a valid PAT or a dashboard step), staff invite + TOTP, and replacing the demo staff/family context with server-resolved contexts.
+The C2.1–C2.4 local slices are complete: identity/configuration/context reads,
+server-seeded family/staff providers, request-persisted context selection, staff
+invitation acceptance UI/lifecycle, admissions→finance→enrollment,
+results/timetable, careers/content/support/settings/audit/notifications/document
+facades, adapter mismatch checks, and local route-denial/context contracts pass.
+The next gate is C5 staging-only global adapter and provider verification.
 
-### B2–B6 database layer (live on the project)
+### Committed remote foundation versus local-only migrations
 
-Migrations `000004_b2_admissions_careers.sql` … `000008_b6_content_documents.sql` authored, reviewed, and pushed to `jxegiamjcawdywqyutdz` (all 8 migrations live):
+Migrations `000001–000015` are committed and were historically pushed to the linked `FAIZ E AAM` project `jxegiamjcawdywqyutdz`. Migrations `000016–000030` are currently local-only and must be applied to the dedicated staging project only after the migration ledger is re-read and the local gates remain green.
 
 - **B2 admissions/careers**: windows, applications, immutable versions, drafts, reviews, assessments, offers, events; vacancies, immutable terms, applications, review assignments, scorecards, interviews, events. Public read = published vacancies only. Role-scoped writes (admissions officer/approver, HR reviewer/approver) via new `app.has_any_role` helper.
 - **B3 enrollment**: enrollments (partial unique: one active per student/year), idempotent conversion records, restricted support records.
@@ -49,34 +64,101 @@ Migrations `000004_b2_admissions_careers.sql` … `000008_b6_content_documents.s
 
 RLS hardening found and fixed during review: anon notice policy leaked `notice_audiences` (fixed with the helper), teacher policies did not enforce aal2 (fixed), pure teachers could read the full staff queue (fixed with `is_pure_teacher`), and timetable/content/support writes were not role-scoped (fixed with `has_any_role`).
 
-**Local validation without Docker**: `scripts/validate-db-local.sh` now rebuilds the full schema on a scratch PostgreSQL 17 instance (GUC-based `auth.uid()`/`auth.jwt()` stubs), applies seed, and runs a positive/negative RLS suite (`scripts/validate-rls.sql`) with fictional actors — guardian two-child scope, invoice/document/notice scoping, link revocation ending access immediately, teacher aal1 denial + aal2 exact-scope acceptance, anon denial — all passing.
+**Local validation**: `scripts/validate-db-local.sh` rebuilds the full schema on a scratch PostgreSQL 17 instance (GUC-based `auth.uid()`/`auth.jwt()` stubs), applies seed, and runs the positive/negative RLS, transactional RPC, results/timetable release, operational, and provider-job suites with fictional actors. It passes through migration `000030`.
 
 **pgTAP suites** added for every slice (run via `supabase db test` in CI): foundation 22, school-config 16, identity-access 31, admissions-careers 79, students-enrollment 21, finance 54, results-timetable 59, content-documents 64 assertions.
 
-**Seed**: `supabase/seed.sql` extended with B2–B6 configuration (admission windows, draft fee schedule + items, draft grade bands, planned exam definitions + components, draft 8-A timetable, published/scheduled notices); `scripts/seed-remote.mjs` mirrors it (admin client, ignore-duplicates) — applied and verified on the live project. Types regenerated from the live project into `lib/supabase/database.types.ts` (4638 lines).
+**Seed and generated types (historical):** `supabase/seed.sql` and
+`scripts/seed-remote.mjs` contain the B2–B6 synthetic configuration. Prior
+remote application and type generation are historical; regenerate types only
+after the staging migration ledger is re-read and reviewed.
 
-### App-layer integration (outbox worker + email + server domain services)
+### Historical app-layer integration (outbox worker + email + server domain services)
 
-The Supabase runtime wiring now exists and is proven against the LIVE project by `scripts/integration-staging.mjs`:
+The following records what was implemented and historically exercised against a
+linked project. Because live health and the migration ledger are not currently
+re-verified, these entries do not make staging or production `VERIFIED`:
 
-- **Outbox worker** (`lib/supabase/outbox-worker.ts` + `app/api/outbox/route.ts`): claims bounded batches via `app.claim_outbox` (SKIP LOCKED), dispatches `email.deliver` (recipients resolved FROM the record — never caller payloads; `notification_deliveries` unique constraint; `email_suppressions` hash check before sending) and `pdf.generate` (job state; PDF adapter is the future provider boundary). Transient failures return to pending with exponential backoff; permanent failures mark delivered and record the error for ops — domain state never rolls back because delivery failed. Endpoint is `CRON_SECRET`-protected with a health probe.
+- **Outbox worker** (`lib/supabase/outbox-worker.ts` + `app/api/outbox/route.ts`): claims bounded batches via `app.claim_outbox` (SKIP LOCKED), resolves recipients from authoritative records, sends through injected provider contracts, and processes PDF/Storage jobs. Transient failures return to pending with exponential backoff; permanent failures remain visibly failed and cannot be marked delivered. Vercel Cron uses the `CRON_SECRET`-protected GET route.
 - **Resend adapter + templates** (`lib/email/`): fetch-based REST adapter (no SDK), idempotency keys derived from delivery records, editorial shell matching the visual system, one template per plan §9 event kind (no marks/balances in subjects or bodies).
-- **Verified webhook** (`app/api/email/webhook/route.ts`): HMAC-SHA256 signature check (Svix format), `svix-id` dedup via `resend_webhook_events`, bounce/complaint → `email_suppressions` (hashed), delivery status projection.
+- **Verified webhook** (`app/api/email/webhook/route.ts`): official Svix `Webhook.verify` over the raw body, retryable `svix-id` receipts, monotonic delivery projection, and hashed bounce/complaint suppression.
 - **Server domain layer** (`lib/supabase/domain.ts` + `rpc.ts`): every operation returns the `ServiceResult` envelope with canonical error codes; commands call the transactional `app` RPCs through a typed schema-scoped wrapper; reads are RLS-filtered. Ops: admissions (draft/submit/queue/review/decide/respond), finance (invoices/receipts/payment), enrollment conversion, results/timetable publish + lists, family/staff context resolution.
 - **Adapter endpoint** (`app/api/adapter/route.ts`): session-protected operation dispatch with zod validation; client gateway `modules/services/adapter-client.ts` behind `FASS_DATA_ADAPTER=supabase` (demo remains the isolated fallback).
-- **Project config**: `supabase/config.toml` now exposes the private `app` schema to PostgREST (`[api] schemas = ["public", "app"]`) and enables TOTP MFA (`[auth.mfa.totp]`) — both pushed to the live project.
+- **Project config**: `supabase/config.toml` exposes the private `app` schema to PostgREST (`[api] schemas = ["public", "app"]`) and enables TOTP MFA (`[auth.mfa.totp]`); historical push status is not a current staging verification.
 
-**Live integration suite** (`scripts/integration-staging.mjs`, fictional run-scoped data): creates real auth users; guardian runs draft → submit (idempotent retry) under real RLS; staff elevates password session to **aal2 via real TOTP** (RFC 6238 code) and an aal1 session is denied; full review → offer → accept → unique invoice → sandbox payment (retries never duplicate) → idempotent conversion (link + invoice adoption) → result publication (frozen roster, per-student snapshots) → timetable publication; denial cases (unlinked guardian, guardian publish attempt); outbox contract (34 claimed email events, one delivery record each, transient failure backoff). **INTEGRATION SUITE PASSED** on the live project.
+**Historical integration evidence** (`scripts/integration-staging.mjs`, fictional run-scoped data): the prior run exercised real sessions, RLS, AAL2, admissions/finance/enrollment, results/timetable, denial cases, and outbox retries. It must be rerun after the remote ledger and provider configuration are verified; it is not current live evidence.
 
-Remaining: wiring the client pages to the adapter (B7 cutover switches `FASS_DATA_ADAPTER=supabase` globally), the staff invite flow behind TOTP, PDF/scan adapters, and the staging webhook/email sender domain configuration.
+Historical remainder at the C2.4 checkpoint (now superseded by the current
+matrix): global staging verification, provider configuration, the payment-gateway
+decision, and production acceptance were still pending.
 
-### Remaining matrix commands live (000015)
+## Historical execution notes
 
-`links_approve`/`links_reject` (support staff + aal2, version-checked, revalidation bump, audit + outbox), `support_respond` (requester-safe thread; private notes staff-only, never rendered to the requester), `content_publish_notice` (publisher release of draft/scheduled notices), `jobs_submit` (idempotent append-only) and `jobs_decide` (HR shortlist/interview/offer/not_selected with self-decision denial), `results_submit_marks` (teacher exact year/class/subject assignment scope, per-component maxima validation, full-roster coverage, batch → submitted + immutable version row), `results_moderate` (exam reviewer approve/return), `results_withdraw` (publisher, reason required, append-only) and `results_correction_request`. All pushed to the live project; the local RPC suite now covers every new command's happy path plus denials (teacher link approval, requester private notes, aal1, HR self-decision) — all three local suites pass, 4827-line types regenerated, gates green, 22/22 journeys, live integration suite still passing.
+The dated entries below preserve implementation history. They are not current
+status evidence; use the status, validation table, feature matrix, and active
+cutover list above for the next task.
 
-### B2–B6 transactional RPC layer (live on the project)
+### UI design quality pass (21 August 2026 session)
 
-Migration `000009_domain_rpcs.sql` implements the plan.md §8 transaction contract as SECURITY DEFINER commands (all `search_path = ''`, every call verifies `auth.uid()` + role + aal2, every command appends audit + outbox rows in its own transaction):
+All four surfaces audited and fixed against `design/UX-BLUEPRINT.md` (public, family portal, staff workspace, applicant journeys). Highlights:
+
+- **Public**: notices failure state + retry added; `/notices/[slug]` loading skeleton; disabled anchor navigation blocked; category filters announce active state (`aria-current`); grievance consent error association fixed.
+- **Portal**: wrong-child "latest result" hard-code removed (derives from the active child's snapshot); numeric table columns right-aligned end-to-end; honest Due/Clear badge; two-step sign-out confirmation; empty states for documents/fees/notices; loaders replaced with editorial skeletons; tab touch targets raised to 44px.
+- **Staff**: careers queue gained status filter tabs with live counts; dashboard counts made honest; required-reason controls now enforce minimum length inline (`role="alert"`, `aria-required`) across admissions/careers/results/link-requests/timetable/facility; numerics right-aligned in 11 tables; marks-entry busy buttons name their operation.
+- **Applicant**: autosave indicator truthful ("Saving failed — retry" path); error-summary entries are labeled "Review this answer" anchors with `aria-label` carrying the message (fixes duplicate-text test failure); job-form rail announces `aria-current="step"`; offer acceptance names exact amount + deadline pre-commit; auth error param renders expired-link recovery; OTP resend cooldown with live-region announcements.
+
+**Loop-test evidence (fresh production build, this session):** typecheck ✓ · lint 0 issues ✓ · 256 web + 47 contract tests ✓ · build 66 pages ✓ · **22/22 critical browser journeys PASS** · responsive sweep 168 viewport×route pairs at phone-s→desktop-xl NO PROBLEMS ✓ · accessibility scan 53 routes 0 violations ✓ · focus/keyboard smoke PASS ✓ · link crawl 65 routes / 91 hrefs, zero dead links ✓.
+
+Finance integration note: `mapServerInvoice`/`invoiceSummary` hardened per new spec tests (34 mapper tests) — receipt references pair by original allocation slot, settled invoices never show residual balance, `paidPaise` counts allocation-backed payments only.
+
+### B7 cutover progress (21 August 2026 session)
+
+
+Work completed and gate-verified on this checkout (typecheck, lint, 222 web + 47 contract tests, 66-page build all pass):
+
+- **Server command layer complete**: every existing DB RPC now has a typed domain wrapper and a zod-validated `/api/adapter` dispatch entry — `jobs.submit`, `jobs.decide`, `links.approve`, `links.reject`, `support.respond`, `content.publishNotice`, `results.submitMarks`, `results.moderate`, `results.withdraw`, `results.correctionRequest`, `finance.issueAdmissionInvoice` join the previous 18 ops (29 total). Authorization remains entirely inside the SECURITY DEFINER RPCs.
+- **Finance ledger reads enriched**: `finance.listInvoices` now embeds `ledger_entries`, `payment_allocations→payments`, and receipts; `finance.listReceipts` embeds payment method/amount and invoice identity — enough for the client to compute portal/staff parity views from the append-only ledger.
+- **PDF generation adapter implemented** (`lib/pdf/render.ts`, `lib/pdf/adapter.ts`): dependency-free valid-PDF writer (Helvetica, deterministic output), receipt template (`receipt-v1`) with INR grouping and IST timestamps, report-card template ready; outbox worker now renders `pdf.generate` receipt events FROM stored records, records a private `documents` row with reserved `object_key` plus append-only processing events, and returns delivered/transient/permanent outcomes. Migration `000016_generated_documents.sql` makes `uploaded_by_account_id` nullable for server-generated documents (NOT yet pushed; regenerate types after apply). Six new renderer tests pass.
+- **First client cutover wired**: `financeService` read paths (`listInvoices`, `listAllInvoices`, `getInvoice`, `listReceipts`, `getReceipt`) route through `adapterCall` when `FASS_DATA_ADAPTER=supabase`, mapping server rows into the unchanged domain shapes via `finance-server-map.ts`. Demo mode is byte-identical; no dual-write. Write paths (attempt lifecycle, `confirmSuccess`) still need server order-create/refresh ops before they can leave the demo path.
+- **UI fix**: the application form's destructive "Start over" replaced `window.confirm()` with an accessible inline confirmation panel (safe default focused, Escape cancels).
+
+Remaining for B7 (honest gaps): client wiring for admissions/careers/results/timetable/family-context/staff-context/content/support facades; server ops for payment-attempt create/refresh and single-invoice/receipt detail; school-config label→UUID resolution for draft creation; staff invite + TOTP enrollment flow; removal of operational sessionStorage once facades cut over.
+
+### Staff identity lifecycle (21 August 2026 session, later)
+
+The staff chain invite → account → role grant (+scopes) → assignment is now complete server-side:
+
+- **Migration `000017_staff_identity_commands.sql`** (authored, NOT yet pushed — execute via `supabase db push` or manually): six SECURITY DEFINER commands in exact house style — `roles_grant` (system_administrator+aal2, duplicate-active-grant guard, scope rows validated against FKs, audit + `security.role_granted` outbox), `roles_revoke` (version-checked, revalidation trigger ends access next request), `assignments_create` (grant must belong to the staff member's account; grade section must belong to the academic year; duplicate-scope guard), `assignments_end`, `invites_create` (stores only sha256 of a 192-bit one-time reference; plaintext returned once to the inviting admin), `invites_revoke`. Reads stay RLS-based (`users.list`) — no read RPCs.
+- **Domain + dispatch**: typed wrappers (`rolesGrant/Revoke`, `assignmentsCreate/End`, `invitesCreate/Revoke`, `usersListAdmin`) and eight zod-validated adapter ops (`users.*`, `assignments.*`, `invites.*`). Typecheck/lint green.
+- **TOTP gate live**: new `/sign-in/totp` route (public-frame layout) + `TotpForm` — first visit enrolls a factor (QR or manual key), later visits challenge+verify, then opens `/staff`. In supabase mode `SignInForm` routes accounts that hold a staff context to `/sign-in/totp` after OTP verification; everyone else lands in the portal. Demo mode untouched.
+- **Tests**: 5 new spec tests (directory mapping, RLS-denial envelope, invite RPC contract). Full gates: **261 web + 47 contract tests**, build 66 pages, **22/22 journeys** on a fresh prod build.
+
+Remaining (honest): migration 000017 not applied to any database (no Docker/live project this session); users page UI still drives demo stores in supabase mode until wired to `users.list`/grant ops; staff invite delivery (email with the one-time ref) awaits Resend sender domain.
+
+### Payment lifecycle + users admin live wiring (21 August 2026 session, final)
+
+- **Migration `000019_finance_attempt_lifecycle.sql`** (authored, unapplied): `finance_create_attempt` (owner-guarded — applicant owner / active guardian / finance staff aal2; amount must equal current balance; sandbox order ref) and `finance_refresh_attempt` (created → processing → succeeded, idempotent terminal reads). The ledger post remains `finance_post_sandbox_payment` — the browser never marks an invoice paid.
+- **Facade cutover complete for the payment journey**: `createPaymentAttempt`/`refreshAttempt`/`confirmSuccess` now drive the real server machine in supabase mode (`finance.createAttempt` → `finance.refreshAttempt` → `finance.postPayment`, receipt resolved from the server list). Demo path byte-identical; 22/22 journeys still pass.
+- **Users admin fully wired** (this session): directory read, invite (one-time ref via `invites.create`), grant/revoke with optimistic versions, suspension as audited multi-revoke; reactivation honestly requires a fresh grant decision.
+- Gates: typecheck ✓ lint ✓ 276 web + 47 contract tests ✓ build ✓ 22/22 journeys ✓.
+
+### Careers facade cutover (21 August 2026 session, continued)
+
+- **New domain reads/draft creation**: `jobsListPublishedVacancies` (public read = published only, latest version resolved), `jobsCreateDraftApplication` (owner RLS insert), `jobsListMine` / `jobsListStaffQueue` (versions + applicant-safe events). Four new dispatch ops: `jobs.vacancies`, `jobs.createDraft`, `jobs.listMine`, `jobs.staffQueue`.
+- **Facade wired** (supabase mode): submit runs the live pipeline (vacancy resolve → draft row → `jobs_submit` immutable version); `getApplication`/`listStaffRecords` map server rows into the unchanged domain shapes; all four HR decisions route through the version-free `jobs_decide` RPC via a ref→id map. Demo path guarded and byte-identical.
+- Gates: typecheck ✓ lint ✓ 276 web + 47 contract ✓ build ✓ 22/22 journeys ✓.
+
+### Historical remaining command set (000015)
+
+
+
+
+
+`links_approve`/`links_reject` (support staff + aal2, version-checked, revalidation bump, audit + outbox), `support_respond` (requester-safe thread; private notes staff-only, never rendered to the requester), `content_publish_notice` (publisher release of draft/scheduled notices), `jobs_submit` (idempotent append-only) and `jobs_decide` (HR shortlist/interview/offer/not_selected with self-decision denial), `results_submit_marks` (teacher exact year/class/subject assignment scope, per-component maxima validation, full-roster coverage, batch → submitted + immutable version row), `results_moderate` (exam reviewer approve/return), `results_withdraw` (publisher, reason required, append-only) and `results_correction_request`. This is the historical command surface; local coverage is current where recorded in the validation table, while remote application and live integration must be reverified.
+
+### Historical B2–B6 transactional RPC layer
+
+Migration `000009_domain_rpcs.sql` implements the historical plan.md transaction contract as SECURITY DEFINER commands (all `search_path = ''`, every call verifies `auth.uid()` + role + aal2, every command appends audit + outbox rows in its own transaction). Treat remote push status as historical until the staging ledger is re-read:
 
 - `admissions_submit` — append-only version submit, optimistic base-version lock, idempotent retry returns the SAME version id.
 - `admissions_review_advance` / `admissions_request_changes` — officer maker steps.
@@ -90,77 +172,111 @@ Migration `000009_domain_rpcs.sql` implements the plan.md §8 transaction contra
 
 `invoices.student_id` was relaxed to NULL for pre-conversion admission invoices (forward-only `alter table`), and the guardian finance/result RLS policies were fixed (forward-only `000010_rls_fixes.sql`): applicant-owned admission invoices/items/receipts are visible to their owner, and the two guardian result policies no longer recurse (`app.active_publication_ids` helper).
 
-The full local chain is proven by `scripts/validate-rpcs.sql` (runs inside `validate-db-local.sh` after the RLS suite): applicant submit → officer advance → approver offer → accept + unique invoice → sandbox payment with idempotent retries → conversion (retry-safe) → result publication → timetable publication, plus denial cases and outbox/audit evidence. All three suites pass on the scratch instance, and both new migrations are pushed to `jxegiamjcawdywqyutdz`.
+The full local chain is proven by `scripts/validate-rpcs.sql` (runs inside
+`validate-db-local.sh` after the RLS suite): applicant submit → officer advance
+→ approver offer → accept + unique invoice → sandbox payment with idempotent
+retries → conversion (retry-safe) → result publication → timetable publication,
+plus denial cases and outbox/audit evidence. All three suites pass on the
+scratch instance. Any remote push status in the historical record must be
+rechecked against the staging migration ledger before it is relied upon.
 
-## Blocking environment inputs for B1
+## Current blockers
 
-1. Create the `fass-staging` Supabase project in `ap-south-1` (Mumbai) and provide new-format publishable + secret keys (store locally in `.env.local`; never in `.env.example`).
-2. Rotate the Supabase keys that were previously copied into `.env.example` (plan.md §3).
-3. Docker Desktop (or an alternative local stack) to run `supabase db reset` / `db test` / `db:types` locally, OR link the staging project and run migrations against it.
-4. Local Node 22 (nvm/volta or `brew install node@22`) to match the pinned runtime; the machine currently runs Node 24.
-5. Resend API key + sender domain (staging testing subdomain) — required from B1 (Auth email) onward.
-6. Known transitive npm audit findings (postcss/sharp via Next 15) have no non-breaking fix; revisit when Next 15.x or the dependency chain provides a patched release.
+1. The linked FASS Supabase project has not been re-verified in this implementation run; read its migration ledger before applying local-only migrations `000016–000030`.
+2. The machine runs Node 24 while the project pins Node 22; use Node 22 in CI and staging verification.
+3. Resend SMTP, verified sender domain, webhook secret, and cron secret are not configured for staging.
+4. A payment gateway/merchant account and school finance policy are still unapproved.
+5. Supabase-generated types must be regenerated after the local-only migrations are applied to staging.
+6. Known transitive npm audit findings (postcss/sharp via Next 15) remain to be revisited when a compatible patched release is available.
+7. A real document-scanner service and retention/legal-hold policy are not configured for staging.
+8. Anonymous public support must remain fail-closed until a real CAPTCHA provider is selected and verified.
+9. Vercel team/project ownership, preview environment, domain, and release owner are not yet recorded.
+
+## Next phase — C5 staging activation
+
+The next action is **C5.0 source-control review**, followed by the staging
+migration ledger. Do not begin with provider configuration or Vercel.
+
+| Stage | State | Required next evidence |
+|---|---|---|
+| C5.0 — source checkpoint | `IN PROGRESS` | Review/group the dirty tree, secret/lockfile scan, local gates, and commit IDs for the staging candidate |
+| C5.1 — staging ownership and ledger | `NOT STARTED` | Confirm synthetic staging project/owner/region and compare local/remote migration history |
+| C5.2 — migrations, types, advisors | `NOT STARTED` | Dry-run and apply `000016–000030`, re-read ledger, generated-type diff, RLS/RPC/provider suites, advisor disposition |
+| C5.3 — Auth/session proof | `NOT STARTED` | Applicant/guardian/staff invitation, OTP, TOTP, recovery, revocation, and wrong-scope real-session evidence |
+| C5.4 — Storage/PDF | `BLOCKED` on provider configuration | Private buckets/policies, scanner, upload/finalisation/quarantine, signed delivery, receipt/report-card generation |
+| C5.5 — Resend/outbox/cron | `BLOCKED` on provider configuration | Sender domain, Auth SMTP, API/webhook/cron secrets, delivery/retry/suppression and worker freshness |
+| C5.6 — finance sandbox | `NOT STARTED` in staging | DB sandbox payment, adjustments/refunds/reconciliation; real gateway remains separately blocked |
+| C5.7 — global staging switch | `NOT STARTED` | Both adapter variables set together and all positive/negative vertical journeys pass |
+| C5.8 — restore rehearsal | `NOT STARTED` | Isolated database/Storage restore record with RPO/RTO and integrity checks |
+| C5.9 — Vercel preview | `NOT STARTED` | Preview built from reviewed commit against staging and full post-deploy verification |
+| C5.10 — production | `NOT STARTED` | Separate production project/build, approved school data/providers, release and rollback evidence |
+
+Detailed commands, stop conditions, ownership expectations, and exit criteria
+are defined only in `plan.md` C5.0–C5.10.
 
 ## Current validation evidence
 
-Evidence was rerun against the current checkout and a fresh production build on `http://localhost:3000` on 6 August 2026 (plan.md Phase 6 gate).
+Evidence was rerun against the current checkout on 24 August 2026. Database
+validation used the local scratch PostgreSQL validator. No remote
+Supabase/provider call was used.
 
 | Gate | Status | Evidence |
 |---|---|---|
-| TypeScript | `VERIFIED` | `npm run typecheck` passed for `@fass/web` and `@fass/contracts` |
-| Lint | `VERIFIED` | `npm run lint` passed without warnings/errors |
-| Unit/component tests | `VERIFIED` | `npm test`: 29 web test files, 216 tests passed; `packages/contracts`: 1 file, 47 tests passed (core contract types) |
-| Production build | `VERIFIED` | `npm run build`: Next.js 15.5.22 compiled successfully and generated 62 pages |
-| Route/link crawl | `VERIFIED` | 65 route cases, 91 unique internal hrefs, no dead links or route failures |
+| TypeScript | `VERIFIED` | `npm run typecheck` runs `next typegen` first and passes both workspaces |
+| Lint | `VERIFIED` | `npm run lint` passes with `--max-warnings=0` |
+| Unit/component tests | `VERIFIED` | `npm test`: 394 web tests; contracts: 47 tests |
+| Production build | `VERIFIED` | Next.js 15.5.22 compiled and generated 76 routes, including health, MFA, provider, document, webhook, and cron boundaries |
+| Local migrations/RLS/RPC | `VERIFIED` | Scratch validator applies `000001–000030` from zero; RLS/RPC, result-release/timetable, operational, and provider-job suites pass |
+| Route/link crawl | `VERIFIED` | 66 route cases, 91 unique internal hrefs, no dead links or route failures |
 | Critical browser journeys | `VERIFIED` | 22/22: job application, student application, grievance, payment, guardian sign-in, staff admission decision (maker/checker across identities), two-child portal switching, staff link-request approval, admission → fee → enrollment, staff role denial + identity switching, teacher assignment scope, content editor publish denial, teacher subject denial, timetable read-only for non-managers, wrong-child resource scope + child switch, link approval then revocation, results maker/checker split, duplicate-safe payment retry, correction versioning, teacher entry → moderator return → approve → publish → portal publication, timetable manager publish → portal v2, family payment → staff ledger parity |
-| Accessibility scan | `VERIFIED` | 53 retained routes scanned with no automated axe violations |
+| Accessibility scan | `VERIFIED` | 54 retained routes scanned with no automated axe violations |
 | Focus/keyboard smoke | `VERIFIED` | mobile drawer, skip link, document dialog, and fee-statement focus behaviors passed |
-| Responsive sweep | `VERIFIED` | 168 viewport/route pairs at 320–1920 px, no reported overflow or console problems |
-| In-app browser review | `VERIFIED` | Fresh build: canonical Phase-1 grants across four demo identities (Sana Wani / Firdous Ahmad / Aisha Lone / Rania Mir); one link-request store (guardian requests + graph links + active-link revocation); results batch subject column with class+subject teacher scope, queue-level return-with-reason for moderators, and versioned withdrawal; timetable class selector (8-A / 9-C empty state) for managers only; wrong-child panels on invoice/receipt pages with child switch; staff finance workspace re-reads the same ledger on the client so browser-session payments appear to the office; append-only audit + demo outbox; cleaner token-based visual system rendered across public/portal/staff |
+| Responsive sweep | `VERIFIED` | 176 viewport/route pairs at 320–1920 px, no reported overflow or console problems |
+| Supabase cutover guard | `VERIFIED` | `npm run check:cutover` passes; protected route/components have no raw browser persistence and every session-store use proves an adapter branch |
+| Local production browser review | `VERIFIED` | 22/22 critical journeys pass on local port 3002, including admissions→enrollment, result/timetable chains, role denial, stale/retry, and payment parity |
+| Supabase live health/migration ledger | `BLOCKED` | Current environment returns DNS/connection failure; no local-only migration is claimed live |
 
 Limitations of this evidence:
 
 - Browser journey tests prove deterministic demo behavior, not server authorization or permanent persistence.
 - Automated accessibility results do not replace manual screen-reader, zoom, contrast, language, and content review.
-- The current directory is not a Git worktree, so no commit, branch, or diff evidence is available.
+- The working tree is intentionally dirty during this implementation; review and commit the C0–C5 changes before applying them to staging.
 
 ## Feature and integration matrix
 
-| Area | Status | Proven now | Required next |
-|---|---|---|---|
-| Editorial design system and shared shells | `VERIFIED` | Public/portal/staff layouts, responsive drawers, focus behavior, fictional-data labels | Preserve; add service-driven identity/context |
-| Public pages | `VERIFIED` | Core pages/routes render and links pass | Verified school content, persistent CMS boundary, approvals |
-| Student admission UI | `VERIFIED` | 8-step validation/draft/submit/status/change edit/offer-response and staff decisions in demo | Applicant ownership, versions/documents, finance handoff, conversion |
-| Careers UI | `VERIFIED` | Vacancy draft/submit/status/withdraw and staff decisions in demo | Applicant auth, private uploads, assignment/scorecard/onboarding boundary |
-| Family payment UI/service | `IN PROGRESS` | Student-scoped ledgers: portal fees/receipts/overview read `financeService` for the active child; staff finance pages read the same service across both students with parity (totals agree); attempts/retry/receipt flows unchanged | Concessions/refund/reconciliation policy rules and gateway adapters remain backend work |
-| Results UI/service | `IN PROGRESS` | Staff workflow and publication list/versioning work; portal marks come from a per-student published snapshot returned by `academicsService`; batches carry a subject and teacher entry scope matches class AND subject; versioned `withdrawPublication` removes the live portal entry while the published record stays on file; publish/withdraw emit one outbox event + audit row each | Enrollment-derived rosters and moderation/correction authority remain backend work |
-| Timetable UI/service | `IN PROGRESS` | One `timetableService` facade (periods, edits, conflicts, versions, history) serves portal and staff; class derives from the active enrollment; known classes 8-A/9-C with a manager-only selector and an honest empty state for 9-C; all workspace state keyed by class; non-managers read-only | Per-teacher assignment scope and exam date-sheet process remain |
-| Support UI/service | `IN PROGRESS` | Submission, staff response, reopen, requester-safe thread | Ownership/auth, private notes, assignment/SLA, notification |
-| Identity demo states | `IN PROGRESS` | Guardian sign-in/verify/recovery/session and pending link request; sessions now carry stable account/person/guardian IDs, expired sessions are signed out, and sign-out clears identity plus relationship context | Real route protection, staff MFA, role workspace, invitations/revocation |
-| Guardian/student linking | `IN PROGRESS` | One link-request store: guardian requests raised through “Link another child” appear on `/staff/link-requests` (LR refs) alongside school-created pending graph links; approval creates the active link exactly once (idempotent, unresolvable refs stay honest); rejection is terminal with a visible reason; active links can be revoked and access ends immediately; every decision records one audit row + outbox event | Real verification evidence, invitations, and server revocation remain backend work |
-| Shared family portal context | `IN PROGRESS` | I0/I1 spine verified: one family-context provider drives the shell and every child-scoped page; two-child selector, active-child persistence, denial of unlinked children, and context strip work in browser | Server reauthorization is backend work |
-| Student/enrollment records | `IN PROGRESS` | `enrollmentConversionService` creates/matches the permanent student, enrollment, and guardian link idempotently from an accepted, fee-paid application; converted children appear in the guardian portal context; adoption moves the paid admission invoice into the new student's ledger | Server persistence, capacity/final-approval policy flags, and real grade-section placement remain backend work |
-| Admission fee to enrollment | `IN PROGRESS` | Accepting an offer issues one admission invoice through `financeService`; the shared PayFlow posts the fee exactly once; readiness (offered + accepted + fee paid + documents + capacity + approval) gates conversion; retries never duplicate | Real gateway adapters, waiver/refund rules, and invitation delivery remain backend work |
-| Staff role and assignment scope | `IN PROGRESS` | Canonical Phase-1 grant model with maker/checker splits (content editor/publisher, admissions officer/approver with self-approval rejection, finance officer/approver, HR reviewer/approver, teacher enter / exam reviewer approve / result publisher release, timetable manager, support officer + `links.verify`, auditor, system administrator); four demo identities (Sana / Firdous / Aisha / Rania Mir); route guards, action gating, teacher class+subject scope, and service outcomes agree; privacy controls applied (sitemap/robots/noindex) | Server-side enforcement is backend work |
-| Notices/content persistence | `IN PROGRESS` | One `contentService` owns notice status/audience/version; public, portal, and staff publisher read the same record (audience-filtered); draft/expired/scheduled states present | Persistent CMS boundary, approvals, scheduling, propagation (I5) |
-| Documents/PDF | `IN PROGRESS` | `documentsService` returns per-student report-card/receipt/ref metadata for the active child; accessible preview/missing/denied states retained | Private storage contract, auth delivery, scan/generation/retention |
-| Notifications | `IN PROGRESS` | `notificationsService` with per-account lists and read state, deterministic demo-clock timestamps | Outbox-driven per-account audience and delivery state |
-| Users/settings/audit | `IN PROGRESS` | Typed demo adapters: `usersService` (accounts/role grants), `settingsService` (policy-pending flags, working days/periods), `auditService` (seeded trail + append-only `record` with deterministic ids/timestamps) drive the staff pages; consequential actions (link decisions, conversions, publications, withdrawals, payment posts) record audit rows and enqueue idempotent demo outbox events | Authoritative typed services, persistence, reasons, effective versions |
-| Backend/database/auth/providers | `NOT STARTED` | None | Begin only after frontend handoff gate and school decisions |
-| Production deployment | `NOT STARTED` | None | Named environment, deployment evidence, post-deploy checks |
-| Campus environment demonstrator | `VERIFIED` | Isolated fictional frontend demonstrator | Deferred; exclude from core launch and do not build backend |
+| Area | Demo UI | Database/RPC | Application cutover | Live verification |
+|---|---|---|---|---|
+| Public website and visual system | `VERIFIED` | Public content schema exists | Public careers/notice reads and content projections have local Supabase branches; staging not rechecked | Demo browser gates pass; staging content not rechecked |
+| Student admissions | `VERIFIED` | Admissions RPCs/schema + `000022` draft/readiness projection | `VERIFIED locally` — owned server drafts, submit/status/decisions/offer response and authoritative mapping; staging not cut over | Local contracts/RPCs only |
+| Enrollment conversion | `VERIFIED` | Idempotent create-or-match conversion/readiness RPCs in `000022` | `VERIFIED locally` — invoice/payment/readiness/conversion/link projection | Local contracts/RPCs only |
+| Careers | `VERIFIED` | Careers schema/RPCs + `000024` drafts/withdrawal/HR commands | `VERIFIED locally` — vacancy, cross-device draft, submit/status, withdrawal, version-safe HR decision branches | Local contracts/RPCs only |
+| Family finance/payment | `VERIFIED` | Provider-neutral attempts, ledger, adjustments, refunds, reconciliation `VERIFIED` locally | `VERIFIED` locally with DB sandbox | Real gateway not selected |
+| Results | `VERIFIED` | Results RPCs/schema + `000023` draft/correction workflow | `VERIFIED locally` — batch/detail/version/publication/snapshot mapper and command branches | Local contracts/RPCs only |
+| Timetable | `VERIFIED` | Timetable RPCs/schema + `000023` revision/conflict/override/date-sheet commands | `VERIFIED locally` — async effective/draft/publish facade and loaders | Local contracts/RPCs only |
+| Guardian/student linking | `VERIFIED` | Versioned link/capability lifecycle `VERIFIED` locally | `VERIFIED` locally | Real-session proof pending |
+| Family context | `VERIFIED` | Relationship/capability RLS `VERIFIED` locally | Server hydration and persisted selection `VERIFIED` locally | Staging pending |
+| Staff context/roles | `VERIFIED` | Grants/assignments/AAL2 `VERIFIED` locally | Server hydration and workspace selection `VERIFIED` locally | Staging pending |
+| Users administration | `VERIFIED` | Invitation/account/grant/MFA lifecycle `VERIFIED` locally | `VERIFIED` locally | Auth email/provider evidence pending |
+| Identity/authentication | `VERIFIED` demo and local route guards | Auth/account/link schema and RLS `VERIFIED` locally | Provider-ready and fail-closed | Live session/AAL/TOTP proof pending |
+| Documents/PDF | `VERIFIED` | Upload, scan, generation, retention jobs `VERIFIED` locally | Provider-ready with private signed delivery | Storage/scanner staging pending |
+| Notices/content | `VERIFIED` | Content/notices schema + `000024` immutable draft/review/publish commands | `VERIFIED locally` — public/family/staff projections and fail-closed writes | Local contracts/RPCs only |
+| Notifications/outbox | `VERIFIED` | Retry-safe outbox/delivery/webhook/job schema `VERIFIED` locally | Official Svix + Resend/provider-ready | Resend not configured |
+| Support | `VERIFIED` | Support RPC/schema + `000024` requester/private/public-intake commands | `VERIFIED locally` — requester-safe/staff projections, public route, reopen/assign branches | Local contracts/RPCs only |
+| Settings/audit | `VERIFIED` | Versioned settings/audit schema + `000024` commands | `VERIFIED locally` — optimistic settings save and read-only PostgreSQL audit projection | Local contracts/RPCs only |
+| Backend foundation | `VERIFIED` locally | Migrations `000001–000030` pass all scratch suites | Local cutover guard passes | `000001–000015` historical only; `000016–000030` local-only |
+| Production/Vercel | `NOT STARTED` | No production schema | No deployment | No release evidence |
+| Facility demonstrator | `VERIFIED` demo-only | No database/RPC by design | Isolated | Deferred |
 
 ## Highest-priority audit findings
 
-1. The next feature is not another screen. It is the shared person/account/guardian/student/staff/enrollment/context contract.
-2. The linked-child selector is now the integration spine: a shared family-context provider drives the shell and every child-scoped page, with two linked children switching together and denial of unlinked references.
-3. Fixed `demoStudent` and direct mutable fixture imports must not become backend contracts; the remaining fixture reads are concept content (policies/careers/admissions copy) and the isolated environment demonstrator.
-4. Admission-fee payment now uses the finance ledger: the accepted offer issues one admission invoice, the shared checkout posts exactly once, and conversion adopts the paid invoice into the new student's ledger. Real gateway adapters remain backend work.
-5. Enrollment conversion now atomically produces the permanent student, enrollment, and guardian link exactly once — a retry returns the same references and never duplicates; an application for an already-enrolled child matches the existing records instead of creating a duplicate.
-6. Results must publish and display a per-student immutable snapshot, not pair publication metadata with separate term fixtures — the portal now renders the per-student snapshot; roster generation and corrections remain backend/I4.
-7. Timetable has one service used by staff and portal; scope now derives from enrollment, and teacher/assignment scope remains I4.
-8. Staff roles are additive; assignments and active workspace limit scope. I4 now proves navigation, route guards, action controls, and service outcomes agree for each retained demo role; UI visibility is still not authorization and the backend adapter remains the final authority.
-9. Cross-module synchronization is proven by the two-child browser journey and denial tests; I2 parameterizes finance, results, timetable, documents, notices, and notifications by student/enrollment context with parity tests for shared records.
+1. The next work is environment verification, not another feature or screen.
+2. C2–C4/provider readiness is locally verified. Do not call staging or global cutover verified until real sessions and providers run every retained workflow.
+3. The demo adapter remains the default. Supabase branches fail closed; staging must switch both adapter variables together only after its migration ledger is reconciled.
+4. The server adapter boundary is split by runtime: Server Components use direct server loaders/request-aware calls; Client Components use `/api/adapter`. A relative unauthenticated server fetch is a release blocker.
+5. Migrations `000016–000030` pass locally but remain unverified remotely. The next environment action is migration-ledger verification, not a blind push.
+6. Storage, scanning, PDF, retention, Resend, webhook, cron, and health code is provider-ready locally; real credentials and staging evidence remain blocked.
+7. Resend SMTP, sender-domain, webhook, cron, bounce, complaint, and suppression evidence is still blocked on provider configuration.
+8. The frontend and local cutover gates are green; this does not make the Supabase adapter globally, staging, or production `VERIFIED`.
 
 ## Scope decision
 
@@ -183,7 +299,21 @@ These decisions are `BLOCKED` on school/provider confirmation, not on engineerin
 
 The UI must keep unconfirmed values fictional/demo or policy-pending.
 
-## Active implementation order
+## Active phase summary (not an execution order)
+
+Read `plan.md` for the sole C0–C5 execution sequence. This status summary
+records state only:
+
+| Phase | State | Current boundary |
+|---|---|---|
+| C0 | `VERIFIED` locally | Browser dependencies, deterministic typegen, lint, demo/browser/accessibility/focus/responsive/link gates, and scratch DB validation pass. |
+| C1 | `VERIFIED` locally | Role-boundary hardening, invitation lifecycle, atomic suspension/reactivation, and private bucket/policy migration pass locally. |
+| C2 | `VERIFIED` locally | Every retained facade has a fail-closed Supabase branch/loader and the cutover guard passes; staging sessions remain unverified. |
+| C3 | `VERIFIED` locally | Storage finalisation/scanning, signed delivery, PDF generation, and retention pass fake/provider-job contracts. |
+| C4 | `BLOCKED` on provider configuration | Code and official Svix verification are locally verified; real Resend SMTP/API/domain/webhook/cron evidence remains. |
+| C5 | `BLOCKED` on live environment verification | Remote ledger, generated types, advisors, real sessions/providers, restore rehearsal, Vercel preview, and production remain. |
+
+### Historical frontend phases
 
 1. `I0` — **implemented and verified**: shared people, relationships, roles/assignments, enrollments, and context contracts; family/staff context services; service-driven shells; context survives navigation within the demo session.
 2. `I1` — **spine implemented and verified**: two-child portal switching, per-page child context, pending-link approval/rejection path.
@@ -191,11 +321,118 @@ The UI must keep unconfirmed values fictional/demo or policy-pending.
 4. `I3` — **implemented and verified**: admission offer → finance payment → enrollment/link conversion (invoice-once, shared checkout, readiness gates, idempotent create-or-match conversion, ledger adoption, applicant acknowledgement).
 5. `I4` — **spine implemented and verified, then rebaselined to the canonical Phase-1 grant model**: role/action authorization module, role-aware navigation, route guards with workspace-switch denial, demo identity picker, teacher assignment-scoped marks entry, action gating; the `plan.md` Phase-1 grant table (maker/checker splits, `links.verify` scope, Rania Mir approver identity) is the authoritative action model.
 6. `I5` — **in progress**: deterministic demo domain events + append-only audit + demo outbox now emit one idempotent event per consequential action (payment post, conversion, publish, withdraw, content publish, link decision); in-app notification projection from outbox events and PDF generation remain backend work.
-7. `I6` — **frontend contract freeze applied**: `packages/contracts` core domain/context/error/outbox/audit types (47 tests), `design/BACKEND-HANDOFF-MATRIX.md`, applicant draft privacy policy, and the full Phase-6 gate evidence; the backend handoff gate itself remains blocked on the school decisions in `FEATURE-INTEGRATION-SPEC.md` §11.
+7. `I6` — **frontend contract freeze applied (historical)**: `packages/contracts` core domain/context/error/outbox/audit types, `design/BACKEND-HANDOFF-MATRIX.md`, applicant draft privacy policy, and the archived frontend gate evidence; the active backend cutover is governed by `plan.md` C2, not this historical handoff gate.
 
-Do not begin broad backend work before the `UI-COMPLETION-PLAN.md` handoff gate passes.
+The frontend and local backend/provider gates have passed. Do not claim staging verification or production release until the C5 environment gates pass.
 
 ## Change log
+
+Every entry below is historical context only. It cannot override the current
+matrix, validation table, blockers, or C0–C5 execution order above.
+
+- **2026-08-28 (feature-by-feature local verification — every workflow tested in demo mode):** Systematically exercised EVERY feature area in the browser against the local demo runtime (no database or email service — everything is the deterministic demo adapter) and fixed every defect found. 16 feature areas, ~90 browser checks, plus the existing 22 critical journeys:
+
+  **Feature areas verified (all PASS in demo mode):** 1) Public site — 19 routes render with key content, no console errors; 2) Identity — sign-in→verify→complete, recovery issues reset refs for known AND unknown identifiers (no existence leak), wrong-password error, invite/register/totp/session-expired/access-denied routes; 3) Linking — link-child request with reference, two-child switcher, child switch changes overview, staff reject with reason; 4) Admissions applicant — autosave indicator, draft resumes after leaving, resume panel on the landing page, full 8-step submit → APP- reference + timeline, step-1 validation; 5) Staff admissions — request-changes with reason → applicant sees it → edit restores submitted data → re-upload documents → resubmit → offer decline → 9 queue filter tabs; 6+7) Careers — vacancy detail + apply CTA, job draft autosave/resume, submit → JOB- reference, applicant withdrawal with confirmation, 8 queue tabs, HR decision (offer/not-selected) with note + confirm; 8+9) Finance — portal ledger + filter tabs + invoice detail line items + receipt view, staff workspace/invoices/payments/reconciliation render + reconciliation run; 10+11) Results + timetable — portal results list, publication detail with subjects/grades, results queue status tabs, timetable override record→portal applies→revoke restores, date-sheet publish → portal "v1 · published" badge; 12-14) Content — notice draft created (editor workspace), published after switching to the Content publisher workspace (maker/checker), public + portal notice boards, documents library + preview dialog, portal grievance → GRV- ref, staff respond + resolve + reopen; 15-16) Admin + facility — users directory + invite with one-time reference, settings save persists, audit explorer + filters, facility overview/alerts ack/devices/history/reports/zones/wallboard.
+
+  **Bugs found and fixed:**
+
+  1. **`/sign-in/totp` threw a Supabase environment error in demo mode** — `TotpForm` unconditionally called `createSupabaseBrowserClient()`, producing a pageerror and a fatal "Sign-in state could not be read" state even though the docs say "demo-mode sign-ins never route here". Fixed: the page passes `adapter={dataAdapter()}`; in demo mode the form renders an honest "Demo sign-in — pick a demo identity instead" state with a link back to sign-in, and never touches the Supabase client. All auth routes now load with zero console errors in demo mode.
+  2. **Portal results never showed the published snapshot** — the results pages passed the student's public reference (`STU-2026-0901`) to `getStudentResultSnapshot`, but the demo fixture is keyed by the internal student id (UUID), so EVERY child saw "No released snapshot for this child" even though the fixtures exist. Fixed: the demo path resolves the public reference to the internal id through the relationship graph (`demoStudents`), so the same student always resolves to its published snapshot. 2 new regression tests; the publication detail now renders subjects, obtained marks, grades, and remarks.
+
+  **Gates:** typecheck ✓ · lint 0 issues ✓ · 394 web + 47 contract tests ✓ · 76-route build ✓ · cutover guard ✓ · 22/22 critical journeys ✓ · 16/16 feature areas (≈90 checks) ✓.
+
+- **2026-08-28 (docs-vs-code gap audit — timetable overrides + date-sheet publish):** Read PROJECT-BLUEPRINT.md, FEATURE-INTEGRATION-SPEC.md, plan.md, UI-COMPLETION-PLAN.md, PROJECT-STATUS.md, README.md, and AGENTS.md, then compared every documented feature contract against the actual code. All previously claimed gates verified true (392 tests now passing, 76-route build, all facades wired, cutover guard green). Two genuine lags found and closed:
+
+  **Timetable overrides (blueprint §5.9, spec §6.10, plan.md C2.3):** The server RPC (`timetable_save_override`) and adapter op (`timetable.saveOverride`) existed, but the demo timetable service — the DEFAULT runtime — had no override model, the staff UI had no override panel, and the portal never displayed overrides. Implemented end-to-end: `TimetableOverride` model in `modules/services/timetable.ts` (`saveTimetableOverride` with kind-specific validation + deterministic refs + audit recording, `listTimetableOverrides` active-first, `revokeTimetableOverride` append-only revocation, `effectivePeriodsForDate` that applies substitute/room/cancellation/special overrides on their date only — the base timetable is never mutated); staff `TimetableManager` gained an "Overrides" panel (add form with day/period/kind/substitute-teacher/room/reason, active list, revoke) gated by `timetable.manage`; portal `TimetableWorkspace` now applies active overrides on the day/week views with a "Date override" badge and an override-count notice, and derives the exam date range from the date-sheet fixture instead of hardcoded "1–9 September".
+
+  **Exam date-sheet publish was fake:** the staff publish button only flipped local React state. `publishDateSheet`/`getDateSheetState` are now session-backed, versioned service writes (audited), and the portal shows a "v{n} · published" badge for the published state.
+
+  **Tests + verification:** 9 new tests in `timetable-facade.test.ts` (demo-week date mapping, deterministic refs, apply-on-date-only, active-first ordering, kind-specific validation rejections, cancellation/room overrides without base mutation, revoke restores base + rejects unknown/double revoke, date-sheet versioning). New `scripts/timetable-override-check.cjs` browser journey: staff records → portal shows substitute on Tuesday only → staff revokes → portal restores base → exam range derived — 7/7 PASS.
+
+  **Gates:** typecheck ✓ · lint 0 issues ✓ · 392 web + 47 contract tests ✓ · 76-route build ✓ · cutover guard ✓ · 22/22 critical journeys ✓ · 7/7 override browser checks ✓.
+
+- **2026-08-23 (C2.2–C2.4 local cutover):** Added `000022_c2_admissions_enrollment_facade.sql`, `000023_c2_results_timetable_facade.sql`, and `000024_c2_operational_facades.sql`; wired local Supabase branches for admissions/finance/enrollment, results/timetable, careers, content, support, settings, audit, notifications, and document metadata; added public support intake, server loaders, async timetable reads, mapper/denial/retry contracts, and the protected-path cutover guard. Local evidence: 350 web tests + 47 contract tests, zero-warning lint, 70-page build, scratch migrations/RLS/RPC from zero, 22/22 critical journeys, 54-route accessibility, focus smoke, 176 responsive pairs, 66-route/287-href crawl. No remote Supabase/provider action occurred; C2.5 staging proof remains pending.
+
+- **2026-08-23 (C2.1 local implementation slice; superseded by the C2.2–C2.4 slice below):** Added strict server/public adapter matching; request-scoped family-child and staff-workspace selection persisted with secure cookies; server-seeded family/staff context loaders and provider hydration; typed local school-configuration reads; pending staff invitation acceptance UI/lifecycle; and Supabase-mode context/denial tests. The subsequent local C2.2–C2.4 gate is the current evidence above.
+
+- **2026-08-22 (C0–C3 implementation slice):** Pinned Playwright `1.62.1` and axe-core `4.13.0`; added deterministic `next typegen` and zero-warning lint; corrected the teacher-finance RLS expectation; added `000020_role_boundary_hardening.sql` (system-administrator functional-role denial, staff invitation role/scope acceptance, atomic account suspension/reactivation) and `000021_private_storage_buckets.sql`; added verified-claims/AAL route guards for portal, applicant, and staff layouts; added Supabase family/staff context reads, finance/careers server loaders, adapter parity configuration, private document signed delivery/upload intent, generated-PDF Storage upload, Resend timestamp/replay/error hardening, and correlation/no-store headers. Local gates: 329 web + 47 contract tests, typecheck, lint, 68-page build, scratch migrations/RLS/RPC, 22/22 browser journeys, 53-route accessibility, focus smoke, 168 responsive pairs, and 65-route crawl — all pass. Staging migration ledger, Supabase-mode all-facade journeys, Resend configuration, Storage scan/finalisation, and production remain pending.
+
+- **2026-08-22 (Loop 6 — AGENTS.md compliance audit):** A final compliance audit against the AGENTS.md guardrails found and fixed one HIGH-severity issue:
+
+  **Facility authorization gap (HIGH — FIXED):** The `/staff/facility` routes were explicitly excluded from `StaffRouteGuard`, bypassing authorization entirely. The alerts page had write actions (acknowledge/resolve) with no role gate. Fixed by: (1) adding `facility.view` and `facility.manage` actions to `staff-authorization.ts`; (2) granting `facility.view` to `support_officer` and `system_administrator`, and `facility.manage` to `system_administrator`; (3) removing the facility exclusion from `StaffRouteGuard` and adding facility routes to the `ROUTE_ACTIONS` mapping; (4) gating the acknowledge/resolve buttons in `AlertsWorkspace` with `canRole(..., "facility.manage")`.
+
+  **Audit findings documented as known limitations:**
+  - Predictable demo refs (PUB-2026-001, INV-2026-0101, APP-2026-0417): These are human-readable demo fixture identifiers. Access control is enforced through authorization checks (family context, staff role gates), not security-through-obscurity. The backend must generate non-sequential identifiers.
+  - Presentation mappings in components (STATUS_TONE, FILTERS): These are UI presentation concerns (which color/tone to show for a status badge, which filter options to offer), not business rules. Actual state transitions, validation, and authorization ARE enforced in service modules.
+  - TOTP secret display in enrollment: Standard TOTP enrollment flow — the user must receive the secret to set up their authenticator. Not stored persistently in client storage.
+
+  **Gates:** typecheck ✓ · lint 0 errors (1 pre-existing warning) ✓ · 329 web + 47 contract tests ✓ · 67-page build ✓.
+
+- **2026-08-22 (Loop 5 — publishNotice guard, session/timetable tests):** Two parallel subagents filled the last remaining test coverage gaps, and a publishNotice guard was added:
+
+  **publishNotice guard:** Added a guard rejecting re-publishing an already-published notice with the same note (forces a different note to republish, preserving the append-only version trail).
+
+  **Session service tests (7 new):** Created `session-service.test.ts` covering sessionGet/sessionSet round-trip, null for unset keys, overwrite behavior, complex object handling, sessionRemove clearing, sessionRemove on non-existent keys, and sessionKey namespace prefix.
+
+  **Timetable service tests (6 new):** Added to `timetable-facade.test.ts` covering saveTimetableDraft + getTimetableDraft persistence, clearTimetableDraft, deriveEditedKeys (empty set for unchanged, keys for changed cells), detectConflicts (empty array for no conflicts, teacher conflict detection across peer classes).
+
+  **Gates:** typecheck ✓ · lint 0 errors (1 pre-existing warning) ✓ · 329 web + 47 contract tests ✓ · 67-page build ✓.
+
+- **2026-08-22 (Loop 4 — comprehensive error handling and test coverage):** Three parallel subagents completed the remaining error-handling and test-coverage work identified in Loop 3's audit:
+
+  **Error handling (15 files):** Added `.catch()` handlers to every remaining unhandled promise chain across staff and portal components: ResultsBatches, AdmissionsQueue, TimetableManager, MarksEntry (3 sites), OverviewFinanceBand (2 sites), portal results page (2 sites), portal results detail (2 sites), FeeLedger, ReceiptView (2 sites), InvoiceDetail, GrievanceInbox, NotificationBell (2 sites), TimetableWorkspace, staff results detail, and FinanceWorkspace. All handlers use the existing cancellation flags to avoid setting state after unmount, with safe fallback values (empty arrays, null, or `setLoading(false)` to prevent stuck loading states).
+
+  **Content service tests (9 new):** Added tests for `publishNotice` (draft→published, version increment, unknown slug rejection), `unpublishNotice` (published→draft, draft rejection), `listForAudience` (public vs family filtering), and `getNotice` (found and not-found). Flagged a discrepancy: `publishNotice` does not guard against re-publishing an already-published notice (it bumps the version instead) — may need a guard to match the `editNotice` pattern.
+
+  **Identity service tests (9 new):** Added tests for `signIn` validation (empty phone, empty password, short password, wrong credentials, successful sign-in), `verifyCode` validation (empty code, wrong code), `startRecovery` (returns recovery reference), and `requestLink` (returns link reference).
+
+  **Gates:** typecheck ✓ · lint 0 issues ✓ · 316 web + 47 contract tests ✓ · 67-page build ✓.
+
+- **2026-08-22 (Loop 2+3 — deeper audit: empty states, audit recording, role gates, error handling, test coverage):** Continued self-prompting audit loops beyond the initial role-by-role pass. Four parallel subagents audited hardcoded values, missing role gates, error handling patterns, and test coverage gaps across the entire codebase. Findings and fixes:
+
+  **Empty states (Loop 2):** The invoices, payments, and reconciliation pages rendered empty tables with headers but no "no data" message when the register was empty. Added conditional empty-state messages to all three pages.
+
+  **Audit recording (Loop 2):** `contentService.editNotice` and `contentService.unpublishNotice` were not recording audit events — now both record "Notice published" with a descriptive reason. All four careers staff decisions (`staffShortlist`, `staffRequestInterview`, `staffOffer`, `staffNotSelected`) were not recording audit events — now all record "Application reviewed" with the decision reason. 1 new test verifying audit recording for careers staff decisions.
+
+  **Missing role gates (Loop 3):** Four staff pages had write actions accessible without `canRole` checks: (1) Content page review button — now gated by `content.publish`; (2) Settings page save and reset buttons — now gated by `settings.manage`; (3) Users page invite/manage/grant/revoke/suspend/reactivate — now gated by `users.manage`, with the "Manage" button becoming "View" for unauthorized roles; (4) Link requests page approve/reject/revoke — now gated by `links.verify`, with read-only fallback for unauthorized roles.
+
+  **Hardcoded values (Loop 3):** StaffHomeWorkspace had hardcoded "2 drafts · 1 scheduled" notice counts — replaced with the actual fixture count. TimetableManager had a hardcoded "Class 8-A and peer fixture (Class 9-B)" conflict intro — replaced with the dynamic `selectedClass` value.
+
+  **Error handling (Loop 3):** Five critical service-call sites had no `.catch()` handlers, risking unhandled promise rejections: content page, users page, settings page, link-requests page, and StaffHomeWorkspace. All now have `.catch()` handlers that set safe fallback state.
+
+  **Test coverage (Loop 3):** Three previously untested services now have dedicated test files: `audit-service.test.ts` (7 tests covering listEvents ordering, record append-only contract, deterministic id/timestamp, session persistence, non-idempotency), `settings-service.test.ts` (6 tests covering default view, session persistence, audit recording, policy-pending preservation), `outbox-service.test.ts` (9 tests covering idempotent enqueue, insertion-order listing, pending filter, delivered transition, unknown-id rejection). Total: 22 new tests.
+
+  **Gates:** typecheck ✓ · lint 0 issues ✓ · 298 web + 47 contract tests ✓ · 67-page build ✓.
+
+- **2026-08-22 (full-role page-by-page audit — all staff roles + portal + applicants):** Continued the systematic audit across every role's pages. The System Administrator improvements (see entry below) were followed by per-role audits of Content, Admissions, Finance, Teacher/Exam Reviewer/Result Publisher, Timetable Manager, HR/Careers, Support, Auditor, Guardian/Student portal, and Applicant journeys. Findings and fixes:
+
+  **Content Editor/Publisher (`/staff/content`, `/staff/notices`):** The public-page review button was only modifying local React state — now persists through `contentService.setPublicPageStatus` (session-backed, audit-recorded). The NoticePublisher "Edit" button was a stub announcement — now opens an inline edit form calling `contentService.editNotice` (drafts only; published notices must be unpublished first). 9 new `content-service.test.ts` tests covering page status persistence, notice editing with published-rejection guard, and field preservation.
+
+  **Admissions Officer/Approver (`/staff/admissions`):** The top metrics used static fixture counts (`admissionsQueueCounts`) that never reflected session decisions — now derived from live service data inside `AdmissionsQueue`. The filter tabs were missing "Changes requested", "Waitlisted", "Declined", and "Enrolled" — all 9 statuses are now filterable.
+
+  **Finance Officer/Approver (`/staff/finance`):** The "Payments to reconcile" count in `FinanceWorkspace` was hardcoded to `2` — now derived from recent receipts. The `ReconciliationRun` component reported a hardcoded "4 matched, 1 discrepancy" — now computes actual matched/discrepancy/pending counts from the comparison data. The invoices page Print button was a non-functional placeholder — now triggers `window.print()` via a client `PrintButton` component.
+
+  **Teacher/Exam Reviewer/Result Publisher (`/staff/results`):** The results batch queue had no status filtering — an exam reviewer seeing all batches couldn't narrow by status. Added status filter tabs (All, Draft, Submitted, Moderation, Returned, Approved, Published, Withdrawn) with live counts, matching the pattern used in the admissions and careers queues.
+
+  **HR/Careers Reviewer/Approver (`/staff/careers`):** The recruitment queue filter tabs were missing "Offered", "Not selected", and "Withdrawn" — all 7 statuses are now filterable.
+
+  **Timetable Manager, Support Officer, Auditor, Guardian/Student portal, Applicant journeys:** Audited and found no gaps — these pages are already comprehensive with service-backed state, role gating, accessibility, and complete lifecycle flows.
+
+  **Gates (all roles):** typecheck ✓ · lint 0 issues ✓ · 275 web + 47 contract tests ✓ · 67-page build ✓.
+
+- **2026-08-22 (System Administrator role — page-by-page audit and implementation):** Audited all admin-accessible pages (`/staff/users`, `/staff/settings`, `/staff/audit`, `/staff/link-requests`, `/staff` home) and implemented functional improvements:
+
+  **Users page (`/staff/users`):** Replaced the broken invite form (wrong role list, no persistence, no grant/revoke) with a fully functional admin workspace. The `usersService` now derives rows from the mutable relationship store (not the immutable fixture) and supports five write operations: `inviteUser` (creates person + account + staff member + initial role grant, returns a one-time reference shown once), `grantRole` (with duplicate-active-grant guard), `revokeRole` (appends to history, clears the active workspace if it was the revoked grant), `suspendAccount` (revokes all active grants), and `reactivateAccount`. The page shows an expandable "Manage" panel per user with the active role grants, grant-additional-role form, revoke-with-reason, and suspend/reactivate controls. All operations require a reason (recorded in the audit trail) and produce an audit event. The `RelationshipDemoStore` was extended with mutable `userAccounts`, `staffMembers`, `roleGrants`, and `staffAssignments` collections seeded from the immutable graph fixture; `staff-context.ts` and `family-context.ts` now read from the store so admin changes are immediately visible to every consumer.
+
+  **Settings page (`/staff/settings`):** The save button now persists editable fields (grading scheme, two-reviewer requirement, notice expiry, email sender) to sessionStorage via `settingsService.saveSettings`, records an audit event, and shows the updated "saved by/at" metadata. Policy-pending sections remain visibly flagged and disabled until the school confirms them.
+
+  **Audit page (`/staff/audit`):** The action filter dropdown now includes all 15 `AuditAction` types (was missing `Result withdrawn`, `Payment posted`, `Link requested`, `Link approved`, `Link rejected`, `Link revoked`, `Enrollment converted`).
+
+  **Staff home (`/staff`):** Added an "Administration" section for the system_administrator role with quick-link tiles to Manage users (with live staff count), Link requests (with pending count), Settings, and Audit trail. Previously the admin role saw an empty home page.
+
+  **Tests:** 15 new `users-service.test.ts` tests covering invite, grant (with duplicate guard), revoke (with already-revoked guard), suspend (with already-suspended guard), reactivate (with already-active guard), and staff-context integration (revoking the active workspace grant causes the context to pick a new workspace). Fixed the pre-existing `staff-identity-domain.test.ts` typecheck error by adding a typed `AdminDirectoryRow` return type to `usersListAdmin`.
+
+  **Gates:** typecheck ✓ · lint 0 issues ✓ · 276 web + 47 contract tests ✓ · 67-page build ✓ · 65-route link crawl zero dead links ✓.
 
 - **2026-08-06 (remaining matrix commands live — links/support/content/careers/marks/moderate/withdraw):** Migration `000015_remaining_commands.sql` closes the BACKEND-HANDOFF-MATRIX command surface: `links_approve`/`links_reject` (revalidation bump, version checks), `support_respond` (private notes staff-only), `content_publish_notice`, `jobs_submit` (idempotent) / `jobs_decide` (self-decision denied), `results_submit_marks` (exact assignment scope + maxima + roster coverage), `results_moderate`, `results_withdraw`, `results_correction_request`. Local RPC suite extended with happy paths + denials for all of them — all three suites pass; pushed live; types regenerated (4827 lines); typecheck/lint/216+47 tests/66-page build/22/22 journeys green; live integration suite still passes.
 - **2026-08-06 (app layer: outbox worker + email + server domain services + live integration suite):** Built the Supabase runtime wiring: `lib/supabase/outbox-worker.ts` + `app/api/outbox/route.ts` (CRON_SECRET-protected claim/dispatch/deliver-fail with exponential backoff), `lib/email/` Resend adapter + editorial string templates (one per plan §9 event kind), `app/api/email/webhook/route.ts` (Svix HMAC verification, svix-id dedup, suppression projection), `lib/supabase/domain.ts` + `rpc.ts` (typed app-schema RPC wrapper; ServiceResult envelopes with canonical error codes), `app/api/adapter/route.ts` (session-protected dispatch) + `modules/services/adapter-client.ts`. Project config now exposes the `app` schema to PostgREST and enables TOTP MFA (pushed live; forward migrations 000011–000014: nullable suppression author/processing document, service_role app grants). `scripts/integration-staging.mjs` proves the full chain live with real sessions: RLS draft→submit idempotency, TOTP aal2 elevation + aal1 denial, offer→invoice→payment retry-safety, idempotent conversion, result/timetable publication, denial cases, outbox contract (34 events, unique deliveries, backoff) — INTEGRATION SUITE PASSED. Gates: local DB suites, typecheck, lint, 216 web + 47 contract tests, 66-page build, 22/22 journeys — all green. Pushed to GitHub.
@@ -204,7 +441,7 @@ Do not begin broad backend work before the `UI-COMPLETION-PLAN.md` handoff gate 
 - **2026-08-06 (B1 live schema + auth foundation):** Migrations pushed to the `jxegiamjcawdywqyutdz` project (foundation + B1 identity/school config + actor-read policy), real generated types, remote seed applied and verified via the idempotent `scripts/seed-remote.mjs` (admin client + ignore-duplicates). Auth foundation: session-refresh middleware, `/auth/callback` safe code exchange, server actor resolver (`lib/auth/actor.ts`), adapter-aware email-OTP sign-in behind `FASS_DATA_ADAPTER=supabase`. Resend key added to `.env.local` with the default `onboarding@resend.dev` development sender. Gates: 216 web + 47 contract tests, 63-page build, 22/22 journeys. Pushed to GitHub (`833d39e`).
 - **2026-08-06 (B1 identity/school-config slice):** Keys moved to `.env.local` (gitignored); Supabase project `jxegiamjcawdywqyutdz` verified live (GoTrue v2.195.0, PostgREST v14.15). Added migration `000002_b1_identity_school_config.sql` (school configuration + identity/access tables, SECURITY DEFINER authorization helpers `is_staff_aal2`/`has_role`/`is_guardian`/`bump_access_revalidation`, revalidation triggers, RLS policies with explicit base grants for the always-revoked default), B1 seeds (years/grades/sections/subjects/rooms/periods/settings/flags), pgTAP suites for both slices (47 assertions), and `scripts/validate-db-local.sh` which validates migrations + seed + RLS/append-only/outbox behavior on a scratch PostgreSQL 17 instance — all checks pass. Git push to `github.com/scnz313/FAIZ-A-AAM-` is blocked: the repo does not exist and the authenticated `gh` account (HASHIM-HAMEEM) cannot create it.
 - **2026-08-06 (B0 backend foundation):** `plan.md` rebaselined to the Supabase Backend Blueprint (B0–B8). B0 completed: version-controlled source established (`git init`, baseline commit `4edf099`); `.env.example` scrubbed to names/placeholders (exposed Supabase keys flagged for rotation) and Node 22 pinned; Supabase CLI 2.111.0 + `@supabase/ssr` + `@supabase/supabase-js` added; `supabase/config.toml` with Realtime/Edge Functions disabled; foundation migration (conventions, `app.new_ref`, version/append-only helpers, audit/outbox/idempotency/webhook-receipts/rate-limit/job-runs tables, `role_definitions`, RLS deny-by-default, SECURITY DEFINER outbox/audit helpers with SKIP LOCKED claim and exponential retry); deterministic role-code seed; 22-assertion pgTAP foundation suite; Supabase client factories (browser/server/admin) + env validation + types placeholder + `db:*` scripts. Typecheck, lint, 216 web + 47 contract tests, and the 62-page build all re-passed. Remaining B0 items are blocked on environment inputs (staging project + keys, Docker, Node 22, Resend).
-- **2026-08-06 (plan.md Phases 1–6):** Completed the canonical grant model (Phase 1): maker/checker splits across content/admissions/finance/HR/results, `links.verify` scoped to support_officer + system_administrator, and the fourth demo identity Rania Mir (approvals/timetables); admissions self-approval is rejected with the same actor account. Workflow repairs (Phase 2): result batches carry a subject, teacher marks entry requires class AND subject, moderators return sheets with a reason from the queue, `withdrawPublication` is versioned and never deletes published history, timetable known classes 8-A/9-C with a manager-only selector and honest empty state, date-sheet publish gated to managers. Family context (Phase 3): one link-request store — guardian requests flow to `/staff/link-requests` (LR refs), approval creates the active link exactly once, active links are revocable; `classifyStudentAccess` (current/other/none) wired into invoice and receipt pages with a child-switch panel and neutral denial. Propagation (Phase 4): append-only `auditService.record` + session-backed idempotent demo outbox (`modules/services/outbox.ts`) — one event per payment post, enrollment conversion, result publish/withdraw, content publish, and link decision; retries never duplicate (proven by tests); all `Math.random()` latencies replaced with fixed 200 ms. Contracts + privacy (Phase 5): `packages/contracts` core types with 47 tests, `design/BACKEND-HANDOFF-MATRIX.md`, applicant drafts moved to sessionStorage with sensitive-field stripping. Phase 6 gate: typecheck, lint, 29 web test files (216 tests) + 47 contract tests, 62-page build, 22/22 critical journeys (incl. the full teacher entry → moderator return → approve → publish → portal chain, timetable manager publish reaching the portal, and family payment → staff ledger parity via the client-refreshed finance workspace), 53-route axe scan, focus smoke, 65-route link crawl, 168-pair responsive sweep — all passed. Docs updated: `UI-COMPLETION-PLAN.md` (phase status + execution record) and `PROJECT-STATUS.md` (evidence, matrix, order).
+- **2026-08-06 (plan.md Phases 1–6):** Completed the canonical grant model (Phase 1): maker/checker splits across content/admissions/finance/HR/results, `links.verify` scoped to support_officer + system_administrator, and the fourth demo identity Rania Mir (approvals/timetables); admissions self-approval is rejected with the same actor account. Workflow repairs (Phase 2): result batches carry a subject, teacher marks entry requires class AND subject, moderators return sheets with a reason from the queue, `withdrawPublication` is versioned and never deletes published history, timetable known classes 8-A/9-C with a manager-only selector and honest empty state, date-sheet publish gated to managers. Family context (Phase 3): one link-request store — guardian requests flow to `/staff/link-requests` (LR refs), approval creates the active link exactly once, active links are revocable; `classifyStudentAccess` (current/other/none) wired into invoice and receipt pages with a child-switch panel and neutral denial. Propagation (Phase 4): append-only `auditService.record` + session-backed idempotent demo outbox (`modules/services/outbox.ts`) — one event per payment post, enrollment conversion, result publish/withdraw, content publish, and link decision; retries never duplicate (proven by tests); all `Math.random()` latencies replaced with fixed 200 ms. Contracts + privacy (Phase 5): `packages/contracts` core types with 47 tests, `design/BACKEND-HANDOFF-MATRIX.md`, applicant drafts moved to sessionStorage with sensitive-field stripping. Phase 6 gate: typecheck, lint, historical frontend gate counts and build output, 22/22 critical journeys (incl. the full teacher entry → moderator return → approve → publish → portal chain, timetable manager publish reaching the portal, and family payment → staff ledger parity via the client-refreshed finance workspace), 53-route axe scan, focus smoke, 65-route link crawl, 168-pair responsive sweep — all passed. Docs updated: `UI-COMPLETION-PLAN.md` (phase status + execution record) and `PROJECT-STATUS.md` (evidence, matrix, order).
 - **2026-08-05 (I4 + visual refinement):** Implemented staff role/assignment scope: `staff-authorization` module (role/action matrix, active-workspace checks, assignment-class matching); role-aware staff navigation; `StaffRouteGuard` with workspace-switch denial on every staff route (marks-entry sub-route requires the teacher role); demo identity picker in the staff shell (Sana Wani — finance/results/admissions, Firdous Ahmad — teacher, Aisha Lone — content/support/audit/admin; session-persistent); teacher marks entry denied for batches outside assigned classes; results approve/publish/correction gated to publishers and entry links to teachers; timetable editor read-only for non-managers; support response gated to support officers; staff home dashboard filtered by role. Refined the design tokens toward a cleaner, more minimal professional system (finer hairlines, pure-white raised surfaces, softly rounded controls, slightly lighter paper) while preserving the editorial serif, saffron accent, and Urdu wordmark identity. Verified by 23 test files (163 tests), a 62-page build, 11/11 critical journeys (incl. role denial and teacher assignment scope), a 53-route axe scan, a 168-pair responsive sweep, and a clean route/link crawl — all re-run after the visual refinement.
 - **2026-08-05 (I3):** Implemented admission → finance → enrollment. Accepting a seat issues one admission invoice through `financeService` (idempotent per applicant; `createAdmissionInvoice` / `assignInvoiceToStudent`); `AdmissionFeeStep` now pays through the shared checkout (attempt/confirm/receipt, duplicate-safe) instead of a timer; `enrollmentConversionService` derives readiness (offered + accepted + fee paid + documents + capacity + approval) and converts idempotently — creating the permanent person/student/enrollment (and activating the guardian link) or matching the already-enrolled child, adopting the paid invoice into the new student's ledger, and marking the application Enrolled with its permanent references; the applicant sees an acknowledgement with the student reference and the portal link. Verified by 22 test files (157 tests), a 62-page build, 9/9 critical journeys (new admission-to-enrollment journey), a 53-route axe scan, a 168-pair responsive sweep, and a clean route/link crawl.
 - **2026-08-05 (I2):** Consolidated service boundaries. Finance: ledgers parameterized by student (Aarif + Mariam), portal fees/receipts/overview read `financeService` for the active child, staff finance pages read the same service across both students with parity tests (totals agree). Results: portal marks come from a per-student published snapshot (`academicsService.getStudentResultSnapshot`) with distinct fictional snapshots per child. Timetable: one `timetableService` facade (periods, edits, conflicts, versions, history) now serves portal and staff; the academics timetable stub was removed. Added typed demo adapters `contentService` (notice status/audience/version), `documentsService` (per-student bundles), `notificationsService` (per-account read state, demo clock), `usersService`, `settingsService`, and `auditService`, wired into public/portal/staff pages; the portal overview now reads the active child's ledger and family-audience notices through services. Verified by 21 test files (150 tests), a 62-page build, 8/8 critical journeys, a 53-route axe scan, a 168-pair responsive sweep, and a clean route/link crawl; in-browser parity confirmed (child switch changes the overview band and ledger; staff finance aggregates both students).
