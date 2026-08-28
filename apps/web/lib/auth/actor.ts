@@ -28,6 +28,8 @@ export type ServerActor = {
   roles: string[];
   /** access_revalidation.security_version — invalidated access is visible here. */
   securityVersion: number;
+  /** Verified Supabase Authenticator Assurance Level for this request. */
+  aal: "aal1" | "aal2" | null;
 };
 
 /**
@@ -38,6 +40,8 @@ export async function getServerActor(): Promise<ServerActor | null> {
   if (dataAdapter() !== "supabase") return null;
 
   const supabase = await createSupabaseServerClient();
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  if (claimsError !== null || claimsData === null) return null;
   const {
     data: { user },
     error,
@@ -76,6 +80,7 @@ export async function getServerActor(): Promise<ServerActor | null> {
     accountStatus: account.status,
     roles: (grants ?? []).map((grant) => grant.role_code),
     securityVersion: revalidation?.security_version ?? 0,
+    aal: claimsData.claims.aal === "aal2" ? "aal2" : claimsData.claims.aal === "aal1" ? "aal1" : null,
   };
 }
 

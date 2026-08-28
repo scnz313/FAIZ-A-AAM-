@@ -14,6 +14,7 @@
 import { academicsService } from "@/modules/services/academics";
 import { familyContextService, gradeSectionLabel } from "@/modules/services/family-context";
 import { financeService, type Receipt } from "@/modules/services/finance";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 
 export { formatINR } from "@/modules/finance/demo";
 
@@ -48,6 +49,7 @@ export type StudentDocumentBundle = {
   reportCards: ReportCardDocument[];
   receipts: ReceiptDocument[];
   certificates: CertificateDocument[];
+  metadata?: Array<{ ref: string; category: string; filename: string; processingState: string; mimeType: string; sizeBytes: number }>;
 };
 
 export interface DocumentsService {
@@ -64,6 +66,11 @@ export const documentsService: DocumentsService = {
     if (context === undefined) {
       throw new Error("These documents are not accessible to this account.");
     }
+
+    const documentMetadata = clientAdapterMode() === "supabase"
+      ? await adapterCall<Array<{ reference?: string; ref?: string; category: string; safe_filename?: string; filename?: string; processingState?: string; status?: string; mime_type?: string; mimeType?: string; size_bytes?: number; sizeBytes?: number }>>("documents.list", { ownerDomain: "student", ownerRecordRef: context.student.ref })
+      : null;
+    if (documentMetadata !== null && !documentMetadata.ok) throw new Error(documentMetadata.errors[0]?.message ?? "Documents are unavailable.");
 
     const [terms, publications, receipts] = await Promise.all([
       academicsService.getTerms(),
@@ -96,6 +103,7 @@ export const documentsService: DocumentsService = {
       reportCards,
       receipts: studentReceipts.map((receipt) => ({ ...receipt })),
       certificates: [],
+      metadata: documentMetadata?.ok ? documentMetadata.value.map((document) => ({ ref: document.ref ?? document.reference ?? "", category: document.category, filename: document.filename ?? document.safe_filename ?? "", processingState: document.processingState ?? document.status ?? "pending_scan", mimeType: document.mimeType ?? document.mime_type ?? "", sizeBytes: document.sizeBytes ?? document.size_bytes ?? 0 })) : undefined,
     };
   },
 };

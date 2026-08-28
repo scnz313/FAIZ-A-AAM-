@@ -11,6 +11,7 @@
 
 import { demoNowIso } from "@/modules/demo/clock";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 
 export type AuditAction =
   | "Login"
@@ -26,8 +27,12 @@ export type AuditAction =
   | "Link approved"
   | "Link rejected"
   | "Link revoked"
+  | "Link restricted"
+  | "Link capabilities changed"
   | "Link requested"
-  | "Enrollment converted";
+  | "Enrollment converted"
+  | "Staff invitation created"
+  | "Staff invitation accepted";
 
 export type AuditOutcome = "Success" | "Denied" | "Failed";
 
@@ -146,6 +151,11 @@ export const AUDIT_SESSION_KEY_EXPORT = AUDIT_SESSION_KEY;
 
 export const auditService: AuditService = {
   async listEvents() {
+    if (clientAdapterMode() === "supabase") {
+      const response = await adapterCall<Array<{ reference: string; actor_label: string; action: string; target_reference: string; outcome: AuditOutcome; reason: string | null; created_at: string }>>("audit.list", { limit: 100 });
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "Audit events are unavailable.");
+      return response.value.map((event) => ({ id: event.reference, timestampIso: event.created_at, actor: event.actor_label, action: event.action as AuditAction, target: event.target_reference, outcome: event.outcome, reason: event.reason ?? undefined }));
+    }
     const sessionEvents = loadSessionEvents();
     return [...sessionEvents, ...demoAuditEvents]
       .sort((a, b) => b.timestampIso.localeCompare(a.timestampIso))
@@ -153,6 +163,9 @@ export const auditService: AuditService = {
   },
 
   async record(event) {
+    if (clientAdapterMode() === "supabase") {
+      throw new Error("Browser code cannot append audit records; the server command must record this action.");
+    }
     const events = loadSessionEvents();
     const nextCounter = events.length + 1 + demoAuditEvents.length;
     const next: AuditEvent = {

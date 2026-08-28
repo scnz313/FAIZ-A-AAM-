@@ -10,6 +10,7 @@ import {
 } from "@fass/contracts";
 
 import { demoNowIso } from "@/modules/demo/clock";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 import { demoAcademicYears, demoRelationshipGraph } from "@/modules/relationships/demo";
 import {
   loadRelationshipStore,
@@ -28,19 +29,19 @@ function isEffective(fromIso: string, toIso: string | null, atIso: string): bool
 }
 
 function accountById(accountId: string): UserAccount | undefined {
-  return demoRelationshipGraph.userAccounts.find((account) => account.id === accountId);
+  return loadRelationshipStore().userAccounts.find((account) => account.id === accountId);
 }
 
 function staffForAccount(accountId: string): StaffMember | undefined {
   const account = accountById(accountId);
   return account === undefined
     ? undefined
-    : demoRelationshipGraph.staffMembers.find((staff) => staff.personId === account.personId);
+    : loadRelationshipStore().staffMembers.find((staff) => staff.personId === account.personId);
 }
 
 function staffGrantsForAccount(accountId: string): RoleGrant[] {
   const nowIso = demoNowIso();
-  return demoRelationshipGraph.roleGrants.filter(
+  return loadRelationshipStore().roleGrants.filter(
     (grant) =>
       grant.accountId === accountId &&
       grant.status === "active" &&
@@ -77,7 +78,7 @@ function activeAssignmentsFor(
   academicYear: AcademicYear,
 ): StaffAssignment[] {
   const nowIso = demoNowIso();
-  return demoRelationshipGraph.staffAssignments.filter(
+  return loadRelationshipStore().staffAssignments.filter(
     (assignment) =>
       assignment.staffMemberId === staff.id &&
       assignment.roleGrantId === roleGrant.id &&
@@ -173,8 +174,139 @@ export type StaffWorkspaceSummary = {
   grantedWorkspaceCount: number;
 };
 
+export type ServerStaffContextResponse = {
+  accountId: string;
+  personId: string;
+  displayName: string;
+  title: string | null;
+  staffMemberId: string;
+  activeRoleGrantId: string;
+  activeRole: string;
+  grantedWorkspaceCount: number;
+  grants: Array<{
+    id: string;
+    reference: string;
+    account_id: string;
+    role_code: string;
+    status: string;
+    granted_by_account_id: string | null;
+    reason: string | null;
+    effective_from: string;
+    effective_to: string | null;
+    version: number;
+  }>;
+  assignments: Array<{
+    id: string;
+    reference: string;
+    role_grant_id: string;
+    academic_year_id: string;
+    grade_section_id: string | null;
+    subject_id: string | null;
+    status: string;
+    effective_from: string;
+    effective_to: string | null;
+    subjectCode: string | null;
+    subjectName: string | null;
+    gradeLabel: string | null;
+    sectionLabel: string | null;
+  }>;
+  academicYear: { id: string; reference: string; label: string; starts_on: string; ends_on: string; status: string } | null;
+};
+
+async function serverStaffContext(roleGrantId?: string): Promise<ServerStaffContextResponse> {
+  const result = await adapterCall<ServerStaffContextResponse>("context.staff", roleGrantId ? { roleGrantId } : {});
+  if (!result.ok) throw new RelationshipContextError("workspace-not-granted", result.errors[0]?.message ?? "Staff context is unavailable.");
+  return result.value;
+}
+
+function mapServerGrant(grant: ServerStaffContextResponse["grants"][number]): RoleGrant {
+  return {
+    id: grant.id,
+    ref: grant.reference,
+    accountId: grant.account_id,
+    role: grant.role_code as RoleGrant["role"],
+    status: grant.status as RoleGrant["status"],
+    grantedByPersonId: null,
+    reason: grant.reason ?? "Role grant",
+    scope: { academicYearIds: [], gradeSectionIds: [], subjectIds: [] },
+    effectiveFromIso: grant.effective_from,
+    effectiveToIso: grant.effective_to,
+  };
+}
+
+function mapServerAssignment(assignment: ServerStaffContextResponse["assignments"][number]): StaffAssignment {
+  return {
+    id: assignment.id,
+    ref: assignment.reference,
+    staffMemberId: "server",
+    roleGrantId: assignment.role_grant_id,
+    academicYearId: assignment.academic_year_id,
+    gradeSectionId: assignment.grade_section_id ?? "server",
+    subjectId: assignment.subject_id ?? "server",
+    subjectRef: assignment.subjectCode ?? "—",
+    subjectName: assignment.subjectName ?? "Unassigned subject",
+    status: assignment.status as StaffAssignment["status"],
+    effectiveFromIso: assignment.effective_from,
+    effectiveToIso: assignment.effective_to,
+  };
+}
+
+function mapServerYear(year: ServerStaffContextResponse["academicYear"]): AcademicYear {
+  if (year === null) throw new RelationshipContextError("enrollment-not-found", "No current academic year is configured.");
+  return academicYearSchema.parse({
+    id: year.id,
+    ref: year.reference,
+    label: year.label,
+    startsOn: year.starts_on,
+    endsOn: year.ends_on,
+    status: year.status,
+  });
+}
+
+/** Map the request-authorized server context into the stable shell contracts. */
+export function mapServerStaffContext(value: ServerStaffContextResponse): {
+  summary: StaffWorkspaceSummary;
+  workspaces: RoleGrant[];
+  identityId: string;
+} {
+  const year = mapServerYear(value.academicYear);
+  const assignmentLabel = value.assignments
+    .map((assignment) =>
+      `${assignment.gradeLabel && assignment.sectionLabel ? `${assignment.gradeLabel}-${assignment.sectionLabel}` : "—"} · ${assignment.subjectName ?? "Unassigned subject"}`,
+    )
+    .join(", ") || null;
+  return {
+    identityId: value.accountId,
+    summary: {
+      accountId: value.accountId,
+      staffMemberId: value.staffMemberId,
+      personId: value.personId,
+      displayName: value.displayName,
+      title: value.title ?? "Staff member",
+      activeRoleGrantId: value.activeRoleGrantId,
+      role: value.activeRole,
+      roleLabel: roleLabel(value.activeRole),
+      academicYearLabel: year.label,
+      assignmentLabel,
+      grantedWorkspaceCount: value.grantedWorkspaceCount,
+    },
+    workspaces: value.grants.map(mapServerGrant),
+  };
+}
+
 export const staffContextService: StaffContextService = {
   async getWorkspace(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverStaffContext();
+      return {
+        accountId: value.accountId,
+        staffMemberId: value.staffMemberId,
+        activeRoleGrantId: value.activeRoleGrantId,
+        activeRole: value.activeRole as StaffWorkspaceContext["activeRole"],
+        activeAssignmentIds: value.assignments.map((assignment) => assignment.id),
+        academicYearId: mapServerYear(value.academicYear).id,
+      };
+    }
     const resolved = resolveWorkspace(accountId);
     if (resolved.store.activeWorkspaceByAccount[accountId] === undefined) {
       resolved.store.activeWorkspaceByAccount[accountId] = resolved.roleGrant.id;
@@ -184,11 +316,26 @@ export const staffContextService: StaffContextService = {
   },
 
   async listGrantedWorkspaces(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverStaffContext();
+      return value.grants.map(mapServerGrant);
+    }
     requireStaffAccount(accountId);
     return staffGrantsForAccount(accountId).map((grant) => clone(grant));
   },
 
   async setActiveWorkspace(accountId, roleGrantId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverStaffContext(roleGrantId);
+      return {
+        accountId: value.accountId,
+        staffMemberId: value.staffMemberId,
+        activeRoleGrantId: value.activeRoleGrantId,
+        activeRole: value.activeRole as StaffWorkspaceContext["activeRole"],
+        activeAssignmentIds: value.assignments.map((assignment) => assignment.id),
+        academicYearId: mapServerYear(value.academicYear).id,
+      };
+    }
     const resolved = resolveWorkspace(accountId);
     const selected = resolved.grants.find((grant) => grant.id === roleGrantId);
     if (selected === undefined) {
@@ -200,10 +347,18 @@ export const staffContextService: StaffContextService = {
   },
 
   async getActiveAssignments(accountId, assignmentId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverStaffContext();
+      const assignments = value.assignments.map(mapServerAssignment);
+      if (assignmentId !== undefined && !assignments.some((assignment) => assignment.id === assignmentId)) {
+        throw new RelationshipContextError("assignment-not-active", "That assignment is not active in this workspace.");
+      }
+      return assignmentId === undefined ? assignments : assignments.filter((assignment) => assignment.id === assignmentId);
+    }
     const resolved = resolveWorkspace(accountId);
     const activeAssignments = activeAssignmentsFor(resolved.staff, resolved.roleGrant, resolved.academicYear);
     if (assignmentId !== undefined) {
-      const selected = demoRelationshipGraph.staffAssignments.find(
+      const selected = loadRelationshipStore().staffAssignments.find(
         (assignment) =>
           assignment.id === assignmentId &&
           assignment.staffMemberId === resolved.staff.id &&
@@ -218,11 +373,18 @@ export const staffContextService: StaffContextService = {
   },
 
   async getAcademicYear(accountId) {
+    if (clientAdapterMode() === "supabase") return mapServerYear((await serverStaffContext()).academicYear);
     requireStaffAccount(accountId);
     return clone(currentAcademicYear());
   },
 
   async getActiveAssignmentSections(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverStaffContext();
+      return value.assignments
+        .filter((assignment) => assignment.gradeLabel !== null && assignment.sectionLabel !== null)
+        .map((assignment) => ({ gradeLabel: assignment.gradeLabel as string, sectionLabel: assignment.sectionLabel as string }));
+    }
     const resolved = resolveWorkspace(accountId);
     return activeAssignmentsFor(resolved.staff, resolved.roleGrant, resolved.academicYear)
       .map((assignment) => {
@@ -237,12 +399,32 @@ export const staffContextService: StaffContextService = {
   },
 
   async getWorkspaceSummary(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverStaffContext();
+      const year = mapServerYear(value.academicYear);
+      const assignmentLabel = value.assignments
+        .map((assignment) => `${assignment.gradeLabel && assignment.sectionLabel ? `${assignment.gradeLabel}-${assignment.sectionLabel}` : "—"} · ${assignment.subjectName ?? "Unassigned subject"}`)
+        .join(", ") || null;
+      return {
+        accountId: value.accountId,
+        staffMemberId: value.staffMemberId,
+        personId: value.personId,
+        displayName: value.displayName,
+        title: value.title ?? "Staff member",
+        activeRoleGrantId: value.activeRoleGrantId,
+        role: value.activeRole,
+        roleLabel: roleLabel(value.activeRole),
+        academicYearLabel: year.label,
+        assignmentLabel,
+        grantedWorkspaceCount: value.grantedWorkspaceCount,
+      };
+    }
     const resolved = resolveWorkspace(accountId);
     if (resolved.store.activeWorkspaceByAccount[accountId] === undefined) {
       resolved.store.activeWorkspaceByAccount[accountId] = resolved.roleGrant.id;
       saveRelationshipStore(resolved.store);
     }
-    const person = demoRelationshipGraph.people.find((candidate) => candidate.id === resolved.account.personId);
+    const person = resolved.store.people.find((candidate) => candidate.id === resolved.account.personId);
     const activeAssignments = activeAssignmentsFor(resolved.staff, resolved.roleGrant, resolved.academicYear);
     const assignmentLabel =
       activeAssignments

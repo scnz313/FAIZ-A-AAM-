@@ -23,6 +23,8 @@ import {
 } from "@/modules/admissions/demo";
 import { financeService } from "@/modules/services/finance";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
+import { schoolConfigService } from "@/modules/services/school-config";
 
 /* ------------------------------------------------------------------ */
 /* Shared types                                                        */
@@ -51,7 +53,7 @@ export type ApplicationDraft = {
   lastClassAttended: string;
   leavingCertificate: string;
   conditions: string[];
-  documents: Record<"birth" | "photo" | "reportCard" | "addressProof", string>;
+  documents: Record<string, string>;
   consent: boolean;
 };
 
@@ -83,6 +85,10 @@ export type ApplicationRecord = {
   studentRef?: string;
   enrollmentRef?: string;
   linkRef?: string;
+  /** Server-only duplicate signal; never auto-merges on a name match. */
+  duplicateReview?: boolean;
+  /** Authoritative reviewer identity/reference when loaded from Supabase. */
+  reviewer?: string;
   /**
    * Maker/checker (Phase 1): the account that moved this application to
    * assessment. The same account may not offer/waitlist/decline it — a
@@ -98,13 +104,187 @@ export type StaffQueueRecord = ApplicationRecord & {
   flagged?: boolean;
 };
 
+export type ServerAdmissionRow = {
+  id: string;
+  reference: string;
+  academic_year_id: string;
+  grade_id: string;
+  current_status: string;
+  student_name: string;
+  parent_name: string;
+  parent_contact: string | null;
+  version: number;
+  submitted_at: string | null;
+  created_at: string;
+  academic_years: { label: string; starts_on: string; ends_on: string; status: string } | null;
+  grades: { label: string } | null;
+  admission_drafts: Array<{ draft: Record<string, unknown>; schema_version: number; expires_at: string; updated_at: string }> | null;
+  admission_application_versions: Array<{ id: string; version: number; snapshot: Record<string, unknown>; schema_version: number; created_at: string }> | null;
+  admission_events: Array<{ event_type: string; visible_to_applicant: boolean; copy: string; created_at: string }> | null;
+  admission_reviews?: Array<{ officer_account_id: string; created_at: string }> | null;
+  admission_offers: Array<{
+    id: string;
+    grade_id: string;
+    academic_year_id: string;
+    conditions: Record<string, unknown>;
+    expires_at: string;
+    fee_required: boolean;
+    admission_invoice_ref: string | null;
+    response: string;
+    responded_at: string | null;
+    decided_by_account_id: string | null;
+    version: number;
+  }> | null;
+};
+
+const SERVER_STATUS_TO_APPLICATION: Record<string, ApplicationStatus> = {
+  draft: "Draft",
+  submitted: "Submitted",
+  under_review: "Under review",
+  changes_requested: "Changes requested",
+  assessment: "Assessment",
+  offered: "Offered",
+  waitlisted: "Waitlisted",
+  declined: "Declined",
+  enrolled: "Enrolled",
+  withdrawn: "Declined",
+  duplicate_review: "Under review",
+};
+
+const SERVER_EVENT_TO_STATUS: Record<string, ApplicationStatus> = {
+  submitted: "Submitted",
+  under_review: "Under review",
+  assessment: "Assessment",
+  changes_requested: "Changes requested",
+  offered: "Offered",
+  waitlisted: "Waitlisted",
+  declined: "Declined",
+  offer_accepted: "Offered",
+  offer_declined: "Declined",
+  invoice_issued: "Offered",
+  enrolled: "Enrolled",
+};
+
+const serverAdmissionIds = new Map<string, { id: string; version: number; offerVersion: number }>();
+
+export function mapServerApplication(row: ServerAdmissionRow, invoiceAmountPaise = 0): ApplicationRecord {
+  const offer = row.admission_offers?.[0];
+  const reviewer = [...(row.admission_reviews ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at)).at(-1)?.officer_account_id;
+  const timeline = (row.admission_events ?? [])
+    .filter((event) => event.visible_to_applicant)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map((event) => ({
+      status: SERVER_EVENT_TO_STATUS[event.event_type] ?? SERVER_STATUS_TO_APPLICATION[row.current_status] ?? "Submitted",
+      atIso: event.created_at,
+      actor: event.event_type === "submitted" ? "Applicant" : "Admissions office",
+      note: event.copy,
+    }));
+  if (timeline.length === 0 && row.current_status !== "draft") {
+    timeline.push({
+      status: SERVER_STATUS_TO_APPLICATION[row.current_status] ?? "Submitted",
+      atIso: row.submitted_at ?? row.created_at,
+      actor: "Admissions office",
+      note: "Application status recorded by the school.",
+    });
+  }
+  const record: ApplicationRecord = {
+    ref: row.reference,
+    session: row.academic_years?.label ?? row.academic_year_id,
+    grade: row.grades?.label ?? row.grade_id,
+    studentName: row.student_name,
+    parentName: row.parent_name,
+    contact: row.parent_contact ?? "—",
+    submittedAtIso: row.submitted_at ?? row.created_at,
+    status: SERVER_STATUS_TO_APPLICATION[row.current_status] ?? "Submitted",
+    timeline,
+    duplicateReview: row.current_status === "duplicate_review",
+    reviewer,
+    reviewedByAccountId: reviewer,
+    offer: offer === undefined
+      ? undefined
+      : {
+          grade: row.grades?.label ?? row.grade_id,
+          session: row.academic_years?.label ?? row.academic_year_id,
+          acceptByIso: offer.expires_at,
+          admissionFeePaise:
+            typeof offer.conditions.admissionFeePaise === "number" ? offer.conditions.admissionFeePaise : invoiceAmountPaise,
+          accepted: offer.response === "accepted",
+          declined: offer.response === "declined",
+          respondedAtIso: offer.responded_at ?? undefined,
+          admissionInvoiceRef: offer.admission_invoice_ref ?? undefined,
+        },
+  };
+  serverAdmissionIds.set(row.reference, { id: row.id, version: row.version, offerVersion: offer?.version ?? 1 });
+  return record;
+}
+
+async function serverAdmissionRawRows(scope: "mine" | "staff"): Promise<ServerAdmissionRow[]> {
+  const result = await adapterCall<ServerAdmissionRow[]>(scope === "mine" ? "admissions.listMine" : "admissions.staffQueue");
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Admissions are unavailable.");
+  return result.value;
+}
+
+async function serverAdmissionRows(scope: "mine" | "staff"): Promise<ApplicationRecord[]> {
+  return (await serverAdmissionRawRows(scope)).map((row) => mapServerApplication(row));
+}
+
+async function serverApplicationByRef(ref: string, scope: "mine" | "staff"): Promise<ApplicationRecord | null> {
+  return (await serverAdmissionRows(scope)).find((record) => record.ref === ref) ?? null;
+}
+
+export async function resolveServerApplicationId(ref: string, scope: "mine" | "staff" = "mine"): Promise<string> {
+  if (!serverAdmissionIds.has(ref)) await serverAdmissionRows(scope);
+  const target = serverAdmissionIds.get(ref);
+  if (target === undefined) throw new Error("Application not found.");
+  return target.id;
+}
+
+async function serverDraftByRef(ref: string): Promise<ApplicationDraft | null> {
+  const rows = await serverAdmissionRawRows("mine");
+  const row = rows.find((candidate) => candidate.reference === ref);
+  if (row) mapServerApplication(row);
+  return row?.admission_drafts?.[0]?.draft as ApplicationDraft | null ?? null;
+}
+
+function normalizedLabel(value: string): string {
+  return value.replace(/[–—]/g, "-").replace(/\s+/g, "").toLowerCase();
+}
+
+async function serverAdmissionConfig(draft: ApplicationDraft): Promise<{ academicYearRef: string; gradeRef: string }> {
+  const configuration = await schoolConfigService.getConfiguration();
+  const year = configuration.academicYears.find((candidate) => normalizedLabel(candidate.label) === normalizedLabel(draft.session));
+  const grade = configuration.grades.find((candidate) => normalizedLabel(candidate.label) === normalizedLabel(draft.grade));
+  if (year === undefined || grade === undefined) {
+    throw new Error("The selected academic year or grade is not available in the current school configuration.");
+  }
+  return { academicYearRef: year.ref, gradeRef: grade.code };
+}
+
+async function serverAdmissionDecision(
+  ref: string,
+  operation: "reviewAdvance" | "decide",
+  payload: Record<string, unknown>,
+): Promise<ApplicationRecord> {
+  if (!serverAdmissionIds.has(ref)) await serverAdmissionRows("staff");
+  const target = serverAdmissionIds.get(ref);
+  if (target === undefined) throw new Error("Application not found.");
+  const result = await adapterCall(
+    operation === "reviewAdvance" ? "admissions.reviewAdvance" : "admissions.decide",
+    { applicationRef: ref, expectedVersion: target.version, ...payload },
+  );
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Admission decision failed.");
+  const updated = await serverApplicationByRef(ref, "staff");
+  if (updated === null) throw new Error("Admission decision was accepted but the updated application is unavailable.");
+  return updated;
+}
+
 /** The boundary every admissions caller uses; the demo adapter is replaceable. */
 export interface AdmissionsService {
   /** Persist a form draft under a key ("new", or an application ref when editing). */
-  saveDraft(key: string, draft: ApplicationDraft): Promise<{ savedAtIso: string }>;
+  saveDraft(key: string, draft: ApplicationDraft): Promise<{ savedAtIso: string; draftRef?: string }>;
   getDraft(key: string): Promise<ApplicationDraft | null>;
   /** Submit the final form; resolves with the issued (or re-opened) reference. */
-  submitApplication(draft: ApplicationDraft): Promise<{ ref: string }>;
+  submitApplication(draft: ApplicationDraft, draftRef?: string): Promise<{ ref: string }>;
   /** The record for a reference, or null when it is not in the school's records. */
   getApplication(ref: string): Promise<ApplicationRecord | null>;
   /** Applicant response to a seat offer; appends a timeline event. */
@@ -356,6 +536,30 @@ function nextReference(): string {
 
 export const admissionsService: AdmissionsService = {
   async saveDraft(key, draft) {
+    if (clientAdapterMode() === "supabase") {
+      const configuration = await serverAdmissionConfig(draft);
+      const existing = key === "new" ? undefined : serverAdmissionIds.get(key);
+      const result = await adapterCall<{
+        id: string;
+        reference: string;
+        version: number;
+        status: string;
+        updatedAt: string;
+      }>("admissions.saveDraft", {
+        applicationRef: existing === undefined ? undefined : key,
+        academicYearRef: configuration.academicYearRef,
+        gradeRef: configuration.gradeRef,
+        studentName: draft.studentName,
+        parentName: draft.guardianName,
+        parentContact: draft.phone,
+        draft: { ...draft },
+        schemaVersion: 1,
+        expectedVersion: existing?.version ?? null,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Draft could not be saved.");
+      serverAdmissionIds.set(result.value.reference, { id: result.value.id, version: result.value.version, offerVersion: 1 });
+      return { savedAtIso: result.value.updatedAt, draftRef: result.value.reference };
+    }
     return respond(() => {
       const drafts = sessionGet<Record<string, ApplicationDraft>>(DRAFTS_KEY) ?? {};
       drafts[key] = draft;
@@ -366,10 +570,26 @@ export const admissionsService: AdmissionsService = {
   },
 
   async getDraft(key) {
+    if (clientAdapterMode() === "supabase") return serverDraftByRef(key);
     return respond(() => sessionGet<Record<string, ApplicationDraft>>(DRAFTS_KEY)?.[key] ?? null);
   },
 
-  async submitApplication(draft) {
+  async submitApplication(draft, draftRef) {
+    if (clientAdapterMode() === "supabase") {
+      const targetRef = draftRef;
+      const target = targetRef === undefined ? undefined : serverAdmissionIds.get(targetRef);
+      if (targetRef === undefined || target === undefined) {
+        throw new Error("Save the application draft before submitting it.");
+      }
+      const result = await adapterCall<{ versionId: string }>("admissions.submit", {
+        applicationRef: targetRef,
+        snapshot: { ...draft },
+        expectedVersion: target.version,
+        schemaVersion: 1,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Application submission failed.");
+      return { ref: targetRef };
+    }
     return respond(() => {
       /* An edit session (the last draft was saved under an application ref)
          updates that application in place, appending to its timeline; every
@@ -413,10 +633,25 @@ export const admissionsService: AdmissionsService = {
   },
 
   async getApplication(ref) {
+    if (clientAdapterMode() === "supabase") {
+      return (await serverApplicationByRef(ref, "mine")) ?? (await serverApplicationByRef(ref, "staff"));
+    }
     return respond(() => loadRecord(ref));
   },
 
   async respondToOffer(ref, accepted, by, note) {
+    if (clientAdapterMode() === "supabase") {
+      const target = serverAdmissionIds.get(ref);
+      const current = await serverApplicationByRef(ref, "mine");
+      if (target === undefined || current === null || current.offer === undefined) throw new Error("Application offer not found.");
+      const result = await adapterCall<{ invoiceRef: string | null }>("admissions.respondOffer", {
+        applicationRef: ref,
+        response: accepted ? "accepted" : "declined",
+        offerVersion: target.offerVersion,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Offer response failed.");
+      return (await serverApplicationByRef(ref, "mine")) ?? current;
+    }
     const updated = await respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
@@ -498,6 +733,24 @@ export const admissionsService: AdmissionsService = {
   },
 
   async requestChange(ref, reason) {
+    if (clientAdapterMode() === "supabase") {
+      const target = serverAdmissionIds.get(ref);
+      if (target === undefined) {
+        await serverAdmissionRows("staff");
+      }
+      const current = serverAdmissionIds.get(ref);
+      if (current === undefined) throw new Error("Application not found.");
+      const result = await adapterCall("admissions.requestChanges", {
+        applicationRef: ref,
+        expectedVersion: current.version,
+        visibleReason: reason.trim(),
+        privateNote: null,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Request for changes failed.");
+      const updated = (await serverApplicationByRef(ref, "staff")) ?? (await serverApplicationByRef(ref, "mine"));
+      if (updated === null) throw new Error("Application was updated but could not be reloaded.");
+      return updated;
+    }
     /* Staff side — kept behind the same boundary so the staff workspace can
        call it later; no page calls it in this phase. */
     return respond(() => {
@@ -525,6 +778,9 @@ export const admissionsService: AdmissionsService = {
   },
 
   async listStaffRecords() {
+    if (clientAdapterMode() === "supabase") {
+      return (await serverAdmissionRows("staff")).map((record) => ({ ...record }));
+    }
     return respond(() => {
       const fixtureRows: StaffQueueRecord[] = staffApplications
         .map((row): StaffQueueRecord | null => {
@@ -541,6 +797,9 @@ export const admissionsService: AdmissionsService = {
   },
 
   async staffMoveToAssessment(ref, note, actorAccountId) {
+    if (clientAdapterMode() === "supabase") {
+      return serverAdmissionDecision(ref, "reviewAdvance", { action: "assessment", visibleReason: note ?? null, privateNote: null });
+    }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
@@ -564,6 +823,9 @@ export const admissionsService: AdmissionsService = {
   },
 
   async staffOfferSeat(ref, note, actorAccountId) {
+    if (clientAdapterMode() === "supabase") {
+      return serverAdmissionDecision(ref, "decide", { action: "offer", visibleReason: note, privateNote: null, conditions: {}, expiresAt: null });
+    }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
@@ -593,6 +855,9 @@ export const admissionsService: AdmissionsService = {
   },
 
   async staffWaitlist(ref, note, actorAccountId) {
+    if (clientAdapterMode() === "supabase") {
+      return serverAdmissionDecision(ref, "decide", { action: "waitlist", visibleReason: note, privateNote: null, conditions: {}, expiresAt: null });
+    }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
@@ -612,6 +877,9 @@ export const admissionsService: AdmissionsService = {
   },
 
   async staffDecline(ref, note, actorAccountId) {
+    if (clientAdapterMode() === "supabase") {
+      return serverAdmissionDecision(ref, "decide", { action: "decline", visibleReason: note, privateNote: null, conditions: {}, expiresAt: null });
+    }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");

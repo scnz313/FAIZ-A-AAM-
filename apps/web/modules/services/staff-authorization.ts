@@ -37,7 +37,9 @@ export type StaffAction =
   | "audit.view"
   | "settings.manage"
   | "support.view"
-  | "support.respond";
+  | "support.respond"
+  | "facility.view"
+  | "facility.manage";
 
 /**
  * Canonical Phase-1 grant model: every role gets exactly its maker/checker
@@ -67,11 +69,11 @@ const ROLE_ACTIONS: Record<string, ReadonlySet<StaffAction>> = {
   /* Timetable: manager creates, validates, publishes, overrides. */
   timetable_manager: new Set(["home.view", "timetable.view", "timetable.manage"]),
   /* Support: officer responds and reviews guardian links. */
-  support_officer: new Set(["home.view", "support.view", "support.respond", "links.verify"]),
+  support_officer: new Set(["home.view", "support.view", "support.respond", "links.verify", "facility.view"]),
   /* Auditor: read-only audit. */
   auditor: new Set(["home.view", "audit.view"]),
   /* System administrator: configuration and access grants ONLY. */
-  system_administrator: new Set(["home.view", "users.manage", "settings.manage", "audit.view", "links.verify"]),
+  system_administrator: new Set(["home.view", "users.manage", "settings.manage", "audit.view", "links.verify", "facility.view", "facility.manage"]),
 };
 
 /** Sync check: can a role perform an action? */

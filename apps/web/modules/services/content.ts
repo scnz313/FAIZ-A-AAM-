@@ -18,6 +18,7 @@
  */
 
 import { demoNowIso } from "@/modules/demo/clock";
+import { formatKolkata } from "@/modules/iot/domain";
 import { auditService } from "@/modules/services/audit";
 import { enqueueOutboxEvent } from "@/modules/services/outbox";
 import {
@@ -58,6 +59,8 @@ export type NoticeAudience = "public" | "family";
  * in the staff workspaces).
  */
 export type ContentNotice = Notice & {
+  /** Server content-version id used only by the Supabase publisher boundary. */
+  versionId?: string;
   status: NoticeStatus;
   audience: NoticeAudience;
   /** Number of publishes — seeded rows have 1, fresh drafts have 0. */
@@ -93,6 +96,21 @@ const PUBLIC_PAGES: PublicPageRow[] = [
   { key: "careers", label: "Careers", href: "/careers", status: "Draft", lastReviewed: "—", owner: "R. Wani" },
   { key: "contact", label: "Contact", href: "/contact", status: "Published", lastReviewed: "01 Jul 2026", owner: "N. Lone" },
 ];
+
+/** Session key holding the mutable public-page list. */
+export const PUBLIC_PAGES_SESSION_KEY = sessionKey("content-public-pages");
+
+function loadPublicPages(): PublicPageRow[] {
+  const stored = sessionGet<PublicPageRow[]>(PUBLIC_PAGES_SESSION_KEY);
+  if (stored !== null) return stored.map((row) => ({ ...row }));
+  const seeded = PUBLIC_PAGES.map((row) => ({ ...row }));
+  sessionSet(PUBLIC_PAGES_SESSION_KEY, seeded);
+  return seeded.map((row) => ({ ...row }));
+}
+
+function savePublicPages(rows: PublicPageRow[]): void {
+  sessionSet(PUBLIC_PAGES_SESSION_KEY, rows.map((row) => ({ ...row })));
+}
 
 /* ------------------------------------------------------------------ */
 /* Demo adapter                                                        */
@@ -203,6 +221,17 @@ export interface ContentService {
   listDownloads(): Promise<DownloadItem[]>;
   /** Public-page review rows for the staff content page. */
   listPublicPages(): Promise<PublicPageRow[]>;
+  /** Update a public page's review status (maker/checker flow). Persists to the session store. */
+  setPublicPageStatus(
+    key: string,
+    next: PublicPageReviewStatus,
+    actor: string,
+  ): Promise<ContentResult<PublicPageRow>>;
+  /** Edit an existing notice's title, category, and body (drafts only). */
+  editNotice(
+    slug: string,
+    input: { title?: string; category?: NoticeCategory; body?: string[] },
+  ): Promise<ContentResult<ContentNotice>>;
   /** The vacancy for a slug, or null when unknown. */
   getVacancy(slug: string): Promise<Vacancy | null>;
   listVacancies(): Promise<Vacancy[]>;
@@ -256,6 +285,9 @@ export function createDemoContentService(): ContentService {
       if (current === undefined) {
         return { ok: false, message: "The notice was not found." };
       }
+      if (current.status === "published" && current.publishNote === note) {
+        return { ok: false, message: "This notice is already published with the same note. Use a different note to republish." };
+      }
       const next: ContentNotice = {
         ...current,
         status: "published",
@@ -295,6 +327,13 @@ export function createDemoContentService(): ContentService {
       }
       const next: ContentNotice = { ...current, status: "draft", scheduledForIso: null };
       saveStore(store.map((notice) => (notice.slug === slug ? next : notice)));
+      void auditService.record({
+        actor: "Content office",
+        action: "Notice published",
+        target: slug,
+        outcome: "Success",
+        reason: "Notice unpublished back to draft",
+      });
       return { ok: true, value: cloneNotice(next) };
     },
 
@@ -303,7 +342,57 @@ export function createDemoContentService(): ContentService {
     },
 
     async listPublicPages() {
-      return PUBLIC_PAGES.map((row) => ({ ...row }));
+      return loadPublicPages();
+    },
+
+    async setPublicPageStatus(key, nextStatus, actor) {
+      const rows = loadPublicPages();
+      const current = rows.find((row) => row.key === key);
+      if (current === undefined) {
+        return { ok: false, message: "The page was not found." };
+      }
+      const today = formatKolkata(demoNowIso(), { format: "day" });
+      const updated: PublicPageRow = {
+        ...current,
+        status: nextStatus,
+        lastReviewed: nextStatus === "Published" ? today : current.lastReviewed,
+      };
+      savePublicPages(rows.map((row) => (row.key === key ? updated : row)));
+      void auditService.record({
+        actor,
+        action: "Notice published",
+        target: `page:${key}`,
+        outcome: "Success",
+        reason: `Page status set to ${nextStatus}`,
+      });
+      return { ok: true, value: { ...updated } };
+    },
+
+    async editNotice(slug, input) {
+      const store = loadStore();
+      const current = store.find((notice) => notice.slug === slug);
+      if (current === undefined) {
+        return { ok: false, message: "The notice was not found." };
+      }
+      if (current.status === "published") {
+        return { ok: false, message: "Published notices cannot be edited directly. Unpublish first." };
+      }
+      const updated: ContentNotice = {
+        ...current,
+        title: input.title?.trim() || current.title,
+        category: input.category ?? current.category,
+        body: input.body ? [...input.body] : current.body,
+        excerpt: input.body ? (input.body[0]?.slice(0, 140) ?? "") : current.excerpt,
+      };
+      saveStore(store.map((notice) => (notice.slug === slug ? updated : notice)));
+      void auditService.record({
+        actor: "Content office",
+        action: "Notice published",
+        target: slug,
+        outcome: "Success",
+        reason: `Notice edited: ${input.title ? "title changed" : "content updated"}`,
+      });
+      return { ok: true, value: cloneNotice(updated) };
     },
 
     getVacancy: (slug) => Promise.resolve(vacancies.find((item) => item.slug === slug) ?? null),
@@ -313,3 +402,103 @@ export function createDemoContentService(): ContentService {
 
 /** Default singleton consumed by pages. */
 export const contentService: ContentService = createDemoContentService();
+
+/* Supabase facade: protected/public reads use only the authorized adapter
+ * projection. Demo session rows are never consulted in this branch. */
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
+
+export type ServerContentRow = {
+  id: string;
+  reference: string;
+  kind: string;
+  slug: string;
+  current_status: string;
+  version?: number;
+  current_version_id?: string | null;
+  content_versions?: Array<{ id: string; version: number; title: string; body: unknown; review_status: string; published_at: string | null; created_at: string }>;
+  notices?: Array<{ category: string; urgent: boolean; status: string; published_at: string | null; expires_at: string | null; scheduled_at?: string | null; notice_audiences?: Array<{ audience: string }> }>;
+};
+
+export function mapServerContentRow(row: ServerContentRow): ContentNotice {
+  const version = [...(row.content_versions ?? [])].sort((a, b) => b.version - a.version)[0];
+  const bodyValue = version?.body;
+  const body = typeof bodyValue === "object" && bodyValue !== null && !Array.isArray(bodyValue) && Array.isArray((bodyValue as { blocks?: unknown }).blocks)
+    ? ((bodyValue as { blocks: unknown[] }).blocks).map((block) => typeof block === "object" && block !== null && typeof (block as { text?: unknown }).text === "string" ? (block as { text: string }).text : "").filter(Boolean)
+    : Array.isArray(bodyValue) ? bodyValue.filter((item): item is string => typeof item === "string") : [typeof bodyValue === "string" ? bodyValue : "Published school notice."];
+  const notice = row.notices?.[0];
+  const audience = notice?.notice_audiences?.some((candidate) => candidate.audience !== "public") ? "family" : "public";
+  return { slug: row.slug, versionId: (version as { id?: string } | undefined)?.id, category: (notice?.category ?? "General") as NoticeCategory, title: version?.title ?? row.slug, excerpt: body[0]?.slice(0, 140) ?? "", body, dateIso: notice?.published_at ?? version?.published_at ?? version?.created_at ?? "", urgent: notice?.urgent ?? false, status: row.current_status === "expired" ? "expired" : row.current_status === "published" ? "published" : "draft", audience, version: row.version ?? version?.version ?? 0, reviewDue: "—", scheduledForIso: notice?.scheduled_at ?? null };
+}
+
+const originalContent = createDemoContentService();
+contentService.listForAudience = async (audience, opts = {}) => {
+  if (clientAdapterMode() !== "supabase") return originalContent.listForAudience(audience, opts);
+  const response = await adapterCall<ServerContentRow[]>("content.list", { scope: audience === "family" ? "family" : "public" });
+  if (!response.ok) throw new Error(response.errors[0]?.message ?? "Content is unavailable.");
+  return response.value.map(mapServerContentRow).filter((row) => row.status === (opts.status ?? "published"));
+};
+contentService.getNotice = async (slug, audience) => {
+  if (clientAdapterMode() !== "supabase") return originalContent.getNotice(slug, audience);
+  const rows = await contentService.listForAudience(audience);
+  return rows.find((row) => row.slug === slug) ?? null;
+};
+contentService.listForStaff = async () => {
+  if (clientAdapterMode() !== "supabase") return originalContent.listForStaff();
+  const response = await adapterCall<ServerContentRow[]>("content.list", { scope: "staff" });
+  if (!response.ok) throw new Error(response.errors[0]?.message ?? "Content is unavailable.");
+  return response.value.map(mapServerContentRow);
+};
+contentService.createNotice = async (input) => {
+  if (clientAdapterMode() !== "supabase") return originalContent.createNotice(input);
+  const response = await adapterCall<{ reference: string; version: number }>("content.saveDraft", { contentItemId: null, kind: "notice", slug: input.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), title: input.title, body: { blocks: input.body.map((text) => ({ type: "paragraph", text })) } });
+  if (!response.ok) throw new Error(response.errors[0]?.message ?? "Unable to create content draft.");
+  return { slug: input.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), category: input.category, title: input.title, excerpt: input.body[0] ?? "", body: [...input.body], dateIso: new Date().toISOString(), urgent: input.urgent ?? false, status: "draft", audience: "public", version: response.value.version, reviewDue: "—", scheduledForIso: input.scheduledForIso ?? null };
+};
+contentService.publishNotice = async (slug, input) => {
+  if (clientAdapterMode() !== "supabase") return originalContent.publishNotice(slug, input);
+  const rows = await contentService.listForStaff();
+  const row = rows.find((candidate) => candidate.slug === slug);
+  const versionId = row?.versionId;
+  if (row === undefined || !versionId) return { ok: false, message: "The content version is not available for publication." };
+  const response = await adapterCall<unknown>("content.publishVersion", { versionId });
+  const current = row;
+  return response.ok ? { ok: true, value: { ...current, status: "published", publishNote: input.note } } : { ok: false, message: response.errors[0]?.message ?? "Unable to publish content." };
+};
+contentService.unpublishNotice = async (slug) => {
+  if (clientAdapterMode() !== "supabase") return originalContent.unpublishNotice(slug);
+  const rows = await adapterCall<ServerContentRow[]>("content.list", { scope: "staff" });
+  if (!rows.ok) throw new Error(rows.errors[0]?.message ?? "Content is unavailable.");
+  const row = rows.value.find((candidate) => candidate.slug === slug);
+  if (!row) return { ok: false, message: "The notice was not found." };
+  const response = await adapterCall<unknown>("content.unpublish", { contentItemId: row.id, reason: "Unpublished through the content workspace." });
+  return response.ok ? { ok: true, value: mapServerContentRow({ ...row, current_status: "draft" }) } : { ok: false, message: response.errors[0]?.message ?? "Unable to unpublish content." };
+};
+contentService.listDownloads = async () => {
+  if (clientAdapterMode() !== "supabase") return originalContent.listDownloads();
+  throw new Error("Public download metadata is not available in the current content projection.");
+};
+contentService.listPublicPages = async () => {
+  if (clientAdapterMode() !== "supabase") return originalContent.listPublicPages();
+  throw new Error("Public page review metadata is not available in the current content projection.");
+};
+contentService.setPublicPageStatus = async (key, next, actor) => {
+  if (clientAdapterMode() !== "supabase") return originalContent.setPublicPageStatus(key, next, actor);
+  throw new Error(`Public page review is unavailable for ${key}.`);
+};
+contentService.editNotice = async (slug, input) => {
+  if (clientAdapterMode() !== "supabase") return originalContent.editNotice(slug, input);
+  const rows = await adapterCall<ServerContentRow[]>("content.list", { scope: "staff" });
+  const row = rows.ok ? rows.value.find((candidate) => candidate.slug === slug) : undefined;
+  if (!row) return { ok: false, message: "The notice was not found." };
+  const current = mapServerContentRow(row);
+  const response = await adapterCall<unknown>("content.saveDraft", { contentItemId: row.id, kind: row.kind, slug, title: input.title ?? current.title, body: { blocks: (input.body ?? current.body).map((text) => ({ type: "paragraph", text })) }, expectedVersion: current.version });
+  return response.ok ? { ok: true, value: { ...current, title: input.title ?? current.title, body: input.body ?? current.body, status: "draft", version: current.version + 1 } } : { ok: false, message: response.errors[0]?.message ?? "Unable to edit content." };
+};
+contentService.getVacancy = async (slug) => {
+  if (clientAdapterMode() !== "supabase") return originalContent.getVacancy(slug);
+  throw new Error(`Vacancy ${slug} must be loaded through the server vacancy loader.`);
+};
+contentService.listVacancies = async () => {
+  if (clientAdapterMode() !== "supabase") return originalContent.listVacancies();
+  throw new Error("Vacancies must be loaded through the server vacancy loader.");
+};

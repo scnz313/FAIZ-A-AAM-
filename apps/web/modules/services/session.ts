@@ -57,3 +57,17 @@ export function sessionRemove(key: string): void {
 export function sessionKey(domain: string): string {
   return `fass-demo:${domain}`;
 }
+
+/** Clear client-side protected/demo context after a server denial. Supabase
+ * authorization is never based on these values; this prevents revoked family
+ * or staff rows from lingering in an already-mounted shell. */
+export function clearProtectedClientState(): void {
+  const keys = [
+    sessionKey("identity"),
+    sessionKey("relationships"),
+    sessionKey("staff-identity"),
+    sessionKey("active-child"),
+    sessionKey("active-workspace"),
+  ];
+  for (const key of keys) sessionRemove(key);
+}

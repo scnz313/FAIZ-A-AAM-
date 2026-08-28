@@ -25,6 +25,8 @@ export type OutboxEventKind =
   | "link.approved"
   | "link.rejected"
   | "link.revoked"
+  | "link.restricted"
+  | "link.capabilities.changed"
   | "link.requested"
   | "enrollment.converted"
   | "results.published"

@@ -37,6 +37,9 @@ import {
   invoiceBalance,
   invoicePaid,
   invoiceTotal,
+  formatINR,
+  INVOICE_STATUS_META,
+  FINANCE_DEMO_NOTE,
   invoices as fixtureInvoices,
   mariamInvoices as fixtureMariamInvoices,
   mariamReceipts as fixtureMariamReceipts,
@@ -50,9 +53,20 @@ import {
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
 import { auditService } from "@/modules/services/audit";
 import { enqueueOutboxEvent } from "@/modules/services/outbox";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
+import {
+  invoiceSummary,
+  mapServerInvoice,
+  mapServerReceipt,
+  type ServerInvoiceRow,
+  type ServerReceiptRow,
+} from "@/modules/services/finance-server-map";
+export type { PaymentProvider, PaymentOrder, PaymentRefund, PaymentProviderStatus } from "@/modules/services/payment-provider";
+export { createLocalSandboxPaymentProvider } from "@/modules/services/payment-provider";
 
 /** Shared finance types re-exported at the service boundary. */
 export type { Invoice, InvoiceStatus, Payment, PaymentMethod, Receipt } from "@/modules/finance/demo";
+export { formatINR, invoiceTotal, INVOICE_STATUS_META, FINANCE_DEMO_NOTE } from "@/modules/finance/demo";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                                */
@@ -102,7 +116,8 @@ export type FinanceServiceErrorCode =
   | "invoice-not-found"
   | "amount-mismatch"
   | "attempt-not-found"
-  | "attempt-not-succeeded";
+  | "attempt-not-succeeded"
+  | "policy-pending";
 
 export class FinanceServiceError extends Error {
   readonly code: FinanceServiceErrorCode;
@@ -249,23 +264,106 @@ function toView(invoice: Invoice): InvoiceView {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* Supabase adapter (server rows → the same domain shapes)              */
+/* ------------------------------------------------------------------ */
+
+async function serverInvoices(): Promise<InvoiceView[]> {
+  const result = await adapterCall<ServerInvoiceRow[]>("finance.listInvoices");
+  if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "The ledger is unavailable.");
+  const receipts = await serverReceipts();
+  return result.value.map((row) => {
+    const invoice = mapServerInvoice(row);
+    const summary = invoiceSummary(invoice);
+    return {
+      invoice,
+      studentId: invoice.studentId,
+      studentName: "—",
+      status: invoice.status,
+      totalPaise: summary.totalPaise,
+      paidPaise: summary.paidPaise,
+      balancePaise: summary.balancePaise,
+      payments: invoice.payments,
+      receipts: receipts.filter((receipt) => receipt.invoiceRef === invoice.ref),
+    };
+  });
+}
+
+async function serverReceipts(): Promise<Receipt[]> {
+  const result = await adapterCall<ServerReceiptRow[]>("finance.listReceipts");
+  if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "The ledger is unavailable.");
+  return result.value.map(mapServerReceipt);
+}
+
+type ServerAttemptRow = {
+  id: string;
+  reference: string;
+  amount_paise: number;
+  method: string;
+  status: string;
+  failure_reason: string | null;
+  provider_order_ref: string | null;
+  created_at: string;
+  updated_at: string;
+  invoices: { reference: string } | null;
+};
+
+function mapServerAttempt(row: ServerAttemptRow): PaymentAttempt {
+  const attempt: PaymentAttempt = {
+    id: row.reference,
+    invoiceRef: row.invoices?.reference ?? "",
+    method: row.method as PaymentMethod,
+    amountPaise: row.amount_paise,
+    status: row.status as PaymentAttemptStatus,
+    createdAtIso: row.created_at,
+    updatedAtIso: row.updated_at,
+    gatewayRef: row.provider_order_ref ?? undefined,
+    failureReason: row.failure_reason ?? undefined,
+  };
+  serverAttempts.set(attempt.id, { ...attempt });
+  return attempt;
+}
+
+/** True when the Supabase adapter owns the runtime data path. */
+function isServerMode(): boolean {
+  return clientAdapterMode() === "supabase";
+}
+
+/**
+ * Live checkout attempts for this page session, keyed by server reference.
+ * The server owns the durable state machine (migration 000019); this map
+ * only preserves the facade's PaymentAttempt shape between PayFlow steps —
+ * it never holds money state that outlives the checkout.
+ */
+const serverAttempts = new Map<string, PaymentAttempt>();
+
 /**
  * One student's invoices with live totals. The no-argument call keeps the
  * historical Aarif first-paint default for the portal server render; pass a
- * student id for the active-child ledger.
+ * student id for the active-child ledger. In supabase mode the RLS-filtered
+ * server ledger is returned and `studentId` narrows it client-side.
  */
 export async function listInvoices(studentId?: string): Promise<InvoiceView[]> {
+  if (isServerMode()) {
+    const views = await serverInvoices();
+    return studentId === undefined ? views : views.filter((view) => view.studentId === studentId);
+  }
   const target = studentId ?? STUDENT_AARIF_ID;
   return respond(() => loadInvoices().filter((invoice) => invoice.studentId === target).map(toView));
 }
 
 /** Staff-wide ledger across both demo students, in fixture order. */
 export async function listAllInvoices(): Promise<InvoiceView[]> {
+  if (isServerMode()) return serverInvoices();
   return respond(() => loadInvoices().map(toView));
 }
 
 /** One invoice view, or null when the reference does not exist. */
 export async function getInvoice(invoiceRef: string): Promise<InvoiceView | null> {
+  if (isServerMode()) {
+    const views = await serverInvoices();
+    return views.find((view) => view.invoice.ref === invoiceRef) ?? null;
+  }
   return respond(() => {
     const invoice = loadInvoices().find((item) => item.ref === invoiceRef);
     return invoice ? toView(invoice) : null;
@@ -345,7 +443,37 @@ export async function createPaymentAttempt(
   invoiceRef: string,
   method: PaymentMethod,
   amountPaise: number,
+  idempotencyKey?: string,
 ): Promise<PaymentAttempt> {
+  if (isServerMode()) {
+    const result = await adapterCall<{ attemptRef: string; providerOrderRef: string }>("finance.createAttempt", {
+      invoiceRef,
+      amountPaise,
+      method,
+      idempotencyKey,
+    });
+    if (!result.ok) {
+      const message = result.errors[0]?.message ?? "The gateway could not be reached.";
+      throw new FinanceServiceError(
+        message.includes("amount mismatch") ? "amount-mismatch" : "gateway-unreachable",
+        message.includes("amount mismatch")
+          ? "The amount is out of date — refresh the invoice and try again."
+          : message,
+      );
+    }
+    const live: PaymentAttempt = {
+      id: result.value.attemptRef,
+      invoiceRef,
+      method,
+      amountPaise,
+      status: "created",
+      createdAtIso: new Date().toISOString(),
+      updatedAtIso: new Date().toISOString(),
+      gatewayRef: result.value.providerOrderRef,
+    };
+    serverAttempts.set(live.id, { ...live });
+    return { ...live };
+  }
   return respond(() => {
     if (getDemoScenario() === "create-fails") {
       throw new FinanceServiceError(
@@ -387,6 +515,26 @@ export async function createPaymentAttempt(
  * on its next refresh. Never creates or posts anything.
  */
 export async function refreshAttempt(attemptId: string): Promise<PaymentAttempt> {
+  if (isServerMode()) {
+    /* The sandbox machine advances one step per poll, mirroring demo pacing.
+       The stored attempt (below) keeps the facade shape stable for PayFlow. */
+    const result = await adapterCall<{ status: PaymentAttemptStatus; version?: number }>("finance.refreshAttempt", {
+      attemptRef: attemptId,
+    });
+    if (!result.ok) {
+      const message = result.errors[0]?.message ?? "The gateway could not be reached.";
+      throw new FinanceServiceError("attempt-not-found", message);
+    }
+    let known = serverAttempts.get(attemptId);
+    if (known === undefined) {
+      const recovered = await adapterCall<ServerAttemptRow>("finance.getAttempt", { attemptRef: attemptId });
+      if (!recovered.ok) throw new FinanceServiceError("attempt-not-found", recovered.errors[0]?.message ?? `Payment attempt ${attemptId} was not found.`);
+      known = mapServerAttempt(recovered.value);
+    }
+    known.status = result.value.status;
+    known.updatedAtIso = new Date().toISOString();
+    return { ...known };
+  }
   return respond(() => {
     const attempts = loadAttempts();
     const attempt = attempts.find((item) => item.id === attemptId);
@@ -430,6 +578,53 @@ export async function refreshAttempt(attemptId: string): Promise<PaymentAttempt>
  * double post and never a second receipt.
  */
 export async function confirmSuccess(attemptId: string): Promise<ConfirmedPair> {
+  if (isServerMode()) {
+    let attempt = serverAttempts.get(attemptId);
+    if (attempt === undefined) {
+      const recovered = await adapterCall<ServerAttemptRow>("finance.getAttempt", { attemptRef: attemptId });
+      if (!recovered.ok) throw new FinanceServiceError("attempt-not-found", recovered.errors[0]?.message ?? `Payment attempt ${attemptId} was not found.`);
+      attempt = mapServerAttempt(recovered.value);
+    }
+    if (attempt.status !== "succeeded") {
+      throw new FinanceServiceError(
+        "attempt-not-succeeded",
+        "This payment attempt has not been confirmed by the gateway yet — check its status again.",
+      );
+    }
+    const result = await adapterCall<{ receiptRef: string }>("finance.postPayment", {
+      invoiceRef: attempt.invoiceRef,
+      attemptRef: attempt.id,
+      providerTxnId: attempt.gatewayRef ?? attempt.id,
+      amountPaise: attempt.amountPaise,
+      method: attempt.method,
+    });
+    if (!result.ok) {
+      throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Posting failed.");
+    }
+    const receipts = await listReceipts();
+    const receipt = receipts.find((candidate) => candidate.ref === result.value.receiptRef);
+    const payment: Payment = {
+      ref: attempt.id,
+      paidAtIso: attempt.updatedAtIso,
+      method: attempt.method,
+      amountPaise: attempt.amountPaise,
+      receiptRef: result.value.receiptRef,
+    };
+    return {
+      payment,
+      receipt:
+        receipt ??
+        ({
+          ref: result.value.receiptRef,
+          invoiceRef: attempt.invoiceRef,
+          studentId: null,
+          issuedAtIso: new Date().toISOString(),
+          method: attempt.method,
+          amountPaise: attempt.amountPaise,
+          counter: "Online payment",
+        } satisfies Receipt),
+    };
+  }
   return respond(() => {
     const confirms = loadConfirms();
     const confirmed = confirms[attemptId];
@@ -515,6 +710,11 @@ export async function confirmSuccess(attemptId: string): Promise<ConfirmedPair> 
 
 /** Attempts for one invoice in creation order (empty when none exist). */
 export async function listAttempts(invoiceRef: string): Promise<PaymentAttempt[]> {
+  if (isServerMode()) {
+    const result = await adapterCall<ServerAttemptRow[]>("finance.listAttempts", { invoiceRef });
+    if (!result.ok) throw new FinanceServiceError("attempt-not-found", result.errors[0]?.message ?? "Attempts unavailable.");
+    return result.value.map(mapServerAttempt);
+  }
   return respond(() =>
     loadAttempts()
       .filter((attempt) => attempt.invoiceRef === invoiceRef)
@@ -528,15 +728,71 @@ export async function listAttempts(invoiceRef: string): Promise<PaymentAttempt[]
 
 /** All receipts: fixtures plus session-issued ones, in issue order. */
 export async function listReceipts(): Promise<Receipt[]> {
+  if (isServerMode()) return serverReceipts();
   return respond(() => loadReceipts().map((receipt) => ({ ...receipt })));
 }
 
 /** One receipt, or null when the reference does not exist. */
 export async function getReceipt(receiptRef: string): Promise<Receipt | null> {
+  if (isServerMode()) {
+    const receipts = await serverReceipts();
+    return receipts.find((receipt) => receipt.ref === receiptRef) ?? null;
+  }
   return respond(() => {
     const receipt = loadReceipts().find((item) => item.ref === receiptRef);
     return receipt ? { ...receipt } : null;
   });
+}
+
+export type ReconciliationRun = {
+  id: string;
+  reference: string;
+  runAt: string;
+  status: string;
+  summary: unknown;
+  createdByAccountId: string | null;
+};
+
+export async function applyConcession(input: {
+  invoiceId: string;
+  amountPaise: number;
+  reason: string;
+  type: string;
+}): Promise<{ concessionId: string | null }> {
+  if (isServerMode()) {
+    const result = await adapterCall<{ concessionId: string | null }>(
+      "finance.applyConcession",
+      input as unknown as Record<string, unknown>,
+    );
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Concession failed.");
+    return result.value;
+  }
+  throw new FinanceServiceError("policy-pending", "policy pending");
+}
+
+export async function requestRefund(input: {
+  paymentId: string;
+  amountPaise: number;
+  reason: string;
+}): Promise<{ refundRequestId: string | null }> {
+  if (isServerMode()) {
+    const result = await adapterCall<{ refundRequestId: string | null }>(
+      "finance.requestRefund",
+      input as unknown as Record<string, unknown>,
+    );
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Refund failed.");
+    return result.value;
+  }
+  throw new FinanceServiceError("policy-pending", "policy pending");
+}
+
+export async function listReconciliationRuns(): Promise<ReconciliationRun[]> {
+  if (isServerMode()) {
+    const result = await adapterCall<ReconciliationRun[]>("finance.listReconciliationRuns");
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Reconciliation unavailable.");
+    return result.value;
+  }
+  throw new FinanceServiceError("policy-pending", "policy pending");
 }
 
 /* ------------------------------------------------------------------ */
@@ -555,4 +811,7 @@ export const financeService = {
   listAttempts,
   listReceipts,
   getReceipt,
+  applyConcession,
+  requestRefund,
+  listReconciliationRuns,
 };

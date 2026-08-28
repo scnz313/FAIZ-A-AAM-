@@ -18,12 +18,22 @@
  * Everything here is fictional demo data. No server persistence.
  */
 
-import { timetableByDay, weekDays, type Period } from "@/modules/academics/demo";
-import { demoNowIso } from "@/modules/demo/clock";
+import { midTermDateSheet, timetableByDay, weekDays, type ExamSlot, type Period } from "@/modules/academics/demo";
+import { demoNowIso, demoWeekday } from "@/modules/demo/clock";
+import { auditService } from "@/modules/services/audit";
 import { sessionGet, sessionKey, sessionRemove, sessionSet } from "@/modules/services/session";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 
 /** The demo class owned by this facade; other classes have no timetable data. */
 export const TIMETABLE_CLASS = "8-A";
+/** Presentation calendar for the isolated demo adapter; Supabase mode uses
+ * server period/date-sheet projections instead. */
+export const TIMETABLE_WEEK_DAYS = weekDays;
+export function getDemoDateSheet(): ExamSlot[] {
+  return midTermDateSheet.map((slot) => ({ ...slot }));
+}
+export function timetableDemoNowIso(): string { return demoNowIso(); }
+export function timetableDemoWeekday(): string { return demoWeekday(); }
 
 /** Demo week carried by published versions. */
 export const TIMETABLE_WEEK = "2026-08-03";
@@ -69,11 +79,145 @@ export type DraftNote = {
   atIso: string;
 };
 
+/* ------------------------------------------------------------------ */
+/* Overrides and date-sheet state                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One date-specific change to a published class timetable (blueprint §5.9).
+ * Overrides never rewrite the base timetable: they are recorded against a
+ * date + period, applied only on that date, and stay in history after
+ * revocation. The base timetable remains the source for every other date.
+ */
+export type TimetableOverrideKind = "substitute" | "room" | "cancellation" | "special";
+
+export type TimetableOverride = {
+  /** Deterministic demo reference, e.g. "OVR-2026-001". */
+  ref: string;
+  className: string;
+  /** The date the override applies to, "YYYY-MM-DD" in the demo week. */
+  dateIso: string;
+  day: string;
+  time: string;
+  kind: TimetableOverrideKind;
+  /** Substitute kind only — the covering teacher. */
+  teacher?: string;
+  /** Substitute kind only — the covering subject. */
+  subject?: string;
+  /** Room kind only — the changed room. */
+  room?: string;
+  /** Required reason — recorded in the change trail and audit. */
+  note: string;
+  createdAtIso: string;
+  by: string;
+  /** Set when revoked; the record stays in history (append-only). */
+  revokedAtIso: string | null;
+};
+
+export type TimetableOverrideInput = {
+  dateIso: string;
+  time: string;
+  kind: TimetableOverrideKind;
+  teacher?: string;
+  subject?: string;
+  room?: string;
+  note: string;
+  by?: string;
+};
+
+/** Published exam date-sheet state for a class (demo session). */
+export type DateSheetState = {
+  published: boolean;
+  version: number;
+  publishedAtIso: string;
+  by: string;
+};
+
 export type TimetableDraft = {
+  id?: string;
+  ref?: string;
+  revision?: number;
   savedAtIso: string;
   periods: Record<string, Period[]>;
   notes: DraftNote[];
 };
+
+type SupabaseTimetablePeriod = {
+  day_of_week: number;
+  period_number: number;
+  starts_at: string;
+  ends_at: string;
+  subject_id: string | null;
+  teacher_assignment_id: string | null;
+  room_id: string | null;
+  kind: string;
+  subjects?: { name: string } | null;
+  staff_assignments?: { staff_members?: { people?: { display_name: string } | null } | null } | null;
+  rooms?: { label: string } | null;
+};
+
+type SupabaseTimetableVersion = {
+  id: string;
+  reference: string;
+  grade_section_id: string;
+  status: string;
+  version: number;
+  revision?: number;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  created_at: string;
+  updated_at?: string;
+  timetable_periods?: SupabaseTimetablePeriod[];
+  timetable_publications?: { reference: string; published_at: string; note: string | null }[] | null;
+};
+
+type SupabaseConfiguration = {
+  gradeSections: Array<{ id: string; ref?: string; gradeLabel: string; sectionLabel: string }>;
+  subjects?: Array<{ id: string; code?: string; name: string }>;
+  assignments?: Array<{ id: string; ref?: string; gradeSectionId: string | null; subjectId: string | null; teacherName: string }>;
+  rooms?: Array<{ id: string; label: string; code: string }>;
+  periods?: Array<{ dayOfWeek: number; periodNumber: number; startsAt: string; endsAt: string }>;
+};
+
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+
+function mapSupabasePeriods(periods: SupabaseTimetablePeriod[] | undefined): Record<string, Period[]> {
+  const mapped: Record<string, Period[]> = {};
+  for (const period of periods ?? []) {
+    const day = DAY_NAMES[Math.max(0, period.day_of_week - 1)] ?? "Monday";
+    (mapped[day] ??= []).push({
+      time: period.starts_at.slice(0, 5),
+      subject: period.subjects?.name ?? period.subject_id ?? "Scheduled class",
+      teacher: period.staff_assignments?.staff_members?.people?.display_name ?? period.teacher_assignment_id ?? "Assigned teacher",
+      room: period.rooms?.label ?? period.room_id ?? "Assigned room",
+      kind: period.kind as Period["kind"],
+    });
+  }
+  return mapped;
+}
+
+async function supabaseConfiguration(): Promise<SupabaseConfiguration | null> {
+  const response = await adapterCall<SupabaseConfiguration>("config.read", {});
+  return response.ok ? response.value : null;
+}
+
+async function supabaseSectionId(className: string): Promise<string | null> {
+  const config = await supabaseConfiguration();
+  if (!config) return null;
+  const normalized = className.replace(/^Class\s+/i, "").replace("-", " ");
+  return config.gradeSections.find((section) => `${section.gradeLabel.replace(/^Class\s+/i, "")}-${section.sectionLabel}` === className || `${section.gradeLabel.replace(/^Class\s+/i, "")} ${section.sectionLabel}` === normalized)?.id ?? null;
+}
+
+async function supabaseSectionRef(className: string): Promise<string | null> {
+  const config = await supabaseConfiguration();
+  if (!config) return null;
+  const normalized = className.replace(/^Class\s+/i, "").replace("-", " ");
+  return config.gradeSections.find((section) => `${section.gradeLabel.replace(/^Class\s+/i, "")}-${section.sectionLabel}` === className || `${section.gradeLabel.replace(/^Class\s+/i, "")} ${section.sectionLabel}` === normalized)?.ref ?? null;
+}
+
+function uuidOrNull(value: string | null | undefined): string | null {
+  return value !== undefined && value !== null && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) ? value : null;
+}
 
 /* ------------------------------------------------------------------ */
 /* Session storage (per class)                                          */
@@ -93,6 +237,42 @@ function historyKey(className: string): string {
 
 function draftKey(className: string): string {
   return sessionKey(`timetable:${sessionSlug(className)}:draft`);
+}
+
+function overridesKey(className: string): string {
+  return sessionKey(`timetable:${sessionSlug(className)}:overrides`);
+}
+
+function dateSheetKey(className: string): string {
+  return sessionKey(`timetable:${sessionSlug(className)}:datesheet`);
+}
+
+const OVERRIDES_COUNTER_KEY = sessionKey("timetable:overrides:counter");
+
+/** Date of a weekday in the demo week (Mon 3 Aug – Sat 8 Aug 2026), or
+ * null for days outside the fixture week. Overrides must target this week. */
+export function demoDateForWeekday(day: string): string | null {
+  const index = TIMETABLE_WEEK_DAYS.indexOf(day);
+  if (index < 0) return null;
+  const base = new Date(`${TIMETABLE_WEEK}T00:00:00.000Z`);
+  base.setUTCDate(base.getUTCDate() + index);
+  return base.toISOString().slice(0, 10);
+}
+
+/** The demo weekday ("Monday"…) for a "YYYY-MM-DD" date in the demo week. */
+function demoWeekdayForDate(dateIso: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
+  for (const day of TIMETABLE_WEEK_DAYS) {
+    if (demoDateForWeekday(day) === dateIso) return day;
+  }
+  return null;
+}
+
+function nextOverrideRef(): string {
+  const last = sessionGet<number>(OVERRIDES_COUNTER_KEY) ?? 0;
+  const next = last + 1;
+  sessionSet(OVERRIDES_COUNTER_KEY, next);
+  return `OVR-2026-${String(next).padStart(3, "0")}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -129,6 +309,16 @@ export function isKnownTimetableClass(className: string): boolean {
 /** A copy of the demo's known class keys ("8-A", "9-C"). */
 export function listKnownClasses(): string[] {
   return [...TIMETABLE_KNOWN_CLASSES];
+}
+
+/** Dynamic section list for operational Supabase mode. The fixed demo class
+ * list is intentionally used only when the demo adapter is active. */
+export async function listTimetableClasses(): Promise<string[]> {
+  if (clientAdapterMode() === "supabase") {
+    const config = await supabaseConfiguration();
+    return (config?.gradeSections ?? []).map((section) => classKeyForGradeSection({ gradeLabel: section.gradeLabel, sectionLabel: section.sectionLabel }));
+  }
+  return listKnownClasses();
 }
 
 /* ------------------------------------------------------------------ */
@@ -590,6 +780,18 @@ export function effectiveTimetable(className: string = TIMETABLE_CLASS): Record<
   return readPublishedVersion(className)?.periods ?? (isKnownTimetableClass(className) ? timetableByDay : null);
 }
 
+/** Async protected read. In Supabase mode it only returns database data and
+ * never consults the demo fixture or session store. */
+export async function getEffectiveTimetable(className: string = TIMETABLE_CLASS): Promise<Record<string, Period[]> | null> {
+  if (clientAdapterMode() === "supabase") {
+    const sectionRef = await supabaseSectionRef(className);
+    if (!sectionRef) return null;
+    const response = await adapterCall<SupabaseTimetableVersion | null>("timetable.effective", { gradeSectionRef: sectionRef });
+    return response.ok && response.value ? mapSupabasePeriods(response.value.timetable_periods) : null;
+  }
+  return effectiveTimetable(className);
+}
+
 /**
  * The session-published timetable (version metadata + period snapshot) for
  * a class, or null when nothing was published this session. The portal and
@@ -597,12 +799,26 @@ export function effectiveTimetable(className: string = TIMETABLE_CLASS): Record<
  * portal shows.
  */
 export async function getTimetableVersion(className: string = TIMETABLE_CLASS): Promise<TimetableVersion | null> {
+  if (clientAdapterMode() === "supabase") {
+    const sectionRef = await supabaseSectionRef(className);
+    if (!sectionRef) return null;
+    const response = await adapterCall<SupabaseTimetableVersion | null>("timetable.effective", { gradeSectionRef: sectionRef });
+    if (!response.ok || !response.value) return null;
+    const publication = response.value.timetable_publications?.[0];
+    return { className, weekOf: response.value.effective_from ?? TIMETABLE_WEEK, version: response.value.version, note: publication?.note ?? undefined, publishedAtIso: publication?.published_at, periods: mapSupabasePeriods(response.value.timetable_periods) };
+  }
   const snapshot = readPublishedVersion(className);
   return snapshot ? { ...snapshot, periods: snapshot.periods } : null;
 }
 
 /** Version history: fixture v1 (Class 8-A) plus every session-published version, newest first. */
 export async function getTimetableVersionList(className: string = TIMETABLE_CLASS): Promise<TimetableVersionEntry[]> {
+  if (clientAdapterMode() === "supabase") {
+    const response = await adapterCall<SupabaseTimetableVersion[]>("timetable.listVersions", {});
+    if (!response.ok) return [];
+    const sectionId = await supabaseSectionId(className);
+    return response.value.filter((item) => item.grade_section_id === sectionId).map((item) => ({ version: item.version, note: item.timetable_publications?.[0]?.note ?? `Timetable ${item.status}`, publishedAtIso: item.timetable_publications?.[0]?.published_at ?? item.created_at, by: "Timetable office", session: false }));
+  }
   const history = sessionGet<TimetableVersionEntry[]>(historyKey(className)) ?? [];
   if (!isKnownTimetableClass(className)) return [...history];
   return [...history, fixtureVersion];
@@ -634,6 +850,30 @@ function nextVersionNumber(className: string = TIMETABLE_CLASS): number {
   return latest + 1;
 }
 
+async function mapPeriodsToDatabase(
+  periods: Record<string, Period[]>,
+  edits: ReadonlyArray<TimetablePeriodEdit>,
+): Promise<Array<Record<string, unknown>>> {
+  const config = await supabaseConfiguration();
+  if (!config) throw new Error("School timetable configuration is unavailable.");
+  return Object.entries(periods).flatMap(([day, entries]) => entries.map((original, index) => {
+    const edit = edits.find((candidate) => candidate.day === day && candidate.time === original.time);
+    const period = edit ? { ...original, subject: edit.subject, teacher: edit.teacher, room: edit.room } : original;
+    const subject = config.subjects?.find((candidate) => candidate.name.toLowerCase() === period.subject.toLowerCase());
+    const subjectId = uuidOrNull(period.subject) ?? subject?.id ?? null;
+    const assignment = config.assignments?.find((candidate) => candidate.teacherName.toLowerCase() === period.teacher.toLowerCase() && candidate.gradeSectionId !== null && (subjectId === null || candidate.subjectId === subjectId));
+    const assignmentId = uuidOrNull(period.teacher) ?? assignment?.id ?? null;
+    const room = config.rooms?.find((candidate) => candidate.label.toLowerCase() === period.room.toLowerCase() || candidate.code.toLowerCase() === period.room.toLowerCase());
+    const roomId = uuidOrNull(period.room) ?? room?.id ?? null;
+    const isPlaceholder = period.kind === "break" || period.kind === "assembly" || period.subject === "—" || period.teacher === "—";
+    if (!isPlaceholder && (subjectId === null || assignmentId === null || roomId === null)) {
+      throw new Error(`Timetable entry ${day} ${period.time} needs an authorised subject, teacher assignment, and room.`);
+    }
+    const definition = config.periods?.find((candidate) => candidate.dayOfWeek === DAY_NAMES.indexOf(day as (typeof DAY_NAMES)[number]) + 1 && candidate.periodNumber === index + 1);
+    return { dayOfWeek: DAY_NAMES.indexOf(day as (typeof DAY_NAMES)[number]) + 1, periodNumber: index + 1, startsAt: definition?.startsAt ?? period.time, endsAt: definition?.endsAt ?? period.time, subjectRef: isPlaceholder ? null : (subject?.code ?? period.subject), teacherAssignmentRef: isPlaceholder ? null : (assignment?.ref ?? period.teacher), roomRef: isPlaceholder ? null : (room?.code ?? period.room), kind: period.kind ?? "class" };
+  }));
+}
+
 /**
  * Publishes a new version: the facade writes the version metadata (counter
  * + note + timestamp) and the edited period snapshot into the same session
@@ -646,6 +886,20 @@ export async function publishTimetable(
   note: string,
   className: string = TIMETABLE_CLASS,
 ): Promise<TimetableVersion> {
+  if (clientAdapterMode() === "supabase") {
+    const sectionRef = await supabaseSectionRef(className);
+    if (!sectionRef) throw new Error("No timetable section is available for this class.");
+    const draft = await getTimetableDraftAsync(className);
+    const current = draft?.periods ? { periods: draft.periods } : await getTimetableVersion(className);
+    const periods = await mapPeriodsToDatabase(current?.periods ?? {}, edits);
+    const saved = await adapterCall<{ versionId?: string; version?: number; reference?: string; revision?: number }>("timetable.saveDraft", { gradeSectionRef: sectionRef, versionRef: draft?.ref ?? null, periods, expectedRevision: draft?.revision ?? 0 });
+    if (!saved.ok) throw new Error(saved.errors[0]?.message ?? "Unable to save timetable draft.");
+    const published = await adapterCall<{ publicationRef: string }>("timetable.publish", { versionRef: saved.value.reference ?? draft?.ref, note: note.trim() });
+    if (!published.ok) throw new Error(published.errors[0]?.message ?? "Unable to publish timetable.");
+    const latest = await getTimetableVersion(className);
+    if (!latest) throw new Error("Published timetable could not be reloaded.");
+    return latest;
+  }
   if (!isKnownTimetableClass(className)) {
     throw new Error("No timetable exists for this class.");
   }
@@ -688,8 +942,36 @@ export function saveTimetableDraft(
   return draft;
 }
 
+export async function saveTimetableDraftAsync(
+  periods: Record<string, Period[]>,
+  notes: ReadonlyArray<DraftNote>,
+  className: string = TIMETABLE_CLASS,
+): Promise<TimetableDraft> {
+  if (clientAdapterMode() === "supabase") {
+    const sectionRef = await supabaseSectionRef(className);
+    if (!sectionRef) throw new Error("No timetable section is available for this class.");
+    const payload = await mapPeriodsToDatabase(periods, []);
+    const current = await getTimetableDraftAsync(className);
+    const response = await adapterCall<{ updatedAt?: string; reference?: string; revision?: number; versionId?: string }>("timetable.saveDraft", { gradeSectionRef: sectionRef, versionRef: current?.ref ?? null, periods: payload, expectedRevision: current?.revision ?? 0 });
+    if (!response.ok) throw new Error(response.errors[0]?.message ?? "Unable to save timetable draft.");
+    return { id: response.value.versionId, ref: response.value.reference ?? current?.ref, revision: response.value.revision, savedAtIso: response.value.updatedAt ?? new Date().toISOString(), periods, notes: [...notes] };
+  }
+  return saveTimetableDraft(periods, notes, className);
+}
+
 export function getTimetableDraft(className: string = TIMETABLE_CLASS): TimetableDraft | null {
   return sessionGet<TimetableDraft>(draftKey(className));
+}
+
+export async function getTimetableDraftAsync(className: string = TIMETABLE_CLASS): Promise<TimetableDraft | null> {
+  if (clientAdapterMode() === "supabase") {
+    const response = await adapterCall<SupabaseTimetableVersion[]>("timetable.listVersions", {});
+    if (!response.ok) return null;
+    const sectionId = await supabaseSectionId(className);
+    const draft = response.value.find((item) => item.grade_section_id === sectionId && item.status === "draft");
+    return draft ? { id: draft.id, ref: draft.reference, revision: draft.revision ?? 0, savedAtIso: draft.updated_at ?? draft.created_at, periods: mapSupabasePeriods(draft.timetable_periods), notes: [] } : null;
+  }
+  return getTimetableDraft(className);
 }
 
 export function clearTimetableDraft(className: string = TIMETABLE_CLASS): void {
@@ -701,6 +983,223 @@ export function clearTimetableSession(className: string = TIMETABLE_CLASS): void
   sessionRemove(periodsKey(className));
   sessionRemove(historyKey(className));
   sessionRemove(draftKey(className));
+  sessionRemove(overridesKey(className));
+  sessionRemove(dateSheetKey(className));
+}
+
+/* ------------------------------------------------------------------ */
+/* Overrides                                                           */
+/* ------------------------------------------------------------------ */
+
+/** Overrides recorded in this session for a class, active first. */
+export function listTimetableOverrides(className: string = TIMETABLE_CLASS): TimetableOverride[] {
+  const overrides = sessionGet<TimetableOverride[]>(overridesKey(className)) ?? [];
+  return [...overrides]
+    .sort((a, b) => {
+      const active = (a.revokedAtIso === null ? 0 : 1) - (b.revokedAtIso === null ? 0 : 1);
+      if (active !== 0) return active;
+      return a.dateIso.localeCompare(b.dateIso) || a.time.localeCompare(b.time);
+    })
+    .map((override) => ({ ...override }));
+}
+
+function loadOverrides(className: string): TimetableOverride[] {
+  return sessionGet<TimetableOverride[]>(overridesKey(className)) ?? [];
+}
+
+function validateOverrideInput(input: TimetableOverrideInput, base: Record<string, Period[]>, className: string): { day: string } {
+  const note = input.note.trim();
+  if (note.length < 10) {
+    throw new Error("A reason of at least 10 characters is required — it becomes part of the change trail.");
+  }
+  const day = demoWeekdayForDate(input.dateIso);
+  if (day === null) {
+    throw new Error("The override date must fall within the demo week (3–8 August 2026).");
+  }
+  const period = base[day]?.find((candidate) => candidate.time === input.time);
+  if (period === undefined) {
+    throw new Error(`No period starts at ${input.time} on ${day} — choose a period from the published timetable.`);
+  }
+  if (input.kind === "substitute" && (input.teacher === undefined || input.teacher.trim() === "")) {
+    throw new Error("A substitute teacher is required for a substitute override.");
+  }
+  if (input.kind === "room" && (input.room === undefined || input.room.trim() === "")) {
+    throw new Error("A room is required for a room override.");
+  }
+  return { day };
+}
+
+/**
+ * Records one date-specific override (blueprint §5.9). The base timetable
+ * is never rewritten: the override applies only on its date and remains in
+ * history after revocation. A reason is required and an audit event is
+ * appended. In Supabase mode the command routes through the school
+ * timetable service.
+ */
+export async function saveTimetableOverride(
+  input: TimetableOverrideInput,
+  className: string = TIMETABLE_CLASS,
+): Promise<TimetableOverride> {
+  if (clientAdapterMode() === "supabase") {
+    const sectionRef = await supabaseSectionRef(className);
+    if (!sectionRef) throw new Error("No timetable section is available for this class.");
+    const config = await supabaseConfiguration();
+    const subject = config?.subjects?.find((candidate) => candidate.name.toLowerCase() === (input.subject ?? "").toLowerCase());
+    const room = config?.rooms?.find((candidate) => candidate.label.toLowerCase() === (input.room ?? "").toLowerCase() || candidate.code.toLowerCase() === (input.room ?? "").toLowerCase());
+    const assignment = config?.assignments?.find((candidate) => candidate.teacherName.toLowerCase() === (input.teacher ?? "").toLowerCase());
+    const dayIndex = TIMETABLE_WEEK_DAYS.indexOf(demoWeekdayForDate(input.dateIso) ?? "") + 1;
+    const periodNumber = (timetableByDay[demoWeekdayForDate(input.dateIso) ?? "Monday"] ?? []).findIndex((period) => period.time === input.time) + 1;
+    const response = await adapterCall<{ reference: string }>("timetable.saveOverride", {
+      gradeSectionRef: sectionRef,
+      overrideDate: input.dateIso,
+      dayOfWeek: dayIndex,
+      periodNumber,
+      kind: input.kind,
+      subjectId: subject?.id ?? null,
+      roomId: room?.id ?? null,
+      substituteTeacherAssignmentId: assignment?.id ?? null,
+      note: input.note.trim(),
+    });
+    if (!response.ok) throw new Error(response.errors[0]?.message ?? "Unable to save the override.");
+    return {
+      ref: response.value.reference,
+      className,
+      dateIso: input.dateIso,
+      day: demoWeekdayForDate(input.dateIso) ?? "",
+      time: input.time,
+      kind: input.kind,
+      teacher: input.teacher,
+      subject: input.subject,
+      room: input.room,
+      note: input.note.trim(),
+      createdAtIso: demoNowIso(),
+      by: input.by ?? "Timetable office",
+      revokedAtIso: null,
+    };
+  }
+  const { day } = validateOverrideInput(input, effectiveTimetable(className) ?? {}, className);
+  const override: TimetableOverride = {
+    ref: nextOverrideRef(),
+    className,
+    dateIso: input.dateIso,
+    day,
+    time: input.time,
+    kind: input.kind,
+    teacher: input.kind === "substitute" ? input.teacher?.trim() : undefined,
+    subject: input.kind === "substitute" ? input.subject?.trim() : undefined,
+    room: input.kind === "room" ? input.room?.trim() : undefined,
+    note: input.note.trim(),
+    createdAtIso: demoNowIso(),
+    by: input.by ?? "Timetable office",
+    revokedAtIso: null,
+  };
+  sessionSet(overridesKey(className), [...loadOverrides(className), override]);
+  void auditService.record({
+    actor: override.by,
+    action: "Timetable changed",
+    target: `${className} · ${override.day} ${override.time} · ${override.kind}`,
+    outcome: "Success",
+    reason: override.note,
+  });
+  return { ...override };
+}
+
+/**
+ * Revokes an active override — the base timetable reapplies on that date.
+ * The override record stays in history (append-only); revocation is
+ * audited. Unknown or already-revoked references throw.
+ */
+export async function revokeTimetableOverride(ref: string, className: string = TIMETABLE_CLASS): Promise<TimetableOverride> {
+  if (clientAdapterMode() === "supabase") {
+    throw new Error("Override revocation is not yet available through the school timetable service.");
+  }
+  const overrides = loadOverrides(className);
+  const override = overrides.find((candidate) => candidate.ref === ref);
+  if (override === undefined) {
+    throw new Error(`No override carries the reference ${ref}.`);
+  }
+  if (override.revokedAtIso !== null) {
+    throw new Error(`Override ${ref} is already revoked.`);
+  }
+  const next: TimetableOverride = { ...override, revokedAtIso: demoNowIso() };
+  sessionSet(overridesKey(className), overrides.map((candidate) => (candidate.ref === ref ? next : candidate)));
+  void auditService.record({
+    actor: "Timetable office",
+    action: "Timetable changed",
+    target: `${className} · ${next.day} ${next.time} · override revoked`,
+    outcome: "Success",
+    reason: "Override revoked — the published base timetable reapplies on that date.",
+  });
+  return { ...next };
+}
+
+/**
+ * The periods shown for one date: the published base for that weekday with
+ * every active override applied. Cancellations blank the assignment with
+ * an explicit "Cancelled" subject; substitutes replace teacher/subject and
+ * room overrides replace the room. The base timetable is never mutated.
+ */
+export function effectivePeriodsForDate(
+  dateIso: string,
+  className: string = TIMETABLE_CLASS,
+): Period[] {
+  const day = demoWeekdayForDate(dateIso);
+  if (day === null) return [];
+  const base = effectiveTimetable(className)?.[day] ?? [];
+  const active = listTimetableOverrides(className).filter((override) => override.dateIso === dateIso && override.revokedAtIso === null);
+  if (active.length === 0) return base.map((period) => ({ ...period }));
+  return base.map((period) => {
+    const override = active.find((candidate) => candidate.time === period.time);
+    if (override === undefined) return { ...period };
+    if (override.kind === "cancellation") {
+      return { ...period, subject: "Cancelled", teacher: "—", room: "—", change: true };
+    }
+    if (override.kind === "substitute") {
+      return { ...period, subject: override.subject ?? period.subject, teacher: override.teacher ?? period.teacher, change: true };
+    }
+    if (override.kind === "room") {
+      return { ...period, room: override.room ?? period.room, change: true };
+    }
+    return { ...period, change: true };
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Exam date-sheet publish state                                       */
+/* ------------------------------------------------------------------ */
+
+/** Published date-sheet state for a class, or null when never published. */
+export async function getDateSheetState(className: string = TIMETABLE_CLASS): Promise<DateSheetState | null> {
+  if (clientAdapterMode() === "supabase") return null;
+  return sessionGet<DateSheetState>(dateSheetKey(className)) ?? null;
+}
+
+/**
+ * Publishes the exam date sheet for a class — session-backed in the demo
+ * (versioned, audited) so the staff publish is a real service write that
+ * the portal can read. Supabase mode publishes through the school
+ * timetable service when a date-sheet version exists.
+ */
+export async function publishDateSheet(className: string = TIMETABLE_CLASS): Promise<DateSheetState> {
+  if (clientAdapterMode() === "supabase") {
+    throw new Error("The date sheet is published through the school timetable service.");
+  }
+  const previous = sessionGet<DateSheetState>(dateSheetKey(className));
+  const state: DateSheetState = {
+    published: true,
+    version: (previous?.version ?? 0) + 1,
+    publishedAtIso: demoNowIso(),
+    by: "Timetable office",
+  };
+  sessionSet(dateSheetKey(className), state);
+  void auditService.record({
+    actor: state.by,
+    action: "Timetable changed",
+    target: `Exam date sheet · ${className}`,
+    outcome: "Success",
+    reason: "Mid-term exam date sheet published.",
+  });
+  return { ...state };
 }
 
 /* ------------------------------------------------------------------ */
@@ -716,12 +1215,20 @@ export const timetableService = {
   classKeyForGradeSection,
   isKnownTimetableClass,
   listKnownClasses,
+  listTimetableClasses,
+  getDemoDateSheet,
+  TIMETABLE_WEEK_DAYS,
+  timetableDemoNowIso,
+  timetableDemoWeekday,
   effectiveTimetable,
+  getEffectiveTimetable,
   getTimetableVersion,
   getTimetableVersionList,
   publishTimetable,
   saveTimetableDraft,
+  saveTimetableDraftAsync,
   getTimetableDraft,
+  getTimetableDraftAsync,
   clearTimetableDraft,
   clearTimetableSession,
   detectConflicts,
@@ -731,4 +1238,11 @@ export const timetableService = {
   validateDraft,
   validateResolve,
   suggestedResolve,
+  demoDateForWeekday,
+  saveTimetableOverride,
+  listTimetableOverrides,
+  revokeTimetableOverride,
+  effectivePeriodsForDate,
+  getDateSheetState,
+  publishDateSheet,
 };

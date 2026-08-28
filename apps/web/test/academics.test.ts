@@ -382,3 +382,29 @@ describe("teacher scope (class + subject)", () => {
     expect(assignmentsCoverBatch(scope, "6-A", "Mathematics")).toBe(false);
   });
 });
+
+describe("published student snapshot resolution", () => {
+  it("resolves the student public reference to its published snapshot (portal passes refs)", async () => {
+    /* The portal passes the student's public reference (STU-2026-0901);
+       the demo fixture is keyed by the internal id. Both must resolve. */
+    const byRef = await academicsService.getStudentResultSnapshot("STU-2026-0901", "00000000-0000-4000-8000-000000000602");
+    expect(byRef).not.toBeNull();
+    expect(Object.keys(byRef?.terms ?? {}).sort()).toEqual(["Term 1", "Term 2"]);
+
+    const byId = await academicsService.getStudentResultSnapshot("00000000-0000-4000-8000-000000000901", "00000000-0000-4000-8000-000000000602");
+    expect(byId?.terms["Term 2"]?.length).toBeGreaterThan(0);
+
+    /* The two resolutions describe the same student. */
+    expect(byRef?.studentId).toBe("STU-2026-0901");
+    expect(byId?.studentId).toBe("00000000-0000-4000-8000-000000000901");
+    expect(byRef?.terms["Term 1"]?.[0]?.subject).toBe(byId?.terms["Term 1"]?.[0]?.subject);
+  });
+
+  it("returns null for unknown students and wrong academic years", async () => {
+    const unknown = await academicsService.getStudentResultSnapshot("STU-2026-9999", "00000000-0000-4000-8000-000000000602");
+    expect(unknown).toBeNull();
+
+    const wrongYear = await academicsService.getStudentResultSnapshot("STU-2026-0901", "00000000-0000-4000-8000-000000000601");
+    expect(wrongYear).toBeNull();
+  });
+});

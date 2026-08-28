@@ -15,9 +15,26 @@
 
 export type DataAdapter = "demo" | "supabase";
 
+function parseAdapter(value: string | undefined, name: string, fallback: DataAdapter): DataAdapter {
+  if (value === undefined || value.trim() === "") return fallback;
+  if (value === "demo" || value === "supabase") return value;
+  throw new Error(`${name} must be demo or supabase.`);
+}
+
+function configuredPublicAdapter(): DataAdapter {
+  return parseAdapter(process.env.NEXT_PUBLIC_FASS_DATA_ADAPTER, "NEXT_PUBLIC_FASS_DATA_ADAPTER", "demo");
+}
+
 /** The runtime data adapter for the current process. */
 export function dataAdapter(): DataAdapter {
-  return process.env.FASS_DATA_ADAPTER === "supabase" ? "supabase" : "demo";
+  const serverAdapter = parseAdapter(process.env.FASS_DATA_ADAPTER, "FASS_DATA_ADAPTER", "demo");
+  const publicAdapter = configuredPublicAdapter();
+  if (process.env.NEXT_PUBLIC_FASS_DATA_ADAPTER !== undefined && serverAdapter !== publicAdapter) {
+    throw new Error(
+      `Data adapter mismatch: FASS_DATA_ADAPTER=${serverAdapter} but NEXT_PUBLIC_FASS_DATA_ADAPTER=${publicAdapter}.`,
+    );
+  }
+  return serverAdapter;
 }
 
 /** Public Supabase settings; null when the demo adapter is active. */
@@ -67,4 +84,13 @@ export function requireCronSecretEnv(): { cronSecret: string } {
     throw new Error("CRON_SECRET is not configured.");
   }
   return { cronSecret };
+}
+
+/** Names-only readiness check for server startup/health checks. */
+export function providerEnvReadiness(): { ready: boolean; missing: string[] } {
+  const required = dataAdapter() === "supabase"
+    ? ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "APP_URL", "CRON_SECRET", "RESEND_API_KEY", "EMAIL_FROM", "RESEND_WEBHOOK_SECRET", "DOCUMENT_SCANNER_URL", "DOCUMENT_SCANNER_SECRET"]
+    : ["APP_URL"];
+  const missing = required.filter((name) => !process.env[name]?.trim());
+  return { ready: missing.length === 0, missing };
 }

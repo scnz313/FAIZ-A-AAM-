@@ -29,18 +29,18 @@ export type NotificationKind =
 
 export type NotificationItem = {
   id: string;
+  version?: number;
   kind: NotificationKind;
   text: string;
   atIso: string;
   unread: boolean;
 };
 
-/** Family/student portal bell — service read for the linked demo child. */
-export const GUARDIAN_NOTIFICATIONS: NotificationItem[] = notificationsService.listForAccountSync(
-  DEMO_GUARDIAN_ACCOUNT_ID,
-);
+/** Lazy demo reads avoid evaluating demo session data in Supabase bundles. */
+export function demoGuardianNotifications(): NotificationItem[] {
+  return notificationsService.listForAccountSync(DEMO_GUARDIAN_ACCOUNT_ID);
+}
 
-/** Staff workspace bell — service read for the operations team. */
-export const STAFF_NOTIFICATIONS: NotificationItem[] = notificationsService.listForAccountSync(
-  DEMO_STAFF_ACCOUNT_ID,
-);
+export function demoStaffNotifications(): NotificationItem[] {
+  return notificationsService.listForAccountSync(DEMO_STAFF_ACCOUNT_ID);
+}

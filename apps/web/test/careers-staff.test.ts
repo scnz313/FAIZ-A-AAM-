@@ -225,3 +225,22 @@ describe("session persistence of decisions", () => {
     expect(record?.timeline).toHaveLength(4);
   });
 });
+
+describe("careersService staff audit recording", () => {
+  it("records an audit event for each staff decision", async () => {
+    const { auditService } = await import("@/modules/services/audit");
+    const before = await auditService.listEvents();
+    const beforeIds = new Set(before.map((event) => event.id));
+
+    await careersService.staffShortlist("JOB-2026-0114");
+    await careersService.staffRequestInterview("JOB-2026-0114");
+    await careersService.staffOffer("JOB-2026-0114", "Strong interview.");
+
+    const after = await auditService.listEvents();
+    const newEvents = after.filter((event) => !beforeIds.has(event.id));
+    expect(newEvents).toHaveLength(3);
+    expect(newEvents.every((event) => event.action === "Application reviewed")).toBe(true);
+    expect(newEvents.every((event) => event.target === "JOB-2026-0114")).toBe(true);
+    expect(newEvents.every((event) => event.outcome === "Success")).toBe(true);
+  });
+});

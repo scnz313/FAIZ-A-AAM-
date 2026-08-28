@@ -8,6 +8,9 @@ import {
   type Guardian,
   type GuardianStudentLink,
   type Person,
+  type RoleGrant,
+  type StaffAssignment,
+  type StaffMember,
   type Student,
   type UserAccount,
 } from "@fass/contracts";
@@ -24,9 +27,10 @@ import {
   demoStudents,
 } from "@/modules/relationships/demo";
 import { auditService } from "@/modules/services/audit";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 import { enqueueOutboxEvent } from "@/modules/services/outbox";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
-import type { Enrollment, RoleGrant } from "@fass/contracts";
+import type { Enrollment } from "@fass/contracts";
 
 export const RELATIONSHIPS_SESSION_KEY = sessionKey("relationships");
 
@@ -69,6 +73,17 @@ export type RelationshipDemoStore = {
   pendingRequests: LinkRequestRecord[];
   /** Next free link-request ref suffix — seeded 101, after the fixture refs. */
   linkRequestCounter: number;
+  /** Mutable staff collections — seeded from the immutable graph fixture so
+     admin operations (invite, grant/revoke, suspend) persist in the demo
+     session and are visible to every consumer (users page, staff context). */
+  userAccounts: UserAccount[];
+  staffMembers: StaffMember[];
+  roleGrants: RoleGrant[];
+  staffAssignments: StaffAssignment[];
+  /** Next free account/staff/grant ref suffixes for demo-generated records. */
+  accountCounter: number;
+  staffCounter: number;
+  grantCounter: number;
 };
 
 /**
@@ -113,6 +128,13 @@ export function loadRelationshipStore(): RelationshipDemoStore {
     activeWorkspaceByAccount: {},
     pendingRequests: [],
     linkRequestCounter: 101,
+    userAccounts: clone(demoRelationshipGraph.userAccounts),
+    staffMembers: clone(demoRelationshipGraph.staffMembers),
+    roleGrants: clone(demoRelationshipGraph.roleGrants),
+    staffAssignments: clone(demoRelationshipGraph.staffAssignments),
+    accountCounter: 301,
+    staffCounter: 401,
+    grantCounter: 401,
   };
   sessionSet(RELATIONSHIPS_SESSION_KEY, seeded);
   return seeded;
@@ -123,7 +145,7 @@ export function saveRelationshipStore(store: RelationshipDemoStore): void {
 }
 
 function accountById(accountId: string): UserAccount | undefined {
-  return demoRelationshipGraph.userAccounts.find((account) => account.id === accountId);
+  return loadRelationshipStore().userAccounts.find((account) => account.id === accountId);
 }
 
 function guardianForAccount(accountId: string): Guardian | undefined {
@@ -134,7 +156,7 @@ function guardianForAccount(accountId: string): Guardian | undefined {
 }
 
 function activeGuardianRole(accountId: string): RoleGrant | undefined {
-  return demoRelationshipGraph.roleGrants.find(
+  return loadRelationshipStore().roleGrants.find(
     (grant) => grant.accountId === accountId && grant.role === "guardian" && grant.status === "active",
   );
 }
@@ -280,6 +302,61 @@ export type LinkRequestRow = {
 /** Scope of a record's owning student for the active family account. */
 export type StudentAccessScope = "current" | "other" | "none";
 
+export type ServerFamilyContextResponse = {
+  accountId: string | null;
+  personId: string | null;
+  displayName: string;
+  guardianId: string | null;
+  activeStudentId: string | null;
+  activeEnrollmentId: string | null;
+  academicYearId: string | null;
+  contexts: AccessibleStudentContext[];
+};
+
+async function serverFamilyContext(studentId?: string): Promise<ServerFamilyContextResponse> {
+  const result = await adapterCall<ServerFamilyContextResponse>("context.family", studentId ? { studentId } : {});
+  if (!result.ok) {
+    const first = result.errors[0];
+    const code = first?.code === "forbidden"
+      ? first.message.toLowerCase().includes("revoked")
+        ? "link-not-active"
+        : "student-not-linked"
+      : "account-not-found";
+    throw new RelationshipContextError(code, first?.message ?? "Family context is unavailable.");
+  }
+  return result.value;
+}
+
+export function serverFamilyPortalContext(value: ServerFamilyContextResponse): FamilyPortalContext {
+  if (value.accountId === null || value.activeStudentId === null || value.activeEnrollmentId === null || value.academicYearId === null) {
+    throw new RelationshipContextError("student-not-linked", "No active student link was found for this family account.");
+  }
+  const active = value.contexts.find((context) => context.student.id === value.activeStudentId);
+  if (active === undefined) throw new RelationshipContextError("enrollment-not-found", "No active enrollment was found for this student.");
+  return familyPortalContextSchema.parse({
+    accountId: value.accountId,
+    guardianId: value.guardianId ?? undefined,
+    activeStudentId: value.activeStudentId,
+    activeEnrollmentId: value.activeEnrollmentId,
+    academicYearId: value.academicYearId,
+    allowedCapabilities: active.link.capabilities,
+    relationshipVersion: active.link.version,
+  });
+}
+
+/** Initial state used to hydrate the client provider from a server loader. */
+export function mapServerFamilyContext(value: ServerFamilyContextResponse): {
+  context: FamilyPortalContext;
+  students: AccessibleStudentContext[];
+  guardianName: string;
+} {
+  return {
+    context: serverFamilyPortalContext(value),
+    students: clone(value.contexts),
+    guardianName: value.displayName,
+  };
+}
+
 function gradeSectionFor(id: string): GradeSection {
   const section = demoGradeSections.find((candidate) => candidate.id === id);
   if (section === undefined) {
@@ -305,7 +382,9 @@ export interface FamilyContextService {
   listActiveLinkSummaries(): Promise<LinkRequestSummary[]>;
   approveLink(linkId: string): Promise<GuardianStudentLink>;
   rejectLink(linkId: string, reason?: string): Promise<GuardianStudentLink>;
+  restrictLink(linkId: string, reason?: string): Promise<GuardianStudentLink>;
   revokeLink(linkId: string): Promise<GuardianStudentLink>;
+  changeLinkCapabilities(linkId: string, capabilities: FamilyCapability[]): Promise<GuardianStudentLink>;
   /** One store for guardian-raised requests (plan.md Phase 3). */
   createPendingLinkRequest(
     accountId: string,
@@ -330,6 +409,10 @@ export interface FamilyContextService {
 
 export const familyContextService: FamilyContextService = {
   async listAccessibleStudents(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverFamilyContext();
+      return value.contexts.map((context) => clone(context.student));
+    }
     const { guardian } = requireFamilyAccount(accountId);
     const store = loadRelationshipStore();
     const studentIds = new Set(
@@ -341,6 +424,10 @@ export const familyContextService: FamilyContextService = {
   },
 
   async listAccessibleStudentContexts(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverFamilyContext();
+      return clone(value.contexts);
+    }
     const { guardian } = requireFamilyAccount(accountId);
     const store = loadRelationshipStore();
     const academicYear = currentAcademicYear();
@@ -370,6 +457,9 @@ export const familyContextService: FamilyContextService = {
   },
 
   async getContext(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      return serverFamilyPortalContext(await serverFamilyContext());
+    }
     const { guardian } = requireFamilyAccount(accountId);
     const store = loadRelationshipStore();
     const academicYear = currentAcademicYear();
@@ -404,6 +494,9 @@ export const familyContextService: FamilyContextService = {
   },
 
   async setActiveStudent(accountId, studentId) {
+    if (clientAdapterMode() === "supabase") {
+      return serverFamilyPortalContext(await serverFamilyContext(studentId));
+    }
     const { guardian } = requireFamilyAccount(accountId);
     const store = loadRelationshipStore();
     const link = requireActiveLink(store, guardian.id, studentId);
@@ -421,6 +514,15 @@ export const familyContextService: FamilyContextService = {
   getCapabilities,
 
   async getAccountSummary(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const value = await serverFamilyContext();
+      return {
+        accountId: value.accountId ?? accountId,
+        personId: value.personId ?? accountId,
+        displayName: value.displayName,
+        guardianId: value.guardianId,
+      };
+    }
     const { account, guardian } = requireFamilyAccount(accountId);
     const person = loadRelationshipStore().people.find((candidate) => candidate.id === account.personId);
     return {
@@ -432,6 +534,11 @@ export const familyContextService: FamilyContextService = {
   },
 
   async listPendingLinkRequests(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<GuardianStudentLink[]>("links.listMine");
+      if (!result.ok) throw new RelationshipContextError("account-not-found", result.errors[0]?.message ?? "Link requests are unavailable.");
+      return clone(result.value);
+    }
     const store = loadRelationshipStore();
     let guardianId: string | undefined;
     if (accountId !== undefined) guardianId = requireFamilyAccount(accountId).guardian.id;
@@ -441,6 +548,11 @@ export const familyContextService: FamilyContextService = {
   },
 
   async listLinkRequestSummaries() {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<LinkRequestSummary[]>("links.listPending");
+      if (!result.ok) throw new RelationshipContextError("account-not-found", result.errors[0]?.message ?? "Link requests are unavailable.");
+      return clone(result.value);
+    }
     const store = loadRelationshipStore();
     return store.links
       .filter((link) => link.status === "pending_verification")
@@ -460,6 +572,11 @@ export const familyContextService: FamilyContextService = {
 
   /** Every ACTIVE link with resolved names — the staff revocation view. */
   async listActiveLinkSummaries() {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<LinkRequestSummary[]>("links.listActive");
+      if (!result.ok) throw new RelationshipContextError("account-not-found", result.errors[0]?.message ?? "Active links are unavailable.");
+      return clone(result.value);
+    }
     const store = loadRelationshipStore();
     return store.links
       .filter((link) => link.status === "active")
@@ -479,6 +596,16 @@ export const familyContextService: FamilyContextService = {
   },
 
   async approveLink(linkId) {
+    if (clientAdapterMode() === "supabase") {
+      const listed = await adapterCall<LinkRequestSummary[]>("links.listPending");
+      const expectedVersion = listed.ok ? listed.value.find((row) => row.link.id === linkId)?.link.version ?? 1 : 1;
+      const result = await adapterCall<unknown>("links.approve", { linkId, expectedVersion });
+      if (!result.ok) throw new RelationshipContextError("link-not-active", result.errors[0]?.message ?? "Link approval failed.");
+      const refreshed = await adapterCall<GuardianStudentLink[]>("links.listActive");
+      const link = refreshed.ok ? refreshed.value.find((candidate) => candidate.id === linkId) : undefined;
+      if (link === undefined) throw new RelationshipContextError("link-not-active", "The link was approved but could not be reloaded.");
+      return clone(link);
+    }
     const store = loadRelationshipStore();
     const link = store.links.find((candidate) => candidate.id === linkId);
     if (link === undefined) {
@@ -506,6 +633,13 @@ export const familyContextService: FamilyContextService = {
   },
 
   async rejectLink(linkId, reason = "The school could not verify this relationship.") {
+    if (clientAdapterMode() === "supabase") {
+      const listed = await adapterCall<LinkRequestSummary[]>("links.listPending");
+      const expectedVersion = listed.ok ? listed.value.find((row) => row.link.id === linkId)?.link.version ?? 1 : 1;
+      const result = await adapterCall<unknown>("links.reject", { linkId, reason, expectedVersion });
+      if (!result.ok) throw new RelationshipContextError("link-not-active", result.errors[0]?.message ?? "Link rejection failed.");
+      return { id: linkId, ref: linkId, guardianId: "server", studentId: "server", relationshipLabel: "", status: "rejected", verificationSource: "staff_review", approvedByPersonId: null, approvedAtIso: null, effectiveFromIso: new Date(0).toISOString(), effectiveToIso: new Date().toISOString(), restrictionReason: null, rejectionReason: reason, contactPriority: 1, isEmergencyContact: false, isBillingContact: false, capabilities: [], version: 2 };
+    }
     const store = loadRelationshipStore();
     const link = store.links.find((candidate) => candidate.id === linkId);
     if (link === undefined) {
@@ -536,6 +670,13 @@ export const familyContextService: FamilyContextService = {
   },
 
   async revokeLink(linkId) {
+    if (clientAdapterMode() === "supabase") {
+      const listed = await adapterCall<LinkRequestSummary[]>("links.listActive");
+      const expectedVersion = listed.ok ? listed.value.find((row) => row.link.id === linkId)?.link.version ?? 1 : 1;
+      const result = await adapterCall<unknown>("links.revoke", { linkId, reason: "Access revoked by the school office.", expectedVersion });
+      if (!result.ok) throw new RelationshipContextError("link-not-active", result.errors[0]?.message ?? "Link revocation failed.");
+      return { id: linkId, ref: linkId, guardianId: "server", studentId: "server", relationshipLabel: "", status: "ended", verificationSource: "staff_review", approvedByPersonId: null, approvedAtIso: null, effectiveFromIso: new Date(0).toISOString(), effectiveToIso: new Date().toISOString(), restrictionReason: null, rejectionReason: null, contactPriority: 1, isEmergencyContact: false, isBillingContact: false, capabilities: [], version: 2 };
+    }
     const store = loadRelationshipStore();
     const link = store.links.find((candidate) => candidate.id === linkId);
     if (link === undefined) {
@@ -559,9 +700,56 @@ export const familyContextService: FamilyContextService = {
     return clone(link);
   },
 
+  async restrictLink(linkId, reason = "Access restricted by the school office.") {
+    if (clientAdapterMode() === "supabase") {
+      const listed = await adapterCall<LinkRequestSummary[]>("links.listActive");
+      const expectedVersion = listed.ok ? listed.value.find((row) => row.link.id === linkId)?.link.version ?? 1 : 1;
+      const result = await adapterCall<unknown>("links.restrict", { linkId, reason, expectedVersion });
+      if (!result.ok) throw new RelationshipContextError("link-not-active", result.errors[0]?.message ?? "Link restriction failed.");
+      return { id: linkId, ref: linkId, guardianId: "server", studentId: "server", relationshipLabel: "", status: "restricted", verificationSource: "staff_review", approvedByPersonId: null, approvedAtIso: null, effectiveFromIso: new Date(0).toISOString(), effectiveToIso: null, restrictionReason: reason, rejectionReason: null, contactPriority: 1, isEmergencyContact: false, isBillingContact: false, capabilities: [], version: expectedVersion + 1 };
+    }
+    const store = loadRelationshipStore();
+    const link = store.links.find((candidate) => candidate.id === linkId);
+    if (link === undefined) throw new RelationshipContextError("student-not-linked", "The link was not found.");
+    if (link.status === "restricted") return clone(link);
+    if (link.status !== "active") throw new RelationshipContextError("link-not-active", "Only an active link can be restricted.");
+    link.status = "restricted";
+    link.restrictionReason = reason.trim();
+    link.version += 1;
+    saveRelationshipStore(store);
+    void auditService.record({ actor: "School office", action: "Link restricted", target: link.ref, outcome: "Success", reason: link.restrictionReason });
+    enqueueOutboxEvent({ eventId: `link.restricted:${link.id}`, kind: "link.restricted", targetRef: link.ref, actor: "School office" });
+    return clone(link);
+  },
+
+  async changeLinkCapabilities(linkId, capabilities) {
+    if (clientAdapterMode() === "supabase") {
+      const listed = await adapterCall<LinkRequestSummary[]>("links.listActive");
+      const target = listed.ok ? listed.value.find((row) => row.link.id === linkId)?.link : undefined;
+      const result = await adapterCall<unknown>("links.capabilities", { linkId, capabilities, expectedVersion: target?.version ?? 1 });
+      if (!result.ok) throw new RelationshipContextError("link-not-active", result.errors[0]?.message ?? "Link capabilities could not be changed.");
+      return target === undefined ? { id: linkId, ref: linkId, guardianId: "server", studentId: "server", relationshipLabel: "", status: "active", verificationSource: "staff_review", approvedByPersonId: null, approvedAtIso: null, effectiveFromIso: new Date(0).toISOString(), effectiveToIso: null, restrictionReason: null, rejectionReason: null, contactPriority: 1, isEmergencyContact: false, isBillingContact: false, capabilities, version: 2 } : { ...target, capabilities, version: target.version + 1 };
+    }
+    const store = loadRelationshipStore();
+    const link = store.links.find((candidate) => candidate.id === linkId);
+    if (link === undefined) throw new RelationshipContextError("student-not-linked", "The link was not found.");
+    if (link.status !== "active" && link.status !== "restricted") throw new RelationshipContextError("link-not-active", "Only an active or restricted link can change capabilities.");
+    link.capabilities = [...capabilities];
+    link.version += 1;
+    saveRelationshipStore(store);
+    void auditService.record({ actor: "School office", action: "Link capabilities changed", target: link.ref, outcome: "Success" });
+    enqueueOutboxEvent({ eventId: `link.capabilities:${link.id}:${link.version}`, kind: "link.capabilities.changed", targetRef: link.ref, actor: "School office" });
+    return clone(link);
+  },
+
   /* --- Guardian-raised link requests (plan.md Phase 3) ---------------- */
 
   async createPendingLinkRequest(accountId, guardianName, childAdmissionRef, relation) {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<{ id: string; reference: string; status: string; version: number }>("links.request", { studentRef: childAdmissionRef, relationshipLabel: relation });
+      if (!result.ok) throw new RelationshipContextError("student-not-linked", result.errors[0]?.message ?? "The link request could not be created.");
+      return { id: result.value.id, ref: result.value.reference, guardianAccountId: accountId, guardianName, childAdmissionRef, relation, studentId: childAdmissionRef, studentName: "Linked student", requestedAtIso: new Date().toISOString(), status: "pending" as const, approvedLinkId: null, rejectedReason: null, decidedByPersonId: null, decidedAtIso: null, version: result.value.version };
+    }
     const { guardian, account } = requireFamilyAccount(accountId);
     const store = loadRelationshipStore();
     const cleanRef = childAdmissionRef.trim().toUpperCase();
@@ -635,6 +823,28 @@ export const familyContextService: FamilyContextService = {
   },
 
   async listLinkRequests() {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<LinkRequestSummary[]>("links.listPending");
+      if (!result.ok) throw new RelationshipContextError("request-not-found", result.errors[0]?.message ?? "Link requests are unavailable.");
+      return result.value.map((summary) => ({
+        request: {
+          id: summary.link.id,
+          ref: summary.link.ref,
+          guardianAccountId: "server",
+          guardianName: summary.guardianName,
+          childAdmissionRef: summary.link.studentId,
+          relation: summary.link.relationshipLabel,
+          requestedAtIso: summary.link.effectiveFromIso,
+          status: "pending" as const,
+          approvedLinkId: null,
+          rejectedReason: null,
+          decidedByPersonId: null,
+          decidedAtIso: null,
+          version: summary.link.version,
+        },
+        student: { id: summary.link.studentId, ref: summary.link.studentId, personId: summary.link.studentId, status: "active" as const, displayName: summary.studentName },
+      }));
+    }
     const store = loadRelationshipStore();
     return store.pendingRequests
       .map((request) => {
@@ -646,6 +856,15 @@ export const familyContextService: FamilyContextService = {
   },
 
   async approvePendingLinkRequest(requestId, byPersonId = DEMO_APPROVER_PERSON_ID) {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<LinkRequestSummary[]>("links.listPending");
+      if (!result.ok) throw new RelationshipContextError("request-not-found", result.errors[0]?.message ?? "Link requests are unavailable.");
+      const target = result.value.find((summary) => summary.link.id === requestId);
+      if (target === undefined) throw new RelationshipContextError("request-not-found", "The link request was not found.");
+      const approved = await adapterCall("links.approve", { linkId: requestId, expectedVersion: target.link.version });
+      if (!approved.ok) throw new RelationshipContextError("request-not-pending", approved.errors[0]?.message ?? "The link request could not be approved.");
+      return { id: requestId, ref: target.link.ref, guardianAccountId: "server", guardianName: target.guardianName, childAdmissionRef: target.link.studentId, relation: target.link.relationshipLabel, requestedAtIso: target.link.effectiveFromIso, status: "approved" as const, approvedLinkId: requestId, rejectedReason: null, decidedByPersonId: byPersonId, decidedAtIso: new Date().toISOString(), version: target.link.version + 1 };
+    }
     const store = loadRelationshipStore();
     const request = store.pendingRequests.find((candidate) => candidate.id === requestId);
     if (request === undefined) {
@@ -730,6 +949,17 @@ export const familyContextService: FamilyContextService = {
   },
 
   async rejectPendingLinkRequest(requestId, reason, byPersonId = DEMO_APPROVER_PERSON_ID) {
+    if (clientAdapterMode() === "supabase") {
+      const cleanReason = reason.trim();
+      if (!cleanReason) throw new RelationshipContextError("request-not-pending", "A rejection reason is required.");
+      const result = await adapterCall<LinkRequestSummary[]>("links.listPending");
+      if (!result.ok) throw new RelationshipContextError("request-not-found", result.errors[0]?.message ?? "Link requests are unavailable.");
+      const target = result.value.find((summary) => summary.link.id === requestId);
+      if (target === undefined) throw new RelationshipContextError("request-not-found", "The link request was not found.");
+      const rejected = await adapterCall("links.reject", { linkId: requestId, reason: cleanReason, expectedVersion: target.link.version });
+      if (!rejected.ok) throw new RelationshipContextError("request-not-pending", rejected.errors[0]?.message ?? "The link request could not be rejected.");
+      return { id: requestId, ref: target.link.ref, guardianAccountId: "server", guardianName: target.guardianName, childAdmissionRef: target.link.studentId, relation: target.link.relationshipLabel, requestedAtIso: target.link.effectiveFromIso, status: "rejected" as const, approvedLinkId: null, rejectedReason: cleanReason, decidedByPersonId: byPersonId, decidedAtIso: new Date().toISOString(), version: target.link.version + 1 };
+    }
     const store = loadRelationshipStore();
     const request = store.pendingRequests.find((candidate) => candidate.id === requestId);
     if (request === undefined) {
@@ -827,4 +1057,3 @@ export function findPersonByDisplayName(displayName: string): Person | null {
   );
   return person === undefined ? null : clone(person);
 }
-

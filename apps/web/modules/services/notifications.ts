@@ -15,6 +15,7 @@ import type { NotificationItem, NotificationKind } from "@/modules/notifications
 import { DEMO_GUARDIAN_ACCOUNT_ID } from "@/modules/services/family-context";
 import { DEMO_STAFF_ACCOUNT_ID } from "@/modules/services/staff-context";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 
 /** Demo guardian account used when a portal route is opened without a session. */
 export { DEMO_GUARDIAN_ACCOUNT_ID };
@@ -92,15 +93,28 @@ export interface NotificationsService {
 
 export const notificationsService: NotificationsService = {
   async listForAccount(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const response = await adapterCall<Array<{ id: string; version?: number; kind: string; title: string; body: string | null; target_reference: string | null; read_at: string | null; created_at: string }>>("notifications.list", {});
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notifications are unavailable.");
+      return response.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: item.kind as NotificationKind, text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null }));
+    }
     return notificationsService.listForAccountSync(accountId);
   },
 
   listForAccountSync(accountId) {
+    if (clientAdapterMode() === "supabase") throw new Error("Supabase notifications require the server-seeded account projection.");
     const readIds = loadReadState()[accountId] ?? [];
     return materialize(seedsForAccount(accountId), readIds);
   },
 
   async markRead(accountId, notificationId) {
+    if (clientAdapterMode() === "supabase") {
+      const current = await notificationsService.listForAccount(accountId);
+      const version = current.find((item) => item.id === notificationId)?.version ?? 1;
+      const response = await adapterCall("notifications.markRead", { notificationId, expectedVersion: version });
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notification could not be marked read.");
+      return notificationsService.listForAccount(accountId);
+    }
     const state = loadReadState();
     const readIds = state[accountId] ?? [];
     if (!readIds.includes(notificationId)) {
@@ -111,6 +125,11 @@ export const notificationsService: NotificationsService = {
   },
 
   async markAllRead(accountId) {
+    if (clientAdapterMode() === "supabase") {
+      const response = await adapterCall<{ count: number }>("notifications.markAll", {});
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notifications could not be marked read.");
+      return notificationsService.listForAccount(accountId);
+    }
     const state = loadReadState();
     state[accountId] = seedsForAccount(accountId).map((seed) => seed.id);
     saveReadState(state);

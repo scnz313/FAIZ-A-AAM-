@@ -13,9 +13,14 @@
  */
 
 import type { ServiceError, ServiceResult } from "@fass/contracts";
+import { clearProtectedClientState } from "@/modules/services/session";
 
 export function clientAdapterMode(): "demo" | "supabase" {
-  return process.env.NEXT_PUBLIC_FASS_DATA_ADAPTER === "supabase" ? "supabase" : "demo";
+  const publicAdapter = process.env.NEXT_PUBLIC_FASS_DATA_ADAPTER;
+  if (publicAdapter !== undefined && publicAdapter !== "demo" && publicAdapter !== "supabase") {
+    throw new Error("NEXT_PUBLIC_FASS_DATA_ADAPTER must be demo or supabase.");
+  }
+  return publicAdapter === "supabase" ? "supabase" : "demo";
 }
 
 /** Call one adapter operation; returns the canonical service envelope. */
@@ -27,7 +32,15 @@ export async function adapterCall<T>(
     return {
       ok: false,
       errors: [{ code: "unavailable", message: "The Supabase adapter is not active.", field: null }],
+      httpStatus: 503,
+      retryable: true,
     };
+  }
+  /* Server Components must use the server-only loader directly so the
+     incoming Auth cookie can be forwarded safely. This browser gateway
+     intentionally refuses to make an unauthenticated relative server fetch. */
+  if (typeof window === "undefined") {
+    return { ok: false, errors: [{ code: "unavailable", message: "Use the server adapter boundary for server-rendered data.", field: null }], httpStatus: 503, retryable: true };
   }
   try {
     const response = await fetch("/api/adapter", {
@@ -36,17 +49,33 @@ export async function adapterCall<T>(
       body: JSON.stringify({ op, payload }),
     });
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { errors?: Array<{ code: string; message: string }> } | null;
+      const body = (await response.json().catch(() => null)) as { errors?: Array<{ code: string; message: string; retryable?: boolean }>; correlationRef?: string; httpStatus?: number; retryable?: boolean; currentVersion?: number; currentState?: unknown } | null;
       const error: ServiceError = {
         code: (body?.errors?.[0]?.code ??
           (response.status === 401 ? "unauthenticated" : "unavailable")) as ServiceError["code"],
         message: body?.errors?.[0]?.message ?? `Adapter request failed (${response.status}).`,
         field: null,
+        retryable: body?.errors?.[0]?.retryable,
       };
-      return { ok: false, errors: [error] };
+      if (response.status === 401 || response.status === 403 || error.code === "unauthenticated" || error.code === "forbidden") {
+        clearProtectedClientState();
+      }
+      return {
+        ok: false,
+        errors: [error],
+        correlationRef: body?.correlationRef ?? response.headers.get("X-Correlation-Id") ?? undefined,
+        httpStatus: body?.httpStatus ?? response.status,
+        retryable: body?.retryable ?? response.status >= 500,
+        currentVersion: body?.currentVersion,
+        currentState: body?.currentState,
+      };
     }
-    return (await response.json()) as ServiceResult<T>;
+    const result = (await response.json()) as ServiceResult<T>;
+    if (!result.ok && (result.errors[0]?.code === "unauthenticated" || result.errors[0]?.code === "forbidden")) {
+      clearProtectedClientState();
+    }
+    return result;
   } catch {
-    return { ok: false, errors: [{ code: "unavailable", message: "Adapter unreachable.", field: null }] };
+    return { ok: false, errors: [{ code: "unavailable", message: "Adapter unreachable.", field: null }], httpStatus: 503, retryable: true };
   }
 }

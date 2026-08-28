@@ -15,7 +15,9 @@
 
 import { demoNowIso } from "@/modules/demo/clock";
 import { jobApplications, vacancies, type JobApplicationRow, type Vacancy } from "@/modules/content/demo";
+import { auditService } from "@/modules/services/audit";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 
 /* ------------------------------------------------------------------ */
 /* Shared types                                                        */
@@ -64,11 +66,15 @@ export type JobApplicationRecord = {
 
 /** The boundary every careers caller uses; the demo adapter is replaceable. */
 export interface CareersService {
+  /** Vacancy terms owned by the careers service; Supabase resolves published versions server-side. */
+  listVacancies(): Promise<Vacancy[]>;
   getVacancy(slug: string): Promise<Vacancy | null>;
   /** Persist a form draft under the vacancy slug. */
-  saveDraft(slug: string, draft: JobDraft): Promise<{ savedAtIso: string }>;
+  saveDraft(slug: string, draft: JobDraft, applicationRef?: string): Promise<{ savedAtIso: string; draftRef?: string }>;
+  /** Recover the one owned durable draft for a vacancy on any device. */
+  getDraft(slug: string): Promise<{ ref: string; draft: JobDraft; savedAtIso: string } | null>;
   /** Submit for a vacancy; resolves with the deterministic reference. */
-  submitApplication(slug: string, draft: JobDraft): Promise<{ ref: string }>;
+  submitApplication(slug: string, draft: JobDraft, applicationRef?: string): Promise<{ ref: string }>;
   /** The record for a reference, or null when it is not in the school's records. */
   getApplication(ref: string): Promise<JobApplicationRecord | null>;
   /** Applicant withdrawal; appends a Withdrawn event and is idempotent. */
@@ -263,6 +269,10 @@ function applyStaffDecision(
 /* ------------------------------------------------------------------ */
 
 export const careersService: CareersService = {
+  async listVacancies() {
+    return respond(() => vacancies.map((vacancy) => ({ ...vacancy })));
+  },
+
   async getVacancy(slug) {
     return respond(() => vacancies.find((v) => v.slug === slug) ?? null);
   },
@@ -273,6 +283,13 @@ export const careersService: CareersService = {
       drafts[slug] = draft;
       sessionSet(DRAFTS_KEY, drafts);
       return { savedAtIso: demoNowIso() };
+    });
+  },
+
+  async getDraft(slug) {
+    return respond(() => {
+      const draft = sessionGet<Record<string, JobDraft>>(DRAFTS_KEY)?.[slug];
+      return draft ? { ref: `demo:${slug}`, draft, savedAtIso: demoNowIso() } : null;
     });
   },
 
@@ -335,7 +352,7 @@ export const careersService: CareersService = {
   },
 
   async staffShortlist(ref, note) {
-    return respond(() =>
+    const result = await respond(() =>
       applyStaffDecision(
         ref,
         ["Submitted", "Eligibility review"],
@@ -344,28 +361,32 @@ export const careersService: CareersService = {
         note?.trim() || "Candidate shortlisted for the next stage.",
       ),
     );
+    void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Candidate shortlisted" });
+    return result;
   },
 
   async staffRequestInterview(ref, note) {
     const now = demoNowIso();
     const reason = note?.trim();
-    return respond(() =>
+    const result = await respond(() =>
       applyStaffDecision(ref, ["Shortlisted"], "Interview", "Requesting an interview", reason || "Interview requested — the panel will confirm the slot.", {
-        /* A demo slot three days from the decision instant; the applicant
-           status view renders it once the panel fixes the time. */
         interview: { atIso: plusMs(now, 3 * DAY_MS), note: reason || undefined },
       }),
     );
+    void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Interview requested" });
+    return result;
   },
 
   async staffOffer(ref, note) {
-    return respond(() =>
+    const result = await respond(() =>
       applyStaffDecision(ref, ["Interview"], "Offered", "Offering the position", requireReason(note, "Offering the position")),
     );
+    void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Position offered" });
+    return result;
   },
 
   async staffNotSelected(ref, note) {
-    return respond(() =>
+    const result = await respond(() =>
       applyStaffDecision(
         ref,
         ["Submitted", "Eligibility review", "Shortlisted", "Interview"],
@@ -374,5 +395,264 @@ export const careersService: CareersService = {
         requireReason(note, "Recording the candidate as not selected"),
       ),
     );
+    void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Candidate not selected" });
+    return result;
   },
+};
+
+/* ------------------------------------------------------------------ */
+/* Supabase adapter (server rows → the same domain shapes)              */
+/* ------------------------------------------------------------------ */
+
+export type ServerJobRow = {
+  id: string;
+  reference: string;
+  applicant_name?: string;
+  owner_account_id?: string;
+  vacancy_id?: string;
+  current_status: string;
+  version: number;
+  created_at: string;
+  job_vacancies?: { title?: string; reference?: string } | null;
+  job_application_drafts?: Array<{ draft: Record<string, unknown>; schema_version: number; expires_at: string; updated_at: string; version?: number }> | null;
+  job_interviews?: Array<{ scheduled_at: string; notes: string | null; outcome: string | null }> | null;
+  job_application_versions: Array<{ version: number; snapshot: Record<string, unknown> }> | null;
+  job_events: Array<{ event_type: string; visible_to_applicant: boolean; copy: string; created_at: string }> | null;
+};
+
+const SERVER_STATUS_TO_DEMO: Record<string, JobApplicationStatus> = {
+  draft: "Submitted",
+  submitted: "Submitted",
+  eligibility_review: "Eligibility review",
+  shortlisted: "Shortlisted",
+  interview: "Interview",
+  offered: "Offered",
+  not_selected: "Not selected",
+  withdrawn: "Withdrawn",
+};
+
+function isServerCareers(): boolean {
+  return clientAdapterMode() === "supabase";
+}
+
+function slugifyTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+type ServerVacancy = {
+  vacancyId: string;
+  versionId: string;
+  reference: string;
+  title: string;
+  department: string | null;
+  terms: Record<string, unknown>;
+};
+
+export function mapServerJob(row: ServerJobRow): JobApplicationRecord {
+  const events = (row.job_events ?? [])
+    .filter((event) => event.visible_to_applicant)
+    .map((event) => ({
+      status: SERVER_STATUS_TO_DEMO[event.event_type] ?? "Submitted",
+      atIso: event.created_at,
+      actor: event.event_type === "submitted" ? "Applicant" : "HR office",
+      note: event.copy,
+    }));
+  const latestSnapshot = (row.job_application_versions ?? []).slice(-1)[0]?.snapshot ?? {};
+  const name =
+    typeof row.applicant_name === "string"
+      ? row.applicant_name
+      : typeof latestSnapshot.fullName === "string"
+      ? latestSnapshot.fullName
+      : typeof latestSnapshot.name === "string"
+        ? latestSnapshot.name
+        : row.reference;
+  const interviewEvent = (row.job_events ?? []).find((event) => event.event_type === "interview");
+  return {
+    ref: row.reference,
+    vacancySlug: slugifyTitle(row.job_vacancies?.title ?? row.job_vacancies?.reference ?? "vacancy"),
+    name,
+    submittedAtIso: row.created_at,
+    status: SERVER_STATUS_TO_DEMO[row.current_status] ?? "Submitted",
+    timeline: events,
+    interview: row.job_interviews?.[0]
+      ? { atIso: row.job_interviews[0].scheduled_at, note: row.job_interviews[0].notes ?? undefined }
+      : interviewEvent !== undefined && typeof (latestSnapshot.interviewAtIso as unknown) === "string"
+        ? { atIso: String(latestSnapshot.interviewAtIso), note: undefined }
+        : undefined,
+  };
+}
+
+const serverJobIds = new Map<string, string>();
+const serverJobVersions = new Map<string, number>();
+
+async function serverJobs(scope: "mine" | "staff"): Promise<JobApplicationRecord[]> {
+  const result = await adapterCall<ServerJobRow[]>(scope === "mine" ? "jobs.listMine" : "jobs.staffQueue");
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Applications unavailable.");
+  for (const row of result.value) {
+    serverJobIds.set(row.reference, row.id);
+    serverJobVersions.set(row.reference, row.version);
+  }
+  return result.value.map(mapServerJob);
+}
+
+async function serverJobByRef(ref: string, scope: "mine" | "staff"): Promise<JobApplicationRecord | null> {
+  const rows = await serverJobs(scope);
+  return rows.find((row) => row.ref === ref) ?? null;
+}
+
+const originalSubmitApplication = careersService.submitApplication.bind(careersService);
+const originalSaveDraft = careersService.saveDraft.bind(careersService);
+const originalGetDraft = careersService.getDraft.bind(careersService);
+const originalListVacancies = careersService.listVacancies.bind(careersService);
+const originalGetApplication = careersService.getApplication.bind(careersService);
+const originalGetVacancy = careersService.getVacancy.bind(careersService);
+const originalWithdraw = careersService.withdraw.bind(careersService);
+const originalListStaffRecords = careersService.listStaffRecords.bind(careersService);
+const originalStaffShortlist = careersService.staffShortlist.bind(careersService);
+const originalStaffRequestInterview = careersService.staffRequestInterview.bind(careersService);
+const originalStaffOffer = careersService.staffOffer.bind(careersService);
+const originalStaffNotSelected = careersService.staffNotSelected.bind(careersService);
+
+/** Submit through the live pipeline: resolve the vacancy, create the draft
+    application, then append the immutable submitted version. */
+careersService.submitApplication = async (slug, draft, applicationRef) => {
+  if (!isServerCareers()) return originalSubmitApplication(slug, draft);
+  const vacanciesResult = await adapterCall<ServerVacancy[]>("jobs.vacancies");
+  if (!vacanciesResult.ok) throw new Error(vacanciesResult.errors[0]?.message ?? "Vacancies unavailable.");
+  const vacancy =
+    vacanciesResult.value.find(
+      (candidate) => candidate.reference === slug || slugifyTitle(candidate.title) === slug,
+    ) ?? null;
+  if (vacancy === null) throw new Error("This vacancy is not open for applications right now.");
+  const existingRows = await adapterCall<ServerJobRow[]>("jobs.listMine");
+  const existing = existingRows.ok
+    ? existingRows.value.find((candidate) => applicationRef !== undefined ? candidate.reference === applicationRef : candidate.vacancy_id === vacancy.vacancyId && candidate.current_status === "draft")
+    : undefined;
+  const draftResult = existing
+    ? { ok: true as const, value: { id: existing.id, ref: existing.reference, version: existing.version } }
+    : await adapterCall<{ id: string; ref: string; version: number }>("jobs.createDraft", {
+      vacancyRef: vacancy.reference,
+      applicantName: draft.fullName,
+    });
+  if (!draftResult.ok) throw new Error(draftResult.errors[0]?.message ?? "Application could not be created.");
+  const submitResult = await adapterCall<{ versionId: string }>("jobs.submit", {
+    applicationRef: draftResult.value.ref,
+    snapshot: { ...draft },
+    expectedVersion: draftResult.value.version,
+  });
+  if (!submitResult.ok) throw new Error(submitResult.errors[0]?.message ?? "Submission failed — try again.");
+  return { ref: draftResult.value.ref };
+};
+
+careersService.getVacancy = async (slug) => {
+  if (!isServerCareers()) return originalGetVacancy(slug);
+  const vacanciesResult = await adapterCall<ServerVacancy[]>("jobs.vacancies");
+  if (!vacanciesResult.ok) throw new Error(vacanciesResult.errors[0]?.message ?? "Vacancies unavailable.");
+  const vacancy = vacanciesResult.value.find((candidate) => candidate.reference === slug || slugifyTitle(candidate.title) === slug);
+  if (!vacancy) return null;
+  const stringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return { slug, title: vacancy.title, department: vacancy.department ?? "School office", location: typeof vacancy.terms.location === "string" ? vacancy.terms.location : "Faiz Aam School", type: vacancy.terms.type === "Non-teaching" ? "Non-teaching" : "Teaching", qualifications: stringArray(vacancy.terms.qualifications), documents: stringArray(vacancy.terms.documents), deadlineIso: typeof vacancy.terms.deadlineIso === "string" ? vacancy.terms.deadlineIso : new Date().toISOString(), status: "open", description: typeof vacancy.terms.description === "string" ? vacancy.terms.description : "Published vacancy details." };
+};
+
+careersService.listVacancies = async () => {
+  if (!isServerCareers()) return originalListVacancies();
+  const vacanciesResult = await adapterCall<ServerVacancy[]>("jobs.vacancies");
+  if (!vacanciesResult.ok) throw new Error(vacanciesResult.errors[0]?.message ?? "Vacancies unavailable.");
+  const stringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return vacanciesResult.value.map((vacancy) => ({
+    slug: slugifyTitle(vacancy.title),
+    title: vacancy.title,
+    department: vacancy.department ?? "School office",
+    location: typeof vacancy.terms.location === "string" ? vacancy.terms.location : "School office",
+    type: vacancy.terms.type === "Non-teaching" ? "Non-teaching" : "Teaching",
+    qualifications: stringArray(vacancy.terms.qualifications),
+    documents: stringArray(vacancy.terms.documents),
+    deadlineIso: typeof vacancy.terms.deadlineIso === "string" ? vacancy.terms.deadlineIso : new Date().toISOString(),
+    status: "open",
+    description: typeof vacancy.terms.description === "string" ? vacancy.terms.description : "Published vacancy details.",
+  }));
+};
+
+careersService.getDraft = async (slug) => {
+  if (!isServerCareers()) return originalGetDraft(slug);
+  const vacanciesResult = await adapterCall<ServerVacancy[]>("jobs.vacancies");
+  if (!vacanciesResult.ok) throw new Error(vacanciesResult.errors[0]?.message ?? "Vacancies unavailable.");
+  const vacancy = vacanciesResult.value.find((candidate) => candidate.reference === slug || slugifyTitle(candidate.title) === slug);
+  if (!vacancy) return null;
+  const listed = await adapterCall<ServerJobRow[]>("jobs.listMine");
+  if (!listed.ok) throw new Error(listed.errors[0]?.message ?? "Applications unavailable.");
+  const row = listed.value.find((candidate) => candidate.vacancy_id === vacancy.vacancyId && candidate.current_status === "draft");
+  const saved = row?.job_application_drafts?.[0];
+  if (!row || !saved) return null;
+  return { ref: row.reference, draft: saved.draft as unknown as JobDraft, savedAtIso: saved.updated_at };
+};
+
+careersService.saveDraft = async (slug, draft, applicationRef) => {
+  if (!isServerCareers()) return originalSaveDraft(slug, draft);
+  const vacanciesResult = await adapterCall<ServerVacancy[]>("jobs.vacancies");
+  if (!vacanciesResult.ok) throw new Error(vacanciesResult.errors[0]?.message ?? "Vacancies unavailable.");
+  const vacancy = vacanciesResult.value.find((candidate) => candidate.reference === slug || slugifyTitle(candidate.title) === slug);
+  if (!vacancy) throw new Error("This vacancy is not open for applications right now.");
+  const listed = await adapterCall<ServerJobRow[]>("jobs.listMine");
+  let row = listed.ok ? listed.value.find((candidate) => (applicationRef !== undefined ? candidate.reference === applicationRef : candidate.vacancy_id === vacancy.vacancyId && candidate.current_status === "draft")) : undefined;
+  if (!row) {
+    const created = await adapterCall<{ id: string; ref: string; version: number }>("jobs.createDraft", { vacancyRef: vacancy.reference, applicantName: draft.fullName });
+    if (!created.ok) throw new Error(created.errors[0]?.message ?? "Application could not be created.");
+    const reread = await adapterCall<ServerJobRow[]>("jobs.listMine");
+    row = reread.ok ? reread.value.find((candidate) => candidate.id === created.value.id) : undefined;
+  }
+  if (!row) throw new Error("Job application could not be resumed.");
+  const saved = await adapterCall<{ updatedAt: string }>("jobs.saveDraft", { applicationRef: row.reference, draft, expectedVersion: row.version });
+  if (!saved.ok) throw new Error(saved.errors[0]?.message ?? "Unable to save job draft.");
+  return { savedAtIso: saved.value.updatedAt, draftRef: row.reference };
+};
+
+careersService.getApplication = async (ref) =>
+  isServerCareers() ? (await serverJobByRef(ref, "mine")) ?? serverJobByRef(ref, "staff") : originalGetApplication(ref);
+careersService.listStaffRecords = async () =>
+  isServerCareers() ? serverJobs("staff") : originalListStaffRecords();
+
+careersService.withdraw = async (ref, by) => {
+  if (!isServerCareers()) return originalWithdraw(ref, by);
+  const applicationId = serverJobIds.get(ref) ?? (await serverJobs("mine"), serverJobIds.get(ref));
+  if (!applicationId) throw new Error("Application not found.");
+  const result = await adapterCall<unknown>("jobs.withdraw", { applicationRef: ref, expectedVersion: serverJobVersions.get(ref) ?? null });
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Unable to withdraw application.");
+  return (await serverJobByRef(ref, "mine")) ?? { ref, vacancySlug: "", name: by, submittedAtIso: new Date().toISOString(), status: "Withdrawn", timeline: [] };
+};
+
+async function serverDecide(
+  ref: string,
+  action: "shortlist" | "interview" | "offer" | "not_selected",
+  note?: string,
+): Promise<JobApplicationRecord> {
+  const applicationId = serverJobIds.get(ref);
+  if (applicationId === undefined) throw new Error("Application not found in the queue.");
+  const result = await adapterCall<unknown>("jobs.decideV2", {
+    applicationRef: ref,
+    action,
+    reason: note?.trim() || null,
+    expectedVersion: serverJobVersions.get(ref) ?? null,
+    scheduledAt: action === "interview" ? new Date(Date.now() + 3 * DAY_MS).toISOString() : null,
+  });
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Decision failed.");
+  await serverJobs("staff");
+  return serverJobByRef(ref, "staff") as Promise<JobApplicationRecord>;
+}
+
+careersService.staffShortlist = async (ref, note) => {
+  if (!isServerCareers()) return originalStaffShortlist(ref, note);
+  return serverDecide(ref, "shortlist", note);
+};
+careersService.staffRequestInterview = async (ref, note) => {
+  if (!isServerCareers()) return originalStaffRequestInterview(ref, note);
+  return serverDecide(ref, "interview", note);
+};
+careersService.staffOffer = async (ref, note) => {
+  if (!isServerCareers()) return originalStaffOffer(ref, note);
+  return serverDecide(ref, "offer", note);
+};
+careersService.staffNotSelected = async (ref, note) => {
+  if (!isServerCareers()) return originalStaffNotSelected(ref, note);
+  return serverDecide(ref, "not_selected", note);
 };

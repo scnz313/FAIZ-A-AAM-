@@ -1,207 +1,96 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { z } from "zod";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { getServerActor } from "@/lib/auth/actor";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getServerActor, type ServerActor } from "@/lib/auth/actor";
 import { dataAdapter } from "@/lib/supabase/env";
-import type { Database } from "@/lib/supabase/database.types";
 import {
-  admissionCreateDraft,
-  admissionDecide,
-  admissionListMine,
-  admissionListStaffQueue,
-  admissionRequestChanges,
-  admissionRespondOffer,
-  admissionReviewAdvance,
-  admissionSubmit,
-  enrollmentConvert,
-  financeListMyInvoices,
-  financeListMyReceipts,
-  financePostPayment,
-  resolveFamilyContext,
-  resolveStaffContext,
-  resultsListBatches,
-  resultsPublish,
-  timetableListVersions,
-  timetablePublish,
-} from "@/lib/supabase/domain";
-import type { ServiceResult } from "@fass/contracts";
+  parseAdapterOperation,
+  ReferenceResolutionError,
+  resolveAdapterReferences,
+  statusForServiceResult,
+  withCorrelation,
+} from "./registry";
+import type { AdapterSelection } from "./registry/types";
 
-/**
- * Session-protected adapter endpoint (plan.md §10).
- *
- * The client adapter (`modules/services/adapter-client.ts`) calls this route
- * when `FASS_DATA_ADAPTER=supabase`. Every operation is re-authorized
- * server-side: the actor is resolved fresh (never from client claims) and the
- * domain functions enforce role/scope through RLS and the transactional RPCs.
- * The response is always the canonical `ServiceResult<T>` envelope.
- */
+const ACTIVE_FAMILY_STUDENT_COOKIE = "fass-active-student";
+const ACTIVE_STAFF_WORKSPACE_COOKIE = "fass-active-workspace";
 
-const ops = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("admissions.listMine"), payload: z.object({}) }),
-  z.object({ op: z.literal("admissions.staffQueue"), payload: z.object({}) }),
-  z.object({
-    op: z.literal("admissions.createDraft"),
-    payload: z.object({
-      academicYearId: z.string().uuid(),
-      gradeId: z.string().uuid(),
-      studentName: z.string().min(1),
-      parentName: z.string().min(1),
-      parentContact: z.string().nullable().optional(),
-      draft: z.record(z.unknown()),
-      schemaVersion: z.number().int().optional(),
-    }),
-  }),
-  z.object({
-    op: z.literal("admissions.submit"),
-    payload: z.object({
-      applicationId: z.string().uuid(),
-      snapshot: z.record(z.unknown()),
-      expectedVersion: z.number().int().nonnegative(),
-      schemaVersion: z.number().int().optional(),
-    }),
-  }),
-  z.object({
-    op: z.literal("admissions.requestChanges"),
-    payload: z.object({
-      applicationId: z.string().uuid(),
-      visibleReason: z.string().min(1),
-      privateNote: z.string().nullable().optional(),
-    }),
-  }),
-  z.object({
-    op: z.literal("admissions.reviewAdvance"),
-    payload: z.object({
-      applicationId: z.string().uuid(),
-      action: z.enum(["under_review", "assessment"]),
-      visibleReason: z.string().nullable().optional(),
-      privateNote: z.string().nullable().optional(),
-    }),
-  }),
-  z.object({
-    op: z.literal("admissions.decide"),
-    payload: z.object({
-      applicationId: z.string().uuid(),
-      action: z.enum(["offer", "waitlist", "decline"]),
-      visibleReason: z.string().nullable().optional(),
-      privateNote: z.string().nullable().optional(),
-      conditions: z.record(z.unknown()).optional(),
-      expiresAt: z.string().nullable().optional(),
-    }),
-  }),
-  z.object({
-    op: z.literal("admissions.respondOffer"),
-    payload: z.object({
-      applicationId: z.string().uuid(),
-      response: z.enum(["accepted", "declined"]),
-      offerVersion: z.number().int().positive(),
-    }),
-  }),
-  z.object({ op: z.literal("finance.listInvoices"), payload: z.object({}) }),
-  z.object({ op: z.literal("finance.listReceipts"), payload: z.object({}) }),
-  z.object({
-    op: z.literal("finance.postPayment"),
-    payload: z.object({
-      invoiceRef: z.string().min(1),
-      attemptRef: z.string().min(1),
-      providerTxnId: z.string().min(1),
-      amountPaise: z.number().int().positive(),
-      method: z.string().optional(),
-    }),
-  }),
-  z.object({ op: z.literal("enrollment.convert"), payload: z.object({ applicationId: z.string().uuid() }) }),
-  z.object({ op: z.literal("results.listBatches"), payload: z.object({}) }),
-  z.object({
-    op: z.literal("results.publish"),
-    payload: z.object({ batchId: z.string().uuid(), expectedVersion: z.number().int().nonnegative() }),
-  }),
-  z.object({ op: z.literal("timetable.listVersions"), payload: z.object({}) }),
-  z.object({
-    op: z.literal("timetable.publish"),
-    payload: z.object({ versionId: z.string().uuid(), note: z.string().nullable().optional() }),
-  }),
-  z.object({ op: z.literal("context.family"), payload: z.object({}) }),
-  z.object({ op: z.literal("context.staff"), payload: z.object({}) }),
-]);
-
-type Op = z.infer<typeof ops>;
-
-async function dispatch(
-  supabase: SupabaseClient<Database>,
-  actor: ServerActor,
-  input: Op,
-): Promise<ServiceResult<unknown>> {
-  switch (input.op) {
-    case "admissions.listMine":
-      return admissionListMine(supabase);
-    case "admissions.staffQueue":
-      return admissionListStaffQueue(supabase);
-    case "admissions.createDraft":
-      return admissionCreateDraft(supabase, actor.accountId, input.payload);
-    case "admissions.submit":
-      return admissionSubmit(supabase, input.payload);
-    case "admissions.requestChanges":
-      return admissionRequestChanges(supabase, input.payload);
-    case "admissions.reviewAdvance":
-      return admissionReviewAdvance(supabase, input.payload);
-    case "admissions.decide":
-      return admissionDecide(supabase, input.payload);
-    case "admissions.respondOffer":
-      return admissionRespondOffer(supabase, input.payload);
-    case "finance.listInvoices":
-      return financeListMyInvoices(supabase);
-    case "finance.listReceipts":
-      return financeListMyReceipts(supabase);
-    case "finance.postPayment":
-      return financePostPayment(supabase, input.payload);
-    case "enrollment.convert":
-      return enrollmentConvert(supabase, input.payload.applicationId);
-    case "results.listBatches":
-      return resultsListBatches(supabase);
-    case "results.publish":
-      return resultsPublish(supabase, input.payload);
-    case "timetable.listVersions":
-      return timetableListVersions(supabase);
-    case "timetable.publish":
-      return timetablePublish(supabase, input.payload);
-    case "context.family":
-      return resolveFamilyContext(supabase);
-    case "context.staff":
-      return resolveStaffContext(supabase, actor.personId);
+function responseFor(body: unknown, status: number, correlationRef: string, cookies: Array<{ name: string; value: string }> = []) {
+  const response = NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationRef },
+  });
+  for (const cookie of cookies) {
+    response.cookies.set(cookie.name, cookie.value, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
   }
+  return response;
+}
+
+function errorBody(code: "unauthenticated" | "forbidden" | "validation" | "unavailable", message: string, correlationRef: string, httpStatus: number) {
+  return { ok: false, errors: [{ code, message, field: null }], correlationRef, httpStatus, retryable: httpStatus >= 500 };
 }
 
 export async function POST(request: NextRequest) {
+  const correlationRef = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
   if (dataAdapter() !== "supabase") {
-    return NextResponse.json({ ok: false, error: "adapter inactive" }, { status: 503 });
+    return responseFor(errorBody("unavailable", "The Supabase adapter is not active.", correlationRef, 503), 503, correlationRef);
+  }
+
+  const origin = request.headers.get("origin");
+  if (origin !== null && origin !== new URL(request.url).origin) {
+    return responseFor(errorBody("forbidden", "Cross-origin requests are not accepted.", correlationRef, 403), 403, correlationRef);
   }
 
   const actor = await getServerActor();
   if (actor === null) {
-    return NextResponse.json(
-      { ok: false, errors: [{ code: "unauthenticated", message: "Sign in to continue.", field: null }] },
-      { status: 401 },
-    );
+    return responseFor(errorBody("unauthenticated", "Sign in to continue.", correlationRef, 401), 401, correlationRef);
   }
 
-  let input: Op;
+  let body: unknown;
   try {
-    input = ops.parse(await request.json());
+    body = await request.json();
   } catch {
-    return NextResponse.json(
-      { ok: false, errors: [{ code: "validation", message: "Invalid operation payload.", field: null }] },
-      { status: 400 },
-    );
+    return responseFor(errorBody("validation", "Invalid operation payload.", correlationRef, 400), 400, correlationRef);
+  }
+  const parsed = parseAdapterOperation(body);
+  if (parsed === null) {
+    return responseFor(errorBody("validation", "Invalid operation payload.", correlationRef, 400), 400, correlationRef);
   }
 
   const supabase = await createSupabaseServerClient();
-  let result: ServiceResult<unknown>;
+  const selection: AdapterSelection = {
+    familyStudentId: request.cookies.get(ACTIVE_FAMILY_STUDENT_COOKIE)?.value,
+    staffRoleGrantId: request.cookies.get(ACTIVE_STAFF_WORKSPACE_COOKIE)?.value,
+  };
+  const context = { supabase, actor, selection };
+  let result;
   try {
-    result = await dispatch(supabase, actor, input);
-  } catch {
-    result = { ok: false, errors: [{ code: "unavailable", message: "Operation failed.", field: null }] };
+    const normalized = await resolveAdapterReferences(supabase, parsed.operation.name, parsed.payload as Record<string, unknown>);
+    result = await parsed.operation.handle(context, normalized);
+  } catch (error) {
+    if (error instanceof ReferenceResolutionError) {
+      result = { ok: false as const, errors: [{ code: error.code, message: error.message, field: null }] };
+    } else {
+      /* Keep provider/SQL details out of the browser. The correlation reference
+       * is sufficient for operators to find the structured server log. */
+      result = { ok: false as const, errors: [{ code: "unavailable" as const, message: "The operation could not be completed.", field: null }] };
+    }
   }
-  return NextResponse.json(result);
+  const safeResult = withCorrelation(result, correlationRef);
+  const payload = parsed.payload as Record<string, unknown>;
+  const cookies: Array<{ name: string; value: string }> = [];
+  if (safeResult.ok && parsed.operation.name === "context.family" && typeof (payload.studentId ?? payload.studentRef) === "string") {
+    cookies.push({ name: ACTIVE_FAMILY_STUDENT_COOKIE, value: String(payload.studentId ?? payload.studentRef) });
+  }
+  if (safeResult.ok && parsed.operation.name === "context.staff" && typeof (payload.roleGrantId ?? payload.roleGrantRef) === "string") {
+    cookies.push({ name: ACTIVE_STAFF_WORKSPACE_COOKIE, value: String(payload.roleGrantId ?? payload.roleGrantRef) });
+  }
+  return responseFor(safeResult, statusForServiceResult(safeResult), correlationRef, cookies);
 }

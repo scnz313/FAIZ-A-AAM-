@@ -142,6 +142,24 @@ export type Database = {
         }
         Returns: undefined
       }
+      jobs_decide_v2: {
+        Args: {
+          p_action: string
+          p_application_id: string
+          p_expected_version?: number
+          p_private_note?: string
+          p_reason?: string
+          p_scheduled_at?: string
+        }
+        Returns: Json
+      }
+      jobs_save_draft: {
+        Args: { p_application_id: string; p_draft: Json; p_expected_version?: number; p_schema_version?: number }
+        Returns: Json
+      }
+      jobs_withdraw: { Args: { p_application_id: string; p_expected_version?: number }; Returns: undefined }
+      jobs_assign_reviewer: { Args: { p_application_id: string; p_reviewer_account_id: string }; Returns: string }
+      jobs_save_scorecard: { Args: { p_application_id: string; p_notes?: string; p_score: number }; Returns: string }
       jobs_submit: {
         Args: {
           p_application_id: string
@@ -187,7 +205,15 @@ export type Database = {
       }
       results_correction_request: {
         Args: { p_publication_id: string; p_reason: string }
-        Returns: undefined
+        Returns: string
+      }
+      results_correction_decide: {
+        Args: { p_note?: string; p_outcome: string; p_request_id: string }
+        Returns: Json
+      }
+      results_save_draft: {
+        Args: { p_batch_id: string; p_expected_version: number; p_marks: Json }
+        Returns: Json
       }
       results_moderate: {
         Args: {
@@ -210,11 +236,51 @@ export type Database = {
         Args: { p_publication_id: string; p_reason: string }
         Returns: undefined
       }
+      content_save_draft: { Args: { p_body: Json; p_content_item_id?: string; p_expected_version?: number; p_kind: string; p_slug: string; p_title: string }; Returns: Json }
+      content_review_version: { Args: { p_outcome: string; p_version_id: string }; Returns: undefined }
+      content_publish_version: { Args: { p_version_id: string }; Returns: undefined }
+      content_unpublish: { Args: { p_content_item_id: string; p_reason: string }; Returns: undefined }
       support_respond: {
         Args: { p_body: string; p_private?: boolean; p_request_id: string }
         Returns: undefined
       }
+      support_create: { Args: { p_body: string; p_category: string; p_priority?: string; p_subject: string }; Returns: Json }
+      support_public_intake: { Args: { p_body: string; p_category: string; p_contact: string; p_intake_key?: string; p_requester_name?: string; p_subject: string }; Returns: Json }
+      support_reopen: { Args: { p_expected_version: number; p_request_id: string }; Returns: undefined }
+      support_assign: { Args: { p_assignee_account_id: string; p_expected_version: number; p_request_id: string }; Returns: undefined }
+      settings_save: { Args: { p_expected_version: number; p_policy: Json; p_reason: string }; Returns: Json }
+      audit_list: { Args: { p_limit?: number }; Returns: Database["public"]["Tables"]["audit_events"]["Row"][]; SetofOptions: { from: "*"; to: "audit_events"; isOneToOne: false; isSetofReturn: true } }
       timetable_publish_version: {
+        Args: { p_note?: string; p_version_id: string }
+        Returns: string
+      }
+      timetable_save_draft: {
+        Args: { p_expected_revision?: number; p_grade_section_id: string; p_periods: Json; p_version_id?: string }
+        Returns: Json
+      }
+      timetable_validate_draft: {
+        Args: { p_version_id: string }
+        Returns: Json
+      }
+      timetable_save_override: {
+        Args: {
+          p_day_of_week: number
+          p_grade_section_id: string
+          p_kind: string
+          p_note?: string
+          p_override_date: string
+          p_period_number: number
+          p_room_id?: string
+          p_subject_id?: string
+          p_substitute_teacher_assignment_id?: string
+        }
+        Returns: string
+      }
+      exam_schedule_save_draft: {
+        Args: { p_entries: Json; p_grade_section_id: string; p_version_id?: string }
+        Returns: Json
+      }
+      exam_schedule_publish: {
         Args: { p_note?: string; p_version_id: string }
         Returns: string
       }
@@ -295,6 +361,10 @@ export type Database = {
           id: string
           invitation_hash: string
           purpose: string
+          provider_dispatched_at: string | null
+          provider_invitation_ref: string | null
+          provider_state: string
+          provider_subject: string | null
           reference: string
           status: string
           updated_at: string
@@ -309,6 +379,10 @@ export type Database = {
           id?: string
           invitation_hash: string
           purpose: string
+          provider_dispatched_at?: string | null
+          provider_invitation_ref?: string | null
+          provider_state?: string
+          provider_subject?: string | null
           reference?: string
           status?: string
           updated_at?: string
@@ -323,6 +397,10 @@ export type Database = {
           id?: string
           invitation_hash?: string
           purpose?: string
+          provider_dispatched_at?: string | null
+          provider_invitation_ref?: string | null
+          provider_state?: string
+          provider_subject?: string | null
           reference?: string
           status?: string
           updated_at?: string
@@ -338,6 +416,93 @@ export type Database = {
           {
             foreignKeyName: "account_invitations_created_by_account_id_fkey"
             columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_context_preferences: {
+        Row: {
+          account_id: string
+          active_role_grant_id: string | null
+          active_student_id: string | null
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          account_id: string
+          active_role_grant_id?: string | null
+          active_student_id?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          account_id?: string
+          active_role_grant_id?: string | null
+          active_student_id?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_context_preferences_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_context_preferences_active_student_id_fkey"
+            columns: ["active_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_context_preferences_active_role_grant_id_fkey"
+            columns: ["active_role_grant_id"]
+            isOneToOne: false
+            referencedRelation: "role_grants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      applicant_identities: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          purpose: string
+          reference: string
+          status: string
+          updated_at: string
+          verified_contact: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          purpose: string
+          reference?: string
+          status?: string
+          updated_at?: string
+          verified_contact: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          purpose?: string
+          reference?: string
+          status?: string
+          updated_at?: string
+          verified_contact?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "applicant_identities_account_id_fkey"
+            columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "user_accounts"
             referencedColumns: ["id"]
@@ -1060,10 +1225,19 @@ export type Database = {
       }
       documents: {
         Row: {
+          actual_mime_type: string | null
+          actual_size_bytes: number | null
+          allowed_mime_types: string[]
+          attachment_code: string | null
           category: string
           checksum: string | null
+          checksum_algorithm: string
+          checksum_verified: boolean
           created_at: string
+          declared_mime_type: string | null
+          finalized_at: string | null
           id: string
+          max_bytes: number
           mime_type: string
           object_key: string
           owner_domain: string
@@ -1074,15 +1248,24 @@ export type Database = {
           scan_status: string
           size_bytes: number
           updated_at: string
-          uploaded_by_account_id: string
+          uploaded_by_account_id: string | null
           version: number
           visibility: string
         }
         Insert: {
+          actual_mime_type?: string | null
+          actual_size_bytes?: number | null
+          allowed_mime_types?: string[]
+          attachment_code?: string | null
           category: string
           checksum?: string | null
+          checksum_algorithm?: string
+          checksum_verified?: boolean
           created_at?: string
+          declared_mime_type?: string | null
+          finalized_at?: string | null
           id?: string
+          max_bytes?: number
           mime_type: string
           object_key: string
           owner_domain: string
@@ -1093,15 +1276,24 @@ export type Database = {
           scan_status?: string
           size_bytes: number
           updated_at?: string
-          uploaded_by_account_id: string
+          uploaded_by_account_id?: string | null
           version?: number
           visibility?: string
         }
         Update: {
+          actual_mime_type?: string | null
+          actual_size_bytes?: number | null
+          allowed_mime_types?: string[]
+          attachment_code?: string | null
           category?: string
           checksum?: string | null
+          checksum_algorithm?: string
+          checksum_verified?: boolean
           created_at?: string
+          declared_mime_type?: string | null
+          finalized_at?: string | null
           id?: string
+          max_bytes?: number
           mime_type?: string
           object_key?: string
           owner_domain?: string
@@ -1112,7 +1304,7 @@ export type Database = {
           scan_status?: string
           size_bytes?: number
           updated_at?: string
-          uploaded_by_account_id?: string
+          uploaded_by_account_id?: string | null
           version?: number
           visibility?: string
         }
@@ -4330,7 +4522,11 @@ export type Database = {
           id: string
           priority: string
           reference: string
-          requester_account_id: string
+          requester_account_id: string | null
+          requester_name: string | null
+          requester_contact: string | null
+          public_intake_key: string | null
+          last_public_intake_at: string | null
           resolved_at: string | null
           sla_due_at: string | null
           status: string
@@ -4345,7 +4541,11 @@ export type Database = {
           id?: string
           priority?: string
           reference?: string
-          requester_account_id: string
+          requester_account_id?: string | null
+          requester_name?: string | null
+          requester_contact?: string | null
+          public_intake_key?: string | null
+          last_public_intake_at?: string | null
           resolved_at?: string | null
           sla_due_at?: string | null
           status?: string
@@ -4360,7 +4560,11 @@ export type Database = {
           id?: string
           priority?: string
           reference?: string
-          requester_account_id?: string
+          requester_account_id?: string | null
+          requester_name?: string | null
+          requester_contact?: string | null
+          public_intake_key?: string | null
+          last_public_intake_at?: string | null
           resolved_at?: string | null
           sla_due_at?: string | null
           status?: string
@@ -4577,6 +4781,7 @@ export type Database = {
           grade_section_id: string
           id: string
           reference: string
+          revision: number
           status: string
           updated_at: string
           version: number
@@ -4588,6 +4793,7 @@ export type Database = {
           grade_section_id: string
           id?: string
           reference?: string
+          revision?: number
           status?: string
           updated_at?: string
           version?: number
@@ -4599,6 +4805,7 @@ export type Database = {
           grade_section_id?: string
           id?: string
           reference?: string
+          revision?: number
           status?: string
           updated_at?: string
           version?: number

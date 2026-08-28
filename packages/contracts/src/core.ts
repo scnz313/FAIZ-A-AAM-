@@ -31,11 +31,39 @@ export type ServiceError = z.infer<typeof serviceErrorSchema>;
 /** Discriminated result envelope: either the authoritative value or typed errors. */
 export function serviceResultSchema<T extends z.ZodType>(valueSchema: T) {
   return z.discriminatedUnion("ok", [
-    z.object({ ok: z.literal(true), value: valueSchema }),
-    z.object({ ok: z.literal(false), errors: z.array(serviceErrorSchema) }),
+    z.object({
+      ok: z.literal(true),
+      value: valueSchema,
+      /** Safe request correlation reference for support/log lookup. */
+      correlationRef: z.string().min(1).optional(),
+      /** Canonical HTTP status for transport-aware callers. */
+      httpStatus: z.number().int().min(100).max(599).optional(),
+      /** Aggregate retry hint for the operation, not a provider detail. */
+      retryable: z.boolean().optional(),
+      /** Returned when a mutable command exposes its authoritative revision. */
+      currentVersion: z.number().int().nonnegative().optional(),
+      /** Authoritative state/status returned by a command when available. */
+      currentState: z.unknown().optional(),
+    }),
+    z.object({
+      ok: z.literal(false),
+      errors: z.array(serviceErrorSchema),
+      /** Safe request correlation reference; never a provider/SQL detail. */
+      correlationRef: z.string().min(1).optional(),
+      /** Canonical HTTP status for transport-aware callers. */
+      httpStatus: z.number().int().min(100).max(599).optional(),
+      /** Aggregate retry hint for the operation, not a provider detail. */
+      retryable: z.boolean().optional(),
+      /** Current revision when the failure is a stale/concurrency conflict. */
+      currentVersion: z.number().int().nonnegative().optional(),
+      /** Authoritative state/status returned by a command when available. */
+      currentState: z.unknown().optional(),
+    }),
   ]);
 }
-export type ServiceResult<T> = { ok: true; value: T } | { ok: false; errors: ServiceError[] };
+export type ServiceResult<T> =
+  | { ok: true; value: T; correlationRef?: string; httpStatus?: number; retryable?: boolean; currentVersion?: number; currentState?: unknown }
+  | { ok: false; errors: ServiceError[]; correlationRef?: string; httpStatus?: number; retryable?: boolean; currentVersion?: number; currentState?: unknown };
 
 /* ------------------------------------------------------------------ */
 /* Actor and record scope                                              */

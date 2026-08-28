@@ -29,9 +29,11 @@ import {
   type Term,
 } from "@/modules/academics/demo";
 import { demoNowIso } from "@/modules/demo/clock";
+import { demoStudents } from "@/modules/relationships/demo";
 import { auditService } from "@/modules/services/audit";
 import { enqueueOutboxEvent } from "@/modules/services/outbox";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 
 /** Version-history entries returned by `listVersions`, newest first. */
 export type { BatchVersion } from "@/modules/academics/demo";
@@ -48,6 +50,54 @@ export type MarksRow = {
   obtained: number | null;
   grade?: Grade;
   remark?: string;
+  /** Present for Supabase ResultEntrySheet rows; demo rows intentionally omit them. */
+  rosterId?: string;
+  componentId?: string;
+  studentId?: string;
+  studentName?: string;
+  markStatus?: "pending" | "present" | "absent" | "exempt" | "not_applicable";
+};
+
+export type ResultEntryComponent = {
+  id: string;
+  ref?: string;
+  name: string;
+  maxMarks: number;
+  weight?: number | null;
+  order: number;
+};
+
+export type ResultEntryMark = {
+  id?: string;
+  rosterId: string;
+  componentId: string;
+  obtained: number | null;
+  markStatus: "pending" | "present" | "absent" | "exempt" | "not_applicable";
+  remark?: string | null;
+};
+
+export type ResultEntryRoster = {
+  id: string;
+  ref?: string;
+  studentId: string;
+  enrollmentId: string;
+  studentName: string;
+  order: number;
+  marks: ResultEntryMark[];
+};
+
+/** Authoritative one-subject sheet. Every roster × component cell is explicit. */
+export type ResultEntrySheet = {
+  id: string;
+  ref: string;
+  examDefinitionId?: string;
+  academicYearId?: string;
+  gradeSectionId?: string;
+  subjectId?: string;
+  state: EntryBatchStatus | "superseded";
+  version: number;
+  components: ResultEntryComponent[];
+  roster: ResultEntryRoster[];
 };
 
 export type EntryBatchStatus = "draft" | "submitted" | "moderation" | "returned" | "approved" | "published" | "withdrawn";
@@ -67,6 +117,8 @@ export type EntryBatch = {
   publishedAtIso?: string;
   /** Version note shown under the queue row, e.g. a queued correction. */
   note?: string;
+  /** Full matrix used by Supabase; rows remain a presentation-compatible view. */
+  entrySheet?: ResultEntrySheet;
 };
 
 export type Publication = {
@@ -80,6 +132,9 @@ export type Publication = {
   /** Set when the live publication is withdrawn — the record stays on file. */
   withdrawnAtIso?: string;
   withdrawalReason?: string;
+  releaseId?: string;
+  releaseVersion?: number;
+  items?: Array<{ publicationId: string; subjectId: string; snapshot: unknown }>;
 };
 
 /** A field-level problem; `subject` is null for batch-level errors. */
@@ -193,6 +248,125 @@ async function respond<T>(compute: () => T): Promise<T> {
   return compute();
 }
 
+type SupabaseResultRow = {
+  id: string;
+  reference: string;
+  status: string;
+  version: number;
+  state?: string;
+  examDefinitionId?: string;
+  academicYearId?: string;
+  gradeSectionId?: string;
+  subjectId?: string;
+  examTerm?: string;
+  gradeLabel?: string;
+  sectionLabel?: string;
+  subjectName?: string;
+  components?: Array<{ id: string; reference?: string; name: string; maxMarks: number; weight?: number | null; order?: number }>;
+  roster?: Array<{ id: string; reference?: string; studentId: string; enrollmentId: string; studentName?: string; order?: number; marks?: Array<{ id?: string; componentId: string; obtained: number | null; markStatus?: string; remark?: string | null }> }>;
+  exam_definitions?: { term?: string; grade_sections?: { section_label?: string; grades?: { label?: string } | null } | null; assessment_components?: Array<{ id: string; name: string; max_marks: number }> } | null;
+  result_rosters?: Array<{ id: string; mark_entries?: Array<{ component_id: string; obtained: number | null; absent: boolean; remark: string | null }> }>;
+};
+
+function supabaseBatchStatus(status: string): EntryBatchStatus {
+  return status as EntryBatchStatus;
+}
+
+function mapSupabaseBatch(row: SupabaseResultRow): EntryBatch {
+  if (Array.isArray(row.components) && Array.isArray(row.roster)) {
+    const components: ResultEntryComponent[] = row.components.map((component, index) => ({
+      id: component.id,
+      ref: component.reference,
+      name: component.name,
+      maxMarks: Number(component.maxMarks),
+      weight: component.weight ?? null,
+      order: component.order ?? index,
+    }));
+    const roster: ResultEntryRoster[] = row.roster.map((candidate, rosterIndex) => ({
+      id: candidate.id,
+      ref: candidate.reference,
+      studentId: candidate.studentId,
+      enrollmentId: candidate.enrollmentId,
+      studentName: candidate.studentName ?? candidate.studentId,
+      order: candidate.order ?? rosterIndex,
+      marks: (candidate.marks ?? []).map((mark) => ({
+        id: mark.id,
+        rosterId: candidate.id,
+        componentId: mark.componentId,
+        obtained: mark.obtained,
+        markStatus: (mark.markStatus ?? (mark.obtained === null ? "pending" : "present")) as ResultEntryMark["markStatus"],
+        remark: mark.remark,
+      })),
+    }));
+    const rows = roster.flatMap((candidate) => components.map((component) => {
+      const mark = candidate.marks.find((item) => item.componentId === component.id);
+      return {
+        subject: `${candidate.studentName} · ${component.name}`,
+        max: component.maxMarks,
+        obtained: mark?.obtained ?? null,
+        remark: mark?.remark ?? undefined,
+        rosterId: candidate.id,
+        componentId: component.id,
+        studentId: candidate.studentId,
+        studentName: candidate.studentName,
+        markStatus: mark?.markStatus ?? "pending",
+      } satisfies MarksRow;
+    }));
+    return {
+      ref: row.reference,
+      exam: row.examTerm ?? "Results",
+      className: `${row.gradeLabel ?? "Class"} · ${row.sectionLabel ?? ""}`.trim(),
+      subject: row.subjectName ?? components[0]?.name ?? "",
+      status: supabaseBatchStatus(row.state ?? row.status),
+      rows,
+      totalsIncomplete: rows.some((item) => item.obtained === null && item.markStatus === "pending"),
+      version: row.version,
+      entrySheet: { id: row.id, ref: row.reference, examDefinitionId: row.examDefinitionId, academicYearId: row.academicYearId, gradeSectionId: row.gradeSectionId, subjectId: row.subjectId, state: supabaseBatchStatus(row.state ?? row.status), version: row.version, components, roster },
+    };
+  }
+  const components = row.exam_definitions?.assessment_components ?? [];
+  const marks = row.result_rosters?.flatMap((roster) => roster.mark_entries ?? []) ?? [];
+  const rows = components.map((component) => {
+    const entries = marks.filter((mark) => mark.component_id === component.id);
+    const first = entries[0];
+    return { subject: component.name, max: Number(component.max_marks), obtained: first?.obtained ?? null, remark: first?.remark ?? undefined };
+  });
+  return {
+    ref: row.reference,
+    exam: row.exam_definitions?.term ?? "Results",
+    className: `${row.exam_definitions?.grade_sections?.grades?.label ?? "Class"} · ${row.exam_definitions?.grade_sections?.section_label ?? ""}`.trim(),
+    subject: rows[0]?.subject ?? "",
+    status: supabaseBatchStatus(row.status),
+    rows,
+    totalsIncomplete: rows.some((item) => item.obtained === null),
+    version: row.version,
+  };
+}
+
+async function supabaseBatch(ref: string): Promise<{ id: string; raw: SupabaseResultRow } | null> {
+  const listed = await adapterCall<SupabaseResultRow[]>("results.listBatches", {});
+  if (!listed.ok) return null;
+  const raw = listed.value.find((candidate) => candidate.reference === ref || candidate.id === ref);
+  return raw ? { id: raw.id, raw } : null;
+}
+
+function markPayload(rows: MarksRow[], raw: SupabaseResultRow): Array<{ rosterId: string; componentId: string; obtained: number | null; absent: boolean; remark: string | null }> {
+  if (rows.some((row) => row.rosterId && row.componentId)) {
+    return rows.filter((row): row is MarksRow & { rosterId: string; componentId: string } => Boolean(row.rosterId && row.componentId)).map((row) => ({
+      rosterId: row.rosterId,
+      componentId: row.componentId,
+      obtained: row.obtained,
+      absent: row.markStatus === "absent",
+      remark: row.remark ?? null,
+    }));
+  }
+  const rosterId = raw.result_rosters?.[0]?.id;
+  const componentId = raw.exam_definitions?.assessment_components?.[0]?.id;
+  if (!rosterId || !componentId) return [];
+  const row = rows[0];
+  return row ? [{ rosterId, componentId, obtained: row.obtained, absent: false, remark: row.remark ?? null }] : [];
+}
+
 /* --- Session snapshot ---------------------------------------------- */
 
 /** Internal batch record: public fields plus correction/publisher audit. */
@@ -287,6 +461,7 @@ function publicBatch(batch: SessionBatch): EntryBatch {
     version: batch.version,
     publishedAtIso: batch.publishedAtIso,
     note: batch.note,
+    entrySheet: batch.entrySheet,
   };
 }
 
@@ -334,10 +509,23 @@ function statusLabel(status: EntryBatchStatus): string {
 /* --- Results implementation ---------------------------------------- */
 
 async function listBatches(): Promise<EntryBatch[]> {
+  if (clientAdapterMode() === "supabase") {
+    const response = await adapterCall<SupabaseResultRow[]>("results.listBatches", {});
+    if (!response.ok) return [];
+    return response.value.map(mapSupabaseBatch);
+  }
   return respond(() => Object.values(loadSession().batches).map(publicBatch));
 }
 
 async function getBatch(ref: string): Promise<EntryBatch | null> {
+  if (clientAdapterMode() === "supabase") {
+    const listed = await adapterCall<SupabaseResultRow[]>("results.listBatches", {});
+    if (!listed.ok) return null;
+    const found = listed.value.find((candidate) => candidate.reference === ref || candidate.id === ref);
+    if (!found) return null;
+    const detail = await adapterCall<SupabaseResultRow>("results.getBatch", { batchRef: found.reference });
+    return detail.ok ? mapSupabaseBatch(detail.value) : mapSupabaseBatch(found);
+  }
   return respond(() => {
     const batch = loadSession().batches[ref];
     return batch ? publicBatch(batch) : null;
@@ -345,6 +533,14 @@ async function getBatch(ref: string): Promise<EntryBatch | null> {
 }
 
 async function saveEntryDraft(ref: string, rows: MarksRow[]): Promise<AcademicResult<EntryBatch>> {
+  if (clientAdapterMode() === "supabase") {
+    const resolved = await supabaseBatch(ref);
+    if (!resolved) return fail("Batch not found.");
+    const response = await adapterCall<unknown>("results.saveDraft", { batchRef: resolved.raw.reference, marks: markPayload(rows, resolved.raw), expectedVersion: resolved.raw.version, idempotencyKey: `draft:${resolved.raw.reference}:${resolved.raw.version}` });
+    if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+    const next = await getBatch(ref);
+    return next ? { ok: true, value: next } : fail("The saved batch could not be reloaded.");
+  }
   return respond(() => {
     const state = loadSession();
     const batch = state.batches[ref];
@@ -362,6 +558,14 @@ async function saveEntryDraft(ref: string, rows: MarksRow[]): Promise<AcademicRe
 }
 
 async function submitForModeration(ref: string, rows: MarksRow[]): Promise<AcademicResult<EntryBatch>> {
+  if (clientAdapterMode() === "supabase") {
+    const resolved = await supabaseBatch(ref);
+    if (!resolved) return fail("Batch not found.");
+    const response = await adapterCall<unknown>("results.submitMarks", { batchRef: resolved.raw.reference, marks: markPayload(rows, resolved.raw), expectedVersion: resolved.raw.version, idempotencyKey: `submit:${resolved.raw.reference}:${resolved.raw.version}` });
+    if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+    const next = await getBatch(ref);
+    return next ? { ok: true, value: next } : fail("The submitted batch could not be reloaded.");
+  }
   return respond(() => {
     const state = loadSession();
     const batch = state.batches[ref];
@@ -381,6 +585,14 @@ async function submitForModeration(ref: string, rows: MarksRow[]): Promise<Acade
 }
 
 async function returnWithReason(ref: string, reason: string): Promise<AcademicResult<EntryBatch>> {
+  if (clientAdapterMode() === "supabase") {
+    const resolved = await supabaseBatch(ref);
+    if (!resolved) return fail("Batch not found.");
+    const response = await adapterCall<unknown>("results.moderate", { batchRef: resolved.raw.reference, outcome: "returned", note: reason, expectedVersion: resolved.raw.version, idempotencyKey: `return:${resolved.raw.reference}:${resolved.raw.version}` });
+    if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+    const next = await getBatch(ref);
+    return next ? { ok: true, value: next } : fail("The returned batch could not be reloaded.");
+  }
   return respond(() => {
     const state = loadSession();
     const batch = state.batches[ref];
@@ -397,6 +609,14 @@ async function returnWithReason(ref: string, reason: string): Promise<AcademicRe
 }
 
 async function approve(ref: string): Promise<AcademicResult<EntryBatch>> {
+  if (clientAdapterMode() === "supabase") {
+    const resolved = await supabaseBatch(ref);
+    if (!resolved) return fail("Batch not found.");
+    const response = await adapterCall<unknown>("results.moderate", { batchRef: resolved.raw.reference, outcome: "approved", expectedVersion: resolved.raw.version, idempotencyKey: `approve:${resolved.raw.reference}:${resolved.raw.version}` });
+    if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+    const next = await getBatch(ref);
+    return next ? { ok: true, value: next } : fail("The approved batch could not be reloaded.");
+  }
   return respond(() => {
     const state = loadSession();
     const batch = state.batches[ref];
@@ -411,6 +631,16 @@ async function approve(ref: string): Promise<AcademicResult<EntryBatch>> {
 }
 
 async function publish(ref: string, by: string = DEFAULT_ACTOR): Promise<AcademicResult<Publication>> {
+  if (clientAdapterMode() === "supabase") {
+    const resolved = await supabaseBatch(ref);
+    if (!resolved) return fail("Batch not found.");
+    const response = await adapterCall<{ publicationRef?: string; publicationId?: string }>("results.publish", { batchRef: resolved.raw.reference, expectedVersion: resolved.raw.version, idempotencyKey: `publish:${resolved.raw.reference}:${resolved.raw.version}` });
+    if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+    const publications = await adapterCall<Array<{ reference: string; version: number; status: string; published_at: string }>>("results.listPublications", {});
+    const publicationRef = response.value.publicationRef ?? response.value.publicationId ?? resolved.raw.reference;
+    const item = publications.ok ? publications.value.find((candidate) => candidate.reference === publicationRef) : undefined;
+    return { ok: true, value: { ref: publicationRef, term: resolved.raw.exam_definitions?.term ?? resolved.raw.examTerm ?? "Results", status: "final", publishedAtIso: item?.published_at ?? new Date().toISOString(), version: item?.version ?? resolved.raw.version } };
+  }
   return respond(() => {
     const state = loadSession();
     const batch = state.batches[ref];
@@ -452,6 +682,17 @@ async function publish(ref: string, by: string = DEFAULT_ACTOR): Promise<Academi
 }
 
 async function startCorrection(ref: string, reason: string, by: string = DEFAULT_ACTOR): Promise<AcademicResult<EntryBatch>> {
+  if (clientAdapterMode() === "supabase") {
+    const publications = await adapterCall<Array<{ id: string; reference: string; batch_id?: string; releaseId?: string; items?: Array<{ publicationId: string; subjectId: string; snapshot: unknown }> }>>("results.listReleases", {});
+    if (!publications.ok) return { ok: false, errors: publications.errors.map((error) => ({ subject: null, message: error.message })) };
+    const publication = publications.value.find((candidate) => candidate.reference === ref || candidate.releaseId === ref);
+    if (!publication) return fail("Publication not found.");
+    const target = publication.items?.[0];
+    if (!target) return fail("The report release has no subject publication to correct.");
+    const request = await adapterCall<{ requestId: string }>("results.requestCorrection", { releaseRef: publication.reference, publicationRef: target.publicationId, reason, idempotencyKey: `correction:${publication.reference}:${target.publicationId}` });
+    if (!request.ok) return { ok: false, errors: request.errors.map((error) => ({ subject: null, message: error.message })) };
+    return fail("Correction request recorded. A separate reviewer must approve it before a new draft is created.");
+  }
   return respond(() => {
     const state = loadSession();
     const batch = state.batches[ref];
@@ -473,6 +714,16 @@ async function startCorrection(ref: string, reason: string, by: string = DEFAULT
 }
 
 async function withdrawPublication(ref: string, reason: string, by: string = DEFAULT_ACTOR): Promise<AcademicResult<EntryBatch>> {
+  if (clientAdapterMode() === "supabase") {
+    const publications = await adapterCall<Array<{ id: string; reference: string; batch_id: string }>>("results.listPublications", {});
+    if (!publications.ok) return { ok: false, errors: publications.errors.map((error) => ({ subject: null, message: error.message })) };
+    const publication = publications.value.find((candidate) => candidate.reference === ref);
+    if (!publication) return fail("Publication not found.");
+    const response = await adapterCall<unknown>("results.withdraw", { publicationId: publication.id, reason });
+    if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+    const next = await getBatch(publication.batch_id);
+    return next ? { ok: true, value: next } : fail("The withdrawn batch could not be reloaded.");
+  }
   return respond(() => {
     const state = loadSession();
     const batch = state.batches[ref];
@@ -521,6 +772,11 @@ async function withdrawPublication(ref: string, reason: string, by: string = DEF
 }
 
 async function getPublications(): Promise<Publication[]> {
+  if (clientAdapterMode() === "supabase") {
+    const response = await adapterCall<Array<{ id: string; reference: string; term: string; version: number; status: string; publishedAt?: string; published_at?: string; items?: Array<{ publicationId: string; subjectId: string; snapshot: unknown }> }>>("results.listReleases", {});
+    if (!response.ok) return [];
+    return response.value.map((publication) => ({ ref: publication.reference, term: publication.term ?? "Results", status: publication.status === "provisional" ? "provisional" : "final", publishedAtIso: publication.publishedAt ?? publication.published_at ?? new Date().toISOString(), version: publication.version, releaseId: publication.id, releaseVersion: publication.version, items: publication.items }));
+  }
   return respond(() =>
     loadSession()
       .publications.filter((publication) => publication.withdrawnAtIso === undefined)
@@ -529,6 +785,10 @@ async function getPublications(): Promise<Publication[]> {
 }
 
 async function getPublication(ref: string): Promise<Publication | null> {
+  if (clientAdapterMode() === "supabase") {
+    const publications = await getPublications();
+    return publications.find((publication) => publication.ref === ref) ?? null;
+  }
   return respond(() => {
     const publication = loadSession().publications.find((item) => item.ref === ref);
     return publication ? { ...publication } : null;
@@ -536,10 +796,21 @@ async function getPublication(ref: string): Promise<Publication | null> {
 }
 
 async function listVersions(batchRef: string): Promise<BatchVersion[]> {
+  if (clientAdapterMode() === "supabase") {
+    const resolved = await supabaseBatch(batchRef);
+    if (!resolved) return [];
+    const response = await adapterCall<Array<{ version?: number; note?: string | null; createdAt?: string; created_at?: string; actorAccountId?: string; created_by_account_id?: string }>>("results.listVersions", { sheetRef: resolved.raw.reference });
+    if (!response.ok) return [];
+    return response.value.map((item) => ({ version: item.version ?? 0, note: item.note ?? "", atIso: item.createdAt ?? item.created_at ?? new Date(0).toISOString(), by: item.actorAccountId ?? item.created_by_account_id ?? "Result office" }));
+  }
   return respond(() => [...(loadSession().versions[batchRef] ?? [])]);
 }
 
 async function getTerms(): Promise<Term[]> {
+  if (clientAdapterMode() === "supabase") {
+    const publications = await getPublications();
+    return publications.map((publication) => ({ id: publication.ref, label: publication.term, publicationStatus: publication.status, publishedAtIso: publication.publishedAtIso, version: publication.version }));
+  }
   return respond(() => {
     const state = loadSession();
     /* Withdrawn publications are not live: the term falls back to the honest
@@ -571,8 +842,29 @@ async function getTerms(): Promise<Term[]> {
  * or academic year without a published snapshot.
  */
 async function getStudentResultSnapshot(studentId: string, academicYearId: string): Promise<StudentResultSnapshot | null> {
+  if (clientAdapterMode() === "supabase") {
+    const response = await adapterCall<Array<{ term?: string; academicYearId?: string; items?: Array<{ snapshot: unknown }> }>>("results.listReleases", { studentRef: studentId });
+    if (!response.ok) return null;
+    const terms: Record<string, SnapshotMarkRow[]> = {};
+    for (const publication of response.value) {
+      if (publication.academicYearId !== undefined && publication.academicYearId !== academicYearId) continue;
+      for (const item of publication.items ?? []) {
+        const snapshot = item.snapshot;
+        if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) continue;
+        const value = snapshot as { term?: string; subject?: string; marks?: Array<{ max?: number; obtained?: number; component?: string; remark?: string }> };
+        const term = value.term ?? publication.term ?? "Results";
+        terms[term] = [...(terms[term] ?? []), ...(value.marks ?? []).map((mark) => ({ subject: mark.component ?? value.subject ?? "Subject", max: Number(mark.max ?? 0), obtained: Number(mark.obtained ?? 0), remark: mark.remark }))];
+      }
+    }
+    return Object.keys(terms).length === 0 ? null : { studentId, academicYearId, terms };
+  }
   return respond(() => {
-    const fixture = studentResultSnapshots[studentId];
+    /* The portal passes the student's public reference; the demo snapshot
+       fixture is keyed by the internal student id. Resolve the reference so
+       the same student always resolves to its published snapshot. */
+    const byRef = new Map(demoStudents.map((student) => [student.ref, student.id]));
+    const resolvedId = studentResultSnapshots[studentId] !== undefined ? studentId : (byRef.get(studentId) ?? studentId);
+    const fixture = studentResultSnapshots[resolvedId];
     if (fixture === undefined || fixture.academicYearId !== academicYearId) return null;
     const terms: Record<string, SnapshotMarkRow[]> = {};
     for (const [label, marks] of Object.entries(fixture.terms)) {

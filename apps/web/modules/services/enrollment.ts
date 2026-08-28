@@ -28,6 +28,7 @@ import { financeService } from "@/modules/services/finance";
 import { auditService } from "@/modules/services/audit";
 import { enqueueOutboxEvent } from "@/modules/services/outbox";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
+import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                                */
@@ -47,6 +48,10 @@ export type EnrollmentConversionResult = {
       conversion "creates or matches" — matches never duplicate records). */
   matchedExisting: boolean;
   createdAtIso: string;
+  status?: "converted" | "manual_review_required" | "manual_review_rejected";
+  manualReviewRequired?: boolean;
+  duplicateReviewRef?: string;
+  candidateStudentId?: string;
 };
 
 export type EnrollmentReadiness = {
@@ -57,9 +62,11 @@ export type EnrollmentReadiness = {
   feePaid: boolean;
   /** Documents were required at submission — always complete here. */
   documentsComplete: boolean;
+  placementAvailable: boolean;
   /** Demo policy flags — capacity and final approval read as available. */
   capacityAvailable: boolean;
   finalApproved: boolean;
+  policyPending?: boolean;
   ready: boolean;
   /** Why the application is not ready yet (null when ready). */
   reason: string | null;
@@ -160,6 +167,49 @@ function clone<T>(value: T): T {
  * arrive with the backend.
  */
 export async function getEnrollmentReadiness(applicationRef: string): Promise<EnrollmentReadiness> {
+  if (clientAdapterMode() === "supabase") {
+    const result = await adapterCall<Record<string, unknown>>("enrollment.readiness", { applicationRef });
+    if (!result.ok) throw new EnrollmentConversionError("application-not-found", result.errors[0]?.message ?? "Readiness unavailable.");
+    const value = result.value;
+    const offered = value.offered === true;
+    const accepted = value.accepted === true;
+    const feePaid = value.feePaid === true;
+    const documentsComplete = value.documentsComplete === true;
+    const capacityAvailable = value.capacityAvailable === true;
+    const finalApproved = value.finalApproved === true;
+    const placementAvailable = value.placementAvailable !== false;
+    const policyPending = value.policyPending === true;
+    const ready = offered && accepted && feePaid && documentsComplete && placementAvailable && capacityAvailable && finalApproved && !policyPending;
+    return {
+      applicationRef,
+      offered,
+      accepted,
+      admissionInvoiceRef: typeof value.admissionInvoiceRef === "string" ? value.admissionInvoiceRef : null,
+      feePaid,
+      documentsComplete,
+      placementAvailable,
+      capacityAvailable,
+      finalApproved,
+      ready,
+      reason: !offered
+        ? "There is no offered seat on this application."
+        : !accepted
+          ? "The offered seat has not been accepted yet."
+          : !feePaid
+            ? "The admission fee has not been recorded as paid."
+            : !documentsComplete
+              ? "Required documents are not all ready for enrollment."
+              : !placementAvailable
+                ? "The school has not configured a placement for this grade and year."
+                : !capacityAvailable
+              ? "The school has not confirmed capacity for this placement."
+              : !finalApproved
+                ? "Final admissions approval is still pending."
+                : policyPending
+                  ? "The admission policy is still pending school confirmation."
+                : null,
+    };
+  }
   const record = await admissionsService.getApplication(applicationRef);
   if (record === null) {
     throw new EnrollmentConversionError("application-not-found", "The application was not found in the school's records.");
@@ -170,9 +220,10 @@ export async function getEnrollmentReadiness(applicationRef: string): Promise<En
   const invoice = admissionInvoiceRef === null ? null : await financeService.getInvoice(admissionInvoiceRef);
   const feePaid = invoice !== null && invoice.balancePaise === 0;
   const documentsComplete = true;
+  const placementAvailable = true;
   const capacityAvailable = true;
   const finalApproved = true;
-  const ready = offered && accepted && feePaid && documentsComplete && capacityAvailable && finalApproved;
+  const ready = offered && accepted && feePaid && documentsComplete && placementAvailable && capacityAvailable && finalApproved;
   const reason = !offered
     ? "There is no offered seat on this application."
     : !accepted
@@ -187,6 +238,7 @@ export async function getEnrollmentReadiness(applicationRef: string): Promise<En
     admissionInvoiceRef,
     feePaid,
     documentsComplete,
+    placementAvailable,
     capacityAvailable,
     finalApproved,
     ready,
@@ -201,6 +253,27 @@ export async function getEnrollmentReadiness(applicationRef: string): Promise<En
  * the SAME references and creates nothing new.
  */
 export async function convertApplication(applicationRef: string): Promise<EnrollmentConversionResult> {
+  if (clientAdapterMode() === "supabase") {
+    const result = await adapterCall<Record<string, unknown>>("enrollment.convert", { applicationRef });
+    if (!result.ok) throw new EnrollmentConversionError("not-ready", result.errors[0]?.message ?? "Enrollment conversion failed.");
+    const value = result.value;
+    const manualReviewRequired = value.manualReviewRequired === true;
+    return {
+      applicationRef,
+      studentId: typeof value.student === "string" ? value.student : "",
+      studentRef: typeof value.studentRef === "string" ? value.studentRef : typeof value.student === "string" ? value.student : "",
+      enrollmentId: typeof value.enrollment === "string" ? value.enrollment : "",
+      enrollmentRef: typeof value.enrollmentRef === "string" ? value.enrollmentRef : typeof value.enrollment === "string" ? value.enrollment : "",
+      linkId: typeof value.guardian_link === "string" ? value.guardian_link : null,
+      portalAvailable: typeof value.guardian_link === "string",
+      matchedExisting: value.matched_existing === true,
+      createdAtIso: new Date().toISOString(),
+      status: value.status === "manual_review_rejected" ? "manual_review_rejected" : manualReviewRequired ? "manual_review_required" : "converted",
+      manualReviewRequired,
+      duplicateReviewRef: typeof value.duplicateReviewRef === "string" ? value.duplicateReviewRef : undefined,
+      candidateStudentId: typeof value.candidateStudent === "string" ? value.candidateStudent : undefined,
+    };
+  }
   const existing = loadConversions()[applicationRef];
   if (existing !== undefined) return clone(existing);
 
