@@ -27,6 +27,7 @@ import { createResendSender, type EmailSender } from "@/lib/email/resend";
 import {
   applicationSubmittedEmail,
   applicationChangesRequestedEmail,
+  applicationDecisionEmail,
   contentNoticeEmail,
   enrollmentCompleteEmail,
   examDateSheetEmail,
@@ -40,6 +41,7 @@ import {
   refundStatusEmail,
   receiptAvailableEmail,
   resultCorrectionEmail,
+  resultEntryReviewEmail,
   resultsPublishedEmail,
   resultWithdrawnEmail,
   securityUpdateEmail,
@@ -184,7 +186,7 @@ async function recipientsForNotice(admin: SupabaseClient<Database>, noticeRefere
   return accountEmails(admin, [...accountIds]);
 }
 
-async function resolveRecipients(
+export async function resolveRecipients(
   admin: SupabaseClient<Database>,
   event: OutboxEventRow,
 ): Promise<Recipient[]> {
@@ -225,11 +227,28 @@ async function resolveRecipients(
       }
       break;
     }
+    case "refund_request":
+    case "refund_requests": {
+      const { data: refund } = await admin
+        .from("refund_requests")
+        .select("payments(payment_allocations(invoices(reference)))")
+        .eq("reference", target)
+        .maybeSingle();
+      const allocations = Array.isArray(refund?.payments?.payment_allocations)
+        ? refund.payments.payment_allocations
+        : refund?.payments?.payment_allocations ? [refund.payments.payment_allocations] : [];
+      for (const allocation of allocations) {
+        if (allocation.invoices?.reference) recipients.push(...(await resolveRecipients(admin, { ...event, target_type: "invoice", target_reference: allocation.invoices.reference })));
+      }
+      break;
+    }
     case "support_request":
     case "support_requests": {
       const { data: support } = await admin.from("support_requests").select("requester_account_id, assignee_account_id").eq("reference", target).maybeSingle();
-      const accounts = [support?.requester_account_id, support?.assignee_account_id].filter((id): id is string => typeof id === "string");
-      recipients.push(...(await accountEmails(admin, accounts)));
+      const accounts = event.event_key.startsWith("email.support")
+        ? [support?.requester_account_id]
+        : [support?.requester_account_id, support?.assignee_account_id];
+      recipients.push(...(await accountEmails(admin, accounts.filter((id): id is string => typeof id === "string"))));
       break;
     }
     case "enrollment": {
@@ -266,6 +285,12 @@ async function resolveRecipients(
     case "user_accounts": {
       // This account id is attached by a trusted domain command, not supplied
       // by a browser notification caller.
+      const accountId = typeof event.payload.accountId === "string" ? event.payload.accountId : isUuid(target) ? target : null;
+      if (accountId) recipients.push(...(await accountEmails(admin, [accountId])));
+      break;
+    }
+    case "applicant_identity":
+    case "staff_assignment": {
       const accountId = typeof event.payload.accountId === "string" ? event.payload.accountId : null;
       if (accountId) recipients.push(...(await accountEmails(admin, [accountId])));
       break;
@@ -277,6 +302,12 @@ async function resolveRecipients(
       recipients.push(...(await accountEmails(admin, accountIds)));
       break;
     }
+    case "result_batch":
+    case "result_batches":
+    case "result_entry_sheet":
+    case "result_entry_sheets":
+      recipients.push(...(await staffEmailsForRoles(admin, ["exam_reviewer", "result_publisher"])));
+      break;
     case "result_report_release":
     case "result_report_releases": {
       const { data } = await db.from("result_report_releases").select("student_id").eq("reference", target).maybeSingle();
@@ -343,14 +374,12 @@ async function resolveRecipients(
 /* Template selection by event key prefix                               */
 /* ------------------------------------------------------------------ */
 
-async function renderEmail(admin: SupabaseClient<Database>, event: OutboxEventRow, _recipient: Recipient) {
+export async function renderEmail(admin: SupabaseClient<Database>, event: OutboxEventRow, _recipient: Recipient) {
   const key = event.event_key;
   const target = event.target_reference;
-  if (key.startsWith("email.application_submitted")) {
-    const { data } = await admin.from("admission_applications").select("parent_name").eq("reference", target).maybeSingle();
-    return applicationSubmittedEmail({ applicationRef: target, parentName: data?.parent_name ?? "Guardian" });
-  }
+  if (key.startsWith("email.application_submitted")) return applicationSubmittedEmail({ applicationRef: target });
   if (key.startsWith("email.application_changes")) return applicationChangesRequestedEmail({ applicationRef: target });
+  if (key.startsWith("email.application_decision")) return applicationDecisionEmail({ applicationRef: target, decision: event.payload.decision === "waitlisted" ? "waitlisted" : "declined" });
   if (key.startsWith("email.offer")) {
     const { data } = await admin
       .from("admission_offers")
@@ -413,7 +442,7 @@ async function renderEmail(admin: SupabaseClient<Database>, event: OutboxEventRo
   if (key.startsWith("email.notice") || key.startsWith("email.content")) return noticePublishedEmail({ reference: target });
   if (key.startsWith("email.staff_invitation")) return staffInvitationEmail({ reference: target });
   if (key.startsWith("security.")) return securityUpdateEmail({ reference: target });
-  if (key.startsWith("email.marks_") || key.startsWith("email.result_entry_sheet_submitted")) return securityUpdateEmail({ reference: target });
+  if (key.startsWith("email.marks_") || key.startsWith("email.result_entry_sheet_submitted")) return resultEntryReviewEmail({ reference: target });
   if (key.startsWith("content.") || key.startsWith("notice.")) return contentNoticeEmail({ reference: target });
   return null;
 }
@@ -662,7 +691,7 @@ async function dispatchStorageEvent(
 async function dispatchEvent(
   admin: SupabaseClient<Database>,
   event: OutboxEventRow,
-  sender: EmailSender,
+  sender: EmailSender | undefined,
   storage: StorageProvider,
   scanner: DocumentScanner,
 ): Promise<DispatchOutcome> {
@@ -695,6 +724,12 @@ async function dispatchEvent(
     return { kind: "unknown" };
   }
 
+  let emailSender: EmailSender;
+  try {
+    emailSender = sender ?? createResendSender();
+  } catch (error) {
+    return { kind: "transient", error: error instanceof Error ? error.message : "email provider unavailable" };
+  }
   const recipients = await resolveRecipients(admin, event);
   if (recipients.length === 0) {
     return { kind: "permanent", error: `no verified recipients for ${event.target_type} ${event.target_reference}` };
@@ -740,7 +775,7 @@ async function dispatchEvent(
     }
 
     try {
-      const result = await sender({
+      const result = await emailSender({
         to: [recipient.email],
         subject: template.subject,
         html: template.html,
@@ -775,7 +810,7 @@ type ProviderJobRow = {
 
 async function processProviderJobs(input: {
   admin: SupabaseClient<Database>;
-  sender: EmailSender;
+  sender?: EmailSender;
   storage: StorageProvider;
   scanner: DocumentScanner;
   batchSize: number;
@@ -795,7 +830,7 @@ async function processProviderJobs(input: {
                   : job.job_kind === "settings_effective" ? "settings.effective" : job.job_kind;
     const event: OutboxEventRow = {
       id: job.id,
-      event_key: `provider:${job.idempotency_key}`,
+      event_key: job.idempotency_key,
       kind,
       target_type: job.target_type ?? "document",
       target_reference: job.target_reference ?? job.document_id ?? "",
@@ -832,9 +867,10 @@ export async function processOutboxBatch(input: {
 }): Promise<WorkerSummary> {
   const startedAt = new Date().toISOString();
   const { data: jobRun } = await input.admin.from("job_runs").insert({ job_name: "outbox", status: "started", started_at: startedAt }).select("id").maybeSingle();
+  try {
   // Recording is test-only and must be injected explicitly. Runtime provider
-  // mode always uses the real Resend adapter when configured.
-  const sender = input.sender ?? createResendSender();
+  // mode uses the real Resend adapter only when an email event is claimed.
+  const sender = input.sender;
   const storage = input.storage ?? new SupabaseStorageProvider(input.admin);
   const scanner = input.scanner ?? {
     scan: async () => {
@@ -905,4 +941,8 @@ export async function processOutboxBatch(input: {
   summary.skippedUnknown += providerSummary.skippedUnknown;
   if (jobRun?.id) await input.admin.from("job_runs").update({ status: "succeeded", finished_at: new Date().toISOString(), outcome: summary }).eq("id", jobRun.id);
   return summary;
+  } catch (error) {
+    if (jobRun?.id) await input.admin.from("job_runs").update({ status: "failed", finished_at: new Date().toISOString(), error: "Outbox worker failed." }).eq("id", jobRun.id);
+    throw error;
+  }
 }

@@ -25,7 +25,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const ITEMS: NotificationItem[] = [
-  { id: "n1", kind: "Fee", text: "Term 3 invoice issued — INV-2026-0103", atIso: "2026-08-03T06:00:00Z", unread: true },
+  { id: "n1", kind: "Fee", text: "Term 3 invoice issued — INV-2026-0103", atIso: "2026-08-03T06:00:00Z", unread: true, href: "/portal/fees/INV-2026-0103" },
   { id: "n2", kind: "Result", text: "Term 2 report card published", atIso: "2026-08-02T06:00:00Z", unread: true },
   { id: "n3", kind: "Notice", text: "Mid-term date sheet released", atIso: "2026-08-01T06:00:00Z", unread: false },
   { id: "n4", kind: "Alert", text: "Winter air-quality advisory", atIso: "2026-07-30T06:00:00Z", unread: false },
@@ -54,6 +54,18 @@ describe("NotificationBell", () => {
     await user.click(bell);
     expect(bell).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("region", { name: "Notifications" })).not.toBeInTheDocument();
+  });
+
+  it("renders authorized deep links and marks a selected item read", async () => {
+    const user = userEvent.setup();
+    render(<NotificationBell items={ITEMS} />);
+    const bell = screen.getByRole("button", { name: /Notifications/ });
+    await user.click(bell);
+    const link = screen.getByRole("link", { name: /Term 3 invoice issued/ });
+    expect(link).toHaveAttribute("href", "/portal/fees/INV-2026-0103");
+    link.addEventListener("click", (event) => event.preventDefault());
+    await user.click(link);
+    expect(bell).toHaveAttribute("aria-label", "Notifications, 1 unread");
   });
 
   it("clears the unread count via Mark all read", async () => {

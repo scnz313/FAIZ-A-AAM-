@@ -13,6 +13,8 @@ import {
   DEMO_GUARDIAN_ACCOUNT_ID,
   DEMO_STAFF_ACCOUNT_ID,
   NOTIFICATIONS_SESSION_KEY,
+  notificationHref,
+  notificationKind,
   notificationsService,
 } from "@/modules/services/notifications";
 import { sessionRemove } from "@/modules/services/session";
@@ -78,6 +80,14 @@ describe("notificationsService", () => {
     const staff = await notificationsService.listForAccount(DEMO_STAFF_ACCOUNT_ID);
     expect(staff.some((item) => item.unread)).toBe(true);
     expect(staff.find((item) => item.id === "staff-1")?.unread).toBe(true);
+  });
+
+  it("maps server notification targets to safe authorized routes", () => {
+    expect(notificationKind({ kind: "email.deliver", target_type: "refund_request" })).toBe("Finance");
+    expect(notificationKind({ kind: "Results", target_type: "result_publication" })).toBe("Results");
+    expect(notificationHref({ target_type: "admission_application", target_reference: "APP-1" })).toBe("/apply/student/APP-1/status");
+    expect(notificationHref({ target_type: "result_entry_sheet", target_reference: "RES-1" })).toBe("/staff/results/RES-1");
+    expect(notificationHref({ target_type: "receipt", target_reference: "RCPT-1" })).toBe("/portal/receipts/RCPT-1");
   });
 
   it("ships the same items the shells pass via the demo module", () => {

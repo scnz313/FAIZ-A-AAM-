@@ -61,17 +61,17 @@ ${cta}
 /* Template functions (one per plan.md §9 event kind)                  */
 /* ------------------------------------------------------------------ */
 
-export function applicationSubmittedEmail(input: { applicationRef: string; parentName: string }) {
+export function applicationSubmittedEmail(input: { applicationRef: string }) {
   const { appUrl } = requireAppEnv();
   return {
     subject: `Application ${input.applicationRef} received`,
     html: shell({
       eyebrow: "Admissions",
       title: "Your application has been received",
-      cta: { label: "View application status", href: `${appUrl}/applicant/status?ref=${encodeURIComponent(input.applicationRef)}` },
+      cta: { label: "View application status", href: `${appUrl}/apply/student/${encodeURIComponent(input.applicationRef)}/status` },
       paragraphs: [
-        `Assalamu alaikum ${escapeHtml(input.parentName)}, we have received your application <strong>${escapeHtml(input.applicationRef)}</strong> for the 2026-27 academic year.`,
-        "Our admissions office will review it and you will be able to follow its progress from your portal.",
+        `We have received application <strong>${escapeHtml(input.applicationRef)}</strong>.`,
+        "Our admissions office will review it and you can follow its progress from the secure applicant centre.",
       ],
     }),
   };
@@ -84,7 +84,7 @@ export function offerExtendedEmail(input: { applicationRef: string; expiresLabel
     html: shell({
       eyebrow: "Admissions",
       title: "An offer has been extended",
-      cta: { label: "Respond to the offer", href: `${appUrl}/applicant/status?ref=${encodeURIComponent(input.applicationRef)}` },
+      cta: { label: "Respond to the offer", href: `${appUrl}/apply/student/${encodeURIComponent(input.applicationRef)}/status` },
       paragraphs: [
         `Your application <strong>${escapeHtml(input.applicationRef)}</strong> has been approved and an offer is waiting for your response.`,
         `The offer remains open until ${escapeHtml(input.expiresLabel)}.`,
@@ -100,7 +100,7 @@ export function invoiceIssuedEmail(input: { invoiceRef: string; applicationRef: 
     html: shell({
       eyebrow: "Fees",
       title: "Your admission invoice is ready",
-      cta: { label: "View invoice", href: `${appUrl}/applicant/status?ref=${encodeURIComponent(input.applicationRef)}` },
+      cta: { label: "View invoice", href: `${appUrl}/apply/student/${encodeURIComponent(input.applicationRef)}/status` },
       paragraphs: [
         `Your invoice <strong>${escapeHtml(input.invoiceRef)}</strong> has been issued for application ${escapeHtml(input.applicationRef)}.`,
         "You can review it from the applicant portal and complete payment there.",
@@ -157,7 +157,7 @@ export function resultsPublishedEmail(input: { term: string; subject: string }) 
 export function timetablePublishedEmail(input: { className: string }) {
   const { appUrl } = requireAppEnv();
   return {
-    subject: `New timetable for ${input.className}`,
+    subject: "A class timetable has been updated",
     html: shell({
       eyebrow: "Timetable",
       title: "Your class timetable is updated",
@@ -204,6 +204,10 @@ export function applicationChangesRequestedEmail(input: { applicationRef: string
   return genericNotificationEmail({ targetRef: input.applicationRef, subject: `Application ${input.applicationRef} needs an update`, eyebrow: "Admissions", title: "An application update is ready", body: "The admissions office has requested an update to your application", path: `/apply/student/${encodeURIComponent(input.applicationRef)}/status` });
 }
 
+export function applicationDecisionEmail(input: { applicationRef: string; decision: "waitlisted" | "declined" }) {
+  return genericNotificationEmail({ targetRef: input.applicationRef, subject: `Application ${input.applicationRef} has an update`, eyebrow: "Admissions", title: "A decision is available", body: input.decision === "waitlisted" ? "Your application has been placed on the waitlist" : "A final decision is available for your application", path: `/apply/student/${encodeURIComponent(input.applicationRef)}/status` });
+}
+
 export function jobApplicationSubmittedEmail(input: { applicationRef: string }) {
   return genericNotificationEmail({ targetRef: input.applicationRef, subject: `Job application ${input.applicationRef} received`, eyebrow: "Careers", title: "Your job application has been received", body: "Your vacancy application is now in the school recruitment queue", path: `/apply/job/${encodeURIComponent(input.applicationRef)}/status` });
 }
@@ -228,6 +232,10 @@ export function resultWithdrawnEmail(input: { reference: string }) {
   return genericNotificationEmail({ targetRef: input.reference, subject: "A results record is temporarily unavailable", eyebrow: "Results", title: "A result publication has changed", body: "Sign in to review the current publication status", path: "/portal/results" });
 }
 
+export function resultEntryReviewEmail(input: { reference: string }) {
+  return genericNotificationEmail({ targetRef: input.reference, subject: "A result entry sheet is ready for review", eyebrow: "Results workflow", title: "Marks are awaiting review", body: "An assigned result entry sheet has a new workflow update", path: "/staff/results" });
+}
+
 export function examDateSheetEmail(input: { reference: string }) {
   return genericNotificationEmail({ targetRef: input.reference, subject: "An exam date sheet is available", eyebrow: "Timetable", title: "Exam dates are updated", body: "Sign in to view the published exam schedule", path: "/portal/timetable" });
 }
@@ -245,11 +253,11 @@ export function noticePublishedEmail(input: { reference: string }) {
 }
 
 export function securityUpdateEmail(input: { reference: string }) {
-  return genericNotificationEmail({ targetRef: input.reference, subject: "Your school account security was updated", eyebrow: "Security", title: "Your account security has changed", body: "Sign in to review the current account and access status", path: "/portal/security" });
+  return genericNotificationEmail({ targetRef: input.reference, subject: "Your school account security was updated", eyebrow: "Security", title: "Your account security has changed", body: "Sign in to review the current account and access status", path: "/sign-in" });
 }
 
 export function staffInvitationEmail(input: { reference: string }) {
-  return genericNotificationEmail({ targetRef: input.reference, subject: "A school staff invitation is ready", eyebrow: "School account", title: "Your school invitation is ready", body: "Use the secure invitation flow to continue account setup", path: "/sign-in/invite" });
+  return genericNotificationEmail({ targetRef: input.reference, subject: "A school staff invitation is ready", eyebrow: "School account", title: "Your school invitation is ready", body: "Use the secure invitation flow to continue account setup", path: `/sign-in/invite?invitation=${encodeURIComponent(input.reference)}` });
 }
 
 export function contentNoticeEmail(input: { reference: string }) {

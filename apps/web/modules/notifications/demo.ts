@@ -25,6 +25,11 @@ export type NotificationKind =
   | "Admissions"
   | "Finance"
   | "Results"
+  | "Timetable"
+  | "Careers"
+  | "Support"
+  | "Security"
+  | "Enrollment"
   | "Environment";
 
 export type NotificationItem = {
@@ -34,6 +39,7 @@ export type NotificationItem = {
   text: string;
   atIso: string;
   unread: boolean;
+  href?: string;
 };
 
 /** Lazy demo reads avoid evaluating demo session data in Supabase bundles. */

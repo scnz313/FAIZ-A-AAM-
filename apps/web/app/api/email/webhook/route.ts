@@ -4,36 +4,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sha256 } from "@/lib/supabase/outbox-worker";
-import { verifyResendWebhook } from "@/lib/email/webhook";
+import { deliveryProjection, normalizedWebhookPayload, verifyResendWebhook, webhookSuppressionReason, type ResendPayload } from "@/lib/email/webhook";
 import { providerLog } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
-
-type ResendPayload = {
-  type?: string;
-  data?: {
-    email_id?: string;
-    to?: string[];
-    created_at?: string;
-  };
-};
 
 function response(body: Record<string, unknown>, status = 200, correlationId = crypto.randomUUID()) {
   return NextResponse.json(body, {
     status,
     headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId },
   });
-}
-
-function deliveryProjection(eventType: string): { status: string; rank: number } | null {
-  const type = eventType.toLowerCase();
-  if (type.includes("bounced")) return { status: "bounced", rank: 40 };
-  if (type.includes("complained") || type.includes("complaint")) return { status: "complained", rank: 40 };
-  if (type.includes("suppressed")) return { status: "suppressed", rank: 40 };
-  if (type.includes("delivered")) return { status: "delivered", rank: 30 };
-  if (type.includes("delivery_delayed") || type.includes("delayed")) return { status: "failed", rank: 10 };
-  if (type.includes("failed") || type.includes("failure")) return { status: "failed", rank: 20 };
-  return null;
 }
 
 async function projectDelivery(
@@ -67,12 +47,13 @@ async function projectDelivery(
     }
   }
 
-  if (projection?.status === "bounced" || projection?.status === "complained" || projection?.status === "suppressed") {
+  const suppressionReason = webhookSuppressionReason(payload, eventType);
+  if (suppressionReason !== null) {
     for (const address of payload.data?.to ?? []) {
       if (typeof address !== "string" || address.trim().length === 0) continue;
       const { error } = await admin.from("email_suppressions").upsert({
         email_hash: sha256(address.toLowerCase().trim()),
-        reason: projection.status === "complained" ? "complaint" : "hard_bounce",
+        reason: suppressionReason,
         created_by_account_id: null,
         note: `resend webhook ${eventType}`,
       }, { onConflict: "email_hash", ignoreDuplicates: true });
@@ -107,6 +88,7 @@ export async function POST(request: NextRequest) {
     ? new Date(payload.data.created_at).toISOString()
     : new Date().toISOString();
   const payloadHash = sha256(rawBody);
+  const normalized = normalizedWebhookPayload(payload, eventType, eventAt);
   const admin = createSupabaseAdminClient();
   const db = admin as unknown as SupabaseClient;
 
@@ -125,7 +107,7 @@ export async function POST(request: NextRequest) {
       event_time: eventAt,
       event_type: eventType,
       payload_hash: payloadHash,
-      normalized: payload,
+      normalized,
       status: "processing",
       attempts: 1,
       received_at: new Date().toISOString(),

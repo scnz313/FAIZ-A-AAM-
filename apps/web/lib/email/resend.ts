@@ -53,6 +53,7 @@ export function createResendSender(): EmailSender {
         subject: input.subject,
         html: input.html,
       }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (response.status >= 200 && response.status < 300) {
@@ -63,13 +64,10 @@ export function createResendSender(): EmailSender {
       return { providerMessageId: body.id };
     }
 
-    const detail = await response.text().catch(() => "");
     // Resend rate limits (429) and every 5xx response are retryable. Other
     // 4xx responses are permanent recipient/from/payload failures.
-    const permanent = response.status >= 400 && response.status < 500 && response.status !== 429;
-    throw new Error(
-      `${permanent ? "Permanent" : "Transient"}:Resend ${response.status} ${detail.slice(0, 300)}`,
-    );
+    const permanent = response.status >= 400 && response.status < 500 && ![408, 425, 429].includes(response.status);
+    throw new Error(`${permanent ? "Permanent" : "Transient"}:Resend ${response.status}`);
   };
 }
 

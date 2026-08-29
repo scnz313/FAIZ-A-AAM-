@@ -28,6 +28,52 @@ export const NOTIFICATIONS_SESSION_KEY = sessionKey("notifications");
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
+export type ServerNotificationRow = {
+  id: string;
+  version?: number;
+  kind: string;
+  title: string;
+  body: string | null;
+  target_type?: string | null;
+  target_reference?: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
+const NOTIFICATION_KINDS = new Set<NotificationKind>(["Fee", "Result", "Notice", "Alert", "Admissions", "Finance", "Results", "Timetable", "Careers", "Support", "Security", "Enrollment", "Environment"]);
+
+export function notificationKind(row: Pick<ServerNotificationRow, "kind" | "target_type">): NotificationKind {
+  if (NOTIFICATION_KINDS.has(row.kind as NotificationKind)) return row.kind as NotificationKind;
+  const target = row.target_type ?? "";
+  if (target.includes("admission")) return "Admissions";
+  if (target.includes("job")) return "Careers";
+  if (target.includes("invoice") || target.includes("receipt") || target.includes("refund") || target.includes("payment")) return "Finance";
+  if (target.includes("result")) return "Results";
+  if (target.includes("timetable") || target.includes("exam_schedule")) return "Timetable";
+  if (target.includes("notice") || target.includes("content")) return "Notice";
+  if (target.includes("support")) return "Support";
+  if (target.includes("enrollment")) return "Enrollment";
+  return "Security";
+}
+
+export function notificationHref(row: Pick<ServerNotificationRow, "target_type" | "target_reference">): string | undefined {
+  const target = row.target_type ?? "";
+  const reference = row.target_reference ?? "";
+  if (target.includes("admission") && reference) return `/apply/student/${encodeURIComponent(reference)}/status`;
+  if (target.includes("job_application") && reference) return `/apply/job/${encodeURIComponent(reference)}/status`;
+  if (target.includes("receipt") && reference) return `/portal/receipts/${encodeURIComponent(reference)}`;
+  if (target.includes("invoice") && reference) return `/portal/fees/${encodeURIComponent(reference)}`;
+  if (target.includes("refund") || target.includes("payment")) return "/portal/fees";
+  if (target.includes("result_entry") || target.includes("result_batch")) return reference ? `/staff/results/${encodeURIComponent(reference)}` : "/staff/results";
+  if (target.includes("result")) return "/portal/results";
+  if (target.includes("timetable") || target.includes("exam_schedule")) return "/portal/timetable";
+  if (target.includes("notice") || target.includes("content")) return "/portal/notices";
+  if (target.includes("support")) return "/portal/support";
+  if (target.includes("student") || target.includes("enrollment")) return "/portal";
+  if (target.includes("user_account") || target.includes("staff_assignment") || target.includes("account_invitation")) return "/sign-in";
+  return undefined;
+}
+
 /** Seed rows keep their fictional text; `offsetMs` ages them from demoNow. */
 type NotificationSeed = {
   id: string;
@@ -94,9 +140,9 @@ export interface NotificationsService {
 export const notificationsService: NotificationsService = {
   async listForAccount(accountId) {
     if (clientAdapterMode() === "supabase") {
-      const response = await adapterCall<Array<{ id: string; version?: number; kind: string; title: string; body: string | null; target_reference: string | null; read_at: string | null; created_at: string }>>("notifications.list", {});
+      const response = await adapterCall<ServerNotificationRow[]>("notifications.list", {});
       if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notifications are unavailable.");
-      return response.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: item.kind as NotificationKind, text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null }));
+      return response.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: notificationKind(item), text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null, href: notificationHref(item) }));
     }
     return notificationsService.listForAccountSync(accountId);
   },

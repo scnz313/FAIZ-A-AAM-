@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Webhook } from "svix";
 
 import { createResendSender } from "@/lib/email/resend";
-import { verifyResendWebhook } from "@/lib/email/webhook";
+import { applicationSubmittedEmail, invoiceIssuedEmail, offerExtendedEmail } from "@/lib/email/templates";
+import { deliveryProjection, normalizedWebhookPayload, verifyResendWebhook, webhookSuppressionReason } from "@/lib/email/webhook";
 import { generateReceiptPdf, generatedObjectKey, mapReportCardSnapshot } from "@/lib/pdf/adapter";
 import { renderReportCardPdf } from "@/lib/pdf/render";
 import { FakeDocumentScanner, FakeStorageProvider, HttpDocumentScanner } from "@/modules/services/document-providers";
@@ -113,12 +114,51 @@ describe("provider contracts", () => {
     expect(verifyResendWebhook(secret, body, { id, timestamp, signature: signature.replace("v1,", "v1=") })).toBe(false);
   });
 
-  it("classifies Resend 429 as transient", async () => {
+  it("keeps delivery projections monotonic by terminal severity", () => {
+    expect(deliveryProjection("email.delivery_delayed")).toEqual({ status: "failed", rank: 10 });
+    expect(deliveryProjection("email.failed")).toEqual({ status: "failed", rank: 20 });
+    expect(deliveryProjection("email.delivered")).toEqual({ status: "delivered", rank: 30 });
+    expect(deliveryProjection("email.bounced")).toEqual({ status: "bounced", rank: 40 });
+  });
+
+  it("stores only hashed recipients and suppresses permanent bounces or complaints", () => {
+    const permanent = { data: { email_id: "email-1", to: ["guardian@example.test"], bounce: { type: "Permanent", subType: "NoEmail" } } };
+    const transient = { data: { email_id: "email-1", to: ["guardian@example.test"], bounce: { type: "Transient" } } };
+    const normalized = normalizedWebhookPayload(permanent, "email.bounced", "2026-08-10T00:00:00.000Z");
+    expect(normalized.recipientHashes).toHaveLength(1);
+    expect(JSON.stringify(normalized)).not.toContain("guardian@example.test");
+    expect(webhookSuppressionReason(permanent, "email.bounced")).toBe("hard_bounce");
+    expect(webhookSuppressionReason(transient, "email.bounced")).toBeNull();
+    expect(webhookSuppressionReason({ data: { to: ["guardian@example.test"] } }, "email.complained")).toBe("complaint");
+  });
+
+  it("classifies Resend 429 as transient and applies a provider timeout", async () => {
     vi.stubEnv("RESEND_API_KEY", "re_test_key");
     vi.stubEnv("EMAIL_FROM", "office@example.test");
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("rate limited", { status: 429 })));
+    const fetchMock = vi.fn(async () => new Response("rate limited", { status: 429 }));
+    vi.stubGlobal("fetch", fetchMock);
     const sender = createResendSender();
-    await expect(sender({ to: ["guardian@example.test"], subject: "Update", html: "<p>Update</p>", idempotencyKey: "delivery:test" })).rejects.toThrow(/^Transient:Resend 429/);
+    await expect(sender({ to: ["guardian@example.test"], subject: "Update", html: "<p>Update</p>", idempotencyKey: "delivery:test" })).rejects.toThrow(/^Transient:Resend 429$/);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.resend.com/emails", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it("does not persist provider response bodies in send errors", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_key");
+    vi.stubEnv("EMAIL_FROM", "office@example.test");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("recipient guardian@example.test was rejected", { status: 400 })));
+    const sender = createResendSender();
+    await expect(sender({ to: ["guardian@example.test"], subject: "Update", html: "<p>Update</p>", idempotencyKey: "delivery:test" })).rejects.toThrow(/^Permanent:Resend 400$/);
+  });
+
+  it("uses real applicant status routes in admissions emails", () => {
+    vi.stubEnv("APP_URL", "https://school.example.test");
+    const submitted = applicationSubmittedEmail({ applicationRef: "APP-2026-0101" });
+    const offered = offerExtendedEmail({ applicationRef: "APP-2026-0101", expiresLabel: "20 August 2026" });
+    const invoice = invoiceIssuedEmail({ invoiceRef: "INV-2026-0101", applicationRef: "APP-2026-0101" });
+    for (const email of [submitted, offered, invoice]) {
+      expect(email.html).toContain("/apply/student/APP-2026-0101/status");
+      expect(email.html).not.toContain("/applicant/status");
+    }
   });
 
   it("payment fake preserves idempotent order/refund contracts", async () => {

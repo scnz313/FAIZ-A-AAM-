@@ -23,7 +23,8 @@ import { mapServerApplication, type ApplicationRecord, type ServerAdmissionRow }
 import { mapServerSupportRow, type Grievance, type ServerSupportRow } from "@/modules/services/support";
 import type { AdmissionConfiguration, AdmissionWindow, AdmissionDocumentRequirement, SchoolGrade } from "@/modules/services/school-config";
 import type { AcademicYear } from "@fass/contracts";
-import type { NotificationItem, NotificationKind } from "@/modules/notifications/demo";
+import type { NotificationItem } from "@/modules/notifications/demo";
+import { notificationHref, notificationKind, type ServerNotificationRow } from "@/modules/services/notifications";
 
 async function financeClient() {
   return createSupabaseServerClient();
@@ -229,9 +230,9 @@ export async function loadServerSupport(scope: "mine" | "staff"): Promise<Grieva
 }
 
 export async function loadServerNotifications(): Promise<NotificationItem[]> {
-  const result = await serverAdapterCall<Array<{ id: string; version?: number; kind: string; title: string; body: string | null; read_at: string | null; created_at: string }>>("notifications.list");
+  const result = await serverAdapterCall<ServerNotificationRow[]>("notifications.list");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Notifications could not be loaded.");
-  return result.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: item.kind as NotificationKind, text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null }));
+  return result.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: notificationKind(item), text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null, href: notificationHref(item) }));
 }
 
 export async function loadServerAudit(): Promise<unknown[]> {

@@ -118,6 +118,11 @@ export function NotificationBell({ items: initialItems, accountId }: { items: No
     setReadIds(new Set(items.map((item) => item.id)));
   };
 
+  const markRead = (id: string) => {
+    setReadIds((current) => new Set([...current, id]));
+    if (accountId) void notificationsService.markRead(accountId, id).then((list) => setItems(list)).catch(() => {});
+  };
+
   return (
     <div className={styles.root} ref={rootRef}>
       <button
@@ -181,7 +186,11 @@ export function NotificationBell({ items: initialItems, accountId }: { items: No
                           {relativeTime(item.atIso)}
                         </time>
                       </p>
-                      <p className={styles.text}>{item.text}</p>
+                      {item.href ? (
+                        <a className={`${styles.text} ${styles.textLink}`} href={item.href} onClick={() => markRead(item.id)}>{item.text}</a>
+                      ) : (
+                        <p className={styles.text}>{item.text}</p>
+                      )}
                     </div>
                   </li>
                 );

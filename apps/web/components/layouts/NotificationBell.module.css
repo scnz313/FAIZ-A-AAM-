@@ -158,6 +158,16 @@
   color: var(--ink);
 }
 
+.textLink {
+  display: block;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.textLink:hover {
+  color: var(--saffron-deep);
+}
+
 .empty {
   margin: 0;
   padding: 20px 16px;
