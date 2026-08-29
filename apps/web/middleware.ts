@@ -12,13 +12,14 @@ import { createServerClient } from "@supabase/ssr";
  * createServerClient and getUser().
  */
 export async function updateSession(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-fass-pathname", request.nextUrl.pathname);
+  const nextResponse = () => NextResponse.next({ request: { headers: requestHeaders } });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !publishableKey) {
-    return NextResponse.next({ request });
-  }
+  if (!url || !publishableKey) return nextResponse();
 
-  let supabaseResponse = NextResponse.next({ request });
+  let supabaseResponse = nextResponse();
 
   const supabase = createServerClient(url, publishableKey, {
     cookies: {
@@ -27,7 +28,8 @@ export async function updateSession(request: NextRequest) {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        supabaseResponse = NextResponse.next({ request });
+        requestHeaders.set("cookie", request.cookies.toString());
+        supabaseResponse = nextResponse();
         cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options));
       },
     },

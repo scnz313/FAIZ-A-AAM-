@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
+import { dataAdapter } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
 
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
  * today every route is reachable; this page previews the denied state.
  */
 export default function AccessDeniedPage() {
+  const demo = dataAdapter() === "demo";
   return (
     <div className={styles.page}>
       <PublicHeader tone="light" />
@@ -30,10 +32,14 @@ export default function AccessDeniedPage() {
           <a className="link-arrow" href="/">
             Return home →
           </a>
-          <p className={styles.demoNote}>
-            <span className="demo-badge">UI demo</span>
-            <span>Authorization is enforced server-side once the backend exists — no route is protected yet.</span>
-          </p>
+          {demo ? (
+            <p className={styles.demoNote}>
+              <span className="demo-badge">UI demo</span>
+              <span>Authorization is previewed locally in this adapter.</span>
+            </p>
+          ) : (
+            <p className={styles.demoNote}>Access was denied by the current account, role, or record scope. No protected record was disclosed.</p>
+          )}
         </div>
       </main>
       <PublicFooter />

@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
 import PageIntro from "@/components/public/PageIntro";
 import TotpForm from "@/components/identity/TotpForm";
+import { getServerActor } from "@/lib/auth/actor";
+import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { dataAdapter } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
@@ -18,7 +21,21 @@ export const metadata: Metadata = {
  * Staff second-factor gate. Reached after a verified first factor when the
  * account holds staff grants; demo-mode sign-ins never route here.
  */
-export default function TotpPage() {
+export default async function TotpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const adapter = dataAdapter();
+  const params = await searchParams;
+  const requested = Array.isArray(params.next) ? params.next[0] : params.next;
+  const next = safeAuthRedirect(requested, "/staff");
+  if (adapter === "supabase") {
+    const actor = await getServerActor();
+    if (actor === null) redirect(`/sign-in/staff?next=${encodeURIComponent(next)}`);
+    if (!actor.roles.some((role) => !["guardian", "student"].includes(role))) redirect("/access-denied");
+    if (actor.aal === "aal2") redirect(next);
+  }
   return (
     <div className={styles.page}>
       <PublicHeader tone="light" />
@@ -31,7 +48,7 @@ export default function TotpPage() {
           />
           <section className={styles.section} aria-label="Two-step verification">
             <div className={`panel ${styles.card}`}>
-              <TotpForm adapter={dataAdapter()} />
+              <TotpForm adapter={adapter} />
             </div>
           </section>
         </div>

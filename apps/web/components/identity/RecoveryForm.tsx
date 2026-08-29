@@ -44,7 +44,8 @@ export default function RecoveryForm({ adapter = clientAdapterMode() }: { adapte
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ identifier: identifier.trim() }),
         });
-        if (!response.ok) throw new Error("Recovery is temporarily unavailable. Try again shortly.");
+        const payload = await response.json().catch(() => null) as { errors?: Array<{ message?: string }> } | null;
+        if (!response.ok) throw new Error(payload?.errors?.[0]?.message ?? "Recovery is temporarily unavailable. Try again shortly.");
         setResult({ generic: true });
       } else {
         setResult(await identityService.startRecovery(identifier.trim()));
@@ -81,7 +82,9 @@ export default function RecoveryForm({ adapter = clientAdapterMode() }: { adapte
           </>
         )}
         <p className={styles.successNote}>
-          Use the code at the sign-in screen to reset the password. The office cannot reset passwords over the phone.
+          {supabaseMode
+            ? "Open the secure link in the email to choose a new password. The school office cannot reset passwords over the phone."
+            : "Use the code at the sign-in screen to reset the password. The office cannot reset passwords over the phone."}
         </p>
         <p className={styles.back}>
           <a className="link-arrow" href="/sign-in">

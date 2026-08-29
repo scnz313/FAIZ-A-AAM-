@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
 import Button from "@/components/ui/Button";
+import { dataAdapter } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
 
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
  * yet, so this page previews the state the backend will produce.
  */
 export default function SessionExpiredPage() {
+  const demo = dataAdapter() === "demo";
   return (
     <div className={styles.page}>
       <PublicHeader tone="light" />
@@ -33,10 +35,14 @@ export default function SessionExpiredPage() {
               Back to the school home →
             </a>
           </div>
-          <p className={styles.demoNote}>
-            <span className="demo-badge">UI demo</span>
-            <span>Sessions are not real yet — nothing was actually protected or lost.</span>
-          </p>
+          {demo ? (
+            <p className={styles.demoNote}>
+              <span className="demo-badge">UI demo</span>
+              <span>This adapter previews the session-expiry state.</span>
+            </p>
+          ) : (
+            <p className={styles.demoNote}>Your previous session can no longer access protected records. Sign in again to continue safely.</p>
+          )}
         </div>
       </main>
       <PublicFooter />

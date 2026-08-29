@@ -4,6 +4,7 @@ import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
 import StaffInvitationForm from "@/components/identity/StaffInvitationForm";
 import PageIntro from "@/components/public/PageIntro";
+import { dataAdapter } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
 
@@ -19,6 +20,7 @@ export default async function StaffInvitationPage({
 }) {
   const params = await searchParams;
   const invitation = Array.isArray(params.invitation) ? params.invitation[0] : params.invitation;
+  const supabaseMode = dataAdapter() === "supabase";
   return (
     <div className={styles.page}>
       <PublicHeader tone="light" />
@@ -27,7 +29,7 @@ export default async function StaffInvitationPage({
           <PageIntro
             eyebrow="Staff sign-in"
             title="Accept your invitation"
-            deck="Use the private references from the school office to create your staff workspace access."
+            deck={supabaseMode ? "Open this page from the invitation email, confirm your name, and set the password used for staff sign in." : "Use the private references from the school office to create your staff workspace access."}
           />
           <section className={styles.section} aria-label="Accept staff invitation">
             <div className={`panel ${styles.card}`}>

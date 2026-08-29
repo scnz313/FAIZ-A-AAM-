@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { FakeAuthProvider } from "@/lib/auth/provider";
 import { isSameOrigin } from "@/lib/auth/identity-server";
+import { safeAuthRedirect } from "@/lib/auth/redirect";
 
 describe("server auth provider boundary", () => {
   it("creates provider-verification applicant invitations deterministically and de-duplicates contact", async () => {
@@ -28,5 +29,13 @@ describe("server auth provider boundary", () => {
     expect(isSameOrigin("https://school.test/api/auth/recovery", "https://school.test")).toBe(true);
     expect(isSameOrigin("https://school.test/api/auth/recovery", "https://evil.test")).toBe(false);
     expect(isSameOrigin("https://school.test/api/auth/recovery", "not an origin")).toBe(false);
+  });
+
+  it("allows only approved post-authentication destinations", () => {
+    expect(safeAuthRedirect("/portal/fees?year=2026", "/portal")).toBe("/portal/fees?year=2026");
+    expect(safeAuthRedirect("/sign-in/invite?invitation=INV-1", "/portal")).toBe("/sign-in/invite?invitation=INV-1");
+    expect(safeAuthRedirect("//evil.test", "/portal")).toBe("/portal");
+    expect(safeAuthRedirect("/api/outbox", "/portal")).toBe("/portal");
+    expect(safeAuthRedirect("https://evil.test/staff", "/portal")).toBe("/portal");
   });
 });

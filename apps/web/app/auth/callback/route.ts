@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { safeAuthRedirect } from "@/lib/auth/redirect";
+import { requireAppEnv } from "@/lib/supabase/env";
+import { recordAuthEvent } from "@/lib/supabase/domain";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -9,18 +12,19 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * arbitrary `next` value — scheme-relative or foreign targets are dropped.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const { appUrl } = requireAppEnv();
   const code = searchParams.get("code");
-  const requested = searchParams.get("next") ?? "/portal";
+  const next = safeAuthRedirect(searchParams.get("next"), "/portal");
 
   if (code !== null) {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error === null) {
-      const next = requested.startsWith("/") && !requested.startsWith("//") ? requested : "/portal";
-      return NextResponse.redirect(`${origin}${next}`);
+      await recordAuthEvent(supabase, "signed_in");
+      return NextResponse.redirect(new URL(next, appUrl));
     }
   }
 
-  return NextResponse.redirect(`${origin}/sign-in?error=auth`);
+  return NextResponse.redirect(new URL("/sign-in?error=auth", appUrl));
 }

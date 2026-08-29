@@ -17,7 +17,7 @@ const EXAM_REVIEWER_GRANT_ID = "00000000-0000-4000-8000-000000000315";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/staff",
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
 beforeEach(() => {

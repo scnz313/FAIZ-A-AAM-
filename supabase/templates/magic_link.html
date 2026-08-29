@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;background:#f4efe5;color:#0b1c2a;font-family:Arial,sans-serif">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 16px">
+      <tr><td align="center">
+        <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fffdf8;border:1px solid #d8d0c3">
+          <tr><td style="padding:22px 28px;background:#0b1c2a;color:#fffdf8;font-family:Georgia,serif;font-size:20px">Faiz Aam Secondary School</td></tr>
+          <tr><td style="padding:32px 28px">
+            <p style="margin:0 0 8px;color:#b96832;font-size:12px;letter-spacing:.12em;text-transform:uppercase">Secure sign in</p>
+            <h1 style="margin:0 0 18px;font-family:Georgia,serif;font-size:26px">Your verification code</h1>
+            <p style="margin:0 0 18px;line-height:1.6">Enter this one-time code on the school sign-in page. It expires shortly and can be used only once.</p>
+            <p style="margin:0 0 22px;padding:16px;border:1px solid #d8d0c3;background:#f4efe5;text-align:center;font-size:30px;letter-spacing:.22em;font-weight:700">{{ .Token }}</p>
+            <p style="margin:0 0 18px;line-height:1.6">If you started sign-in on this same device, you may also use the secure link below.</p>
+            <p style="margin:0"><a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#b96832;color:#fff;text-decoration:none;padding:11px 20px">Continue securely</a></p>
+          </td></tr>
+          <tr><td style="padding:18px 28px;background:#f4efe5;color:#53606b;font-size:12px;line-height:1.6">Do not forward this code or link. The school office will never ask you to read it over the phone.</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>

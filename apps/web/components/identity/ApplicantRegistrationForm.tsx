@@ -5,7 +5,13 @@ import type { FormEvent } from "react";
 
 import Button from "@/components/ui/Button";
 
-export default function ApplicantRegistrationForm() {
+export default function ApplicantRegistrationForm({
+  purpose = "student_admission",
+  next = "/apply/student",
+}: {
+  purpose?: "student_admission" | "job_application";
+  next?: string;
+}) {
   const [givenName, setGivenName] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [email, setEmail] = useState("");
@@ -25,7 +31,7 @@ export default function ApplicantRegistrationForm() {
       const response = await fetch("/api/auth/applicant-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ givenName, familyName, email, purpose: "student_admission" }),
+        body: JSON.stringify({ givenName, familyName, email, purpose, next }),
       });
       const result = (await response.json().catch(() => null)) as { ok?: boolean; errors?: Array<{ message?: string }> } | null;
       if (!response.ok || result?.ok !== true) throw new Error(result?.errors?.[0]?.message ?? "Registration could not be completed.");
@@ -43,7 +49,7 @@ export default function ApplicantRegistrationForm() {
         <p className="section-label">Check your email</p>
         <h2>Verify your email to continue.</h2>
         <p>We sent a verification invitation to {email}. Follow it first, then sign in with the same email to start or resume an application.</p>
-        <a className="button button--primary" href="/sign-in?next=%2Fapply%2Fstudent">Go to sign in</a>
+        <a className="button button--primary" href={`/sign-in?next=${encodeURIComponent(next)}`}>Go to sign in</a>
       </section>
     );
   }

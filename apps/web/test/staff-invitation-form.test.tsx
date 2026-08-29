@@ -2,6 +2,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const authMocks = vi.hoisted(() => ({
+  updateUser: vi.fn().mockResolvedValue({ error: null }),
+}));
+
+vi.mock("@/lib/supabase/client", () => ({
+  createSupabaseBrowserClient: () => ({ auth: authMocks }),
+}));
+
 import StaffInvitationForm from "@/components/identity/StaffInvitationForm";
 import { setDemoNow } from "@/modules/demo/clock";
 import { STAFF_INVITATIONS_SESSION_KEY, usersService } from "@/modules/services/users";
@@ -11,12 +19,15 @@ beforeEach(() => {
   window.sessionStorage.clear();
   sessionRemove(STAFF_INVITATIONS_SESSION_KEY);
   setDemoNow(new Date("2026-08-10T05:00:00.000Z"));
+  authMocks.updateUser.mockReset().mockResolvedValue({ error: null });
 });
 
 afterEach(() => {
   window.sessionStorage.clear();
   sessionRemove(STAFF_INVITATIONS_SESSION_KEY);
   setDemoNow(null);
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("StaffInvitationForm", () => {
@@ -78,9 +89,12 @@ describe("StaffInvitationForm", () => {
     expect(screen.queryByLabelText(/one-time reference/i)).toBeNull();
     await user.type(screen.getByLabelText(/given name/i), "New");
     await user.type(screen.getByLabelText(/family name/i), "Teacher");
+    await user.type(screen.getByLabelText(/^password/i), "SecurePass9");
+    await user.type(screen.getByLabelText(/confirm password/i), "SecurePass9");
     await user.click(screen.getByRole("button", { name: "Accept invitation" }));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Your staff account is ready." })).toBeTruthy());
+    expect(authMocks.updateUser).toHaveBeenCalledWith({ password: "SecurePass9" });
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/staff-invite-accept", expect.objectContaining({ method: "POST" }));
   });
 });

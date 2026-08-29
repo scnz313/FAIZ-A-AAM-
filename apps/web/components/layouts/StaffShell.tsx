@@ -95,6 +95,9 @@ export function StaffShell({ children, initialNotifications }: { children: React
   const activeRole = summary?.role ?? "";
   const [navOpen, setNavOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const supabaseMode = clientAdapterMode() === "supabase";
   /* Hydration-safe gate: attribute-bearing drawer state (inert, tabIndex,
      role) stays absent from the SSR DOM and appears only after mount. */
   const [mounted, setMounted] = useState(false);
@@ -176,8 +179,27 @@ export function StaffShell({ children, initialNotifications }: { children: React
   };
 
   async function handleSignOut(): Promise<void> {
-    await identityService.clear();
-    router.push("/sign-in");
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      if (supabaseMode) {
+        const response = await fetch("/api/auth/sign-out", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "local" }),
+        });
+        if (!response.ok) throw new Error("sign out failed");
+      } else {
+        await identityService.clear();
+      }
+      router.push("/sign-in/staff");
+      router.refresh();
+    } catch {
+      setSignOutError("Sign out could not be completed. Check your connection and try again.");
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -312,17 +334,19 @@ export function StaffShell({ children, initialNotifications }: { children: React
             </span>
             <span className="signed-in-copy">
               <strong>{status === "ready" && summary ? summary.displayName : "Staff member"}</strong>
-              <small>{status === "ready" && summary ? `${summary.roleLabel} · demo session` : "Demo session"}</small>
+              <small>{status === "ready" && summary ? `${summary.roleLabel}${supabaseMode ? "" : " · demo session"}` : supabaseMode ? "Staff account" : "Demo session"}</small>
             </span>
             <button
               type="button"
               className="button button--small button--quiet"
               onClick={() => void handleSignOut()}
-              title="Back to sign in — demo sessions are not real"
+              title={supabaseMode ? "Sign out of this device" : "Back to sign in — demo sessions are not real"}
+              disabled={signingOut}
             >
-              Sign out <span className="num">(demo)</span>
+              {signingOut ? "Signing out…" : "Sign out"} {!supabaseMode ? <span className="num">(demo)</span> : null}
             </button>
           </div>
+          {signOutError ? <p className={styles.switcherError} role="alert">{signOutError}</p> : null}
         </div>
       </aside>
 
@@ -330,10 +354,12 @@ export function StaffShell({ children, initialNotifications }: { children: React
 
       <div className="portal-main">
         <header className="portal-chrome">
-          <p className="alert-strip demo-strip">
-            Demo session — all data shown is fictional concept data. Real records appear once the backend and staff
-            accounts are connected.
-          </p>
+          {!supabaseMode ? (
+            <p className="alert-strip demo-strip">
+              Demo session — all data shown is fictional concept data. Real records appear once the backend and staff
+              accounts are connected.
+            </p>
+          ) : null}
 
           <div className="portal-topbar">
             <button
@@ -348,14 +374,14 @@ export function StaffShell({ children, initialNotifications }: { children: React
             </button>
             <p className="eyebrow">Staff workspace</p>
             <div className="topbar-actions">
-              <NotificationBell items={initialNotifications ?? (clientAdapterMode() === "supabase" ? [] : demoStaffNotifications())} accountId={identityId ?? undefined} />
-              <span className="demo-badge">Demo data</span>
+              <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoStaffNotifications())} accountId={identityId ?? undefined} />
+              {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
             </div>
           </div>
 
           <div className={`folio ${styles.folio}`}>
             <span>FAIZ AAM SECONDARY SCHOOL · STAFF WORKSPACE</span>
-            <span className={styles.folioDate}>{demoTodayLabel()}</span>
+            <span className={styles.folioDate}>{supabaseMode ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()) : demoTodayLabel()}</span>
           </div>
 
           <div className={styles.contextStrip}>

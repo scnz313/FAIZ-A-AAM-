@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./page.module.css";
 
@@ -49,10 +51,29 @@ export default function SecurityPage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const activeCount = SESSIONS.filter((session) => !signedOut[session.id]).length;
+  const supabaseMode = clientAdapterMode() === "supabase";
+  const [mfaStatus, setMfaStatus] = useState<"checking" | "verified" | "not-enrolled">("checking");
+  const [securityBusy, setSecurityBusy] = useState<"local" | "others" | "global" | null>(null);
+  const [securityError, setSecurityError] = useState<string | null>(null);
+  const [securityMessage, setSecurityMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (confirmingId !== null) confirmRef.current?.focus();
   }, [confirmingId]);
+
+  useEffect(() => {
+    if (!supabaseMode) return;
+    let cancelled = false;
+    void createSupabaseBrowserClient().auth.mfa.listFactors().then(({ data }) => {
+      if (cancelled) return;
+      setMfaStatus((data?.totp ?? []).some((factor) => factor.status === "verified") ? "verified" : "not-enrolled");
+    }).catch(() => {
+      if (!cancelled) setMfaStatus("not-enrolled");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabaseMode]);
 
   function beginConfirm(id: string) {
     setConfirmingId(id);
@@ -65,6 +86,88 @@ export default function SecurityPage() {
   function signOut(id: string) {
     setSignedOut((previous) => ({ ...previous, [id]: true }));
     setConfirmingId(null);
+  }
+
+  async function signOutProvider(scope: "local" | "others" | "global") {
+    if (securityBusy !== null) return;
+    setSecurityBusy(scope);
+    setSecurityError(null);
+    setSecurityMessage(null);
+    try {
+      const response = await fetch("/api/auth/sign-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope }),
+      });
+      if (!response.ok) throw new Error("sign out failed");
+      if (scope === "others") {
+        setSecurityMessage("Other device sessions were closed. This browser remains signed in.");
+      } else {
+        window.location.assign("/sign-in");
+      }
+    } catch {
+      setSecurityError("The session change could not be completed. Check your connection and try again.");
+    } finally {
+      setSecurityBusy(null);
+    }
+  }
+
+  if (supabaseMode) {
+    return (
+      <div className={styles.page}>
+        <header>
+          <p className="eyebrow">Portal · Security</p>
+          <h1 className={styles.title}>Security</h1>
+          <p className={styles.intro}>Manage this signed-in browser, other sessions, password recovery, and authenticator status.</p>
+        </header>
+
+        {securityError ? <p className="field-error" role="alert">{securityError}</p> : null}
+        {securityMessage ? <p role="status" aria-live="polite">{securityMessage}</p> : null}
+
+        <section aria-labelledby="sessions-heading">
+          <h2 id="sessions-heading" className={styles.sectionTitle}>Session access</h2>
+          <div className={styles.rows}>
+            <div className={styles.sessionRow}>
+              <div>
+                <strong>Current browser</strong>
+                <small>Verified Supabase session</small>
+              </div>
+              <p className={styles.lastActive}><StatusBadge tone="good">This device</StatusBadge>Active now</p>
+              <div className={styles.sessionAction}>
+                <Button variant="quiet" onClick={() => void signOutProvider("local")} disabled={securityBusy !== null}>
+                  {securityBusy === "local" ? "Signing out…" : "Sign out this device"}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className={styles.statusLine}>
+            <p className={styles.statusText}>Close sessions on other browsers if you no longer recognize or use them.</p>
+            <Button variant="quiet" onClick={() => void signOutProvider("others")} disabled={securityBusy !== null}>
+              {securityBusy === "others" ? "Closing sessions…" : "Sign out other devices"}
+            </Button>
+            <Button variant="quiet" onClick={() => void signOutProvider("global")} disabled={securityBusy !== null}>
+              {securityBusy === "global" ? "Closing all sessions…" : "Sign out everywhere"}
+            </Button>
+          </div>
+        </section>
+
+        <section aria-labelledby="twofa-heading">
+          <h2 id="twofa-heading" className={styles.sectionTitle}>Two-factor authentication</h2>
+          <div className={styles.statusLine}>
+            <StatusBadge tone={mfaStatus === "verified" ? "good" : "neutral"}>
+              {mfaStatus === "checking" ? "Checking" : mfaStatus === "verified" ? "Enabled" : "Not enrolled"}
+            </StatusBadge>
+            <p className={styles.statusText}>Authenticator verification is mandatory for staff workspaces. Guardian enrollment remains subject to school policy.</p>
+          </div>
+        </section>
+
+        <section aria-labelledby="password-heading">
+          <h2 id="password-heading" className={styles.sectionTitle}>Password</h2>
+          <p className={styles.passwordNote}>Staff passwords are changed through a time-limited recovery email. Family and applicant sign-in continues to use an email code.</p>
+          <Button href="/sign-in/recovery" variant="quiet">Send password reset email</Button>
+        </section>
+      </div>
+    );
   }
 
   return (

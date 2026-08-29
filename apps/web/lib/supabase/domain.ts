@@ -2051,6 +2051,17 @@ export function markMfaVerified(supabase: SupabaseClient<Database>) {
   });
 }
 
+export function recordAuthEvent(
+  supabase: SupabaseClient<Database>,
+  event: "signed_in" | "signed_out" | "password_changed",
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "accounts_record_auth_event", { p_event: event });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "auth event");
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Payment attempt lifecycle (migration 000019)                         */
 /* ------------------------------------------------------------------ */

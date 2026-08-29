@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAppEnv } from "@/lib/supabase/env";
 import {
@@ -10,6 +12,8 @@ import {
   staffInvitesMarkProviderFailed,
 } from "@/lib/supabase/domain";
 import { authProvider } from "@/lib/auth/provider";
+import { safeAuthRedirect } from "@/lib/auth/redirect";
+import { callAppRpc } from "@/lib/supabase/rpc";
 import type { ServiceResult } from "@fass/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
@@ -34,6 +38,24 @@ export function isSameOrigin(requestUrl: string, originHeader: string | null): b
   }
 }
 
+export async function consumeAuthRateLimit(input: {
+  subject: string;
+  action: string;
+  limit: number;
+  windowSeconds: number;
+}): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+  const subjectHash = createHash("sha256").update(`${input.action}:${input.subject}`, "utf8").digest("hex");
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await callAppRpc<{ allowed?: boolean; retryAfterSeconds?: number }>(admin, "auth_rate_limit_consume", {
+    p_subject_hash: subjectHash,
+    p_action: input.action,
+    p_limit: input.limit,
+    p_window_seconds: input.windowSeconds,
+  });
+  if (error !== null || data === null) throw new Error("Auth rate limit is unavailable.");
+  return { allowed: data.allowed === true, retryAfterSeconds: Math.max(1, Number(data.retryAfterSeconds ?? input.windowSeconds)) };
+}
+
 /**
  * Create a provider-invited Auth user and provision the minimum application
  * identity in one server-controlled flow. The provider invitation proves
@@ -45,6 +67,7 @@ export async function registerApplicant(input: {
   givenName: string;
   familyName: string;
   purpose?: "student_admission" | "job_application";
+  next?: string;
 }): Promise<ServiceResult<{ accountId: string; applicantIdentityRef: string; verificationRequired: true }>> {
   const email = input.email.trim().toLowerCase();
   if (!email || !email.includes("@") || !input.givenName.trim() || !input.familyName.trim()) {
@@ -54,9 +77,10 @@ export async function registerApplicant(input: {
   let created: { userId: string; email: string; verificationRequired: true; providerRef?: string };
   try {
     const { appUrl } = requireAppEnv();
+    const next = safeAuthRedirect(input.next, "/apply/student");
     created = await provider.createApplicantUser({
       email,
-      redirectTo: `${appUrl}/auth/callback?next=${encodeURIComponent("/apply/student")}`,
+      redirectTo: `${appUrl}/auth/callback?next=${encodeURIComponent(next)}`,
       givenName: input.givenName.trim(),
       familyName: input.familyName.trim(),
     });
@@ -117,9 +141,10 @@ export async function dispatchStaffInvitation(
   let invited: { userId: string; email: string; providerRef?: string };
   try {
     const { appUrl } = requireAppEnv();
+    const invitationPath = `/sign-in/invite?invitation=${encodeURIComponent(invitationRef)}`;
     invited = await provider.inviteUser({
       email: input.contact.trim().toLowerCase(),
-      redirectTo: `${appUrl}/sign-in/invite?invitation=${encodeURIComponent(invitationRef)}`,
+      redirectTo: `${appUrl}/auth/callback?next=${encodeURIComponent(invitationPath)}`,
     });
   } catch {
     await staffInvitesMarkProviderFailed(client, { invitationReference: invitationRef, reason: "Auth invite provider failed." });
@@ -151,15 +176,20 @@ export async function requestRecovery(input: { identifier: string }): Promise<Se
   const identifier = input.identifier.trim();
   if (!identifier) return safeFailure("Enter the email or phone on the account.");
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.from("user_accounts").select("verified_contact, status");
-  if (error !== null) return safeFailure("Recovery is temporarily unavailable.", true);
   const normalize = (value: string) => value.includes("@") ? value.trim().toLowerCase() : value.replace(/[^0-9+]/g, "");
   const wanted = normalize(identifier);
-  const match = (data ?? []).find((row) => typeof row.verified_contact === "string" && normalize(row.verified_contact) === wanted && (row.status === "active" || row.status === "invited"));
+  const { data: match, error } = await admin
+    .from("user_accounts")
+    .select("id, verified_contact, status")
+    .eq("verified_contact", wanted)
+    .in("status", ["active", "invited"])
+    .maybeSingle();
+  if (error !== null) return safeFailure("Recovery is temporarily unavailable.", true);
   if (match?.verified_contact !== null && match?.verified_contact !== undefined) {
     try {
       const { appUrl } = requireAppEnv();
-      await authProvider().sendRecovery({ email: match.verified_contact, redirectTo: `${appUrl}/auth/callback?next=/portal/security` });
+      await authProvider().sendRecovery({ email: match.verified_contact, redirectTo: `${appUrl}/auth/callback?next=${encodeURIComponent("/sign-in/reset-password")}` });
+      await callAppRpc(admin, "accounts_record_recovery_request", { p_account_id: match.id });
     } catch {
       /* Keep the public response generic even when a provider is unavailable. */
     }

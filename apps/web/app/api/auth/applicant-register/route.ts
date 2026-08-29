@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { isSameOrigin, registerApplicant } from "@/lib/auth/identity-server";
+import { consumeAuthRateLimit, isSameOrigin, registerApplicant } from "@/lib/auth/identity-server";
 import { dataAdapter } from "@/lib/supabase/env";
 import { statusForServiceResult, withCorrelation } from "@/app/api/adapter/registry";
 
@@ -18,15 +18,29 @@ export async function POST(request: NextRequest) {
   try { body = await request.json(); } catch {
     return NextResponse.json({ ok: false, errors: [{ code: "validation", message: "Enter the requested registration details.", field: null }], correlationRef }, { status: 400, headers });
   }
-  const value = body as { email?: unknown; givenName?: unknown; familyName?: unknown; purpose?: unknown };
+  const value = body as { email?: unknown; givenName?: unknown; familyName?: unknown; purpose?: unknown; next?: unknown };
   if (typeof value?.email !== "string" || typeof value.givenName !== "string" || typeof value.familyName !== "string") {
     return NextResponse.json({ ok: false, errors: [{ code: "validation", message: "Email and both names are required.", field: null }], correlationRef }, { status: 400, headers });
+  }
+  try {
+    const address = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip")?.trim() || "unknown";
+    const [ipLimit, contactLimit] = await Promise.all([
+      consumeAuthRateLimit({ subject: address, action: "auth.applicant_register.ip", limit: 10, windowSeconds: 900 }),
+      consumeAuthRateLimit({ subject: value.email.trim().toLowerCase(), action: "auth.applicant_register.contact", limit: 3, windowSeconds: 3600 }),
+    ]);
+    if (!ipLimit.allowed || !contactLimit.allowed) {
+      const retryAfter = Math.max(ipLimit.retryAfterSeconds, contactLimit.retryAfterSeconds);
+      return NextResponse.json({ ok: false, errors: [{ code: "rate_limited", message: "Too many account requests. Wait before trying again.", field: null, retryable: true }], correlationRef }, { status: 429, headers: { ...headers, "Retry-After": String(retryAfter) } });
+    }
+  } catch {
+    return NextResponse.json({ ok: false, errors: [{ code: "retryable", message: "Registration is temporarily unavailable. Try again shortly.", field: null, retryable: true }], correlationRef }, { status: 503, headers });
   }
   const result = withCorrelation(await registerApplicant({
     email: value.email,
     givenName: value.givenName,
     familyName: value.familyName,
     purpose: value.purpose === "job_application" ? "job_application" : "student_admission",
+    next: typeof value.next === "string" ? value.next : undefined,
   }), correlationRef);
   return NextResponse.json(result, { status: statusForServiceResult(result), headers });
 }

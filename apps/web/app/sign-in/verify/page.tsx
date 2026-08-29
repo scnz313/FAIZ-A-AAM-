@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
 import VerifyForm from "@/components/identity/VerifyForm";
 import PageIntro from "@/components/public/PageIntro";
+import { dataAdapter } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
 
@@ -18,6 +20,7 @@ export const metadata: Metadata = {
  * Composes the public frame like the other plain identity routes.
  */
 export default function VerifyPage() {
+  if (dataAdapter() === "supabase") redirect("/sign-in");
   return (
     <div className={styles.page}>
       <PublicHeader tone="light" />

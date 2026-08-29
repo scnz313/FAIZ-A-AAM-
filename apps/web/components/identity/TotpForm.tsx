@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
+import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import styles from "./TotpForm.module.css";
@@ -37,8 +38,7 @@ export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" })
   const codeRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    const requestedNext = new URLSearchParams(window.location.search).get("next");
-    if (requestedNext !== null && requestedNext.startsWith("/") && !requestedNext.startsWith("//")) setSafeNext(requestedNext);
+    setSafeNext(safeAuthRedirect(new URLSearchParams(window.location.search).get("next"), "/staff"));
   }, []);
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import Button from "@/components/ui/Button";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { usersService, type InviteAcceptanceResult } from "@/modules/services/users";
 
@@ -14,6 +15,8 @@ type FieldErrors = {
   oneTimeRef?: string;
   givenName?: string;
   familyName?: string;
+  password?: string;
+  confirmation?: string;
 };
 
 export default function StaffInvitationForm({ initialInvitationRef = "" }: { initialInvitationRef?: string }) {
@@ -21,6 +24,8 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
   const [oneTimeRef, setOneTimeRef] = useState("");
   const [givenName, setGivenName] = useState("");
   const [familyName, setFamilyName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<InviteAcceptanceResult | null>(null);
@@ -33,6 +38,8 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
       oneTimeRef: demo && oneTimeRef.trim().length < 16 ? "Enter the one-time reference exactly as supplied." : undefined,
       givenName: givenName.trim() ? undefined : "Enter your given name.",
       familyName: familyName.trim() ? undefined : "Enter your family name.",
+      password: !demo && (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) ? "Use at least 8 characters with a letter and a number." : undefined,
+      confirmation: !demo && confirmation !== password ? "The passwords do not match." : undefined,
     };
   }
 
@@ -45,6 +52,10 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
 
     setBusy(true);
     try {
+      if (!demo) {
+        const { error: passwordError } = await createSupabaseBrowserClient().auth.updateUser({ password });
+        if (passwordError !== null) throw new Error("Your password could not be saved. Reopen the invitation email and try again.");
+      }
       const accepted = await usersService.acceptInvitation({
         invitationRef: invitationRef.trim(),
         ...(demo ? { oneTimeRef: oneTimeRef.trim() } : {}),
@@ -68,8 +79,7 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
           {demo
             ? "The local demo materialized the account records without contacting an identity provider."
             : "The verified invitation email matched the school record and the account was linked."} {" "}
-          The <strong>{result.userRow.role}</strong> workspace is ready; complete staff two-step verification when
-          provider sign-in is enabled.
+          The <strong>{result.userRow.role}</strong> workspace is ready. Complete two-step verification before opening staff records.
         </p>
         <dl className={styles.references}>
           <div>
@@ -81,8 +91,8 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
             <dd className="num">{result.grantRef}</dd>
           </div>
         </dl>
-        <a className="button button--primary" href="/sign-in">
-          Continue to sign in
+        <a className="button button--primary" href={demo ? "/sign-in" : "/sign-in/totp?next=%2Fstaff"}>
+          {demo ? "Continue to sign in" : "Set up two-step verification"}
         </a>
       </section>
     );
@@ -129,6 +139,7 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
             onChange={setGivenName}
             error={errors.givenName}
             placeholder="Given name"
+            autoComplete="given-name"
           />
           <Field
             id="family-name"
@@ -137,8 +148,33 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
             onChange={setFamilyName}
             error={errors.familyName}
             placeholder="Family name"
+            autoComplete="family-name"
           />
         </div>
+        {!demo ? (
+          <div className={styles.nameFields}>
+            <Field
+              id="staff-password"
+              label="Password"
+              value={password}
+              onChange={setPassword}
+              error={errors.password}
+              placeholder="At least 8 characters"
+              type="password"
+              autoComplete="new-password"
+            />
+            <Field
+              id="staff-password-confirmation"
+              label="Confirm password"
+              value={confirmation}
+              onChange={setConfirmation}
+              error={errors.confirmation}
+              placeholder="Enter it again"
+              type="password"
+              autoComplete="new-password"
+            />
+          </div>
+        ) : null}
       </div>
       <div className={styles.actions}>
         <Button variant="primary" type="submit" disabled={busy}>
@@ -158,6 +194,8 @@ function Field({
   error,
   placeholder,
   mono = false,
+  type = "text",
+  autoComplete = "off",
 }: {
   id: string;
   label: string;
@@ -166,6 +204,8 @@ function Field({
   error?: string;
   placeholder: string;
   mono?: boolean;
+  type?: "text" | "password";
+  autoComplete?: string;
 }) {
   const errorId = `${id}-error`;
   return (
@@ -174,12 +214,13 @@ function Field({
       <input
         id={id}
         className={`input ${mono ? "num" : ""}`}
+        type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         aria-invalid={error !== undefined}
         aria-describedby={error ? errorId : undefined}
-        autoComplete="off"
+        autoComplete={autoComplete}
       />
       {error ? <p id={errorId} className="field-error">{error}</p> : null}
     </div>

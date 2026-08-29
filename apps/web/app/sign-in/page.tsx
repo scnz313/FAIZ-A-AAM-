@@ -32,6 +32,7 @@ export default async function SignInPage({
   const adapter = dataAdapter();
   const supabaseLive = adapter === "supabase";
   const authLinkExpired = params.error === "auth";
+  const passwordReset = params.reset === "complete";
   return (
     <div className={styles.page}>
       <PublicHeader tone="light" />
@@ -49,6 +50,11 @@ export default async function SignInPage({
           <p className={`alert-strip alert-strip--warning ${styles.alertStrip}`} role="alert">
             That sign-in link has expired or was already used. Start again below — enter your email and request a
             fresh code. Your account is safe; nothing needs to be fixed first.
+          </p>
+        ) : null}
+        {passwordReset ? (
+          <p className={`alert-strip alert-strip--notice ${styles.alertStrip}`} role="status">
+            Your password has been updated and all sessions were closed. Staff can sign in with the new password.
           </p>
         ) : null}
         <div className={styles.frame}>

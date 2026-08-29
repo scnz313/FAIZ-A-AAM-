@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { isSameOrigin, requestRecovery } from "@/lib/auth/identity-server";
+import { consumeAuthRateLimit, isSameOrigin, requestRecovery } from "@/lib/auth/identity-server";
 import { dataAdapter } from "@/lib/supabase/env";
 import { statusForServiceResult, withCorrelation } from "@/app/api/adapter/registry";
 
@@ -23,6 +23,20 @@ export async function POST(request: NextRequest) {
   const identifier = typeof body === "object" && body !== null && typeof (body as { identifier?: unknown }).identifier === "string"
     ? (body as { identifier: string }).identifier
     : "";
+  try {
+    const address = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip")?.trim() || "unknown";
+    const normalized = identifier.includes("@") ? identifier.trim().toLowerCase() : identifier.replace(/[^0-9+]/g, "");
+    const [ipLimit, contactLimit] = await Promise.all([
+      consumeAuthRateLimit({ subject: address, action: "auth.recovery.ip", limit: 10, windowSeconds: 900 }),
+      consumeAuthRateLimit({ subject: normalized || "empty", action: "auth.recovery.contact", limit: 3, windowSeconds: 3600 }),
+    ]);
+    if (!ipLimit.allowed || !contactLimit.allowed) {
+      const retryAfter = Math.max(ipLimit.retryAfterSeconds, contactLimit.retryAfterSeconds);
+      return NextResponse.json({ ok: false, errors: [{ code: "rate_limited", message: "Too many recovery requests. Wait before trying again.", field: null, retryable: true }], correlationRef }, { status: 429, headers: { ...headers, "Retry-After": String(retryAfter) } });
+    }
+  } catch {
+    return NextResponse.json({ ok: false, errors: [{ code: "retryable", message: "Recovery is temporarily unavailable. Try again shortly.", field: null, retryable: true }], correlationRef }, { status: 503, headers });
+  }
   const result = withCorrelation(await requestRecovery({ identifier }), correlationRef);
   return NextResponse.json(result, { status: result.ok ? 202 : statusForServiceResult(result), headers });
 }

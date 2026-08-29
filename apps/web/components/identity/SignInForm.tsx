@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
+import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { adapterCall } from "@/modules/services/adapter-client";
 import { DEMO_PHONE, STAFF_DEMO_NOTE, identityService } from "@/modules/services/identity";
@@ -20,13 +21,14 @@ type FieldErrors = {
 type SignInFormProps = {
   /** Runtime data adapter — "supabase" runs the real email-OTP flow. */
   adapter: "demo" | "supabase";
+  audience?: "family" | "staff";
 };
 
 const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["identifier", "password", "code"];
 
 /** Minimum gap between OTP sends, so the button stays honest about when a
  * fresh code can actually arrive. */
-const RESEND_COOLDOWN_SECONDS = 30;
+const RESEND_COOLDOWN_SECONDS = 60;
 
 function fieldId(field: keyof FieldErrors): string {
   return `sign-in-${field}`;
@@ -40,10 +42,11 @@ function fieldId(field: keyof FieldErrors): string {
  * - Demo mode: the honest prototype flow (+91 90000 00000, any password of
  *   6+ characters) which moves to the demo verification screen.
  */
-export default function SignInForm({ adapter }: SignInFormProps) {
+export default function SignInForm({ adapter, audience = "family" }: SignInFormProps) {
   const router = useRouter();
-  const [safeNext, setSafeNext] = useState("/portal");
+  const [safeNext, setSafeNext] = useState(audience === "staff" ? "/staff" : "/portal");
   const supabaseMode = adapter === "supabase";
+  const staffPasswordMode = supabaseMode && audience === "staff";
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -58,9 +61,9 @@ export default function SignInForm({ adapter }: SignInFormProps) {
   const statusRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const requestedNext = new URLSearchParams(window.location.search).get("next");
-    if (requestedNext !== null && requestedNext.startsWith("/") && !requestedNext.startsWith("//")) setSafeNext(requestedNext);
-  }, []);
+    const fallback = audience === "staff" ? "/staff" : "/portal";
+    setSafeNext(safeAuthRedirect(new URLSearchParams(window.location.search).get("next"), fallback));
+  }, [audience]);
 
   /* Route to verification once the acceptance line has been announced. */
   useEffect(() => {
@@ -81,9 +84,10 @@ export default function SignInForm({ adapter }: SignInFormProps) {
     } else if (supabaseMode && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())) {
       next.identifier = "Enter a valid email address.";
     }
-    if (!supabaseMode && password === "") next.password = "Enter your password.";
+    if ((!supabaseMode || staffPasswordMode) && password === "") next.password = "Enter your password.";
     else if (!supabaseMode && password.length < 6) next.password = "Password must be at least 6 characters.";
-    if (codeSent && code.trim().length !== 6) next.code = "Enter the 6-digit code from the email.";
+    else if (staffPasswordMode && password.length < 8) next.password = "Password must be at least 8 characters.";
+    if (!staffPasswordMode && codeSent && code.trim().length !== 6) next.code = "Enter the 6-digit code from the email.";
     return next;
   }
 
@@ -99,12 +103,16 @@ export default function SignInForm({ adapter }: SignInFormProps) {
     const email = identifier.trim();
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`;
     try {
-      await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithOtp({
         email,
         /* Existing-account sign-in must never silently create an Auth user.
          * Applicant registration is a separate server-controlled path. */
         options: { emailRedirectTo: redirectTo, shouldCreateUser: false },
       });
+      if (error?.status === 429) {
+        setRejected("Too many code requests. Wait before trying again.");
+        return;
+      }
     } catch {
       /* Keep known/unknown/provider errors indistinguishable. The next verify
        * step remains generic and will fail safely if no account exists. */
@@ -125,6 +133,31 @@ export default function SignInForm({ adapter }: SignInFormProps) {
     }
   }
 
+  async function signInStaff(): Promise<void> {
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: identifier.trim(),
+      password,
+    });
+    if (error !== null) {
+      setRejected(error.status === 429 ? "Too many sign-in attempts. Wait before trying again." : "Sign-in could not be accepted. Check your details and try again.");
+      return;
+    }
+    try {
+      const staffCheck = await adapterCall<boolean>("identity.hasStaff");
+      if (!staffCheck.ok || !staffCheck.value) {
+        await supabase.auth.signOut({ scope: "local" });
+        setRejected("Sign-in could not be accepted. Check your staff invitation or contact the school office.");
+        return;
+      }
+      await adapterCall("identity.recordAuthEvent", { event: "signed_in" }).catch(() => null);
+      router.push(`/sign-in/totp?next=${encodeURIComponent(safeNext.startsWith("/staff") ? safeNext : "/staff")}`);
+    } catch {
+      await supabase.auth.signOut({ scope: "local" });
+      setRejected("Staff access could not be verified. Check your connection and try again.");
+    }
+  }
+
   async function verifyCode(): Promise<void> {
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.auth.verifyOtp({
@@ -136,6 +169,7 @@ export default function SignInForm({ adapter }: SignInFormProps) {
       setRejected("That code is not right — check it and try again.");
       return;
     }
+    await adapterCall("identity.recordAuthEvent", { event: "signed_in" }).catch(() => null);
     if (supabaseMode) {
       /* Staff accounts continue to the TOTP gate (plan.md §4); everyone
          else lands in the portal. A non-staff context is the normal case. */
@@ -164,7 +198,9 @@ export default function SignInForm({ adapter }: SignInFormProps) {
     setSubmitting(true);
     try {
       if (supabaseMode) {
-        if (codeSent) {
+        if (staffPasswordMode) {
+          await signInStaff();
+        } else if (codeSent) {
           await verifyCode();
         } else {
           await sendCode();
@@ -191,9 +227,11 @@ export default function SignInForm({ adapter }: SignInFormProps) {
             ? resentOnce
               ? "If an account exists, a new code has been sent to your email."
               : "If an account exists, a 6-digit code has been sent to your email. Enter it below."
-            : supabaseMode
-              ? "Sign-in form — a code is sent to your email."
-              : "Sign-in form — demo account only."}
+            : staffPasswordMode
+              ? "Staff sign-in form — email, password, then two-step verification."
+              : supabaseMode
+                ? "Sign-in form — a code is sent to your email."
+                : "Sign-in form — demo account only."}
       </p>
 
       {nextStep ? (
@@ -258,7 +296,7 @@ export default function SignInForm({ adapter }: SignInFormProps) {
             )}
           </div>
 
-          {!supabaseMode && (
+          {(!supabaseMode || staffPasswordMode) && (
             <div className={`field ${errors.password ? "field--invalid" : ""}`}>
               <label htmlFor={fieldId("password")}>
                 Password <span aria-hidden="true">*</span>
@@ -281,7 +319,7 @@ export default function SignInForm({ adapter }: SignInFormProps) {
             </div>
           )}
 
-          {codeSent && (
+          {!staffPasswordMode && codeSent && (
             <div className={`field ${errors.code ? "field--invalid" : ""}`}>
               <label htmlFor={fieldId("code")}>
                 Verification code <span aria-hidden="true">*</span>
@@ -326,12 +364,16 @@ export default function SignInForm({ adapter }: SignInFormProps) {
           <div className={styles.actions}>
             <Button variant="primary" type="submit" disabled={submitting}>
               {submitting
-                ? "Sending…"
-                : codeSent
-                  ? "Verify code"
-                  : supabaseMode
-                    ? "Send code"
-                    : "Sign in"}
+                ? staffPasswordMode
+                  ? "Signing in…"
+                  : "Sending…"
+                : staffPasswordMode
+                  ? "Sign in"
+                  : codeSent
+                    ? "Verify code"
+                    : supabaseMode
+                      ? "Send code"
+                      : "Sign in"}
             </Button>
             {!supabaseMode && (
               <p className={styles.actionNote}>Demo account: {DEMO_PHONE} · any password of 6+ characters.</p>
@@ -342,17 +384,23 @@ export default function SignInForm({ adapter }: SignInFormProps) {
       )}
 
       <div className={styles.links}>
-        {supabaseMode ? (
-          <a className="link-arrow" href="/register/applicant">
+        {supabaseMode && !staffPasswordMode ? (
+          <a className="link-arrow" href={`/register/applicant?purpose=${safeNext.startsWith("/apply/job") ? "job_application" : "student_admission"}&next=${encodeURIComponent(safeNext)}`}>
             New applicant? Create an account →
           </a>
         ) : null}
         <a className="link-arrow" href="/sign-in/recovery">
           Forgot password →
         </a>
-        <a className="link-arrow" href="/staff">
-          Demo staff access →
-        </a>
+        {supabaseMode ? (
+          <a className="link-arrow" href={staffPasswordMode ? "/sign-in" : "/sign-in/staff"}>
+            {staffPasswordMode ? "Family or applicant sign in →" : "Staff sign in →"}
+          </a>
+        ) : (
+          <a className="link-arrow" href="/staff">
+            Demo staff access →
+          </a>
+        )}
       </div>
       {!supabaseMode && <p className={styles.staffNote}>{STAFF_DEMO_NOTE}</p>}
     </div>

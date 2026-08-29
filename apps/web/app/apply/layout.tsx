@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getServerActor } from "@/lib/auth/actor";
+import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { dataAdapter } from "@/lib/supabase/env";
 
 /* Applicant journeys carry private application data (identity, contact,
@@ -13,7 +15,9 @@ export const metadata: Metadata = {
 
 export default async function ApplyLayout({ children }: { children: React.ReactNode }) {
   if (dataAdapter() === "supabase" && (await getServerActor()) === null) {
-    redirect(`/sign-in?next=${encodeURIComponent("/apply/student")}`);
+    const pathname = (await headers()).get("x-fass-pathname");
+    const next = safeAuthRedirect(pathname, "/apply/student");
+    redirect(`/sign-in?next=${encodeURIComponent(next)}`);
   }
   return children;
 }
