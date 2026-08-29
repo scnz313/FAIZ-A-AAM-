@@ -83,7 +83,7 @@ export async function POST(request: Request) {
   if (!ownerRecordId) return NextResponse.json({ error: "The document owner is not accessible to this account." }, { status: 404, headers: { "Cache-Control": "no-store" } });
 
   const extension = MIME_EXTENSIONS[input.mimeType];
-  const safeName = input.filename.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(-120) || `upload.${extension}`;
+  const safeName = input.filename.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 120) || `upload.${extension}`;
   const objectKey = `uploads/${crypto.randomUUID()}.${extension}`;
   const metadata = await callAppRpc<{ id: string; reference: string; objectKey: string; status: string }>(userClient, "documents_create_upload_intent", {
     p_owner_domain: input.ownerDomain,

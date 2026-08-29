@@ -299,7 +299,12 @@ supportService.respond = async (ref, text, _by, resolve) => {
     const status = await adapterCall("support.setStatus", { requestId: row.id, status: "resolved", expectedVersion: response.value.version ?? (row.version ?? 1) + 1, reason: "Response resolved the requester concern." });
     if (!status.ok) throw new Error(status.errors[0]?.message ?? "Support could not be resolved.");
   }
-  return (await supportService.getGrievance(ref)) ?? mapServerSupportRow(row);
+  const refreshed = await adapterCall<ServerSupportRow[]>("support.list", { scope: "staff" });
+  if (refreshed.ok) {
+    const updated = refreshed.value.find((candidate) => candidate.reference === ref);
+    if (updated) return mapServerSupportRow(updated);
+  }
+  return mapServerSupportRow(row);
 };
 supportService.addPrivateNote = async (ref, text, _by) => {
   if (clientAdapterMode() !== "supabase") return originalSupport.addPrivateNote(ref, text, _by);
@@ -309,15 +314,40 @@ supportService.addPrivateNote = async (ref, text, _by) => {
   if (!row) throw new Error("Support request not found.");
   const response = await adapterCall("support.respond", { requestId: row.id, body: text, isPrivate: true, expectedVersion: row.version ?? 1, idempotencyKey: `support-note:${row.reference}:${row.version ?? 1}:${text}` });
   if (!response.ok) throw new Error(response.errors[0]?.message ?? "Private note failed.");
+  const refreshed = await adapterCall<ServerSupportRow[]>("support.list", { scope: "staff" });
+  if (refreshed.ok) {
+    const updated = refreshed.value.find((candidate) => candidate.reference === ref);
+    if (updated) return mapServerSupportRow(updated);
+  }
   return mapServerSupportRow(row);
 };
 supportService.reopen = async (ref, by) => {
   if (clientAdapterMode() !== "supabase") return originalSupport.reopen(ref, by);
-  const rows = await adapterCall<ServerSupportRow[]>("support.list", { scope: "mine" });
+  const rows = await adapterCall<ServerSupportRow[]>("support.list", { scope: "staff" });
   if (!rows.ok) throw new Error(rows.errors[0]?.message ?? "Support is unavailable.");
   const row = rows.value.find((candidate) => candidate.reference === ref);
   if (!row) throw new Error("Support request not found.");
   const response = await adapterCall<unknown>("support.reopen", { requestId: row.id, expectedVersion: (row as ServerSupportRow & { version?: number }).version ?? 1 });
   if (!response.ok) throw new Error(response.errors[0]?.message ?? "Support reopen failed.");
-  return (await supportService.getGrievance(ref)) ?? mapServerSupportRow(row);
+  const refreshed = await adapterCall<ServerSupportRow[]>("support.list", { scope: "staff" });
+  if (refreshed.ok) {
+    const updated = refreshed.value.find((candidate) => candidate.reference === ref);
+    if (updated) return mapServerSupportRow(updated);
+  }
+  return mapServerSupportRow(row);
+};
+supportService.assign = async (ref, by) => {
+  if (clientAdapterMode() !== "supabase") return originalSupport.assign(ref, by);
+  const rows = await adapterCall<ServerSupportRow[]>("support.list", { scope: "staff" });
+  if (!rows.ok) throw new Error(rows.errors[0]?.message ?? "Support is unavailable.");
+  const row = rows.value.find((candidate) => candidate.reference === ref);
+  if (!row) throw new Error("Support request not found.");
+  const response = await adapterCall<unknown>("support.assign", { requestId: row.id, assigneeAccountId: by, expectedVersion: (row as ServerSupportRow & { version?: number }).version ?? 1 });
+  if (!response.ok) throw new Error(response.errors[0]?.message ?? "Support assignment failed.");
+  const refreshed = await adapterCall<ServerSupportRow[]>("support.list", { scope: "staff" });
+  if (refreshed.ok) {
+    const updated = refreshed.value.find((candidate) => candidate.reference === ref);
+    if (updated) return mapServerSupportRow(updated);
+  }
+  return mapServerSupportRow(row);
 };

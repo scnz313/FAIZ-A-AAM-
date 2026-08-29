@@ -58,5 +58,5 @@ export async function POST(request: Request, { params }: Params) {
     p_checksum: checksum,
   });
   if (result.error !== null || result.data === null) return NextResponse.json({ error: "Document metadata could not be finalized." }, { status: 422, headers: { "Cache-Control": "no-store" } });
-  return NextResponse.json({ ok: true, documentRef: result.data.reference, status: "pending_scan", checksumVerified: result.data.checksumVerified }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ ok: true, documentRef: result.data.reference, status: result.data.status, checksumVerified: result.data.checksumVerified }, { headers: { "Cache-Control": "no-store" } });
 }

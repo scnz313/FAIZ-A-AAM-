@@ -329,7 +329,7 @@ export function createDemoContentService(): ContentService {
       saveStore(store.map((notice) => (notice.slug === slug ? next : notice)));
       void auditService.record({
         actor: "Content office",
-        action: "Notice published",
+        action: "Notice unpublished",
         target: slug,
         outcome: "Success",
         reason: "Notice unpublished back to draft",
@@ -360,7 +360,7 @@ export function createDemoContentService(): ContentService {
       savePublicPages(rows.map((row) => (row.key === key ? updated : row)));
       void auditService.record({
         actor,
-        action: "Notice published",
+        action: "Page status updated",
         target: `page:${key}`,
         outcome: "Success",
         reason: `Page status set to ${nextStatus}`,
@@ -387,7 +387,7 @@ export function createDemoContentService(): ContentService {
       saveStore(store.map((notice) => (notice.slug === slug ? updated : notice)));
       void auditService.record({
         actor: "Content office",
-        action: "Notice published",
+        action: "Notice edited",
         target: slug,
         outcome: "Success",
         reason: `Notice edited: ${input.title ? "title changed" : "content updated"}`,
