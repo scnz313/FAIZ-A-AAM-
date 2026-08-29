@@ -146,11 +146,11 @@ export type AcademicError = {
 /** Every write returns a typed outcome so the UI can surface errors. */
 export type AcademicResult<T> = { ok: true; value: T } | { ok: false; errors: AcademicError[] };
 
-/** One row of a published per-student result snapshot (obtained is never null). */
+/** One row of a published per-student result snapshot (obtained is null for absent/exempt). */
 export type SnapshotMarkRow = {
   subject: string;
   max: number;
-  obtained: number;
+  obtained: number | null;
   grade?: Grade;
   remark?: string;
 };
@@ -498,7 +498,7 @@ function rowValueErrors(rows: readonly MarksRow[]): AcademicError[] {
 
 function incompleteRowErrors(rows: readonly MarksRow[]): AcademicError[] {
   return rows
-    .filter((row) => row.obtained === null)
+    .filter((row) => row.obtained === null && (row.markStatus ?? "pending") === "pending")
     .map((row) => ({ subject: row.subject, message: "Marks not entered." }));
 }
 
@@ -691,7 +691,10 @@ async function startCorrection(ref: string, reason: string, by: string = DEFAULT
     if (!target) return fail("The report release has no subject publication to correct.");
     const request = await adapterCall<{ requestId: string }>("results.requestCorrection", { releaseRef: publication.reference, publicationRef: target.publicationId, reason, idempotencyKey: `correction:${publication.reference}:${target.publicationId}` });
     if (!request.ok) return { ok: false, errors: request.errors.map((error) => ({ subject: null, message: error.message })) };
-    return fail("Correction request recorded. A separate reviewer must approve it before a new draft is created.");
+    const next = await getBatch(ref);
+    return next
+      ? { ok: true, value: next }
+      : { ok: true, value: { ref, status: "draft", version: 1, rows: [], totalsIncomplete: false } as unknown as EntryBatch };
   }
   return respond(() => {
     const state = loadSession();
@@ -715,13 +718,25 @@ async function startCorrection(ref: string, reason: string, by: string = DEFAULT
 
 async function withdrawPublication(ref: string, reason: string, by: string = DEFAULT_ACTOR): Promise<AcademicResult<EntryBatch>> {
   if (clientAdapterMode() === "supabase") {
-    const publications = await adapterCall<Array<{ id: string; reference: string; batch_id: string }>>("results.listPublications", {});
+    /* The caller passes a batch reference (RB-...); resolve it to the batch's
+       active publication (PUB-...) before calling results.withdraw. */
+    const publications = await adapterCall<Array<{ id: string; reference: string; batch_id: string; status?: string }>>("results.listPublications", {});
     if (!publications.ok) return { ok: false, errors: publications.errors.map((error) => ({ subject: null, message: error.message })) };
-    const publication = publications.value.find((candidate) => candidate.reference === ref);
-    if (!publication) return fail("Publication not found.");
+    /* Try matching by publication reference first, then fall back to batch_id. */
+    let publication = publications.value.find((candidate) => candidate.reference === ref);
+    if (!publication) {
+      const batches = await adapterCall<SupabaseResultRow[]>("results.listBatches", {});
+      if (batches.ok) {
+        const batch = batches.value.find((candidate) => candidate.reference === ref || candidate.id === ref);
+        if (batch) {
+          publication = publications.value.find((candidate) => candidate.batch_id === batch.id && candidate.status !== "withdrawn");
+        }
+      }
+    }
+    if (!publication) return fail("Publication not found for this batch.");
     const response = await adapterCall<unknown>("results.withdraw", { publicationId: publication.id, reason });
     if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
-    const next = await getBatch(publication.batch_id);
+    const next = await getBatch(ref);
     return next ? { ok: true, value: next } : fail("The withdrawn batch could not be reloaded.");
   }
   return respond(() => {
@@ -851,9 +866,9 @@ async function getStudentResultSnapshot(studentId: string, academicYearId: strin
       for (const item of publication.items ?? []) {
         const snapshot = item.snapshot;
         if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) continue;
-        const value = snapshot as { term?: string; subject?: string; marks?: Array<{ max?: number; obtained?: number; component?: string; remark?: string }> };
+        const value = snapshot as { term?: string; subject?: string; marks?: Array<{ max?: number; obtained?: number | null; component?: string; remark?: string; markStatus?: string }> };
         const term = value.term ?? publication.term ?? "Results";
-        terms[term] = [...(terms[term] ?? []), ...(value.marks ?? []).map((mark) => ({ subject: mark.component ?? value.subject ?? "Subject", max: Number(mark.max ?? 0), obtained: Number(mark.obtained ?? 0), remark: mark.remark }))];
+        terms[term] = [...(terms[term] ?? []), ...(value.marks ?? []).map((mark) => ({ subject: mark.component ?? value.subject ?? "Subject", max: Number(mark.max ?? 0), obtained: mark.obtained === null || mark.obtained === undefined ? null : Number(mark.obtained), remark: mark.remark }))];
       }
     }
     return Object.keys(terms).length === 0 ? null : { studentId, academicYearId, terms };

@@ -238,16 +238,18 @@ export function admissionDecide(
     privateNote?: string | null;
     conditions?: Record<string, unknown>;
     expiresAt?: string | null;
+    expectedVersion?: number | null;
   },
 ) {
   return result(async () => {
-    const { error } = await callAppRpc<null>(supabase, "admissions_decide", {
+    const { error } = await callAppRpc<null>(supabase, "admissions_decide_v2", {
       p_application_id: input.applicationId,
       p_action: input.action,
       p_visible_reason: input.visibleReason ?? null,
       p_private_note: input.privateNote ?? null,
       p_conditions: input.conditions ?? {},
       p_expires_at: input.expiresAt ?? null,
+      p_expected_version: input.expectedVersion ?? null,
     });
     if (error !== null) throw mapRpcError(error);
     return { ok: true };
@@ -459,6 +461,31 @@ export function financeApplyConcession(supabase: SupabaseClient<Database>, input
   });
 }
 
+export function financeListAdjustments(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await (supabase as unknown as { from: (table: string) => ReturnType<SupabaseClient<Database>["from"]> }).from("finance_adjustment_requests")
+      .select("id, reference, invoice_id, invoices(reference), kind, amount_paise, reason, status, requested_by_account_id, approved_by_account_id, decided_at, posted_at, version, created_at")
+      .order("created_at", { ascending: false });
+    if (error !== null) throw mapRpcError(error);
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      ref: row.reference as string,
+      invoiceRef: (row.invoices as { reference?: string } | null)?.reference ?? "",
+      type: row.kind as string,
+      amountPaise: row.amount_paise as number,
+      reason: row.reason as string,
+      requestedBy: row.requested_by_account_id as string,
+      requestedAtIso: row.created_at as string,
+      status: row.status as string,
+      decidedBy: (row.approved_by_account_id as string | null) ?? null,
+      decidedAtIso: (row.decided_at as string | null) ?? null,
+      decisionReason: null,
+      postedAtIso: (row.posted_at as string | null) ?? null,
+      version: row.version as number,
+    }));
+  });
+}
+
 export type FinanceRefundInput = {
   paymentId: string;
   amountPaise: number;
@@ -477,6 +504,37 @@ export function financeRequestRefund(supabase: SupabaseClient<Database>, input: 
     if (error !== null) throw mapRpcError(error);
     const row = requireRow(data, "refund request") as Record<string, unknown>;
     return { refundRequestId: typeof row.id === "string" ? row.id : null, reference: row.reference, status: row.status, version: row.version };
+  });
+}
+
+export function financeListRefunds(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("refund_requests")
+      .select("id, reference, payment_id, payments(reference, invoices(reference)), amount_paise, reason, status, requested_by_account_id, approver_account_id, decided_at, version, created_at")
+      .order("created_at", { ascending: false });
+    if (error !== null) throw mapRpcError(error);
+    return (data ?? []).map((row) => {
+      const record = row as Record<string, unknown>;
+      const payment = record.payments as { reference?: string; invoices?: { reference?: string } | null } | null;
+      return {
+        id: record.id as string,
+        ref: record.reference as string,
+        paymentRef: payment?.reference ?? "",
+        invoiceRef: payment?.invoices?.reference ?? "",
+        amountPaise: record.amount_paise as number,
+        reason: record.reason as string,
+        requestedBy: record.requested_by_account_id as string,
+        requestedAtIso: record.created_at as string,
+        status: record.status as string,
+        decidedBy: (record.approver_account_id as string | null) ?? null,
+        decidedAtIso: (record.decided_at as string | null) ?? null,
+        decisionReason: null,
+        providerRefundRef: null,
+        postedAtIso: null,
+        version: record.version as number,
+      };
+    });
   });
 }
 

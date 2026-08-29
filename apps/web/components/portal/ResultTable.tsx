@@ -18,7 +18,7 @@ type ResultTableProps = {
  * PDF download. Corrections publish as new versions and are labelled.
  */
 export function ResultTable({ term, marks }: ResultTableProps) {
-  const totalObtained = marks.reduce((sum, mark) => sum + mark.obtained, 0);
+  const totalObtained = marks.reduce((sum, mark) => sum + (mark.obtained ?? 0), 0);
   const totalMax = marks.reduce((sum, mark) => sum + mark.max, 0);
   const percentage = totalMax === 0 ? 0 : (totalObtained / totalMax) * 100;
   const published = term.publishedAtIso ? formatKolkata(term.publishedAtIso, { format: "day" }) : null;
