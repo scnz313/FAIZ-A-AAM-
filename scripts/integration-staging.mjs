@@ -82,6 +82,7 @@ function totpCode(secretB32, period = 30, digits = 6) {
 const RUN = Date.now().toString(36);
 const GUARDIAN_EMAIL = `itg.guardian.${RUN}@example.in`;
 const STAFF_EMAIL = `itg.staff.${RUN}@example.in`;
+const APPROVER_EMAIL = `itg.approver.${RUN}@example.in`;
 const STRANGER_EMAIL = `itg.stranger.${RUN}@example.in`;
 const PASSWORD = `Test-${RUN}-x9!`;
 
@@ -120,7 +121,8 @@ async function createActor(email, displayName, givenName) {
 const guardian = await createActor(GUARDIAN_EMAIL, `Integration Guardian ${RUN}`, "ItgGuardian");
 const stranger = await createActor(STRANGER_EMAIL, `Integration Stranger ${RUN}`, "ItgStranger");
 const staff = await createActor(STAFF_EMAIL, `Integration Officer ${RUN}`, "ItgOfficer");
-assert(true, "guardian, stranger, and staff accounts created");
+const approver = await createActor(APPROVER_EMAIL, `Integration Approver ${RUN}`, "ItgApprover");
+assert(true, "guardian, stranger, reviewer, and approver accounts created");
 
 for (const role of ["guardian"]) {
   const { error } = await admin.from("role_grants").insert({
@@ -138,7 +140,7 @@ const { error: strangerGrantError } = await admin.from("role_grants").insert({
   effective_from: new Date().toISOString(),
 });
 if (strangerGrantError) throw strangerGrantError;
-for (const role of ["admissions_officer", "admissions_approver", "finance_officer", "result_publisher", "timetable_manager"]) {
+for (const role of ["admissions_officer", "finance_officer", "result_publisher", "timetable_manager"]) {
   const { error } = await admin.from("role_grants").insert({
     account_id: staff.userId,
     role_code: role,
@@ -147,13 +149,21 @@ for (const role of ["admissions_officer", "admissions_approver", "finance_office
   });
   if (error) throw error;
 }
-const { error: staffMemberError } = await admin.from("staff_members").insert({
-  person_id: staff.personId,
-  employment_status: "active",
-  title: "Integration Officer",
+const { error: approverGrantError } = await admin.from("role_grants").insert({
+  account_id: approver.userId,
+  role_code: "admissions_approver",
+  status: "active",
+  effective_from: new Date().toISOString(),
 });
-if (staffMemberError) throw staffMemberError;
-assert(true, "role grants + staff record provisioned");
+if (approverGrantError) throw approverGrantError;
+for (const member of [
+  { person_id: staff.personId, title: "Integration Officer" },
+  { person_id: approver.personId, title: "Integration Approver" },
+]) {
+  const { error } = await admin.from("staff_members").insert({ ...member, employment_status: "active" });
+  if (error) throw error;
+}
+assert(true, "reviewer and approver grants + staff records provisioned");
 
 const { error: guardianRecordError } = await admin.from("guardians").insert({
   person_id: guardian.personId,
@@ -231,32 +241,21 @@ assert(submitted.current_status === "submitted" && submitted.version === 1, "app
 /* --- 3. staff session with TOTP elevation (aal2) -------------------------- */
 
 console.log("\n== 3. staff: password session → TOTP → aal2");
-const staffClient = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
-const { error: staffSignInError } = await staffClient.auth.signInWithPassword({ email: STAFF_EMAIL, password: PASSWORD });
-if (staffSignInError) throw staffSignInError;
-
-const { data: enrollData, error: enrollError } = await staffClient.auth.mfa.enroll({ factorType: "totp" });
-if (enrollError) {
-  console.error(`  ✗ TOTP enrollment failed: ${enrollError.message} (project MFA may be disabled)`);
-  failures += 1;
-} else {
-  const code = totpCode(enrollData.totp.secret);
-  const { data: challengeData, error: challengeError } = await staffClient.auth.mfa.challenge({
-    factorId: enrollData.id,
-  });
+async function createAal2Client(email, label) {
+  const client = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error: signInError } = await client.auth.signInWithPassword({ email, password: PASSWORD });
+  if (signInError) throw signInError;
+  const { data: enrollData, error: enrollError } = await client.auth.mfa.enroll({ factorType: "totp" });
+  if (enrollError) throw new Error(`TOTP enrollment failed for ${label}: ${enrollError.message}`);
+  const { data: challengeData, error: challengeError } = await client.auth.mfa.challenge({ factorId: enrollData.id });
   if (challengeError) throw challengeError;
-  const { error: verifyError } = await staffClient.auth.mfa.verify({
-    factorId: enrollData.id,
-    challengeId: challengeData.id,
-    code,
-  });
-  if (verifyError) {
-    console.error(`  ✗ TOTP verify failed: ${verifyError.message} (clock skew?)`);
-    failures += 1;
-  } else {
-    assert(true, "staff session elevated to aal2");
-  }
+  const { error: verifyError } = await client.auth.mfa.verify({ factorId: enrollData.id, challengeId: challengeData.id, code: totpCode(enrollData.totp.secret) });
+  if (verifyError) throw new Error(`TOTP verify failed for ${label}: ${verifyError.message}`);
+  assert(true, `${label} session elevated to aal2`);
+  return client;
 }
+const staffClient = await createAal2Client(STAFF_EMAIL, "reviewer");
+const approverClient = await createAal2Client(APPROVER_EMAIL, "approver");
 
 // aal1 denial: before elevation the same user must be denied staff commands.
 const staffAal1Client = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -281,10 +280,12 @@ await rpc(staffClient, "admissions_review_advance", {
   p_visible_reason: "Documents verified",
 });
 await rpc(staffClient, "admissions_review_advance", { p_application_id: draftApp.id, p_action: "assessment" });
-await rpc(staffClient, "admissions_decide", {
+const { data: assessmentState } = await admin.from("admission_applications").select("version").eq("id", draftApp.id).single();
+await rpc(approverClient, "admissions_decide_v2", {
   p_application_id: draftApp.id,
   p_action: "offer",
   p_visible_reason: "Approved by committee",
+  p_expected_version: assessmentState.version,
 });
 const { data: offered } = await admin
   .from("admission_applications")
@@ -444,7 +445,10 @@ for (const event of emailEvents) {
   await admin.schema("app").rpc("mark_outbox_delivered", { p_event_key: event.event_key });
 }
 assert(deliveryRecords === emailEvents.length, "one delivery record per event (unique constraint)");
-const { data: stillPending } = await admin.from("outbox_events").select("id").eq("status", "pending");
+const claimedEmailIds = emailEvents.map((event) => event.id);
+const { data: stillPending } = claimedEmailIds.length === 0
+  ? { data: [] }
+  : await admin.from("outbox_events").select("id").in("id", claimedEmailIds).neq("status", "delivered");
 assert(stillPending.length === 0, "all claimed events delivered");
 
 // Transient failure path: fail an event and confirm exponential backoff state.
