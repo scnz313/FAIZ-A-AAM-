@@ -21,7 +21,8 @@ import { mapServerContentRow, type ContentNotice, type ServerContentRow } from "
 import { mapServerJob, type JobApplicationRecord, type ServerJobRow } from "@/modules/services/careers";
 import { mapServerApplication, type ApplicationRecord, type ServerAdmissionRow } from "@/modules/services/admissions";
 import { mapServerSupportRow, type Grievance, type ServerSupportRow } from "@/modules/services/support";
-import type { AdmissionConfiguration } from "@/modules/services/school-config";
+import type { AdmissionConfiguration, AdmissionWindow, AdmissionDocumentRequirement, SchoolGrade } from "@/modules/services/school-config";
+import type { AcademicYear } from "@fass/contracts";
 import type { NotificationItem, NotificationKind } from "@/modules/notifications/demo";
 
 async function financeClient() {
@@ -134,7 +135,26 @@ export async function loadServerAdmissionByRef(reference: string): Promise<Appli
 export async function loadServerPublicAdmissionConfiguration(): Promise<AdmissionConfiguration> {
   const result = await admissionPublicConfiguration(await financeClient());
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Admission configuration could not be loaded.");
-  return result.value as unknown as AdmissionConfiguration;
+  const raw = result.value as Record<string, unknown>;
+  return {
+    academicYears: (raw.academicYears as AcademicYear[]) ?? [],
+    grades: (raw.grades as SchoolGrade[]) ?? [],
+    windows: ((raw.windows as Record<string, unknown>[]) ?? []).map((w) => ({
+      id: w.id as string,
+      ref: w.ref as string,
+      academicYearId: w.academicYearId as string,
+      gradeId: w.gradeId as string,
+      opensAtIso: (w.opensAtIso ?? w.opensAt) as string,
+      closesAtIso: (w.closesAtIso ?? w.closesAt) as string,
+      capacity: (w.capacity ?? null) as number | null,
+      status: w.status as AdmissionWindow["status"],
+      version: w.version as number,
+      policy: (w.policy ?? {}) as Record<string, unknown>,
+      eligibilityPolicy: (w.eligibilityPolicy ?? {}) as Record<string, unknown>,
+    })),
+    documentRequirements: (raw.documentRequirements as AdmissionDocumentRequirement[]) ?? [],
+    policy: (raw.policy ?? null) as AdmissionConfiguration["policy"],
+  };
 }
 
 export async function loadServerReceipts(): Promise<Receipt[]> {
