@@ -358,7 +358,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
                   <div className={styles.withdrawConfirm} role="group" aria-label="Confirm withdrawal">
                     <p className={styles.sideNote}>
                       Withdraw the application for <strong>{record.studentName}</strong>? This ends the application —
-                      the school can no longer review or decide it. This is a fictional demo rule; the school's real
+                      the school can no longer review or decide it. This is a fictional demo rule; the school&apos;s real
                       withdrawal policy remains pending.
                     </p>
                     <div className={styles.withdrawActions}>
