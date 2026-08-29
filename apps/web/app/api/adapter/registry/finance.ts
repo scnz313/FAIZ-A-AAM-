@@ -8,10 +8,12 @@ import {
   financeGetAttempt,
   financeImportReconciliation,
   financeIssueAdmissionInvoice,
+  financeListAdjustments,
   financeListAttempts,
   financeListMyInvoices,
   financeListMyReceipts,
   financeListReconciliationRuns,
+  financeListRefunds,
   financePostPayment,
   financePostAdjustment,
   financePostRefund,
@@ -29,6 +31,8 @@ export const financeModule: AdapterModule = {
   operations: [
     operation("finance.listInvoices", emptyPayload, ({ supabase }) => financeListMyInvoices(supabase)),
     operation("finance.listReceipts", emptyPayload, ({ supabase }) => financeListMyReceipts(supabase)),
+    operation("finance.listAdjustments", emptyPayload, ({ supabase }) => financeListAdjustments(supabase)),
+    operation("finance.listRefunds", emptyPayload, ({ supabase }) => financeListRefunds(supabase)),
     operation(
       "finance.listAttempts",
       z.object({ invoiceRef: publicReference }),

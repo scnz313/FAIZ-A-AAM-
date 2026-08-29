@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import { useFamilyContext } from "@/components/portal/FamilyContextProvider";
 import { familyContextService, gradeSectionLabel, type StudentAccessScope } from "@/modules/services/family-context";
 import { FINANCE_DEMO_NOTE } from "@/modules/services/finance";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { financeService, type Invoice, type Receipt } from "@/modules/services/finance";
 
 import styles from "./page.module.css";
@@ -233,7 +234,7 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
               Receipt · <span className="num">{receipt.ref}</span>
             </h1>
             <p className={styles.demoLine}>
-              <span className="demo-badge">Demo data</span> {FINANCE_DEMO_NOTE}
+              {clientAdapterMode() === "demo" ? (<><span className="demo-badge">Demo data</span> {FINANCE_DEMO_NOTE}</>) : null}
             </p>
             <div className={styles.headerActions}>
               <Button variant="quiet" onClick={printReceipt} aria-describedby="receipt-print-note">

@@ -115,6 +115,8 @@ export type LedgerEntry = {
 export type ApprovalState = "pending" | "approved" | "rejected" | "posted";
 
 export type AdjustmentRequest = {
+  /** Supabase UUID; null in demo mode. */
+  id?: string;
   ref: string;
   invoiceRef: string;
   type: "concession" | "adjustment" | "write_off";
@@ -132,6 +134,8 @@ export type AdjustmentRequest = {
 };
 
 export type RefundRequest = {
+  /** Supabase UUID; null in demo mode. */
+  id?: string;
   ref: string;
   paymentRef: string;
   invoiceRef: string;
@@ -940,17 +944,34 @@ export async function requestAdjustment(input: {
   requestedBy: string;
 }): Promise<AdjustmentRequest> {
   if (isServerMode()) {
-    const result = await adapterCall<{ concessionId: string | null }>(
+    const result = await adapterCall<{ concessionId: string | null; reference?: string; status?: string; version?: number }>(
       "finance.applyConcession",
       {
         invoiceRef: input.invoiceRef,
         amountPaise: Math.abs(input.amountPaise),
         reason: input.reason,
         type: input.type,
+        expectedVersion: 1,
+        idempotencyKey: `adjustment:${input.invoiceRef}:${input.requestedBy}`,
       } as unknown as Record<string, unknown>,
     );
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Adjustment failed.");
-    throw new FinanceServiceError("policy-pending", "Adjustment approval history is demo-only in this runtime.");
+    return {
+      id: result.value.concessionId ?? undefined,
+      ref: result.value.reference ?? `ADJ-${result.value.concessionId?.slice(0, 8) ?? "pending"}`,
+      invoiceRef: input.invoiceRef,
+      type: input.type,
+      amountPaise: input.type === "adjustment" ? input.amountPaise : -Math.abs(input.amountPaise),
+      reason: input.reason,
+      requestedBy: input.requestedBy,
+      requestedAtIso: new Date().toISOString(),
+      status: (result.value.status as "pending" | "approved" | "rejected" | "posted") ?? "pending",
+      decidedBy: null,
+      decidedAtIso: null,
+      decisionReason: null,
+      postedAtIso: null,
+      version: result.value.version ?? 1,
+    };
   }
   return respond(() => {
     if (!getDemoPolicy()["finance.adjustments"]) {
@@ -988,7 +1009,11 @@ export async function requestAdjustment(input: {
 
 /** All adjustment requests, newest first (demo). */
 export async function listAdjustments(): Promise<AdjustmentRequest[]> {
-  if (isServerMode()) return [];
+  if (isServerMode()) {
+    const result = await adapterCall<AdjustmentRequest[]>("finance.listAdjustments");
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Adjustments unavailable.");
+    return result.value;
+  }
   return respond(() =>
     [...loadAdjustments()].sort((a, b) => b.requestedAtIso.localeCompare(a.requestedAtIso)).map((request) => ({ ...request })),
   );
@@ -1009,7 +1034,7 @@ export async function approveAdjustment(input: {
     const request = requests.find((candidate) => candidate.ref === input.ref);
     if (!request) throw new Error("Adjustment not found.");
     const result = await adapterCall<unknown>("finance.approveAdjustment", {
-      adjustmentId: "demo",
+      adjustmentId: request.id ?? request.ref,
       expectedVersion: request.version,
       approve: input.approve,
       reason: input.reason,
@@ -1047,7 +1072,17 @@ export async function approveAdjustment(input: {
  */
 export async function postAdjustment(input: { ref: string; postedBy: string }): Promise<AdjustmentRequest> {
   if (isServerMode()) {
-    throw new FinanceServiceError("policy-pending", "Adjustment posting is demo-only in this runtime.");
+    const requests = await listAdjustments();
+    const request = requests.find((candidate) => candidate.ref === input.ref);
+    if (!request) throw new Error("Adjustment not found.");
+    if (request.status !== "approved") throw new Error(`Adjustment ${input.ref} must be approved before posting.`);
+    const result = await adapterCall<unknown>("finance.postAdjustment", {
+      adjustmentId: request.id ?? request.ref,
+      expectedVersion: request.version,
+      idempotencyKey: `post-adjustment:${request.ref}`,
+    });
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Posting failed.");
+    return { ...request, status: "posted", postedAtIso: new Date().toISOString(), version: request.version + 1 };
   }
   return respond(() => {
     const requests = loadAdjustments();
@@ -1088,12 +1123,28 @@ export async function requestRefund(input: {
   requestedBy: string;
 }): Promise<RefundRequest> {
   if (isServerMode()) {
-    const result = await adapterCall<{ refundRequestId: string | null }>(
+    const result = await adapterCall<{ refundRequestId: string | null; reference?: string; status?: string; version?: number }>(
       "finance.requestRefund",
-      { paymentRef: input.paymentRef, amountPaise: input.amountPaise, reason: input.reason } as unknown as Record<string, unknown>,
+      { paymentRef: input.paymentRef, amountPaise: input.amountPaise, reason: input.reason, expectedVersion: 1, idempotencyKey: `refund:${input.paymentRef}:${input.requestedBy}` } as unknown as Record<string, unknown>,
     );
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Refund failed.");
-    throw new FinanceServiceError("policy-pending", "Refund history is demo-only in this runtime.");
+    return {
+      id: result.value.refundRequestId ?? undefined,
+      ref: result.value.reference ?? `RFD-${result.value.refundRequestId?.slice(0, 8) ?? "pending"}`,
+      paymentRef: input.paymentRef,
+      invoiceRef: "",
+      amountPaise: input.amountPaise,
+      reason: input.reason,
+      requestedBy: input.requestedBy,
+      requestedAtIso: new Date().toISOString(),
+      status: (result.value.status as ApprovalState) ?? "pending",
+      decidedBy: null,
+      decidedAtIso: null,
+      decisionReason: null,
+      providerRefundRef: null,
+      postedAtIso: null,
+      version: result.value.version ?? 1,
+    };
   }
   return respond(() => {
     if (!getDemoPolicy()["finance.refunds"]) {
@@ -1134,7 +1185,11 @@ export async function requestRefund(input: {
 
 /** All refund requests, newest first (demo). */
 export async function listRefunds(): Promise<RefundRequest[]> {
-  if (isServerMode()) return [];
+  if (isServerMode()) {
+    const result = await adapterCall<RefundRequest[]>("finance.listRefunds");
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Refunds unavailable.");
+    return result.value;
+  }
   return respond(() =>
     [...loadRefunds()].sort((a, b) => b.requestedAtIso.localeCompare(a.requestedAtIso)).map((request) => ({ ...request })),
   );
@@ -1148,14 +1203,17 @@ export async function approveRefund(input: {
   decidedBy: string;
 }): Promise<RefundRequest> {
   if (isServerMode()) {
+    const requests = await listRefunds();
+    const request = requests.find((candidate) => candidate.ref === input.ref);
+    if (!request) throw new Error("Refund request not found.");
     const result = await adapterCall<unknown>("finance.approveRefund", {
-      refundRequestId: "demo",
-      expectedVersion: 1,
+      refundRequestId: request.id ?? request.ref,
+      expectedVersion: request.version,
       approve: input.approve,
       reason: input.reason,
     });
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Approval failed.");
-    throw new FinanceServiceError("policy-pending", "Refund history is demo-only in this runtime.");
+    return { ...request, status: input.approve ? "approved" : "rejected", decidedBy: input.decidedBy, decidedAtIso: new Date().toISOString(), decisionReason: input.reason, version: request.version + 1 };
   }
   return respond(() => {
     if (!getDemoPolicy()["finance.refunds"]) {
@@ -1188,7 +1246,17 @@ export async function approveRefund(input: {
  */
 export async function postRefund(input: { ref: string; postedBy: string }): Promise<RefundRequest> {
   if (isServerMode()) {
-    throw new FinanceServiceError("policy-pending", "Refund posting is demo-only in this runtime.");
+    const requests = await listRefunds();
+    const request = requests.find((candidate) => candidate.ref === input.ref);
+    if (!request) throw new Error("Refund request not found.");
+    if (request.status !== "approved") throw new Error(`Refund ${input.ref} must be approved before posting.`);
+    const result = await adapterCall<unknown>("finance.postRefund", {
+      refundRequestId: request.id ?? request.ref,
+      expectedVersion: request.version,
+      providerRef: null,
+    });
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Refund posting failed.");
+    return { ...request, status: "posted", postedAtIso: new Date().toISOString(), version: request.version + 1 };
   }
   const requests = loadRefunds();
   const request = requireRequest(requests, input.ref);
@@ -1238,9 +1306,11 @@ export async function postRefund(input: { ref: string; postedBy: string }): Prom
  */
 export async function startReconciliation(input: { by: string }): Promise<ReconciliationRun> {
   if (isServerMode()) {
-    const result = await adapterCall<{ reference: string }>("finance.startReconciliation", { idempotencyKey: `reconciliation:${input.by}:${demoNowIso()}` });
+    const result = await adapterCall<{ reference: string }>("finance.startReconciliation", { idempotencyKey: `reconciliation:${input.by}:${new Date().toISOString()}` });
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Reconciliation failed.");
-    throw new FinanceServiceError("policy-pending", "Reconciliation history is demo-only in this runtime.");
+    const runs = await listReconciliationRuns();
+    const run = runs.find((candidate) => candidate.ref === result.value.reference);
+    return run ?? { ref: result.value.reference, ranAtIso: new Date().toISOString(), by: input.by, matchedCount: 0, discrepancyCount: 0, pendingCount: 0, exceptions: [] };
   }
   return respond(() => {
     if (!getDemoPolicy()["finance.reconciliation"]) {
@@ -1330,13 +1400,15 @@ export async function resolveReconciliationException(input: {
 }): Promise<ReconciliationRun> {
   if (isServerMode()) {
     const result = await adapterCall<unknown>("finance.resolveReconciliation", {
-      exceptionId: "demo",
+      exceptionId: input.exceptionId,
       resolutionReason: input.reason,
       expectedVersion: 1,
       idempotencyKey: `recon:${input.runRef}:${input.exceptionId}`,
     });
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Resolution failed.");
-    throw new FinanceServiceError("policy-pending", "Reconciliation history is demo-only in this runtime.");
+    const runs = await listReconciliationRuns();
+    const updated = runs.find((candidate) => candidate.ref === input.runRef);
+    return updated ?? { ref: input.runRef, ranAtIso: new Date().toISOString(), by: input.by, matchedCount: 0, discrepancyCount: 0, pendingCount: 0, exceptions: [] };
   }
   return respond(() => {
     if (input.reason.trim().length < 3) throw new Error("A resolution reason is required.");

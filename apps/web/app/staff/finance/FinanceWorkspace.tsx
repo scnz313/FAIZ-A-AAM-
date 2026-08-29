@@ -134,7 +134,7 @@ export function FinanceWorkspace({
 
       <FeeLedgerTable views={views} />
 
-      {mode === "demo" ? <FinanceActions views={views} /> : null}
+      <FinanceActions views={views} />
     </>
   );
 }
