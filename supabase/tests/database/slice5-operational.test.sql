@@ -145,8 +145,8 @@ begin
   values('slice5-notification-event','email.deliver','user_account','ACC-SLICE5','{"accountId":"30000000-0000-4000-8000-000000000001","secret":"must-not-render"}'::jsonb)
   returning id into v_event;
   perform set_config('slice5.notification_event',v_event::text,false);
-  perform app.project_notification_event(v_event);
-  perform app.project_notification_event(v_event);
+  perform app.project_notification_event_v2(v_event);
+  perform app.project_notification_event_v2(v_event);
   select count(*) into v_after from public.in_app_notifications where source_event_id=v_event;
   assert v_after=1, 'notification projection is idempotent';
   assert not exists (select 1 from public.in_app_notifications where source_event_id=v_event and body like '%must-not-render%'), 'notification body excludes sensitive payload';
@@ -333,7 +333,14 @@ reset role;
 
 select set_config('request.jwt.claims','{}',false);
 do $$
+declare v_sheet text; v_event uuid;
 begin
+  select reference into v_sheet from public.result_entry_sheets limit 1;
+  insert into public.outbox_events(event_key,kind,target_type,target_reference,payload)
+  values('email.result_entry_sheet_submitted:slice5-notification','email.deliver','result_entry_sheet',v_sheet,'{}'::jsonb)
+  returning id into v_event;
+  assert exists (select 1 from public.in_app_notifications n join public.role_grants rg on rg.account_id=n.recipient_account_id and rg.status='active' and rg.role_code in ('exam_reviewer','result_publisher') where n.source_event_id=v_event), 'result entry workflow reaches review staff';
+  assert not exists (select 1 from public.in_app_notifications n join public.role_grants rg on rg.account_id=n.recipient_account_id and rg.status='active' and rg.role_code='guardian' where n.source_event_id=v_event), 'unpublished result entry is not projected to guardians';
   assert to_regprocedure('app.enrollment_convert(uuid,text)') is null, 'unintended enrollment conversion overload is removed';
   assert to_regprocedure('app.enrollment_convert(uuid)') is not null, 'canonical enrollment conversion remains';
   assert exists (select 1 from public.audit_events where action='Login' and target_reference='30000000-0000-4000-8000-000000000007'), 'login audit is recorded';
