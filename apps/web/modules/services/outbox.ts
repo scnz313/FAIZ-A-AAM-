@@ -29,6 +29,7 @@ export type OutboxEventKind =
   | "link.capabilities.changed"
   | "link.requested"
   | "enrollment.converted"
+  | "admissions.withdrawn"
   | "results.published"
   | "results.withdrawn"
   | "content.published"

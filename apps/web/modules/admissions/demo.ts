@@ -15,7 +15,8 @@ export type ApplicationStatus =
   | "Offered"
   | "Waitlisted"
   | "Declined"
-  | "Enrolled";
+  | "Enrolled"
+  | "Withdrawn";
 
 export type ApplicationEvent = {
   status: ApplicationStatus;

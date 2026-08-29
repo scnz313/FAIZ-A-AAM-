@@ -17,6 +17,7 @@
 import { demoNowIso } from "@/modules/demo/clock";
 import { grievances as grievanceFixtures } from "@/modules/support/demo";
 import type { GrievanceCategory, GrievanceStatus } from "@/modules/support/demo";
+import { getDemoPolicy } from "@/modules/services/demo-policy";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
 
 export type { GrievanceCategory, GrievanceStatus };
@@ -40,6 +41,8 @@ export type Grievance = {
   status: GrievanceStatus;
   thread: GrievanceEvent[];
   privateNotes?: Array<{ atIso: string; by: string; text: string }>;
+  /** Support-officer assignment (fictional demo policy). */
+  assignee?: { by: string; atIso: string };
 };
 
 export type GrievanceInput = {
@@ -59,6 +62,8 @@ export interface SupportService {
   respond(ref: string, text: string, by: string, resolve: boolean): Promise<Grievance>;
   /** Staff-only note; never included in the requester-safe projection. */
   addPrivateNote(ref: string, text: string, by: string): Promise<Grievance>;
+  /** Assign the request to a support officer (fictional demo policy). */
+  assign(ref: string, by: string): Promise<Grievance>;
   /** Returns a resolved grievance to "New" (no thread event — only responses append). */
   reopen(ref: string, by: string): Promise<Grievance>;
 }
@@ -128,7 +133,12 @@ function nextRef(counter: number): string {
 
 /** Copy so callers can never mutate the stored record. */
 function copyGrievance(grievance: Grievance): Grievance {
-  return { ...grievance, thread: [...grievance.thread] };
+  return {
+    ...grievance,
+    thread: [...grievance.thread],
+    privateNotes: grievance.privateNotes ? [...grievance.privateNotes] : undefined,
+    assignee: grievance.assignee ? { ...grievance.assignee } : undefined,
+  };
 }
 
 function requireGrievance(store: SupportStore, ref: string): Grievance {
@@ -191,9 +201,28 @@ export function createDemoSupportService(latencyMs = 200): SupportService {
       return copyGrievance(grievance);
     },
 
-    async addPrivateNote(ref, _text, _by) {
+    async addPrivateNote(ref, text, by) {
       await sleep(latencyMs);
-      return copyGrievance(requireGrievance(readStore(), ref));
+      const store = readStore();
+      const grievance = requireGrievance(store, ref);
+      grievance.privateNotes = [
+        ...(grievance.privateNotes ?? []),
+        { atIso: demoNowIso(), by, text: text.trim() },
+      ];
+      writeStore(store);
+      return copyGrievance(grievance);
+    },
+
+    async assign(ref, by) {
+      await sleep(latencyMs);
+      if (!getDemoPolicy()["support.assignment"]) {
+        throw new Error("Support assignment is pending school policy in this demo.");
+      }
+      const store = readStore();
+      const grievance = requireGrievance(store, ref);
+      grievance.assignee = { by, atIso: demoNowIso() };
+      writeStore(store);
+      return copyGrievance(grievance);
     },
 
     async reopen(ref, _by) {

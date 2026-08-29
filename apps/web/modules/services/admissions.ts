@@ -22,6 +22,9 @@ import {
   type ApplicationStatus,
 } from "@/modules/admissions/demo";
 import { financeService } from "@/modules/services/finance";
+import { getDemoPolicy } from "@/modules/services/demo-policy";
+import { auditService } from "@/modules/services/audit";
+import { enqueueOutboxEvent } from "@/modules/services/outbox";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 import { schoolConfigService } from "@/modules/services/school-config";
@@ -422,6 +425,7 @@ const STAGE_NOTES: Record<ApplicationStatus, string> = {
   Waitlisted: "Placed on the waitlist pending seat availability.",
   Declined: "Application declined by the admissions office.",
   Enrolled: "Applicant enrolled for the session.",
+  Withdrawn: "Application withdrawn by the applicant.",
 };
 
 const TERMINAL_STATUSES: readonly ApplicationStatus[] = ["Offered", "Waitlisted", "Declined", "Enrolled"];
@@ -769,11 +773,40 @@ export const admissionsService: AdmissionsService = {
     });
   },
 
-  async withdraw() {
-    /* Applicant withdrawal is gated on a school policy decision; the status
-       view shows the control with an honest "(policy pending)" note. */
+  async withdraw(ref, by) {
+    if (clientAdapterMode() === "supabase") {
+      throw new Error("Applicant withdrawal is not yet available through the school service.");
+    }
+    /* Withdrawal is gated on the explicit fictional demo policy (plan L1.1);
+       the settings page can flip the rule so both states are testable. */
     return respond(() => {
-      throw new Error("Applicant withdrawal is pending school policy and is not available in this demo.");
+      if (!getDemoPolicy()["admission.withdrawal"]) {
+        throw new Error("Applicant withdrawal is pending school policy and is not available in this demo.");
+      }
+      const record = loadRecord(ref);
+      if (!record) throw new Error("Application not found.");
+      const withdrawable: readonly ApplicationStatus[] = ["Submitted", "Under review", "Changes requested", "Assessment", "Waitlisted"];
+      if (!withdrawable.includes(record.status)) {
+        throw new Error(`This application cannot be withdrawn from its current state (${record.status}).`);
+      }
+      const updated: ApplicationRecord = {
+        ...record,
+        status: "Withdrawn",
+        timeline: [
+          ...record.timeline,
+          { status: "Withdrawn", atIso: demoNowIso(), actor: by, note: "Application withdrawn by the applicant." },
+        ],
+      };
+      saveRecord(updated);
+      void auditService.record({
+        actor: by,
+        action: "Application reviewed",
+        target: ref,
+        outcome: "Success",
+        reason: "Application withdrawn by the applicant (fictional demo policy).",
+      });
+      enqueueOutboxEvent({ eventId: `admissions.withdrawn:${ref}`, kind: "admissions.withdrawn", targetRef: ref, actor: by });
+      return updated;
     });
   },
 

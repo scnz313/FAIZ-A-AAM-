@@ -149,3 +149,7 @@
     flex-direction: column;
   }
 }
+
+.demoPolicyActions {
+  margin-top: 16px;
+}

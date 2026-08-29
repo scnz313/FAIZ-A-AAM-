@@ -9,6 +9,14 @@ import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { canRole } from "@/modules/services/staff-authorization";
 import { formatKolkata } from "@/modules/iot/domain";
 import { settingsService, type PolicyPendingKey, type SettingsView } from "@/modules/services/settings";
+import {
+  DEMO_POLICY_META,
+  getDemoPolicy,
+  resetDemoPolicy,
+  setDemoPolicy,
+  type DemoPolicy,
+  type DemoPolicyKey,
+} from "@/modules/services/demo-policy";
 
 import styles from "./page.module.css";
 
@@ -84,6 +92,16 @@ export default function SettingsPage() {
   const [resetNote, setResetNote] = useState<{ key: number; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [demoPolicy, setDemoPolicyState] = useState<DemoPolicy>(() => getDemoPolicy());
+
+  function updateDemoPolicy(key: DemoPolicyKey, value: boolean) {
+    setDemoPolicyState(setDemoPolicy(key, value));
+  }
+
+  function resetDemoRules() {
+    resetDemoPolicy();
+    setDemoPolicyState(getDemoPolicy());
+  }
 
   /* The form is seeded from the settings service view; policy-pending
      sections stay visibly flagged until the school confirms them. */
@@ -325,6 +343,39 @@ export default function SettingsPage() {
           )}
         </div>
       </form>
+
+      <section className={`panel ${styles.dangerZone}`} aria-labelledby="demo-policy-heading">
+        <div className={styles.sectionHead}>
+          <h2 id="demo-policy-heading" className={styles.sectionTitle}>
+            Demo simulation rules
+          </h2>
+          <StatusBadge tone="watch">Fictional demo policy</StatusBadge>
+        </div>
+        <div className={styles.sectionBody}>
+          <p className={styles.dangerCopy}>
+            These rules let every workflow run locally while a school decision is still pending. They are fictional
+            and session-only — they never change approved school policy or the server authorization model.
+          </p>
+          {DEMO_POLICY_META.map((meta) => (
+            <ToggleRow
+              key={meta.key}
+              id={`demo-policy-${meta.key}`}
+              checked={demoPolicy[meta.key]}
+              onChange={(checked) => updateDemoPolicy(meta.key, checked)}
+              disabled={!canManage}
+              help={meta.help}
+            >
+              {meta.label}
+            </ToggleRow>
+          ))}
+          <div className={styles.demoPolicyActions}>
+            <Button variant="quiet" onClick={resetDemoRules} disabled={!canManage}>
+              Restore demo defaults
+            </Button>
+          </div>
+        </div>
+        <p className={styles.savedBy}>Session-only — changes apply to this browser session and reset on reload.</p>
+      </section>
 
       <section className={`panel ${styles.dangerZone}`} aria-labelledby="danger-heading">
         <h2 id="danger-heading" className={styles.sectionTitle}>

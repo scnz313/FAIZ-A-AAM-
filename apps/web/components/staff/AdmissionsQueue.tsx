@@ -19,6 +19,7 @@ const STATUS_TONE: Record<ApplicationStatus, StatusTone> = {
   Waitlisted: "watch",
   Declined: "neutral",
   Enrolled: "good",
+  Withdrawn: "neutral",
 };
 
 const FILTERS: ReadonlyArray<{ key: "all" | ApplicationStatus; label: string }> = [
@@ -31,6 +32,7 @@ const FILTERS: ReadonlyArray<{ key: "all" | ApplicationStatus; label: string }> 
   { key: "Waitlisted", label: "Waitlisted" },
   { key: "Declined", label: "Declined" },
   { key: "Enrolled", label: "Enrolled" },
+  { key: "Withdrawn", label: "Withdrawn" },
 ];
 
 /**

@@ -13,6 +13,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { setDemoNow } from "@/modules/demo/clock";
+import { auditService } from "@/modules/services/audit";
+import { resetDemoPolicy, setDemoPolicy } from "@/modules/services/demo-policy";
+import { listOutboxEvents } from "@/modules/services/outbox";
 import {
   ADMISSIONS_SESSION_KEYS,
   admissionsService,
@@ -286,5 +289,52 @@ describe("admissions staff decision persistence", () => {
 
     const rows = await admissionsService.listStaffRecords();
     expect(rows.find((row) => row.ref === "APP-2026-0419")?.status).toBe("Declined");
+  });
+});
+
+describe("applicant withdrawal (fictional demo policy)", () => {
+  beforeEach(() => {
+    resetDemoPolicy();
+  });
+
+  it("withdraws a submitted application and records timeline + audit + outbox", async () => {
+    const submitted = await admissionsService.submitApplication(draft());
+    expect(submitted.ref).toBe("APP-2026-0424");
+
+    const withdrawn = await admissionsService.withdraw(submitted.ref, "Demo Guardian");
+    expect(withdrawn.status).toBe("Withdrawn");
+    const lastEvent = withdrawn.timeline[withdrawn.timeline.length - 1];
+    expect(lastEvent?.status).toBe("Withdrawn");
+    expect(lastEvent?.actor).toBe("Demo Guardian");
+
+    /* The staff queue shows the withdrawn state. */
+    const queue = await admissionsService.listStaffRecords();
+    const row = queue.find((item) => item.ref === submitted.ref);
+    expect(row?.status).toBe("Withdrawn");
+
+    /* Audit evidence exists. */
+    const audit = await auditService.listEvents();
+    const event = audit.find((item) => item.target === submitted.ref);
+    expect(event?.action).toBe("Application reviewed");
+    expect(event?.outcome).toBe("Success");
+    expect(event?.reason).toContain("withdrawn");
+
+    /* One outbox event, idempotent by event id. */
+    const events = listOutboxEvents();
+    const withdrawnEvents = events.filter((item) => item.kind === "admissions.withdrawn" && item.targetRef === submitted.ref);
+    expect(withdrawnEvents).toHaveLength(1);
+  });
+
+  it("rejects withdrawal from terminal states (offered / declined / enrolled)", async () => {
+    await expect(admissionsService.withdraw("APP-2026-0417", "Demo Guardian")).rejects.toThrow(/cannot be withdrawn/);
+    /* A session record declined by the office is also terminal. */
+    const submitted = await admissionsService.submitApplication(draft());
+    await admissionsService.staffDecline(submitted.ref, "Declined after document verification failed.", "00000000-0000-4000-8000-000000000203");
+    await expect(admissionsService.withdraw(submitted.ref, "Demo Guardian")).rejects.toThrow(/cannot be withdrawn/);
+  });
+
+  it("throws the policy-pending error when the fictional rule is disabled", async () => {
+    setDemoPolicy("admission.withdrawal", false);
+    await expect(admissionsService.withdraw("APP-2026-0419", "Demo Guardian")).rejects.toThrow(/pending school policy/);
   });
 });

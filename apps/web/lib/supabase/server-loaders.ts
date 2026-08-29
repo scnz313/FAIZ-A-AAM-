@@ -70,6 +70,7 @@ export async function loadServerInvoices(studentId?: string): Promise<InvoiceVie
       ...totals,
       payments: invoice.payments,
       receipts: receipts.filter((receipt) => receipt.invoiceRef === invoice.ref),
+      ledgerEntries: [],
     } satisfies InvoiceView;
     });
 }

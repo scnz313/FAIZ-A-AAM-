@@ -21,6 +21,7 @@ const STATUS_TONE: Record<ApplicationStatus, StatusTone> = {
   Waitlisted: "watch",
   Declined: "neutral",
   Enrolled: "good",
+  Withdrawn: "neutral",
 };
 
 type DemoFileState = "demo-preview" | "missing" | "access-denied";
@@ -132,6 +133,7 @@ const AVAILABLE_ACTIONS: Record<ApplicationStatus, DecisionAction[]> = {
   Waitlisted: ["decline"],
   Declined: [],
   Enrolled: [],
+  Withdrawn: [],
 };
 
 const TARGET_STATUS: Record<DecisionAction, ApplicationStatus> = {
@@ -147,6 +149,7 @@ const NO_ACTION_NOTE: Partial<Record<ApplicationStatus, string>> = {
   Offered: "A seat offer is outstanding — the applicant's response is awaited.",
   Declined: "This application is closed.",
   Enrolled: "This applicant is enrolled.",
+  Withdrawn: "This application was withdrawn by the applicant.",
 };
 
 const REASON_MIN_LENGTH = 10;

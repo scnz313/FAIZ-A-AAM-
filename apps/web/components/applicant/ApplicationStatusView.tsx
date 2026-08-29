@@ -9,6 +9,7 @@ import AcceptSeat from "@/components/applicant/AcceptSeat";
 import AdmissionFeeStep from "@/components/applicant/AdmissionFeeStep";
 import { ADMISSIONS_DEMO_NOTE } from "@/modules/admissions/demo";
 import { admissionsService, type ApplicationRecord, type ApplicationStatus } from "@/modules/services/admissions";
+import { getDemoPolicy } from "@/modules/services/demo-policy";
 import { formatINR } from "@/modules/finance/demo";
 import { formatKolkata } from "@/modules/iot/domain";
 
@@ -54,6 +55,8 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
   const [loadError, setLoadError] = useState<string | null>(null);
   const [responding, setResponding] = useState(false);
   const [responseError, setResponseError] = useState<string | null>(null);
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -91,6 +94,21 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
           ? "We could not record the acceptance. Please try again."
           : "We could not record the decline. Please try again.",
       );
+    } finally {
+      setResponding(false);
+    }
+  }
+
+  async function handleWithdraw() {
+    if (!record || responding) return;
+    setResponding(true);
+    setWithdrawError(null);
+    try {
+      const updated = await admissionsService.withdraw(record.ref, record.parentName);
+      setRecord(updated);
+      setConfirmingWithdraw(false);
+    } catch (error) {
+      setWithdrawError(error instanceof Error ? error.message : "We could not record the withdrawal. Please try again.");
     } finally {
       setResponding(false);
     }
@@ -335,12 +353,49 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
 
           {canWithdraw ? (
             <section className={styles.withdrawBlock} aria-label="Withdrawal">
-              <Button variant="quiet" disabled>
-                Withdraw application
-              </Button>
-              <p className={styles.sideNote}>
-                Withdrawal policy is pending a school decision — this control is not yet available.
-              </p>
+              {getDemoPolicy()["admission.withdrawal"] ? (
+                confirmingWithdraw ? (
+                  <div className={styles.withdrawConfirm} role="group" aria-label="Confirm withdrawal">
+                    <p className={styles.sideNote}>
+                      Withdraw the application for <strong>{record.studentName}</strong>? This ends the application —
+                      the school can no longer review or decide it. This is a fictional demo rule; the school's real
+                      withdrawal policy remains pending.
+                    </p>
+                    <div className={styles.withdrawActions}>
+                      <Button variant="danger" onClick={() => void handleWithdraw()} disabled={responding}>
+                        {responding ? "Withdrawing…" : "Confirm withdrawal"}
+                      </Button>
+                      <Button variant="quiet" onClick={() => setConfirmingWithdraw(false)} disabled={responding}>
+                        Cancel
+                      </Button>
+                    </div>
+                    {withdrawError ? (
+                      <p className={styles.errorLine} role="alert">
+                        {withdrawError}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <>
+                    <Button variant="quiet" onClick={() => setConfirmingWithdraw(true)} disabled={responding}>
+                      Withdraw application
+                    </Button>
+                    <p className={styles.sideNote}>
+                      Fictional demo policy — withdrawal is allowed before a final decision under the demo rules; the
+                      school&apos;s real policy is still pending.
+                    </p>
+                  </>
+                )
+              ) : (
+                <>
+                  <Button variant="quiet" disabled>
+                    Withdraw application
+                  </Button>
+                  <p className={styles.sideNote}>
+                    Withdrawal policy is pending a school decision — this control is not yet available.
+                  </p>
+                </>
+              )}
             </section>
           ) : null}
         </aside>

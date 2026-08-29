@@ -19,6 +19,7 @@ const ADMISSION_TONE: Record<ApplicationStatus, StatusTone> = {
   Waitlisted: "watch",
   Declined: "neutral",
   Enrolled: "good",
+  Withdrawn: "neutral",
 };
 
 const JOB_TONE: Record<JobApplicationStatus, StatusTone> = {
