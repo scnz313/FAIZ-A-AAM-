@@ -313,6 +313,32 @@ end
 $$;
 select set_config('request.jwt.claims','{"aal":"aal2"}',false);
 select app.accounts_mark_mfa_verified();
+select app.accounts_record_auth_event('signed_in');
 reset role;
+
+select set_config('request.jwt.claims','{"role":"service_role"}',false);
+set role service_role;
+do $$
+declare v_first jsonb; v_second jsonb;
+begin
+  v_first:=app.auth_rate_limit_consume(repeat('a',64),'auth.test',1,900);
+  v_second:=app.auth_rate_limit_consume(repeat('a',64),'auth.test',1,900);
+  assert (v_first->>'allowed')::boolean, 'first auth request is allowed';
+  assert not (v_second->>'allowed')::boolean, 'rate limit blocks the next request';
+  assert (v_second->>'retryAfterSeconds')::int > 0, 'rate limit returns retry guidance';
+  perform app.accounts_record_recovery_request('30000000-0000-4000-8000-000000000007');
+end
+$$;
+reset role;
+
+select set_config('request.jwt.claims','{}',false);
+do $$
+begin
+  assert to_regprocedure('app.enrollment_convert(uuid,text)') is null, 'unintended enrollment conversion overload is removed';
+  assert to_regprocedure('app.enrollment_convert(uuid)') is not null, 'canonical enrollment conversion remains';
+  assert exists (select 1 from public.audit_events where action='Login' and target_reference='30000000-0000-4000-8000-000000000007'), 'login audit is recorded';
+  assert exists (select 1 from public.audit_events where action='Recovery requested' and target_reference='30000000-0000-4000-8000-000000000007'), 'recovery audit is recorded';
+end
+$$;
 
 select 'SLICE 5 OPERATIONAL SUITE PASSED' as result;
