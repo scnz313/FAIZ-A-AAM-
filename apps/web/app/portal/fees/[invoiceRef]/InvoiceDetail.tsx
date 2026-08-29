@@ -258,6 +258,31 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
                 <dd className="num">{formatINR(view.balancePaise)}</dd>
               </div>
             </dl>
+            {view.ledgerEntries.length > 0 ? (
+              <section className={styles.ledgerSection} aria-labelledby="ledger-entries-title">
+                <p className="section-label" id="ledger-entries-title">
+                  Adjustments &amp; refunds
+                </p>
+                <ul className={styles.ledgerList}>
+                  {view.ledgerEntries.map((entry) => (
+                    <li key={entry.ref}>
+                      <div className={styles.paymentRow}>
+                        <span className={`num ${styles.paymentRef}`}>{entry.ref}</span>
+                        <span className={styles.paymentDesc}>
+                          <strong>{entry.kind}</strong>
+                          <small>{entry.reason}</small>
+                        </span>
+                        <span className={`num ${styles.paymentAmount}`}>{formatINR(entry.amountPaise)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className={styles.policyNote}>
+                  Concessions, adjustments, and refunds are posted ledger entries — the original invoice items and
+                  payment history are never rewritten (demo policy marker).
+                </p>
+              </section>
+            ) : null}
           </section>
 
           <section className={styles.paymentsSection} aria-labelledby="payments-title">

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { FeeLedgerTable } from "@/components/staff/FeeLedgerTable";
+import { FinanceActions } from "@/components/staff/FinanceActions";
 import { formatINR } from "@/modules/services/finance";
 import { formatKolkata } from "@/modules/iot/domain";
 import { financeService, type InvoiceView, type Receipt } from "@/modules/services/finance";
@@ -132,6 +133,8 @@ export function FinanceWorkspace({
       </section>
 
       <FeeLedgerTable views={views} />
+
+      {mode === "demo" ? <FinanceActions views={views} /> : null}
     </>
   );
 }

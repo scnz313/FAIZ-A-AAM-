@@ -70,3 +70,42 @@
 .reconTable td:global(.num) {
   text-align: right;
 }
+
+.exceptions {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exceptionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+}
+
+.exceptionCopy {
+  flex: 1;
+  min-width: 0;
+}
+
+.exceptionCopy p {
+  margin: 0;
+}
+
+.exceptionCopy small {
+  color: var(--ink-soft);
+}
+
+.resolveBox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.resolving {
+  color: var(--ink-soft);
+  font-size: 13px;
+}

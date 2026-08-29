@@ -331,3 +331,17 @@
     grid-column: 1 / -1;
   }
 }
+
+.ledgerSection {
+  margin-top: 22px;
+}
+
+.ledgerList {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.ledgerList li + li {
+  border-top: 1px solid var(--line);
+}

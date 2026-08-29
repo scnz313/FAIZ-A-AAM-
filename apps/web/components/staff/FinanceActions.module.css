@@ -1,0 +1,105 @@
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.intro {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.amountInput {
+  max-width: 180px;
+}
+
+.history {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historyLabel {
+  color: var(--ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 12px;
+}
+
+.requestRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+
+.requestCopy {
+  flex: 1;
+  min-width: 0;
+}
+
+.requestCopy p {
+  margin: 0;
+}
+
+.requestCopy small {
+  color: var(--ink-soft);
+}
+
+.decide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 260px;
+}
+
+.decideActions {
+  display: flex;
+  gap: 8px;
+}
+
+.error {
+  color: var(--alert-ink, #8b1a1a);
+  font-size: 12px;
+  margin: 0;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.readOnly {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.live {
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin-top: 14px;
+  min-height: 18px;
+}

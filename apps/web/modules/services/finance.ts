@@ -53,6 +53,7 @@ import {
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
 import { auditService } from "@/modules/services/audit";
 import { enqueueOutboxEvent } from "@/modules/services/outbox";
+import { getDemoPolicy } from "@/modules/services/demo-policy";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 import {
   invoiceSummary,
@@ -62,7 +63,7 @@ import {
   type ServerReceiptRow,
 } from "@/modules/services/finance-server-map";
 export type { PaymentProvider, PaymentOrder, PaymentRefund, PaymentProviderStatus } from "@/modules/services/payment-provider";
-export { createLocalSandboxPaymentProvider } from "@/modules/services/payment-provider";
+import { createLocalSandboxPaymentProvider } from "@/modules/services/payment-provider";
 
 /** Shared finance types re-exported at the service boundary. */
 export type { Invoice, InvoiceStatus, Payment, PaymentMethod, Receipt } from "@/modules/finance/demo";
@@ -92,6 +93,91 @@ export type PaymentAttempt = {
   gatewayRef?: string;
 };
 
+/* ------------------------------------------------------------------ */
+/* Local finance actions (plan L1.2)                                   */
+/* ------------------------------------------------------------------ */
+
+/** One append-only signed ledger entry for an invoice. */
+export type LedgerEntryKind = "concession" | "adjustment" | "write_off" | "refund";
+
+export type LedgerEntry = {
+  ref: string;
+  invoiceRef: string;
+  kind: LedgerEntryKind;
+  /** Signed: concessions/write-offs reduce the balance, refunds restore it. */
+  amountPaise: number;
+  reason: string;
+  by: string;
+  atIso: string;
+  sourceRef: string;
+};
+
+export type ApprovalState = "pending" | "approved" | "rejected" | "posted";
+
+export type AdjustmentRequest = {
+  ref: string;
+  invoiceRef: string;
+  type: "concession" | "adjustment" | "write_off";
+  /** Signed amount: concession/write-off negative, adjustment may be either. */
+  amountPaise: number;
+  reason: string;
+  requestedBy: string;
+  requestedAtIso: string;
+  status: ApprovalState;
+  decidedBy: string | null;
+  decidedAtIso: string | null;
+  decisionReason: string | null;
+  postedAtIso: string | null;
+  version: number;
+};
+
+export type RefundRequest = {
+  ref: string;
+  paymentRef: string;
+  invoiceRef: string;
+  amountPaise: number;
+  reason: string;
+  requestedBy: string;
+  requestedAtIso: string;
+  status: ApprovalState;
+  decidedBy: string | null;
+  decidedAtIso: string | null;
+  decisionReason: string | null;
+  providerRefundRef: string | null;
+  postedAtIso: string | null;
+  version: number;
+};
+
+export type ReconciliationExceptionKind =
+  | "gateway-only"
+  | "ledger-only"
+  | "amount-mismatch"
+  | "pending"
+  | "refunded";
+
+export type ReconciliationException = {
+  id: string;
+  payRef: string;
+  kind: ReconciliationExceptionKind;
+  amountPaise: number;
+  note: string;
+  status: "open" | "resolved";
+  resolutionReason: string | null;
+  resolvedBy: string | null;
+  resolvedAtIso: string | null;
+  version: number;
+};
+
+export type ReconciliationRun = {
+  ref: string;
+  ranAtIso: string;
+  by: string;
+  matchedCount: number;
+  discrepancyCount: number;
+  pendingCount: number;
+  exceptions: ReconciliationException[];
+};
+
 /** Ledger presentation of one invoice: totals, session payments and its receipts. */
 export type InvoiceView = {
   invoice: Invoice;
@@ -106,6 +192,8 @@ export type InvoiceView = {
   balancePaise: number;
   payments: Payment[];
   receipts: Receipt[];
+  /** Append-only signed ledger entries (concessions, adjustments, refunds). */
+  ledgerEntries: LedgerEntry[];
 };
 
 /** Outcome the deterministic demo gateway produces for the next attempt. */
@@ -154,6 +242,14 @@ export const FINANCE_SESSION_KEYS = {
   gatewayCounter: sessionKey("finance-gateway-counter"),
   receiptCounter: sessionKey("finance-receipt-counter"),
   invoiceCounter: sessionKey("finance-invoice-counter"),
+  ledger: sessionKey("finance-ledger"),
+  adjustments: sessionKey("finance-adjustments"),
+  refunds: sessionKey("finance-refunds"),
+  reconRuns: sessionKey("finance-recon-runs"),
+  adjustmentCounter: sessionKey("finance-adjustment-counter"),
+  refundCounter: sessionKey("finance-refund-counter"),
+  reconCounter: sessionKey("finance-recon-counter"),
+  ledgerCounter: sessionKey("finance-ledger-counter"),
 } as const;
 
 /** Counter seeds: PAY-2026-0301, G-2026-0201, RC-2026-0145, INV-2026-0301. */
@@ -161,6 +257,10 @@ const ATTEMPT_COUNTER_SEED = 301;
 const GATEWAY_COUNTER_SEED = 201;
 const RECEIPT_COUNTER_SEED = 145;
 const INVOICE_COUNTER_SEED = 301;
+const ADJUSTMENT_COUNTER_SEED = 401;
+const REFUND_COUNTER_SEED = 501;
+const RECON_COUNTER_SEED = 601;
+const LEDGER_COUNTER_SEED = 701;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -224,6 +324,76 @@ function nextCounter(key: string, seed: number): number {
 const pad4 = (value: number): string => String(value).padStart(4, "0");
 
 /* ------------------------------------------------------------------ */
+/* Local finance action stores (plan L1.2)                              */
+/* ------------------------------------------------------------------ */
+
+function loadLedgerEntries(): LedgerEntry[] {
+  return sessionGet<LedgerEntry[]>(FINANCE_SESSION_KEYS.ledger) ?? [];
+}
+
+function saveLedgerEntries(entries: LedgerEntry[]): void {
+  sessionSet(FINANCE_SESSION_KEYS.ledger, entries);
+}
+
+function loadAdjustments(): AdjustmentRequest[] {
+  return sessionGet<AdjustmentRequest[]>(FINANCE_SESSION_KEYS.adjustments) ?? [];
+}
+
+function saveAdjustments(requests: AdjustmentRequest[]): void {
+  sessionSet(FINANCE_SESSION_KEYS.adjustments, requests);
+}
+
+function loadRefunds(): RefundRequest[] {
+  return sessionGet<RefundRequest[]>(FINANCE_SESSION_KEYS.refunds) ?? [];
+}
+
+function saveRefunds(requests: RefundRequest[]): void {
+  sessionSet(FINANCE_SESSION_KEYS.refunds, requests);
+}
+
+function loadReconRuns(): ReconciliationRun[] {
+  return sessionGet<ReconciliationRun[]>(FINANCE_SESSION_KEYS.reconRuns) ?? [];
+}
+
+function saveReconRuns(runs: ReconciliationRun[]): void {
+  sessionSet(FINANCE_SESSION_KEYS.reconRuns, runs);
+}
+
+/** Signed sum of POSTED ledger entries for one invoice (balance effect). */
+function postedLedgerSum(invoiceRef: string): number {
+  return loadLedgerEntries()
+    .filter((entry) => entry.invoiceRef === invoiceRef)
+    .reduce((sum, entry) => sum + entry.amountPaise, 0);
+}
+
+/** Refundable amount for a payment: paid amount minus reserved (pending,
+ * approved, or posted) refunds for that payment. */
+function refundableForPayment(paymentRef: string): number {
+  const reserved = loadRefunds()
+    .filter(
+      (request) =>
+        request.paymentRef === paymentRef &&
+        (request.status === "pending" || request.status === "approved" || request.status === "posted"),
+    )
+    .reduce((sum, request) => sum + request.amountPaise, 0);
+  const invoice = [...fixtureInvoices, ...fixtureMariamInvoices, ...loadInvoices()].find((candidate) =>
+    candidate.payments.some((payment) => payment.ref === paymentRef),
+  );
+  const payment = invoice?.payments.find((candidate) => candidate.ref === paymentRef);
+  if (payment === undefined) return 0;
+  return Math.max(0, payment.amountPaise - reserved);
+}
+
+function requireRequest<T extends { ref: string; status: ApprovalState; version: number }>(
+  requests: T[],
+  ref: string,
+): T {
+  const request = requests.find((candidate) => candidate.ref === ref);
+  if (request === undefined) throw new Error(`No ${ref} request carries the reference ${ref}.`);
+  return request;
+}
+
+/* ------------------------------------------------------------------ */
 /* Demo scenario control (read by the gateway simulation)               */
 /* ------------------------------------------------------------------ */
 
@@ -249,7 +419,8 @@ const STUDENT_NAME_BY_ID: Record<string, string> = {
 function toView(invoice: Invoice): InvoiceView {
   const total = invoiceTotal(invoice);
   const paid = invoicePaid(invoice);
-  const balance = total - paid;
+  const entries = loadLedgerEntries().filter((entry) => entry.invoiceRef === invoice.ref);
+  const balance = total - paid + entries.reduce((sum, entry) => sum + entry.amountPaise, 0);
   const status: InvoiceStatus = balance <= 0 ? "paid" : paid > 0 ? "partial" : invoice.status;
   return {
     invoice,
@@ -261,6 +432,7 @@ function toView(invoice: Invoice): InvoiceView {
     balancePaise: balance,
     payments: invoice.payments,
     receipts: loadReceipts().filter((receipt) => receipt.invoiceRef === invoice.ref),
+    ledgerEntries: entries,
   };
 }
 
@@ -285,6 +457,7 @@ async function serverInvoices(): Promise<InvoiceView[]> {
       balancePaise: summary.balancePaise,
       payments: invoice.payments,
       receipts: receipts.filter((receipt) => receipt.invoiceRef === invoice.ref),
+      ledgerEntries: [],
     };
   });
 }
@@ -744,7 +917,7 @@ export async function getReceipt(receiptRef: string): Promise<Receipt | null> {
   });
 }
 
-export type ReconciliationRun = {
+export type ServerReconciliationRun = {
   id: string;
   reference: string;
   runAt: string;
@@ -753,46 +926,444 @@ export type ReconciliationRun = {
   createdByAccountId: string | null;
 };
 
-export async function applyConcession(input: {
-  invoiceId: string;
+/**
+ * Request a concession/adjustment/write-off on an invoice (maker step —
+ * finance officer workspace). The fictional demo policy (plan L1.1) gates
+ * the workflow; the amount is validated against the current balance and a
+ * reason is required.
+ */
+export async function requestAdjustment(input: {
+  invoiceRef: string;
   amountPaise: number;
   reason: string;
-  type: string;
-}): Promise<{ concessionId: string | null }> {
+  type: "concession" | "adjustment" | "write_off";
+  requestedBy: string;
+}): Promise<AdjustmentRequest> {
   if (isServerMode()) {
     const result = await adapterCall<{ concessionId: string | null }>(
       "finance.applyConcession",
-      input as unknown as Record<string, unknown>,
+      {
+        invoiceRef: input.invoiceRef,
+        amountPaise: Math.abs(input.amountPaise),
+        reason: input.reason,
+        type: input.type,
+      } as unknown as Record<string, unknown>,
     );
-    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Concession failed.");
-    return result.value;
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Adjustment failed.");
+    throw new FinanceServiceError("policy-pending", "Adjustment approval history is demo-only in this runtime.");
   }
-  throw new FinanceServiceError("policy-pending", "policy pending");
+  return respond(() => {
+    if (!getDemoPolicy()["finance.adjustments"]) {
+      throw new FinanceServiceError("policy-pending", "Concessions and adjustments are pending school policy in this demo.");
+    }
+    const reason = input.reason.trim();
+    if (reason.length < 10) throw new Error("A reason of at least 10 characters is required.");
+    const invoice = loadInvoices().find((candidate) => candidate.ref === input.invoiceRef);
+    if (!invoice) throw new Error("Invoice not found.");
+    const balance = invoiceTotal(invoice) - invoicePaid(invoice) + postedLedgerSum(invoice.ref);
+    const signed = input.type === "adjustment" ? input.amountPaise : -Math.abs(input.amountPaise);
+    if (signed > 0 && signed > balance) {
+      throw new Error("The adjustment exceeds the outstanding balance.");
+    }
+    const ref = `ADJ-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.adjustmentCounter, ADJUSTMENT_COUNTER_SEED))}`;
+    const request: AdjustmentRequest = {
+      ref,
+      invoiceRef: input.invoiceRef,
+      type: input.type,
+      amountPaise: signed,
+      reason,
+      requestedBy: input.requestedBy,
+      requestedAtIso: demoNowIso(),
+      status: "pending",
+      decidedBy: null,
+      decidedAtIso: null,
+      decisionReason: null,
+      postedAtIso: null,
+      version: 1,
+    };
+    saveAdjustments([...loadAdjustments(), request]);
+    return { ...request };
+  });
 }
 
+/** All adjustment requests, newest first (demo). */
+export async function listAdjustments(): Promise<AdjustmentRequest[]> {
+  if (isServerMode()) return [];
+  return respond(() =>
+    [...loadAdjustments()].sort((a, b) => b.requestedAtIso.localeCompare(a.requestedAtIso)).map((request) => ({ ...request })),
+  );
+}
+
+/**
+ * Approve or reject a pending adjustment (checker step — finance approver
+ * workspace). Self-approval is denied and the decision is audited.
+ */
+export async function approveAdjustment(input: {
+  ref: string;
+  approve: boolean;
+  reason: string;
+  decidedBy: string;
+}): Promise<AdjustmentRequest> {
+  if (isServerMode()) {
+    const requests = await listAdjustments();
+    const request = requests.find((candidate) => candidate.ref === input.ref);
+    if (!request) throw new Error("Adjustment not found.");
+    const result = await adapterCall<unknown>("finance.approveAdjustment", {
+      adjustmentId: "demo",
+      expectedVersion: request.version,
+      approve: input.approve,
+      reason: input.reason,
+    });
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Approval failed.");
+    return { ...request, status: input.approve ? "approved" : "rejected", version: request.version + 1 };
+  }
+  return respond(() => {
+    if (!getDemoPolicy()["finance.adjustments"]) {
+      throw new FinanceServiceError("policy-pending", "Concessions and adjustments are pending school policy in this demo.");
+    }
+    const requests = loadAdjustments();
+    const request = requireRequest(requests, input.ref);
+    if (request.status !== "pending") throw new Error(`Adjustment ${input.ref} is already ${request.status}.`);
+    if (request.requestedBy === input.decidedBy) {
+      throw new Error("The requesting officer cannot approve their own adjustment (maker/checker).");
+    }
+    if (input.reason.trim().length < 10) throw new Error("A decision reason of at least 10 characters is required.");
+    const next: AdjustmentRequest = {
+      ...request,
+      status: input.approve ? "approved" : "rejected",
+      decidedBy: input.decidedBy,
+      decidedAtIso: demoNowIso(),
+      decisionReason: input.reason.trim(),
+      version: request.version + 1,
+    };
+    saveAdjustments(requests.map((candidate) => (candidate.ref === input.ref ? next : candidate)));
+    return { ...next };
+  });
+}
+
+/**
+ * Post an approved adjustment: appends a signed ledger entry (append-only —
+ * invoice items are never rewritten) and records the audit trail.
+ */
+export async function postAdjustment(input: { ref: string; postedBy: string }): Promise<AdjustmentRequest> {
+  if (isServerMode()) {
+    throw new FinanceServiceError("policy-pending", "Adjustment posting is demo-only in this runtime.");
+  }
+  return respond(() => {
+    const requests = loadAdjustments();
+    const request = requireRequest(requests, input.ref);
+    if (request.status !== "approved") throw new Error(`Adjustment ${input.ref} must be approved before posting.`);
+    const entry: LedgerEntry = {
+      ref: `LED-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.ledgerCounter, LEDGER_COUNTER_SEED))}`,
+      invoiceRef: request.invoiceRef,
+      kind: request.type,
+      amountPaise: request.amountPaise,
+      reason: request.reason,
+      by: input.postedBy,
+      atIso: demoNowIso(),
+      sourceRef: request.ref,
+    };
+    saveLedgerEntries([...loadLedgerEntries(), entry]);
+    const next: AdjustmentRequest = { ...request, status: "posted", postedAtIso: demoNowIso(), version: request.version + 1 };
+    saveAdjustments(requests.map((candidate) => (candidate.ref === input.ref ? next : candidate)));
+    void auditService.record({
+      actor: input.postedBy,
+      action: "Payment reconciled",
+      target: request.invoiceRef,
+      outcome: "Success",
+      reason: `${request.type} ${formatINR(request.amountPaise)} posted — ${request.reason}`,
+    });
+    return { ...next };
+  });
+}
+
+/**
+ * Request a refund against a posted payment (maker step). The amount cannot
+ * exceed the payment's remaining refundable amount.
+ */
 export async function requestRefund(input: {
-  paymentId: string;
+  paymentRef: string;
   amountPaise: number;
   reason: string;
-}): Promise<{ refundRequestId: string | null }> {
+  requestedBy: string;
+}): Promise<RefundRequest> {
   if (isServerMode()) {
     const result = await adapterCall<{ refundRequestId: string | null }>(
       "finance.requestRefund",
-      input as unknown as Record<string, unknown>,
+      { paymentRef: input.paymentRef, amountPaise: input.amountPaise, reason: input.reason } as unknown as Record<string, unknown>,
     );
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Refund failed.");
-    return result.value;
+    throw new FinanceServiceError("policy-pending", "Refund history is demo-only in this runtime.");
   }
-  throw new FinanceServiceError("policy-pending", "policy pending");
+  return respond(() => {
+    if (!getDemoPolicy()["finance.refunds"]) {
+      throw new FinanceServiceError("policy-pending", "Refunds are pending school policy in this demo.");
+    }
+    const reason = input.reason.trim();
+    if (reason.length < 10) throw new Error("A reason of at least 10 characters is required.");
+    if (input.amountPaise <= 0) throw new Error("A refund must be a positive amount.");
+    const holder = [...fixtureInvoices, ...fixtureMariamInvoices, ...loadInvoices()].find((candidate) =>
+      candidate.payments.some((payment) => payment.ref === input.paymentRef),
+    );
+    if (!holder) throw new Error("The payment was not found on any invoice.");
+    const refundable = refundableForPayment(input.paymentRef);
+    if (input.amountPaise > refundable) {
+      throw new Error(`The refund exceeds the refundable amount (${formatINR(refundable)}).`);
+    }
+    const ref = `RFD-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.refundCounter, REFUND_COUNTER_SEED))}`;
+    const request: RefundRequest = {
+      ref,
+      paymentRef: input.paymentRef,
+      invoiceRef: holder.ref,
+      amountPaise: input.amountPaise,
+      reason,
+      requestedBy: input.requestedBy,
+      requestedAtIso: demoNowIso(),
+      status: "pending",
+      decidedBy: null,
+      decidedAtIso: null,
+      decisionReason: null,
+      providerRefundRef: null,
+      postedAtIso: null,
+      version: 1,
+    };
+    saveRefunds([...loadRefunds(), request]);
+    return { ...request };
+  });
 }
 
+/** All refund requests, newest first (demo). */
+export async function listRefunds(): Promise<RefundRequest[]> {
+  if (isServerMode()) return [];
+  return respond(() =>
+    [...loadRefunds()].sort((a, b) => b.requestedAtIso.localeCompare(a.requestedAtIso)).map((request) => ({ ...request })),
+  );
+}
+
+/** Approve or reject a pending refund (checker step); self-approval denied. */
+export async function approveRefund(input: {
+  ref: string;
+  approve: boolean;
+  reason: string;
+  decidedBy: string;
+}): Promise<RefundRequest> {
+  if (isServerMode()) {
+    const result = await adapterCall<unknown>("finance.approveRefund", {
+      refundRequestId: "demo",
+      expectedVersion: 1,
+      approve: input.approve,
+      reason: input.reason,
+    });
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Approval failed.");
+    throw new FinanceServiceError("policy-pending", "Refund history is demo-only in this runtime.");
+  }
+  return respond(() => {
+    if (!getDemoPolicy()["finance.refunds"]) {
+      throw new FinanceServiceError("policy-pending", "Refunds are pending school policy in this demo.");
+    }
+    const requests = loadRefunds();
+    const request = requireRequest(requests, input.ref);
+    if (request.status !== "pending") throw new Error(`Refund ${input.ref} is already ${request.status}.`);
+    if (request.requestedBy === input.decidedBy) {
+      throw new Error("The requesting officer cannot approve their own refund (maker/checker).");
+    }
+    if (input.reason.trim().length < 10) throw new Error("A decision reason of at least 10 characters is required.");
+    const next: RefundRequest = {
+      ...request,
+      status: input.approve ? "approved" : "rejected",
+      decidedBy: input.decidedBy,
+      decidedAtIso: demoNowIso(),
+      decisionReason: input.reason.trim(),
+      version: request.version + 1,
+    };
+    saveRefunds(requests.map((candidate) => (candidate.ref === input.ref ? next : candidate)));
+    return { ...next };
+  });
+}
+
+/**
+ * Post an approved refund through the local sandbox provider: a refund
+ * ledger entry restores the invoice balance (append-only — the original
+ * payment and receipt stay on record).
+ */
+export async function postRefund(input: { ref: string; postedBy: string }): Promise<RefundRequest> {
+  if (isServerMode()) {
+    throw new FinanceServiceError("policy-pending", "Refund posting is demo-only in this runtime.");
+  }
+  const requests = loadRefunds();
+  const request = requireRequest(requests, input.ref);
+  if (request.status !== "approved") throw new Error(`Refund ${input.ref} must be approved before posting.`);
+  const provider = createLocalSandboxPaymentProvider();
+  const refund = await provider.refund({
+    providerTxnRef: request.paymentRef,
+    amountPaise: request.amountPaise,
+    idempotencyKey: `refund:${request.ref}`,
+  });
+  return respond(() => {
+    const entry: LedgerEntry = {
+      ref: `LED-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.ledgerCounter, LEDGER_COUNTER_SEED))}`,
+      invoiceRef: request.invoiceRef,
+      kind: "refund",
+      amountPaise: request.amountPaise,
+      reason: request.reason,
+      by: input.postedBy,
+      atIso: demoNowIso(),
+      sourceRef: request.paymentRef,
+    };
+    saveLedgerEntries([...loadLedgerEntries(), entry]);
+    const next: RefundRequest = {
+      ...request,
+      status: "posted",
+      providerRefundRef: refund.providerRefundRef,
+      postedAtIso: demoNowIso(),
+      version: request.version + 1,
+    };
+    saveRefunds(loadRefunds().map((candidate) => (candidate.ref === input.ref ? next : candidate)));
+    void auditService.record({
+      actor: input.postedBy,
+      action: "Payment reconciled",
+      target: request.invoiceRef,
+      outcome: "Success",
+      reason: `Refund ${formatINR(request.amountPaise)} posted for ${request.paymentRef} — ${request.reason}`,
+    });
+    return { ...next };
+  });
+}
+
+/**
+ * Run a local reconciliation comparison: every ledger payment that also has
+ * a gateway reference is matched; the fictional gateway events that are
+ * absent from the ledger become open exceptions; unfinished attempts stay
+ * pending. The run is recorded and nothing in the ledger is mutated.
+ */
+export async function startReconciliation(input: { by: string }): Promise<ReconciliationRun> {
+  if (isServerMode()) {
+    const result = await adapterCall<{ reference: string }>("finance.startReconciliation", { idempotencyKey: `reconciliation:${input.by}:${demoNowIso()}` });
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Reconciliation failed.");
+    throw new FinanceServiceError("policy-pending", "Reconciliation history is demo-only in this runtime.");
+  }
+  return respond(() => {
+    if (!getDemoPolicy()["finance.reconciliation"]) {
+      throw new FinanceServiceError("policy-pending", "Reconciliation is pending school policy in this demo.");
+    }
+    const views = loadInvoices().map(toView);
+    const ledgerRefs = new Set<string>();
+    const exceptions: ReconciliationException[] = [];
+    let matchedCount = 0;
+    for (const view of views) {
+      for (const payment of view.invoice.payments) {
+        ledgerRefs.add(payment.ref);
+        matchedCount += 1;
+      }
+    }
+    /* Fictional gateway events the demo ledger does not yet carry. */
+    const gatewayEvents = [
+      { payRef: "PAY-2026-0301", amountPaise: 500000, kind: "pending" as const, note: "Gateway order pending — no posted payment." },
+      { payRef: "PAY-2026-0303", amountPaise: 200000, kind: "gateway-only" as const, note: "Gateway captured but not posted." },
+      { payRef: "PAY-2026-0292", amountPaise: 120000, kind: "refunded" as const, note: "Refunded at the gateway — ledger entry appended." },
+    ];
+    for (const event of gatewayEvents) {
+      if (ledgerRefs.has(event.payRef)) continue;
+      exceptions.push({
+        id: `exc-${event.payRef}`,
+        payRef: event.payRef,
+        kind: event.kind,
+        amountPaise: event.amountPaise,
+        note: event.note,
+        status: "open",
+        resolutionReason: null,
+        resolvedBy: null,
+        resolvedAtIso: null,
+        version: 1,
+      });
+    }
+    /* Unfinished payment attempts in the session count as pending. */
+    const pendingAttempts = loadAttempts().filter((attempt) => attempt.status !== "succeeded" && attempt.status !== "failed" && attempt.status !== "cancelled");
+    for (const attempt of pendingAttempts) {
+      exceptions.push({
+        id: `exc-${attempt.id}`,
+        payRef: attempt.id,
+        kind: "pending",
+        amountPaise: attempt.amountPaise,
+        note: `Payment attempt ${attempt.id} has not settled (${attempt.status}).`,
+        status: "open",
+        resolutionReason: null,
+        resolvedBy: null,
+        resolvedAtIso: null,
+        version: 1,
+      });
+    }
+    const discrepancyCount = exceptions.filter((exception) => exception.kind === "gateway-only" || exception.kind === "amount-mismatch").length;
+    const pendingCount = exceptions.filter((exception) => exception.kind === "pending" || exception.kind === "refunded").length;
+    const run: ReconciliationRun = {
+      ref: `REC-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.reconCounter, RECON_COUNTER_SEED))}`,
+      ranAtIso: demoNowIso(),
+      by: input.by,
+      matchedCount,
+      discrepancyCount,
+      pendingCount,
+      exceptions,
+    };
+    saveReconRuns([...loadReconRuns(), run]);
+    return { ...run, exceptions: run.exceptions.map((exception) => ({ ...exception })) };
+  });
+}
+
+/** Reconciliation runs, newest first (demo). */
 export async function listReconciliationRuns(): Promise<ReconciliationRun[]> {
   if (isServerMode()) {
     const result = await adapterCall<ReconciliationRun[]>("finance.listReconciliationRuns");
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Reconciliation unavailable.");
     return result.value;
   }
-  throw new FinanceServiceError("policy-pending", "policy pending");
+  return respond(() =>
+    [...loadReconRuns()].sort((a, b) => b.ranAtIso.localeCompare(a.ranAtIso)).map((run) => ({ ...run, exceptions: run.exceptions.map((exception) => ({ ...exception })) })),
+  );
+}
+
+/** Resolve one open reconciliation exception with a reason (finance officer). */
+export async function resolveReconciliationException(input: {
+  runRef: string;
+  exceptionId: string;
+  reason: string;
+  by: string;
+}): Promise<ReconciliationRun> {
+  if (isServerMode()) {
+    const result = await adapterCall<unknown>("finance.resolveReconciliation", {
+      exceptionId: "demo",
+      resolutionReason: input.reason,
+      expectedVersion: 1,
+      idempotencyKey: `recon:${input.runRef}:${input.exceptionId}`,
+    });
+    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Resolution failed.");
+    throw new FinanceServiceError("policy-pending", "Reconciliation history is demo-only in this runtime.");
+  }
+  return respond(() => {
+    if (input.reason.trim().length < 3) throw new Error("A resolution reason is required.");
+    const runs = loadReconRuns();
+    const run = runs.find((candidate) => candidate.ref === input.runRef);
+    if (!run) throw new Error("Reconciliation run not found.");
+    const exception = run.exceptions.find((candidate) => candidate.id === input.exceptionId);
+    if (!exception) throw new Error("Exception not found on the run.");
+    if (exception.status !== "open") throw new Error(`Exception ${input.exceptionId} is already ${exception.status}.`);
+    const next: ReconciliationRun = {
+      ...run,
+      exceptions: run.exceptions.map((candidate) =>
+        candidate.id === input.exceptionId
+          ? {
+              ...candidate,
+              status: "resolved",
+              resolutionReason: input.reason.trim(),
+              resolvedBy: input.by,
+              resolvedAtIso: demoNowIso(),
+              version: candidate.version + 1,
+            }
+          : candidate,
+      ),
+    };
+    saveReconRuns(runs.map((candidate) => (candidate.ref === input.runRef ? next : candidate)));
+    return { ...next, exceptions: next.exceptions.map((exception) => ({ ...exception })) };
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -811,7 +1382,15 @@ export const financeService = {
   listAttempts,
   listReceipts,
   getReceipt,
-  applyConcession,
+  requestAdjustment,
+  listAdjustments,
+  approveAdjustment,
+  postAdjustment,
   requestRefund,
+  listRefunds,
+  approveRefund,
+  postRefund,
+  startReconciliation,
   listReconciliationRuns,
+  resolveReconciliationException,
 };
