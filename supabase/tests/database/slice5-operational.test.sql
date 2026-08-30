@@ -20,6 +20,7 @@ begin
   assert to_regprocedure('app.users_admin_list()') is not null, 'authoritative user projection exists';
   assert to_regprocedure('app.audit_list_page(integer,timestamptz,uuid,text,text,text)') is not null, 'paginated audit projection exists';
   assert to_regprocedure('app.documents_projection_list(text,uuid)') is not null, 'document processing projection exists';
+  assert to_regprocedure('app.document_actor_allowed(text,uuid)') is not null, 'document delivery authorization predicate exists';
   assert to_regprocedure('app.project_notification_event(uuid)') is not null, 'notification projection command exists';
   assert to_regprocedure('app.accounts_mark_mfa_verified()') is not null, 'authoritative MFA command exists';
   assert not has_function_privilege('authenticated','app.settings_effective_due()','EXECUTE'), 'effective settings worker is service-role only';
