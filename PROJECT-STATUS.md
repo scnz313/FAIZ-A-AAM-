@@ -330,6 +330,27 @@ The frontend and local backend/provider gates have passed. Do not claim staging 
 Every entry below is historical context only. It cannot override the current
 matrix, validation table, blockers, or C0–C5 execution order above.
 
+- **2026-08-31 (C5 local feature completion — admissions withdrawal, review state, careers scorecards, CMS pages, finance reconciliation, timetable date input, and demo-leakage removal):** Completed the remaining local features and ran the full local verification gate through migration `000041`:
+
+  **New database work (all verified from zero):** `000040_timetable_override_and_date_sheet_reads.sql` (override/date-sheet read projections for the timetable facade) and `000041_admissions_withdrawal.sql` (version-checked, idempotent `admissions_withdraw` RPC + idempotency records). Scratch PostgreSQL 17 applies `000001–000041` from zero; RLS/RPC, results-release, slice-5 operational, and slice-6 provider-job suites all pass ("ALL LOCAL DATABASE CHECKS PASSED").
+
+  **Functional completion:**
+  1. **Admissions withdrawal** — end-to-end applicant withdrawal in Supabase mode: RPC + domain function + `admissions.withdraw` adapter op + service method + mode-aware UI. `withdrawn` status now maps correctly (was "Declined").
+  2. **Admissions staff review state** — new `staffStartReview` (submitted → under review) and canonical transitions (Submitted → Under review → Assessment → decision); decisions are no longer offered from Submitted. Maker/checker reviewer attribution preserved.
+  3. **Careers detail** — staff queue projection now includes `job_review_assignments` + `job_scorecards`; `assignReviewer` and `saveScorecard` service methods (Supabase + demo); JobReview renders real attributed scorecards with a save form, real reviewer account, and snapshot-derived qualifications instead of fictional rows.
+  4. **Private-document boundary** — upload-intent route now resolves allowed MIME types/max bytes from the admission configuration projection server-side instead of trusting the browser allowlist; declared type/size is validated against the resolved requirement.
+  5. **Finance** — payment-register merge now dedupes by attempt id (provider order refs never align with txn ids); `finance.listAllAttempts` adapter op; reconciliation start now imports sandbox evidence (`finance_reconciliation_import`) so runs carry authoritative matched/pending/exception counts instead of an empty shell.
+  6. **Timetable** — override form uses a calendar date input (date-specific overrides on any date) instead of a weekday select; portal/date-sheet reads stay versioned.
+  7. **CMS** — staff content page gained a public-page editor (create draft with slug, edit draft/archived/expired rows, review/publish note) backed by `createPublicPage`/`editPublicPage`/`getPublicPageBody` in both adapters; homepage latest-notice strip reads the latest authoritative published public notice in Supabase mode; the About route renders a published managed page when one exists (concept copy remains the honest fallback).
+  8. **Demo leakage removed** — every remaining Supabase-mode demo badge, "(demo)" success message, "demo session" text, and fictional policy note across portal/staff/applicant pages and staff components now renders only in demo mode (30+ files).
+  9. **Demo identity fix** — added a dedicated `content_publisher` demo identity (Naseer Lone, account `…0206`) so the notice maker/checker flow is exercisable end to end (Aisha drafts → Naseer approves/publishes); fixture and identity tests updated.
+  10. **Middleware edge fix** — `@supabase/ssr` is now imported lazily inside `updateSession` so the edge bundle never evaluates its code-generation helpers in demo mode (fixes `EvalError: Code generation from strings disallowed` on every route).
+  11. **Responsive fix** — `FinanceActions` grid used `minmax(0, 1fr)` which made `auto-fit` emit dozens of ~1px tracks that overlapped the panels; now `minmax(min(100%, 300px), 1fr)` (single column at 320px, side-by-side at desktop). The 176 viewport×route responsive sweep passes with no problems.
+
+  **Journey automation:** the local feature-journey suite grew from ~90 to 107 checks (timetable override record/revoke with reason, notice maker/checker publish through the new identity, careers reviewer/scorecard), and the finance/override test steps were updated for the date input and the required revocation reason.
+
+  **Full local gate (demo adapter, production build on localhost):** typecheck ✓ · lint 0 issues ✓ · 477 web + 47 contract tests ✓ · 79-route production build ✓ · 107/107 local feature journeys ✓ · 22/22 critical journeys ✓ · link crawl 91 hrefs, no dead links ✓ · accessibility 54 routes, no violations ✓ · focus smoke ✓ · responsive 176 viewport×route pairs, no problems ✓. The Supabase-mode contract suites (47) and the local database validation continue to pass. Remote staging/provider verification remains `NOT STARTED`/`BLOCKED` per plan.md C5.
+
 - **2026-08-28 (C5.0 source-control checkpoint — 6 reviewable commits from the dirty tree):** Audited the entire dirty working tree (248 files: 166 modified + 82 untracked) and committed it in six reviewable groups:
 
   1. `feat(database)` — migrations `000016–000030` + results-release/slice-5/slice-6 pgTAP suites + seed + DB validators (22 files).
