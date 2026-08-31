@@ -35,7 +35,9 @@ export type AuditAction =
   | "Link requested"
   | "Enrollment converted"
   | "Staff invitation created"
-  | "Staff invitation accepted";
+  | "Staff invitation accepted"
+  | "Reviewer assigned"
+  | "Scorecard saved";
 
 export type AuditOutcome = "Success" | "Denied" | "Failed";
 

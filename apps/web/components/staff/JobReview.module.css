@@ -198,6 +198,33 @@
   margin: 12px 0 0;
 }
 
+/* Scorecard entry form: score + optional notes + save action. */
+.scorecardForm {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.scoreField {
+  display: grid;
+  gap: 4px;
+}
+
+.scoreField label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cellNote {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
 /* Decision actions and the recorded-decision live line. */
 .actions {
   display: flex;

@@ -20,27 +20,68 @@ module.exports = {
       if ((await titleField.count()) > 0) {
         await titleField.fill("Parent-teacher meeting on Friday");
         await page.getByLabel("Body").fill("All parents are invited to the parent-teacher meeting this Friday at 14:00 in the school hall.");
+        const reviewNote = page.getByLabel(/review and publish note/i);
+        if ((await reviewNote.count()) > 0) {
+          await reviewNote.fill("Approved by the school office for families.");
+        }
         await page.getByRole("button", { name: "Save draft" }).click();
         await page.waitForTimeout(1500);
         const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
         check("notice draft created", body.includes("Parent-teacher meeting") || body.includes("draft"), body.slice(-120));
-        const workspace = page.getByRole("combobox", { name: "Workspace" });
-        if ((await workspace.count()) > 0) {
-          const options = await workspace.locator("option").allTextContents();
-          const publisher = options.findIndex((label) => /publish/i.test(label));
-          if (publisher >= 0) {
-            await workspace.selectOption({ index: publisher });
-            await page.waitForTimeout(1200);
-          }
+
+        /* Editor sends the draft for review — scoped to OUR notice's row so
+           seeded draft rows are never mistaken for the new notice. */
+        const ourRow = page.locator("tr", { hasText: "Parent-teacher meeting on Friday" });
+        const reviewBtn = ourRow.getByRole("button", { name: "Request review" }).first();
+        if ((await reviewBtn.count()) > 0) {
+          await reviewBtn.click();
+          await page.waitForTimeout(1500);
         }
-        const publishBtn = page.getByRole("button", { name: "Publish", exact: true }).first();
-        if ((await publishBtn.count()) > 0) {
-          await publishBtn.click();
-          await page.waitForTimeout(1200);
+
+        /* Switch to the independent content publisher identity WITHOUT
+           clearing the session store (the draft lives there), then approve
+           and release. */
+        const identitySelect = page.getByRole("combobox", { name: "Demo identity" });
+        if ((await identitySelect.count()) > 0) {
+          await identitySelect.selectOption(STAFF_IDS.naseer);
+        }
+        /* The workspace re-renders after the identity switch; poll for the
+           Approve control before giving up. */
+        const approveRow = page.locator("tr", { hasText: "Parent-teacher meeting on Friday" });
+        let approveBtn = approveRow.getByRole("button", { name: "Approve", exact: true }).first();
+        for (let attempt = 0; attempt < 12 && (await approveBtn.count()) === 0; attempt += 1) {
+          await page.waitForTimeout(500);
+          approveBtn = approveRow.getByRole("button", { name: "Approve", exact: true }).first();
+        }
+        if ((await approveBtn.count()) > 0) {
+          await approveBtn.click();
+          await page.waitForTimeout(1500);
+        }
+        /* Approval auto-selects the release candidate; publish immediately. */
+        const releaseBtn = page.getByRole("button", { name: "Publish now", exact: true }).first();
+        if ((await releaseBtn.count()) > 0) {
+          await releaseBtn.click();
+          await page.waitForTimeout(1500);
           const after = (await page.locator("body").innerText()).replace(/\s+/g, " ");
-          check("notice publishes from the draft row", after.includes("published (demo)") || after.includes("Published"), after.slice(-120));
+          check("notice publishes through the maker/checker flow", after.includes("published") || after.includes("Published"), after.slice(-120));
         } else {
-          check("notice publishes from the draft row", false, "no Publish button on the draft row");
+          /* Fall back to Prepare release when approval did not auto-select. */
+          const prepareBtn = page.getByRole("button", { name: "Prepare release" }).first();
+          if ((await prepareBtn.count()) > 0) {
+            await prepareBtn.click();
+            await page.waitForTimeout(500);
+            const releaseRetry = page.getByRole("button", { name: "Publish now", exact: true }).first();
+            if ((await releaseRetry.count()) > 0) {
+              await releaseRetry.click();
+              await page.waitForTimeout(1500);
+              const after = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+              check("notice publishes through the maker/checker flow", after.includes("published") || after.includes("Published"), after.slice(-120));
+            } else {
+              check("notice publishes through the maker/checker flow", false, "no Publish now button after Prepare release");
+            }
+          } else {
+            check("notice publishes through the maker/checker flow", false, "no Approve or Publish flow available");
+          }
         }
       } else {
         check("notice draft created", false, "no Title field");

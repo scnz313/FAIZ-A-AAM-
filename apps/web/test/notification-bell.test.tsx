@@ -4,12 +4,21 @@
  * Relative time text is intentionally not asserted (it depends on the
  * wall clock); only count / aria / panel visibility are.
  */
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { NotificationBell } from "@/components/layouts/NotificationBell";
 import type { NotificationItem } from "@/modules/notifications/demo";
+import { notificationsService } from "@/modules/services/notifications";
+
+vi.mock("@/modules/services/notifications", () => ({
+  notificationsService: {
+    listForAccount: vi.fn().mockResolvedValue([]),
+    markAllRead: vi.fn().mockResolvedValue([]),
+    markRead: vi.fn().mockResolvedValue([]),
+  },
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -78,5 +87,17 @@ describe("NotificationBell", () => {
 
     expect(bell).toHaveAttribute("aria-label", "Notifications, 0 unread");
     expect(screen.getByRole("button", { name: "Mark all read" })).toBeDisabled();
+  });
+
+  it("uses server-provided items without refetching until the panel opens", async () => {
+    const user = userEvent.setup();
+    const listForAccount = vi.mocked(notificationsService.listForAccount);
+    listForAccount.mockClear();
+    listForAccount.mockResolvedValue(ITEMS);
+    render(<NotificationBell items={ITEMS} accountId="account-1" />);
+
+    expect(listForAccount).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /Notifications/ }));
+    await waitFor(() => expect(listForAccount).toHaveBeenCalledTimes(1));
   });
 });

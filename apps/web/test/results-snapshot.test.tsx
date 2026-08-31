@@ -6,19 +6,30 @@
  * without a snapshot return null, and the portal table renders the
  * snapshot rows — never a term fixture fallback.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 
-import { MarksEntry } from "@/components/staff/MarksEntry";
-import { STAFF_SESSION_KEYS, StaffContextProvider } from "@/components/staff/StaffContextProvider";
+import { FamilyContextProvider } from "@/components/portal/FamilyContextProvider";
+import { PublicationPageClient } from "@/components/portal/PublicationPageClient";
 import { ResultTable } from "@/components/portal/ResultTable";
+import { MarksEntry } from "@/components/staff/MarksEntry";
+import { ResultsBatches } from "@/components/staff/ResultsBatches";
+import {
+  STAFF_SESSION_KEYS,
+  StaffContextProvider,
+  type StaffContextInitialState,
+} from "@/components/staff/StaffContextProvider";
 import { marksByTerm } from "@/modules/academics/demo";
 import { setDemoNow } from "@/modules/demo/clock";
 import { academicsService } from "@/modules/services/academics";
 import { auditService, AUDIT_SESSION_KEY_EXPORT } from "@/modules/services/audit";
 import { clearOutboxSession } from "@/modules/services/outbox";
 import { sessionKey, sessionRemove, sessionSet } from "@/modules/services/session";
-import { RELATIONSHIPS_SESSION_KEY } from "@/modules/services/family-context";
+import {
+  DEMO_GUARDIAN_ACCOUNT_ID,
+  familyContextService,
+  RELATIONSHIPS_SESSION_KEY,
+} from "@/modules/services/family-context";
 import type { EntryBatch } from "@/modules/services/academics";
 
 const SESSION_KEY = sessionKey("academics");
@@ -34,6 +45,46 @@ const ZOYA_ID = "00000000-0000-4000-8000-000000000903";
 const UNKNOWN_ID = "00000000-0000-4000-8000-000000009999";
 const CURRENT_YEAR_ID = "00000000-0000-4000-8000-000000000602";
 const COMPLETED_YEAR_ID = "00000000-0000-4000-8000-000000000601";
+
+const STAFF_INITIAL_STATE: StaffContextInitialState = {
+  identityId: "00000000-0000-4000-8000-000000000203",
+  workspaces: [{
+    id: "00000000-0000-4000-8000-000000000303",
+    ref: "RGR-2026-0303",
+    accountId: "00000000-0000-4000-8000-000000000203",
+    role: "exam_reviewer",
+    status: "active",
+    grantedByPersonId: null,
+    reason: "Fictional results hydration test grant",
+    scope: { academicYearIds: [], gradeSectionIds: [], subjectIds: [] },
+    effectiveFromIso: "2026-04-01T00:00:00.000Z",
+    effectiveToIso: null,
+  }],
+  summary: {
+    accountId: "00000000-0000-4000-8000-000000000203",
+    staffMemberId: "00000000-0000-4000-8000-000000000103",
+    personId: "00000000-0000-4000-8000-000000000003",
+    displayName: "Sana Wani",
+    title: "Exam reviewer",
+    activeRoleGrantId: "00000000-0000-4000-8000-000000000303",
+    role: "exam_reviewer",
+    roleLabel: "Exam reviewer",
+    academicYearLabel: "2026–27",
+    assignmentLabel: null,
+    grantedWorkspaceCount: 1,
+  },
+};
+
+const SERVER_BATCH: EntryBatch = {
+  ref: "RB-2026-SERVER",
+  exam: "Server term",
+  className: "8-A",
+  subject: "Mathematics",
+  status: "draft",
+  rows: [],
+  totalsIncomplete: true,
+  version: 1,
+};
 
 beforeEach(() => {
   sessionRemove(SESSION_KEY);
@@ -53,6 +104,8 @@ afterEach(() => {
   clearOutboxSession();
   sessionRemove(AUDIT_SESSION_KEY_EXPORT);
   setDemoNow(null);
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("getStudentResultSnapshot", () => {
@@ -134,6 +187,65 @@ describe("portal marks source", () => {
     /* Mariam's English mark (78) is present; the fixture English mark (84) is not. */
     expect(screen.getByText("78")).toBeTruthy();
     expect(screen.queryByText("91")).toBeNull();
+  });
+});
+
+describe("server-hydrated results components", () => {
+  it("uses the authoritative batch list and detail without duplicate Supabase reads", async () => {
+    vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    const listBatches = vi.spyOn(academicsService, "listBatches").mockResolvedValue([]);
+    const getBatch = vi.spyOn(academicsService, "getBatch").mockResolvedValue(null);
+    const listVersions = vi.spyOn(academicsService, "listVersions").mockResolvedValue([]);
+
+    const queue = render(
+      <StaffContextProvider initialState={STAFF_INITIAL_STATE}>
+        <ResultsBatches batches={[SERVER_BATCH]} />
+      </StaffContextProvider>,
+    );
+    expect(screen.getByText("Server term")).toBeInTheDocument();
+    expect(listBatches).not.toHaveBeenCalled();
+    queue.unmount();
+
+    render(
+      <StaffContextProvider initialState={STAFF_INITIAL_STATE}>
+        <MarksEntry batchRef={SERVER_BATCH.ref} initialBatch={SERVER_BATCH} />
+      </StaffContextProvider>,
+    );
+    expect(screen.getByText("Marks entry")).toBeInTheDocument();
+    expect(getBatch).not.toHaveBeenCalled();
+    await waitFor(() => expect(listVersions).toHaveBeenCalledOnce());
+  });
+
+  it("trusts an authoritative null publication while demo mode still refreshes", async () => {
+    const [context, students, summary] = await Promise.all([
+      familyContextService.getContext(DEMO_GUARDIAN_ACCOUNT_ID),
+      familyContextService.listAccessibleStudentContexts(DEMO_GUARDIAN_ACCOUNT_ID),
+      familyContextService.getAccountSummary(DEMO_GUARDIAN_ACCOUNT_ID),
+    ]);
+    const initialState = { context, students, guardianName: summary.displayName };
+    vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    const getPublication = vi.spyOn(academicsService, "getPublication").mockResolvedValue(null);
+    vi.spyOn(academicsService, "getStudentResultSnapshot").mockResolvedValue(null);
+
+    const serverView = render(
+      <FamilyContextProvider initialState={initialState}>
+        <PublicationPageClient publicationRef="PUB-MISSING" initialPublication={null} />
+      </FamilyContextProvider>,
+    );
+    await screen.findByRole("heading", { name: "Report not found" });
+    expect(getPublication).not.toHaveBeenCalled();
+    serverView.unmount();
+
+    vi.stubEnv("FASS_DATA_ADAPTER", "demo");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "demo");
+    render(
+      <FamilyContextProvider initialState={initialState}>
+        <PublicationPageClient publicationRef="PUB-MISSING" initialPublication={null} />
+      </FamilyContextProvider>,
+    );
+    await waitFor(() => expect(getPublication).toHaveBeenCalledOnce());
   });
 });
 

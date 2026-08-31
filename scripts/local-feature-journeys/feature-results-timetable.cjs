@@ -50,7 +50,8 @@ module.exports = {
       await staffAs(page, base, "/staff/timetables", { identity: STAFF_IDS.rania });
       await page.getByRole("button", { name: "Add date-specific override" }).waitFor({ state: "visible", timeout: 20000 });
       await page.getByRole("button", { name: "Add date-specific override" }).click();
-      await page.getByLabel("Day", { exact: true }).selectOption("Tuesday");
+      /* Calendar date input: Tuesday of the demo week (3–8 August 2026). */
+      await page.getByLabel("Date", { exact: true }).fill("2026-08-04");
       await page.getByLabel("Period", { exact: true }).selectOption({ label: "14:15 — Physical education · T. Waza" });
       await page.getByLabel("Kind", { exact: true }).selectOption("substitute");
       await page.getByLabel("Substitute teacher", { exact: true }).fill("N. Lone");
@@ -70,6 +71,8 @@ module.exports = {
 
       await page.goto(`${base}/staff/timetables`, { waitUntil: "networkidle" });
       await page.getByRole("button", { name: "Revoke", exact: true }).click();
+      await page.getByLabel("Revocation reason").fill("The substitute teacher has returned to the scheduled class.");
+      await page.getByRole("button", { name: "Confirm revocation" }).click();
       await page.getByText(/OVR-2026-001 revoked/).waitFor({ state: "visible", timeout: 15000 });
       check("staff revokes the override", true);
 

@@ -244,3 +244,25 @@ describe("careersService staff audit recording", () => {
     expect(newEvents.every((event) => event.outcome === "Success")).toBe(true);
   });
 });
+
+describe("careersService reviewer assignment and scorecards", () => {
+  it("assigns a reviewer and persists it on the record", async () => {
+    const updated = await careersService.assignReviewer("JOB-2026-0114", "00000000-0000-4000-8000-000000000204");
+    expect(updated.reviewerAccountId).toBe("00000000-0000-4000-8000-000000000204");
+
+    /* The assignment survives a reload through the same service. */
+    const reloaded = await careersService.getApplication("JOB-2026-0114");
+    expect(reloaded?.reviewerAccountId).toBe("00000000-0000-4000-8000-000000000204");
+  });
+
+  it("saves an attributed scorecard and rejects invalid scores", async () => {
+    await expect(careersService.saveScorecard("JOB-2026-0114", 6)).rejects.toThrow(/Score must be/);
+
+    const updated = await careersService.saveScorecard("JOB-2026-0114", 4, "Strong subject knowledge.");
+    expect(updated.scorecards).toHaveLength(1);
+    expect(updated.scorecards?.[0]).toMatchObject({ score: 4, notes: "Strong subject knowledge." });
+
+    const reloaded = await careersService.getApplication("JOB-2026-0114");
+    expect(reloaded?.scorecards).toHaveLength(1);
+  });
+});

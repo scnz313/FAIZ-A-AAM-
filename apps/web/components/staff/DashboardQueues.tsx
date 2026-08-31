@@ -1,10 +1,11 @@
+import Link from "next/link";
+
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { formatKolkata } from "@/modules/iot/domain";
 import { canRole } from "@/modules/services/staff-authorization";
-import { admissionsService, type StaffQueueRecord } from "@/modules/services/admissions";
-import { careersService, type JobApplicationRecord, type JobApplicationStatus } from "@/modules/services/careers";
-import { useEffect, useState } from "react";
+import type { StaffQueueRecord } from "@/modules/services/admissions";
+import type { JobApplicationRecord, JobApplicationStatus } from "@/modules/services/careers";
 
 import styles from "./DashboardQueues.module.css";
 
@@ -34,31 +35,14 @@ const JOB_TONE: Record<JobApplicationStatus, StatusTone> = {
 
 /** Two ruled queue panels on the staff home: admissions and careers, shown
     only for roles whose workspace can act on them (I4). */
-export function DashboardQueues() {
+export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRecord[]; jobs: JobApplicationRecord[] }) {
   const { summary } = useStaffContext();
   const role = summary?.role ?? "";
   const showAdmissions = canRole(role, "admissions.view");
   const showCareers = canRole(role, "careers.view");
-  const [admissions, setAdmissions] = useState<StaffQueueRecord[]>([]);
-  const [jobs, setJobs] = useState<JobApplicationRecord[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([showAdmissions ? admissionsService.listStaffRecords() : Promise.resolve([]), showCareers ? careersService.listStaffRecords() : Promise.resolve([])])
-      .then(([admissionRows, jobRows]) => {
-        if (!cancelled) {
-          setAdmissions(admissionRows.slice(0, 4));
-          setJobs(jobRows.slice(0, 4));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAdmissions([]);
-          setJobs([]);
-        }
-      });
-    return () => { cancelled = true; };
-  }, [showAdmissions, showCareers]);
   if (!showAdmissions && !showCareers) return null;
+  const visibleAdmissions = admissions.slice(0, 4);
+  const visibleJobs = jobs.slice(0, 4);
   /* Honest queue size: everything still moving, not just the rows shown. */
   const jobsOpen = jobs.filter(
     (row) => row.status !== "Offered" && row.status !== "Not selected",
@@ -75,22 +59,22 @@ export function DashboardQueues() {
           <span className={`num ${styles.count}`}>{admissions.length} queued</span>
         </div>
         <ul className={styles.list}>
-          {admissions.map((row) => (
+          {visibleAdmissions.map((row) => (
             <li key={row.ref} className={styles.row}>
-              <a className={styles.rowLink} href={`/staff/admissions/${row.ref}`}>
+              <Link prefetch={false} className={styles.rowLink} href={`/staff/admissions/${row.ref}`}>
                 <span className={styles.rowMain}>
                   <strong className="num">{row.ref}</strong>
                   <span>{row.studentName}</span>
                   <span className={styles.muted}>{row.grade}</span>
                 </span>
                 <StatusBadge tone={ADMISSION_TONE[row.status]}>{row.status}</StatusBadge>
-              </a>
+              </Link>
             </li>
           ))}
         </ul>
-        <a className="link-arrow" href="/staff/admissions">
+        <Link prefetch={false} className="link-arrow" href="/staff/admissions">
           View all applications →
-        </a>
+        </Link>
       </section>
       ) : null}
 
@@ -103,23 +87,23 @@ export function DashboardQueues() {
           <span className={`num ${styles.count}`}>{jobsOpen} open</span>
         </div>
         <ul className={styles.list}>
-          {jobs.map((row) => (
+          {visibleJobs.map((row) => (
             <li key={row.ref} className={styles.row}>
-              <a className={styles.rowLink} href={`/staff/careers/${row.ref}`}>
+              <Link prefetch={false} className={styles.rowLink} href={`/staff/careers/${row.ref}`}>
                 <span className={styles.rowMain}>
                   <strong className="num">{row.ref}</strong>
                   <span>{row.name}</span>
                   <span className={styles.muted}>{row.vacancySlug}</span>
                 </span>
                 <StatusBadge tone={JOB_TONE[row.status]}>{row.status}</StatusBadge>
-              </a>
+              </Link>
             </li>
           ))}
         </ul>
         <p className={styles.asOf}>{jobs[0]?.submittedAtIso ? `submitted ${formatKolkata(jobs[0].submittedAtIso, { format: "day" })} onwards` : "No career applications in this scope."}</p>
-        <a className="link-arrow" href="/staff/careers">
+        <Link prefetch={false} className="link-arrow" href="/staff/careers">
           View all applications →
-        </a>
+        </Link>
       </section>
       ) : null}
     </div>

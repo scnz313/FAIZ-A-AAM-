@@ -1,6 +1,18 @@
+import { createElement } from "react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { admissionsService, type ApplicationDraft } from "@/modules/services/admissions";
+import { AdmissionsQueue } from "@/components/staff/AdmissionsQueue";
+import { ApplicationReview } from "@/components/staff/ApplicationReview";
+import {
+  admissionsService,
+  type ApplicationDraft,
+  type StaffQueueRecord,
+} from "@/modules/services/admissions";
+
+vi.mock("@/components/staff/StaffContextProvider", () => ({
+  useStaffContext: () => ({ summary: null }),
+}));
 
 const APP_ID = "00000000-0000-4000-8000-00000000a001";
 const YEAR_ID = "00000000-0000-4000-8000-000000000602";
@@ -38,6 +50,19 @@ const config = {
   subjects: [],
   periods: [],
   policy: { version: 1, status: "policy_pending", values: {} },
+};
+
+const INITIAL_APPLICATION: StaffQueueRecord = {
+  ref: APP_REF,
+  session: "2026-27",
+  grade: "Class 8",
+  studentName: "Server Child",
+  parentName: "Server Guardian",
+  contact: "+919419001001",
+  submittedAtIso: "2026-08-10T05:00:00.000Z",
+  status: "Submitted",
+  timeline: [{ status: "Submitted", atIso: "2026-08-10T05:00:00.000Z", actor: "Applicant", note: "Submitted" }],
+  reviewer: "Admissions officer",
 };
 
 function row(status = "offered") {
@@ -112,5 +137,31 @@ describe("admissions Supabase facade", () => {
       vi.fn(async () => json({ ok: false, errors: [{ code: "forbidden", message: "not the application owner", field: null }] }, 403)),
     );
     await expect(admissionsService.getApplication(APP_REF)).rejects.toThrow(/application owner/);
+  });
+});
+
+describe("server-hydrated admissions components", () => {
+  it("trusts authoritative Supabase queue and not-found props without duplicate reads", () => {
+    const list = vi.spyOn(admissionsService, "listStaffRecords").mockResolvedValue([]);
+    const get = vi.spyOn(admissionsService, "getApplication").mockResolvedValue(null);
+
+    const queue = render(createElement(AdmissionsQueue, { rows: [INITIAL_APPLICATION] }));
+    expect(screen.getByText("Server Child")).toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
+    queue.unmount();
+
+    render(createElement(ApplicationReview, { applicationRef: "APP-2026-MISSING", initial: null }));
+    expect(screen.getByText("Application not found")).toBeInTheDocument();
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("keeps the demo queue mount refresh", async () => {
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "demo");
+    const list = vi.spyOn(admissionsService, "listStaffRecords").mockResolvedValue([INITIAL_APPLICATION]);
+
+    render(createElement(AdmissionsQueue, { rows: [] }));
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Server Child")).toBeInTheDocument();
   });
 });

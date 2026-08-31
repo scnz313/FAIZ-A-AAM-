@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ChinarMark } from "@/components/ui/ChinarMark";
 import { Crest } from "@/components/ui/Crest";
 import GirihPattern from "@/components/ui/GirihPattern";
@@ -53,27 +55,27 @@ export function PublicFooter() {
         <nav className="public-footer-col" aria-label="School">
           <h2 className="section-label section-label--on-ink">School</h2>
           {SCHOOL_COLUMN.map((link) => (
-            <a key={link.label} href={link.href}>
+            <Link key={link.label} href={link.href} prefetch={false}>
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
         <nav className="public-footer-col" aria-label="Families">
           <h2 className="section-label section-label--on-ink">Families</h2>
           {FAMILIES_COLUMN.map((link) => (
-            <a key={link.label} href={link.href}>
+            <Link key={link.label} href={link.href} prefetch={false}>
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
 
         <nav className="public-footer-col" aria-label="Policies">
           <h2 className="section-label section-label--on-ink">Policies</h2>
           {POLICIES_COLUMN.map((link) => (
-            <a key={link.label} href={link.href}>
+            <Link key={link.label} href={link.href} prefetch={false}>
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
 

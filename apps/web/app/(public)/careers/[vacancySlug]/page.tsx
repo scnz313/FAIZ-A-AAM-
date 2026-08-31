@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { DemoNotice } from "@/components/layouts/DemoNotice";
 import PageIntro from "@/components/public/PageIntro";
@@ -39,9 +40,9 @@ export default async function VacancyDetailPage({ params }: Props) {
           deck="The position may have been withdrawn, or the address may be incorrect."
         />
         <section className={`${styles.section} ${styles.sectionEnd}`}>
-          <a className="link-arrow" href="/careers">
+          <Link className="link-arrow" href="/careers">
             See current vacancies →
-          </a>
+          </Link>
         </section>
       </div>
     );
@@ -115,9 +116,9 @@ export default async function VacancyDetailPage({ params }: Props) {
             <p className={styles.ctaNote}>
               This vacancy is closed. Applications received before the deadline are under review.
             </p>
-            <a className="link-arrow" href="/careers">
+            <Link className="link-arrow" href="/careers">
               See current vacancies →
-            </a>
+            </Link>
           </div>
         )}
       </section>

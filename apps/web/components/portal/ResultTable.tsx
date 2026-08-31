@@ -3,6 +3,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { Term } from "@/modules/academics/demo";
 import { formatKolkata } from "@/modules/iot/domain";
 import type { SnapshotMarkRow } from "@/modules/services/academics";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./ResultTable.module.css";
 
@@ -18,8 +19,11 @@ type ResultTableProps = {
  * PDF download. Corrections publish as new versions and are labelled.
  */
 export function ResultTable({ term, marks }: ResultTableProps) {
-  const totalObtained = marks.reduce((sum, mark) => sum + (mark.obtained ?? 0), 0);
-  const totalMax = marks.reduce((sum, mark) => sum + mark.max, 0);
+  /* Only present marks contribute to the aggregate; absent/exempt/not-applicable
+   * subjects are excluded from both numerator and denominator. */
+  const presentMarks = marks.filter((mark) => mark.markStatus === undefined || mark.markStatus === "present");
+  const totalObtained = presentMarks.reduce((sum, mark) => sum + (mark.obtained ?? 0), 0);
+  const totalMax = presentMarks.reduce((sum, mark) => sum + mark.max, 0);
   const percentage = totalMax === 0 ? 0 : (totalObtained / totalMax) * 100;
   const published = term.publishedAtIso ? formatKolkata(term.publishedAtIso, { format: "day" }) : null;
   const isFinal = term.publicationStatus === "final";
@@ -55,19 +59,27 @@ export function ResultTable({ term, marks }: ResultTableProps) {
             </tr>
           </thead>
           <tbody>
-            {marks.map((mark) => (
+            {marks.map((mark) => {
+              const statusLabel = mark.markStatus === "absent" ? "Absent"
+                : mark.markStatus === "exempt" ? "Exempt"
+                : mark.markStatus === "not_applicable" ? "N/A"
+                : null;
+              return (
               <tr key={mark.subject}>
                 <td className={styles.subjectCell}>
                   <strong>{mark.subject}</strong>
                 </td>
                 <td className={`num ${styles.numCol}`}>{mark.max}</td>
-                <td className={`num ${styles.numCol}`}>{mark.obtained}</td>
+                <td className={`num ${styles.numCol}`}>
+                  {statusLabel !== null ? <em className={styles.grade}>{statusLabel}</em> : mark.obtained}
+                </td>
                 <td>
                   <span className={styles.grade}>{mark.grade}</span>
                 </td>
                 <td className={styles.remarkCell}>{mark.remark}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -85,10 +97,12 @@ export function ResultTable({ term, marks }: ResultTableProps) {
 
       <div className={styles.download}>
         <Button variant="quiet" disabled>
-          Official report (PDF) — demo
+          {clientAdapterMode() === "supabase" ? "Official report (PDF)" : "Official report (PDF) — demo"}
         </Button>
         <p className={styles.downloadNote}>
-          PDF generation arrives with the results backend; this button is a placeholder for the official report.
+          {clientAdapterMode() === "supabase"
+            ? "The official report is being prepared. It will appear in the documents section once generated."
+            : "PDF generation arrives with the results backend; this button is a placeholder for the official report."}
         </p>
       </div>
     </section>

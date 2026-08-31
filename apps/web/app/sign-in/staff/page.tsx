@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
@@ -13,6 +14,8 @@ export const metadata: Metadata = {
   description: "Staff sign in with an invited school account and two-step verification.",
   robots: { index: false, follow: false },
 };
+
+export const dynamic = "force-dynamic";
 
 export default function StaffSignInPage() {
   const adapter = dataAdapter();
@@ -39,7 +42,7 @@ export default function StaffSignInPage() {
               ) : (
                 <div>
                   <p className="demo-note">Staff authentication is available when the Supabase adapter is enabled.</p>
-                  <a className="button button--primary" href="/staff">Open the demo staff workspace</a>
+                  <Link className="button button--primary" href="/staff" prefetch={false}>Open the demo staff workspace</Link>
                 </div>
               )}
             </div>

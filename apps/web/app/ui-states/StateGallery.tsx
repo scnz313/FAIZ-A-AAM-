@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 
@@ -70,9 +71,9 @@ export default function StateGallery() {
               <h3>No notices in this view</h3>
               <p>Try another category or return to all notices. Nothing has been removed.</p>
             </div>
-            <a className="link-arrow" href="/notices">
+            <Link className="link-arrow" href="/notices">
               View all notices →
-            </a>
+            </Link>
           </div>
         ) : null}
 
@@ -94,9 +95,9 @@ export default function StateGallery() {
               <h3>This record is not available to this role</h3>
               <p>Ask the school office to confirm access. The interface does not reveal private student information.</p>
             </div>
-            <a className="link-arrow" href="/access-denied">
+            <Link className="link-arrow" href="/access-denied" prefetch={false}>
               See access-denied screen →
-            </a>
+            </Link>
           </div>
         ) : null}
 

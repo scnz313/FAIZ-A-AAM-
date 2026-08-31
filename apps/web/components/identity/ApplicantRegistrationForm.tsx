@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 
@@ -49,7 +50,7 @@ export default function ApplicantRegistrationForm({
         <p className="section-label">Check your email</p>
         <h2>Verify your email to continue.</h2>
         <p>We sent a verification invitation to {email}. Follow it first, then sign in with the same email to start or resume an application.</p>
-        <a className="button button--primary" href={`/sign-in?next=${encodeURIComponent(next)}`}>Go to sign in</a>
+        <Link className="button button--primary" prefetch={false} href={`/sign-in?next=${encodeURIComponent(next)}`}>Go to sign in</Link>
       </section>
     );
   }

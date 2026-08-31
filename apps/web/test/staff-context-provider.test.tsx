@@ -70,7 +70,7 @@ describe("StaffContextProvider", () => {
     expect(screen.getByText("result_publisher")).toBeTruthy();
     expect(screen.getByText("admissions_officer")).toBeTruthy();
     expect(screen.getByText("exam_reviewer")).toBeTruthy();
-    expect(screen.getByTestId("identity-count")).toHaveTextContent("4");
+    expect(screen.getByTestId("identity-count")).toHaveTextContent("5");
   });
 
   it("switches between granted workspaces", async () => {

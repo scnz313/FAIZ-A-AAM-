@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { DEMO_CODE, DemoIdentityError, identityService } from "@/modules/services/identity";
@@ -119,9 +120,9 @@ export default function VerifyForm() {
       </form>
 
       <p className={styles.back}>
-        <a className="link-arrow" href="/sign-in">
+        <Link className="link-arrow" prefetch={false} href="/sign-in">
           ← Back to sign in
-        </a>
+        </Link>
       </p>
     </div>
   );

@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 import PublicHeader from "@/components/layouts/PublicHeader";
 import Button from "@/components/ui/Button";
@@ -52,12 +53,12 @@ export default function Hero() {
             <Button href="/admissions/apply" variant="saffron" className={styles.cta}>
               Begin an application →
             </Button>
-            <a className={`link-arrow ${styles.quietLink}`} href="/about">
+            <Link className={`link-arrow ${styles.quietLink}`} href="/about">
               Discover the school
               <span className={styles.quietArrow} aria-hidden="true">
                 →
               </span>
-            </a>
+            </Link>
           </div>
 
           <TrustRibbon />

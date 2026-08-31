@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { DemoNotice } from "@/components/layouts/DemoNotice";
 import PageIntro from "@/components/public/PageIntro";
@@ -64,7 +65,7 @@ export default async function CareersPage() {
         <ul className={styles.list}>
           {open.map((v, i) => (
             <li key={v.slug}>
-              <a className={`tile-link ${styles.row}`} href={`/careers/${v.slug}`}>
+              <Link className={`tile-link ${styles.row}`} href={`/careers/${v.slug}`}>
                 <span className="tile-link__num serif-num">{String(i + 1).padStart(2, "0")}</span>
                 <span className="tile-link__title">{v.title}</span>
                 <span className="tile-link__line">
@@ -74,7 +75,7 @@ export default async function CareersPage() {
                 <span className="tile-link__more">
                   Closes {formatKolkata(v.deadlineIso, { format: "day" })} · Read more <span aria-hidden="true">→</span>
                 </span>
-              </a>
+              </Link>
             </li>
           ))}
         </ul>

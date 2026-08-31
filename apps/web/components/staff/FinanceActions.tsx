@@ -24,7 +24,15 @@ const APPROVAL_TONE: Record<AdjustmentRequest["status"], "good" | "watch" | "ale
  * request; finance approvers decide; posting appends signed ledger entries
  * that both the family portal and the staff ledger read.
  */
-export function FinanceActions({ views }: { views: InvoiceView[] }) {
+export function FinanceActions({
+  views,
+  mode = "demo",
+  onLedgerChanged,
+}: {
+  views: InvoiceView[];
+  mode?: "demo" | "supabase";
+  onLedgerChanged?: () => Promise<void>;
+}) {
   const { summary } = useStaffContext();
   const canOperate = canRole(summary?.role ?? "", "finance.operate");
   const canApprove = canRole(summary?.role ?? "", "finance.approve");
@@ -60,8 +68,12 @@ export function FinanceActions({ views }: { views: InvoiceView[] }) {
     refresh();
   }, []);
 
-  const payments = views.flatMap((view) =>
-    view.invoice.payments.map((payment) => ({ ...payment, studentName: view.studentName })),
+  const payments = Array.from(
+    new Map(
+      views.flatMap((view) =>
+        view.invoice.payments.map((payment) => [payment.ref, { ...payment, studentName: view.studentName }] as const),
+      ),
+    ).values(),
   );
 
   function announce(text: string) {
@@ -147,6 +159,7 @@ export function FinanceActions({ views }: { views: InvoiceView[] }) {
         announce(`${ref} posted through the sandbox provider — original receipt stays on record.`);
         void posted;
       }
+      await onLedgerChanged?.();
       refresh();
     } catch (error) {
       announce(error instanceof Error ? error.message : "Posting failed.");
@@ -165,13 +178,13 @@ export function FinanceActions({ views }: { views: InvoiceView[] }) {
         <h2 id="finance-actions-heading" className="section-label">
           Adjustments &amp; refunds
         </h2>
-        <StatusBadge tone="watch">Fictional demo policy</StatusBadge>
+        <StatusBadge tone="watch">{mode === "supabase" ? "Policy-controlled workflow" : "Fictional demo policy"}</StatusBadge>
       </div>
 
       <p className={styles.intro}>
-        Officer requests and approver decisions follow maker/checker separation; posting appends signed ledger entries
-        that never rewrite invoice items or payment history (demo rules — the school&apos;s real policy is still
-        pending).
+        {mode === "supabase"
+          ? "Officer requests and approver decisions follow maker/checker separation; posting appends authoritative signed ledger entries. Online refund provider activity remains in the local sandbox."
+          : "Officer requests and approver decisions follow maker/checker separation; posting appends signed ledger entries that never rewrite invoice items or payment history (demo rules — the school’s real policy is still pending)."}
       </p>
 
       <div className={styles.grid}>

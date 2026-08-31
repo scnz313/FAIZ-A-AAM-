@@ -56,11 +56,13 @@ import { enqueueOutboxEvent } from "@/modules/services/outbox";
 import { getDemoPolicy } from "@/modules/services/demo-policy";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 import {
-  invoiceSummary,
-  mapServerInvoice,
+  mapServerInvoiceView,
   mapServerReceipt,
+  mapServerReconciliationRun,
+  type MappedLedgerEntry,
   type ServerInvoiceRow,
   type ServerReceiptRow,
+  type ServerReconciliationProjectionRow,
 } from "@/modules/services/finance-server-map";
 export type { PaymentProvider, PaymentOrder, PaymentRefund, PaymentProviderStatus } from "@/modules/services/payment-provider";
 import { createLocalSandboxPaymentProvider } from "@/modules/services/payment-provider";
@@ -98,19 +100,8 @@ export type PaymentAttempt = {
 /* ------------------------------------------------------------------ */
 
 /** One append-only signed ledger entry for an invoice. */
-export type LedgerEntryKind = "concession" | "adjustment" | "write_off" | "refund";
-
-export type LedgerEntry = {
-  ref: string;
-  invoiceRef: string;
-  kind: LedgerEntryKind;
-  /** Signed: concessions/write-offs reduce the balance, refunds restore it. */
-  amountPaise: number;
-  reason: string;
-  by: string;
-  atIso: string;
-  sourceRef: string;
-};
+export type LedgerEntryKind = MappedLedgerEntry["kind"];
+export type LedgerEntry = MappedLedgerEntry;
 
 export type ApprovalState = "pending" | "approved" | "rejected" | "posted";
 
@@ -191,6 +182,7 @@ export type InvoiceView = {
   /** Owning student display name resolved by the demo adapter. */
   studentName: string;
   status: InvoiceStatus;
+  version: number;
   totalPaise: number;
   paidPaise: number;
   balancePaise: number;
@@ -327,6 +319,15 @@ function nextCounter(key: string, seed: number): number {
 
 const pad4 = (value: number): string => String(value).padStart(4, "0");
 
+function stableOperationKey(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 /* ------------------------------------------------------------------ */
 /* Local finance action stores (plan L1.2)                              */
 /* ------------------------------------------------------------------ */
@@ -431,6 +432,7 @@ function toView(invoice: Invoice): InvoiceView {
     studentId: invoice.studentId,
     studentName: invoice.studentId === null ? "—" : (STUDENT_NAME_BY_ID[invoice.studentId] ?? "—"),
     status,
+    version: 1,
     totalPaise: total,
     paidPaise: paid,
     balancePaise: balance,
@@ -448,28 +450,18 @@ async function serverInvoices(): Promise<InvoiceView[]> {
   const result = await adapterCall<ServerInvoiceRow[]>("finance.listInvoices");
   if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "The ledger is unavailable.");
   const receipts = await serverReceipts();
-  return result.value.map((row) => {
-    const invoice = mapServerInvoice(row);
-    const summary = invoiceSummary(invoice);
-    return {
-      invoice,
-      studentId: invoice.studentId,
-      studentName: "—",
-      status: invoice.status,
-      totalPaise: summary.totalPaise,
-      paidPaise: summary.paidPaise,
-      balancePaise: summary.balancePaise,
-      payments: invoice.payments,
-      receipts: receipts.filter((receipt) => receipt.invoiceRef === invoice.ref),
-      ledgerEntries: [],
-    };
-  });
+  return result.value.map((row) => mapServerInvoiceView(row, receipts));
 }
 
 async function serverReceipts(): Promise<Receipt[]> {
   const result = await adapterCall<ServerReceiptRow[]>("finance.listReceipts");
   if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "The ledger is unavailable.");
-  return result.value.map(mapServerReceipt);
+  const seen = new Set<string>();
+  return result.value.map(mapServerReceipt).filter((receipt) => {
+    if (seen.has(receipt.ref)) return false;
+    seen.add(receipt.ref);
+    return true;
+  });
 }
 
 type ServerAttemptRow = {
@@ -921,15 +913,6 @@ export async function getReceipt(receiptRef: string): Promise<Receipt | null> {
   });
 }
 
-export type ServerReconciliationRun = {
-  id: string;
-  reference: string;
-  runAt: string;
-  status: string;
-  summary: unknown;
-  createdByAccountId: string | null;
-};
-
 /**
  * Request a concession/adjustment/write-off on an invoice (maker step —
  * finance officer workspace). The fictional demo policy (plan L1.1) gates
@@ -942,8 +925,12 @@ export async function requestAdjustment(input: {
   reason: string;
   type: "concession" | "adjustment" | "write_off";
   requestedBy: string;
+  expectedVersion?: number;
 }): Promise<AdjustmentRequest> {
   if (isServerMode()) {
+    const invoice = await getInvoice(input.invoiceRef);
+    if (!invoice) throw new Error("Invoice not found.");
+    const expectedVersion = input.expectedVersion ?? invoice.version;
     const result = await adapterCall<{ concessionId: string | null; reference?: string; status?: string; version?: number }>(
       "finance.applyConcession",
       {
@@ -951,8 +938,8 @@ export async function requestAdjustment(input: {
         amountPaise: Math.abs(input.amountPaise),
         reason: input.reason,
         type: input.type,
-        expectedVersion: 1,
-        idempotencyKey: `adjustment:${input.invoiceRef}:${input.requestedBy}`,
+        expectedVersion,
+        idempotencyKey: `adjustment:${input.invoiceRef}:v${expectedVersion}:${stableOperationKey(`${input.type}|${input.amountPaise}|${input.reason.trim()}`)}`,
       } as unknown as Record<string, unknown>,
     );
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Adjustment failed.");
@@ -1125,7 +1112,7 @@ export async function requestRefund(input: {
   if (isServerMode()) {
     const result = await adapterCall<{ refundRequestId: string | null; reference?: string; status?: string; version?: number }>(
       "finance.requestRefund",
-      { paymentRef: input.paymentRef, amountPaise: input.amountPaise, reason: input.reason, expectedVersion: 1, idempotencyKey: `refund:${input.paymentRef}:${input.requestedBy}` } as unknown as Record<string, unknown>,
+      { paymentRef: input.paymentRef, amountPaise: input.amountPaise, reason: input.reason, expectedVersion: 1, idempotencyKey: `refund:${input.paymentRef}:${stableOperationKey(`${input.amountPaise}|${input.reason.trim()}`)}` } as unknown as Record<string, unknown>,
     );
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Refund failed.");
     return {
@@ -1306,11 +1293,42 @@ export async function postRefund(input: { ref: string; postedBy: string }): Prom
  */
 export async function startReconciliation(input: { by: string }): Promise<ReconciliationRun> {
   if (isServerMode()) {
-    const result = await adapterCall<{ reference: string }>("finance.startReconciliation", { idempotencyKey: `reconciliation:${input.by}:${new Date().toISOString()}` });
-    if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Reconciliation failed.");
+    const idempotencyKey = `reconciliation:${input.by}:${new Date().toISOString().slice(0, 10)}`;
+    const started = await adapterCall<{ id?: string; reference: string }>("finance.startReconciliation", { idempotencyKey });
+    if (!started.ok) throw new FinanceServiceError("gateway-unreachable", started.errors[0]?.message ?? "Reconciliation failed.");
+    if (typeof started.value.id !== "string") throw new FinanceServiceError("gateway-unreachable", "The reconciliation run did not return an id.");
+    /* Complete the run by importing the local sandbox evidence so the run
+     * carries authoritative matched/pending/exception counts. */
+    const attempts = await adapterCall<Array<{
+      id: string;
+      reference: string;
+      amount_paise: number;
+      status: string;
+      provider_order_ref?: string | null;
+      invoices?: { reference: string | null } | null;
+    }>>("finance.listAllAttempts");
+    if (attempts.ok) {
+      const evidence = attempts.value.map((attempt) => ({
+        providerEventId: attempt.id,
+        providerCode: "sandbox",
+        providerTxnId: attempt.provider_order_ref ?? attempt.reference,
+        invoiceReference: attempt.invoices?.reference ?? null,
+        amountPaise: attempt.amount_paise,
+        state: attempt.status === "succeeded" ? "captured" : ["failed", "cancelled"].includes(attempt.status) ? "failed" : "pending",
+      }));
+      if (evidence.length > 0) {
+        const imported = await adapterCall<unknown>("finance.importReconciliation", {
+          runId: started.value.id,
+          evidence,
+          expectedVersion: 1,
+          idempotencyKey: `recon-import:${started.value.reference}`,
+        });
+        if (!imported.ok) throw new FinanceServiceError("gateway-unreachable", imported.errors[0]?.message ?? "Reconciliation evidence could not be imported.");
+      }
+    }
     const runs = await listReconciliationRuns();
-    const run = runs.find((candidate) => candidate.ref === result.value.reference);
-    return run ?? { ref: result.value.reference, ranAtIso: new Date().toISOString(), by: input.by, matchedCount: 0, discrepancyCount: 0, pendingCount: 0, exceptions: [] };
+    const run = runs.find((candidate) => candidate.ref === started.value.reference);
+    return run ?? { ref: started.value.reference, ranAtIso: new Date().toISOString(), by: input.by, matchedCount: 0, discrepancyCount: 0, pendingCount: 0, exceptions: [] };
   }
   return respond(() => {
     if (!getDemoPolicy()["finance.reconciliation"]) {
@@ -1379,12 +1397,12 @@ export async function startReconciliation(input: { by: string }): Promise<Reconc
   });
 }
 
-/** Reconciliation runs, newest first (demo). */
+/** Reconciliation runs, newest first, including their authoritative exceptions. */
 export async function listReconciliationRuns(): Promise<ReconciliationRun[]> {
   if (isServerMode()) {
-    const result = await adapterCall<ReconciliationRun[]>("finance.listReconciliationRuns");
+    const result = await adapterCall<ServerReconciliationProjectionRow[]>("finance.listReconciliationRuns");
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Reconciliation unavailable.");
-    return result.value;
+    return result.value.map(mapServerReconciliationRun);
   }
   return respond(() =>
     [...loadReconRuns()].sort((a, b) => b.ranAtIso.localeCompare(a.ranAtIso)).map((run) => ({ ...run, exceptions: run.exceptions.map((exception) => ({ ...exception })) })),
@@ -1399,16 +1417,37 @@ export async function resolveReconciliationException(input: {
   by: string;
 }): Promise<ReconciliationRun> {
   if (isServerMode()) {
+    const before = await listReconciliationRuns();
+    const current = before.find((candidate) => candidate.ref === input.runRef);
+    if (!current) throw new Error("Reconciliation run not found.");
+    const exception = current.exceptions.find((candidate) => candidate.id === input.exceptionId);
+    if (!exception) throw new Error("Exception not found on the run.");
+    if (exception.status !== "open") throw new Error(`Exception ${input.exceptionId} is already ${exception.status}.`);
+
     const result = await adapterCall<unknown>("finance.resolveReconciliation", {
       exceptionId: input.exceptionId,
       resolutionReason: input.reason,
-      expectedVersion: 1,
+      expectedVersion: exception.version,
       idempotencyKey: `recon:${input.runRef}:${input.exceptionId}`,
     });
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Resolution failed.");
-    const runs = await listReconciliationRuns();
-    const updated = runs.find((candidate) => candidate.ref === input.runRef);
-    return updated ?? { ref: input.runRef, ranAtIso: new Date().toISOString(), by: input.by, matchedCount: 0, discrepancyCount: 0, pendingCount: 0, exceptions: [] };
+
+    const refreshed = await listReconciliationRuns();
+    const updated = refreshed.find((candidate) => candidate.ref === input.runRef);
+    if (updated) return updated;
+    return {
+      ...current,
+      exceptions: current.exceptions.map((candidate) => candidate.id === input.exceptionId
+        ? {
+            ...candidate,
+            status: "resolved",
+            resolutionReason: input.reason.trim(),
+            resolvedBy: input.by,
+            resolvedAtIso: new Date().toISOString(),
+            version: candidate.version + 1,
+          }
+        : candidate),
+    };
   }
   return respond(() => {
     if (input.reason.trim().length < 3) throw new Error("A resolution reason is required.");

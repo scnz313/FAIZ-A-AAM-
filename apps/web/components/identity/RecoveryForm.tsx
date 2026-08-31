@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { identityService } from "@/modules/services/identity";
@@ -87,9 +88,9 @@ export default function RecoveryForm({ adapter = clientAdapterMode() }: { adapte
             : "Use the code at the sign-in screen to reset the password. The office cannot reset passwords over the phone."}
         </p>
         <p className={styles.back}>
-          <a className="link-arrow" href="/sign-in">
+          <Link className="link-arrow" prefetch={false} href="/sign-in">
             Back to sign in →
-          </a>
+          </Link>
         </p>
       </section>
     );
@@ -141,9 +142,9 @@ export default function RecoveryForm({ adapter = clientAdapterMode() }: { adapte
       </form>
 
       <p className={styles.back}>
-        <a className="link-arrow" href="/sign-in">
+        <Link className="link-arrow" prefetch={false} href="/sign-in">
           ← Back to sign in
-        </a>
+        </Link>
       </p>
     </div>
   );

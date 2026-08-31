@@ -22,12 +22,16 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   let initialNotifications;
   if (dataAdapter() === "supabase") {
     const actor = await getServerActor();
-    if (actor === null) redirect(`/sign-in?next=${encodeURIComponent("/staff")}`);
+    if (actor === null) redirect(`/sign-in/staff?next=${encodeURIComponent("/staff")}`);
     if (actor.aal !== "aal2") redirect(`/sign-in/totp?next=${encodeURIComponent("/staff")}`);
     if (!actor.roles.some((role) => !["guardian", "student"].includes(role))) redirect("/access-denied");
     try {
-      initialState = mapServerStaffContext(await loadServerStaffContext());
-      initialNotifications = await loadServerNotifications();
+      const [serverContext, notifications] = await Promise.all([
+        loadServerStaffContext(),
+        loadServerNotifications(),
+      ]);
+      initialState = mapServerStaffContext(serverContext);
+      initialNotifications = notifications;
     } catch {
       redirect("/access-denied");
     }

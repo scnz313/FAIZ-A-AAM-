@@ -23,12 +23,17 @@ export default async function PortalLayout({ children }: { children: React.React
       redirect(`/sign-in?next=${encodeURIComponent("/portal")}`);
     }
     try {
-      const serverContext = mapServerFamilyContext(await loadServerFamilyContext());
-      const documentMetadata = serverContext.context.activeStudentId === null
+      const contextPromise = loadServerFamilyContext().then(mapServerFamilyContext);
+      const documentPromise = contextPromise.then((serverContext) => serverContext.context.activeStudentId === null
         ? []
-        : await loadServerDocuments("student", serverContext.context.activeStudentId);
+        : loadServerDocuments("student", serverContext.context.activeStudentId));
+      const [serverContext, documentMetadata, notifications] = await Promise.all([
+        contextPromise,
+        documentPromise,
+        loadServerNotifications(),
+      ]);
       initialState = { ...serverContext, documentMetadata };
-      initialNotifications = await loadServerNotifications();
+      initialNotifications = notifications;
     } catch {
       redirect("/access-denied");
     }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import PageIntro from "@/components/public/PageIntro";
@@ -27,9 +28,9 @@ export default async function NoticeDetailPage({ params }: { params: Promise<{ s
       <div className={styles.page}>
         <PageIntro eyebrow="School office" title="Notice not found" deck="This notice may have expired or the link is incorrect." />
         <div className={styles.body}>
-          <a className="link-arrow" href="/notices">
+          <Link className="link-arrow" href="/notices">
             ← All notices
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -52,12 +53,12 @@ export default async function NoticeDetailPage({ params }: { params: Promise<{ s
         </div>
 
         <div className={styles.foot}>
-          <a className="link-arrow" href="/notices">
+          <Link className="link-arrow" href="/notices">
             ← All notices
-          </a>
+          </Link>
         </div>
 
-        <p className={styles.note}>{CONTENT_DEMO_NOTE}</p>
+        {dataAdapter() !== "supabase" ? <p className={styles.note}>{CONTENT_DEMO_NOTE}</p> : null}
       </div>
     </div>
   );

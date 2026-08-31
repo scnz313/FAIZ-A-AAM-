@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 
 /**
  * Root error boundary — calm, editorial recovery state. No stack traces are
@@ -31,9 +32,9 @@ export default function ErrorComponent({
         <button type="button" className="button button--primary" onClick={() => reset()}>
           Try again
         </button>
-        <a className="link-arrow" href="/">
+        <Link className="link-arrow" href="/">
           Back to the school site →
-        </a>
+        </Link>
       </div>
     </div>
   );

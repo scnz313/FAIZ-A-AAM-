@@ -316,7 +316,7 @@ describe("date-specific overrides", () => {
       subject: "Computer Science",
       note: "N. Lone covers Computer Science while M. Wani attends training.",
     });
-    await timetableService.revokeTimetableOverride(first.ref);
+    await timetableService.revokeTimetableOverride(first.ref, "The substitute cover is no longer required.", first.version);
 
     const list = timetableService.listTimetableOverrides();
     expect(list).toHaveLength(2);
@@ -401,12 +401,15 @@ describe("date-specific overrides", () => {
       note: "N. Lone covers Computer Science while M. Wani attends training.",
     });
 
-    await expect(timetableService.revokeTimetableOverride("OVR-2026-999")).rejects.toThrow(/No override/);
+    const reason = "The original teacher has returned to the scheduled class.";
+    await expect(timetableService.revokeTimetableOverride("OVR-2026-999", reason, 1)).rejects.toThrow(/No override/);
 
-    const revoked = await timetableService.revokeTimetableOverride(override.ref);
+    const revoked = await timetableService.revokeTimetableOverride(override.ref, reason, override.version);
     expect(revoked.revokedAtIso).not.toBeNull();
+    expect(revoked.version).toBe(2);
+    expect(revoked.revocationReason).toBe(reason);
 
-    await expect(timetableService.revokeTimetableOverride(override.ref)).rejects.toThrow(/already revoked/);
+    await expect(timetableService.revokeTimetableOverride(override.ref, reason, revoked.version)).rejects.toThrow(/already revoked/);
 
     const tuesday = timetableService.effectivePeriodsForDate("2026-08-04");
     const period = tuesday.find((candidate) => candidate.time === "14:15");

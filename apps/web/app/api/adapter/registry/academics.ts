@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  examScheduleListPublished,
   examSchedulePublish,
   examScheduleSaveDraft,
   resultsApproveCorrection,
@@ -22,8 +23,10 @@ import {
   resolveFamilyContext,
   schoolConfigRead,
   timetableGetEffective,
+  timetableListOverrides,
   timetableListVersions,
   timetablePublish,
+  timetableRevokeOverride,
   timetableSaveDraft,
   timetableSaveOverride,
   timetableValidateDraft,
@@ -44,6 +47,8 @@ const versionWith = <T extends z.ZodRawShape>(shape: T) => z.object({ ...version
 const sectionFields = { gradeSectionId: uuid.optional(), gradeSectionRef: publicReference.optional() };
 const sectionTarget = z.object(sectionFields).refine((value) => value.gradeSectionId !== undefined || value.gradeSectionRef !== undefined, "section reference is required");
 const sectionWith = <T extends z.ZodRawShape>(shape: T) => z.object({ ...sectionFields, ...shape }).refine((value) => value.gradeSectionId !== undefined || value.gradeSectionRef !== undefined, "section reference is required");
+const overrideFields = { overrideId: uuid.optional(), overrideRef: publicReference.optional() };
+const overrideWith = <T extends z.ZodRawShape>(shape: T) => z.object({ ...overrideFields, ...shape }).refine((value) => value.overrideId !== undefined || value.overrideRef !== undefined, "override reference is required");
 
 const marks = z.array(z.object({ rosterId: uuid.optional(), rosterRef: publicReference.optional(), componentId: uuid.optional(), componentRef: publicReference.optional(), obtained: z.number().nullable().optional(), absent: z.boolean().optional(), remark: z.string().nullable().optional() }));
 const sheetFields = { sheetId: uuid.optional(), sheetRef: publicReference.optional(), batchId: uuid.optional(), batchRef: publicReference.optional() };
@@ -67,8 +72,8 @@ export const academicsModule: AdapterModule = {
     operation("results.withdraw", publicationWith({ reason: z.string().min(1) }), ({ supabase }, payload) => resultsWithdraw(supabase, { publicationId: payload.publicationId!, reason: payload.reason })),
     operation("results.correctionRequest", publicationWith({ reason: z.string().min(1) }), ({ supabase }, payload) => resultsCorrectionRequest(supabase, { publicationId: payload.publicationId!, reason: payload.reason })),
     operation("results.saveDraft", sheetWith({ marks, expectedVersion: z.number().int().nonnegative(), idempotencyKey: z.string().min(1).optional() }), ({ supabase }, payload) => resultsEntrySheetSaveDraft(supabase, { sheetId: (payload.sheetId ?? payload.batchId)!, marks: payload.marks as never, expectedVersion: payload.expectedVersion, idempotencyKey: payload.idempotencyKey })),
-    operation("results.listReleases", z.object({ studentId: uuid.optional(), studentRef: publicReference.optional() }), async ({ supabase, selection }, payload) => {
-      const family = await resolveFamilyContext(supabase, selection.familyStudentId ? { studentId: selection.familyStudentId } : {});
+    operation("results.listReleases", z.object({ studentId: uuid.optional(), studentRef: publicReference.optional() }), async ({ supabase, actor, selection }, payload) => {
+      const family = await resolveFamilyContext(supabase, selection.familyStudentId ? { studentId: selection.familyStudentId } : {}, actor);
       if (family.ok && family.value.guardianId !== null) {
         const activeStudentId = family.value.activeStudentId;
         if (activeStudentId === null) return { ok: true as const, value: [] };
@@ -83,18 +88,35 @@ export const academicsModule: AdapterModule = {
     operation("results.approveCorrection", z.object({ requestId: uuid.optional(), requestRef: publicReference.optional(), expectedVersion: z.number().int().positive(), idempotencyKey: z.string().min(1).optional() }).refine((value) => (value.requestId ?? value.requestRef) !== undefined, "correction request reference is required"), ({ supabase }, payload) => resultsApproveCorrection(supabase, payload as never)),
     operation("results.correctionDecide", z.object({ requestId: uuid.optional(), requestRef: publicReference.optional(), outcome: z.enum(["approved", "rejected"]), note: z.string().nullable().optional() }).refine((value) => value.requestId !== undefined || value.requestRef !== undefined, "correction request reference is required"), ({ supabase }, payload) => resultsCorrectionDecide(supabase, { requestId: payload.requestId!, outcome: payload.outcome, note: payload.note })),
     operation("timetable.listVersions", emptyPayload, ({ supabase }) => timetableListVersions(supabase)),
-    operation("timetable.effective", sectionTarget, async ({ supabase, selection }, payload) => {
-      const family = await resolveFamilyContext(supabase, selection.familyStudentId ? { studentId: selection.familyStudentId } : {});
-      if (family.ok && family.value.guardianId !== null && selection.familyStudentId !== undefined) {
+    operation("timetable.effective", sectionTarget, async ({ supabase, actor, selection }, payload) => {
+      const family = await resolveFamilyContext(supabase, selection.familyStudentId ? { studentId: selection.familyStudentId } : {}, actor);
+      if (family.ok && family.value.guardianId !== null) {
         const active = family.value.contexts.find((context) => context.student.id === family.value.activeStudentId);
         if (active === undefined || active.gradeSection.id !== payload.gradeSectionId) return { ok: false as const, errors: [{ code: "forbidden" as const, message: "Timetable is limited to the active child section.", field: null }] };
       }
       return timetableGetEffective(supabase, payload.gradeSectionId!);
     }),
+    operation("timetable.listOverrides", sectionTarget, async ({ supabase, actor, selection }, payload) => {
+      const family = await resolveFamilyContext(supabase, selection.familyStudentId ? { studentId: selection.familyStudentId } : {}, actor);
+      if (family.ok && family.value.guardianId !== null) {
+        const active = family.value.contexts.find((context) => context.student.id === family.value.activeStudentId);
+        if (active === undefined || active.gradeSection.id !== payload.gradeSectionId) return { ok: false as const, errors: [{ code: "forbidden" as const, message: "Timetable overrides are limited to the active child section.", field: null }] };
+      }
+      return timetableListOverrides(supabase, payload.gradeSectionId!);
+    }),
+    operation("timetable.listDateSheets", sectionTarget, async ({ supabase, actor, selection }, payload) => {
+      const family = await resolveFamilyContext(supabase, selection.familyStudentId ? { studentId: selection.familyStudentId } : {}, actor);
+      if (family.ok && family.value.guardianId !== null) {
+        const active = family.value.contexts.find((context) => context.student.id === family.value.activeStudentId);
+        if (active === undefined || active.gradeSection.id !== payload.gradeSectionId) return { ok: false as const, errors: [{ code: "forbidden" as const, message: "Exam date sheets are limited to the active child section.", field: null }] };
+      }
+      return examScheduleListPublished(supabase, payload.gradeSectionId!);
+    }),
     operation("timetable.saveDraft", sectionWith({ versionId: uuid.nullable().optional(), versionRef: publicReference.nullable().optional(), periods: z.array(jsonObject), expectedRevision: z.number().int().nonnegative().optional() }), ({ supabase }, payload) => timetableSaveDraft(supabase, { gradeSectionId: payload.gradeSectionId!, versionId: payload.versionId, periods: payload.periods as never, expectedRevision: payload.expectedRevision })),
     operation("timetable.validateDraft", versionTarget, ({ supabase }, payload) => timetableValidateDraft(supabase, payload.versionId!)),
     operation("timetable.publish", versionWith({ note: z.string().nullable().optional() }), ({ supabase }, payload) => timetablePublish(supabase, { versionId: payload.versionId!, note: payload.note })),
     operation("timetable.saveOverride", sectionWith({ overrideDate: z.string(), dayOfWeek: z.number().int().min(1).max(7), periodNumber: z.number().int().positive(), kind: z.string(), subjectId: uuid.nullable().optional(), roomId: uuid.nullable().optional(), substituteTeacherAssignmentId: uuid.nullable().optional(), note: z.string().nullable().optional() }), ({ supabase }, payload) => timetableSaveOverride(supabase, { ...payload, gradeSectionId: payload.gradeSectionId! })),
+    operation("timetable.revokeOverride", overrideWith({ expectedVersion: z.number().int().positive(), reason: z.string().trim().min(10) }), ({ supabase }, payload) => timetableRevokeOverride(supabase, { overrideId: payload.overrideId!, expectedVersion: payload.expectedVersion, reason: payload.reason })),
     operation("timetable.saveDateSheet", sectionWith({ versionId: uuid.nullable().optional(), versionRef: publicReference.nullable().optional(), entries: z.array(jsonObject) }), ({ supabase }, payload) => examScheduleSaveDraft(supabase, { gradeSectionId: payload.gradeSectionId!, versionId: payload.versionId, entries: payload.entries as never })),
     operation("timetable.publishDateSheet", versionWith({ note: z.string().nullable().optional() }), ({ supabase }, payload) => examSchedulePublish(supabase, { versionId: payload.versionId!, note: payload.note })),
     operation("config.read", z.object({ academicYearId: uuid.optional(), academicYearRef: publicReference.optional() }), ({ supabase }, payload) => schoolConfigRead(supabase, payload)),

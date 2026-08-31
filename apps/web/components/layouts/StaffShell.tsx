@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -30,6 +31,7 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
       { href: "/staff/finance", label: "Finance", action: "finance.view" },
       { href: "/staff/results", label: "Results", action: "results.view" },
       { href: "/staff/timetables", label: "Timetables", action: "timetable.view" },
+      { href: "/staff/documents", label: "Documents", action: "documents.view" },
     ],
   },
   {
@@ -120,7 +122,7 @@ export function StaffShell({ children, initialNotifications }: { children: React
     return () => query.removeEventListener("change", sync);
   }, []);
 
-  /* Nav links are real <a> tags; a route change closes the drawer. */
+  /* A route change closes the drawer. */
   useEffect(() => {
     setNavOpen(false);
   }, [pathname]);
@@ -216,7 +218,7 @@ export function StaffShell({ children, initialNotifications }: { children: React
         inert={mounted && isMobile && !navOpen}
         onClick={handleNavClick}
       >
-        <a className="facility-brand" href="/staff">
+        <Link className="facility-brand" href="/staff" prefetch={false}>
           <Crest size="sm" />
           <span className="facility-brand-copy">
             <strong>Faiz Aam</strong>
@@ -225,7 +227,7 @@ export function StaffShell({ children, initialNotifications }: { children: React
             </span>
             <small>Staff workspace</small>
           </span>
-        </a>
+        </Link>
 
         <div className={styles.identitySwitcher}>
           <label htmlFor="staff-identity">Demo identity</label>
@@ -312,14 +314,15 @@ export function StaffShell({ children, initialNotifications }: { children: React
                 {visibleLinks.map((link) => {
                   const active = isActive(pathname, link);
                   return (
-                    <a
+                    <Link
                       key={link.href}
                       href={link.href}
+                      prefetch={false}
                       className={active ? "active" : undefined}
                       aria-current={active ? "page" : undefined}
                     >
                       {link.label}
-                    </a>
+                    </Link>
                   );
                 })}
               </nav>

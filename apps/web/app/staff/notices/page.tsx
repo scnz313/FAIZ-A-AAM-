@@ -7,24 +7,27 @@ import { NoticePublisher } from "@/components/staff/NoticePublisher";
 import styles from "./page.module.css";
 
 export default async function NoticesPage() {
-  /* Every notice (published, draft, scheduled, expired) from the content
-     service; the publisher writes back through the same service. */
-  const notices = dataAdapter() === "supabase" ? await loadServerContent("staff") : await contentService.listForStaff();
+  /* Every notice (published, draft, scheduled, expired, archived) from the
+     content service; the publisher writes back through the same service. */
+  const adapter = dataAdapter();
+  const notices = adapter === "supabase" ? await loadServerContent("staff") : await contentService.listForStaff();
 
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
         <p className="eyebrow">Staff · Notices</p>
         <h1 className="workspace-title">Notices</h1>
-        <p className="workspace-intro">Draft → Scheduled → Published; expired notices archive automatically.</p>
+        <p className="workspace-intro">Draft → In review → Approved → Scheduled or Published → Archived.</p>
       </header>
 
       <NoticePublisher notices={notices} />
 
-      <p className={styles.note}>Scheduled publishing and version history arrive with the CMS backend.</p>
-      <p className="demo-note">
-        <span className="demo-badge">Demo data</span> {CONTENT_DEMO_NOTE}
-      </p>
+      <p className={styles.note}>Approved publish notes and audiences stay locked through release; unpublishing archives the current item.</p>
+      {adapter === "demo" ? (
+        <p className="demo-note">
+          <span className="demo-badge">Demo data</span> {CONTENT_DEMO_NOTE}
+        </p>
+      ) : null}
     </div>
   );
 }

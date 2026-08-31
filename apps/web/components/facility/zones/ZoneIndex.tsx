@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { MetricType, Zone } from "@fass/contracts";
 import { ZONE_KIND_LABELS } from "@fass/contracts";
 import { floorLabel, formatMetricValue, zoneStatus, zoneStatusLabel, type ZoneStatus } from "@/modules/iot/domain";
@@ -49,7 +51,7 @@ export function ZoneIndex({ rows }: { rows: ZoneIndexRow[] }) {
             return (
               <tr key={row.zone.id} className={styles.rowLink}>
                 <th scope="row">
-                  <a href={`/staff/facility/zones/${row.zone.id}`}>{row.zone.name}</a>
+                  <Link prefetch={false} href={`/staff/facility/zones/${row.zone.id}`}>{row.zone.name}</Link>
                 </th>
                 <td>{ZONE_KIND_LABELS[row.zone.kind]}</td>
                 <td>

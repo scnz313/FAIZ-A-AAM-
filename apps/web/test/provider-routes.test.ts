@@ -56,7 +56,9 @@ describe("provider and operations route contracts", () => {
     const route = source("app/api/documents/[documentRef]/finalize/route.ts");
     expect(route.indexOf("serviceAuthorized")).toBeLessThan(route.indexOf("new SupabaseStorageProvider"));
     expect(route).toContain("storage_bucket");
-    expect(route).not.toContain("getServerActor");
+    expect(route.indexOf("serviceAuthorized")).toBeLessThan(route.indexOf("getServerActor()"));
+    expect(route).toContain("documentRef");
+    expect(route).toContain("checksumVerified");
   });
 
   it("webhook route persists processing/failed states and retry path", () => {
@@ -65,5 +67,43 @@ describe("provider and operations route contracts", () => {
     expect(route).toContain('status: "failed"');
     expect(route).toContain('existing?.status === "processed"');
     expect(route).toContain("verifyResendWebhook");
+  });
+
+  it("protected Server Components dispatch adapter operations in process", () => {
+    const loaders = source("lib/supabase/server-loaders.ts");
+    const adapter = source("lib/supabase/adapter-server.ts");
+    expect(loaders).toContain("serverAdapterOperation");
+    expect(loaders).not.toContain("serverAdapterCall");
+    expect(adapter).toContain("parsed.operation.handle");
+    expect(adapter).toContain("resolveAdapterReferences");
+  });
+
+  it("memoizes actor resolution per request and parallelizes authorization reads", () => {
+    const actor = source("lib/auth/actor.ts");
+    const middleware = source("middleware.ts");
+    expect(actor).toContain("cache(resolveServerActor)");
+    expect(actor).toContain("await Promise.all");
+    expect(actor).toContain("auth.getClaims()");
+    expect(actor).not.toContain("auth.getUser()");
+    expect(middleware).toContain("auth.getClaims()");
+    expect(middleware).not.toContain("auth.getUser()");
+  });
+
+  it("isolates and accelerates development output while accepting the configured image quality", () => {
+    const config = source("next.config.mjs");
+    const packageJson = source("package.json");
+    expect(config).toContain('NODE_ENV === "development" ? ".next-dev" : ".next"');
+    expect(config).toContain("qualities: [80]");
+    expect(packageJson).toContain('"dev": "next dev --turbopack"');
+  });
+
+  it("does not duplicate authoritative staff projections after hydration", () => {
+    const home = source("components/staff/StaffHomeWorkspace.tsx");
+    const queues = source("components/staff/DashboardQueues.tsx");
+    const finance = source("app/staff/finance/FinanceWorkspace.tsx");
+    expect(home.match(/admissionsService\.listStaffRecords\(\)/g)).toHaveLength(1);
+    expect(home.match(/careersService\.listStaffRecords\(\)/g)).toHaveLength(1);
+    expect(queues).not.toContain("listStaffRecords()");
+    expect(finance).toContain('if (mode !== "demo") return');
   });
 });

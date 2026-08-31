@@ -17,6 +17,37 @@
   margin-bottom: 14px;
 }
 
+.panelActions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.pageEditor {
+  border: 1px solid var(--line);
+  margin-bottom: 18px;
+  padding: 16px;
+}
+
+.editorHead {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.editorFields {
+  display: grid;
+  gap: 12px;
+}
+
+.editorActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .panelTitle {
   font-family: var(--serif);
   font-size: 20px;

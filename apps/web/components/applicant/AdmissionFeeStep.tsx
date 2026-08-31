@@ -12,6 +12,7 @@ import {
   convertApplication,
   type EnrollmentConversionResult,
 } from "@/modules/services/enrollment";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./AdmissionFeeStep.module.css";
 
@@ -33,6 +34,7 @@ type AdmissionFeeStepProps = {
  * failed conversion is safe — it never duplicates records.
  */
 export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByIso }: AdmissionFeeStepProps) {
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [invoice, setInvoice] = useState<InvoiceView | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(true);
   const [invoiceError, setInvoiceError] = useState(false);
@@ -129,7 +131,7 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
       </p>
       <div className={styles.head}>
         <p className="section-label">Admission fee</p>
-        <span className="demo-badge">Demo payment</span>
+        {!supabaseMode ? <span className="demo-badge">Demo payment</span> : null}
       </div>
       <h3 className={styles.title} id="fee-step-title">
         Pay {formatINR(invoice?.totalPaise ?? 0)}

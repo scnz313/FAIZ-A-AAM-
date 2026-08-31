@@ -1,16 +1,17 @@
 import "server-only";
 
-import { cookies } from "next/headers";
+import { cache } from "react";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { serverAdapterCall } from "@/lib/supabase/adapter-server";
+import { serverAdapterOperation } from "@/lib/supabase/adapter-server";
 import { getServerActor } from "@/lib/auth/actor";
 import { admissionPublicConfiguration, contentListPublic, financeListAllAttempts, financeListMyInvoices, financeListMyReceipts, financeListReconciliationProjection, jobsListPublishedVacancies, resolveFamilyContext, resolveStaffContext, type FinanceAttemptProjectionRow, type FinanceReconciliationProjectionRow } from "@/lib/supabase/domain";
 import type { ServerFamilyContextResponse } from "@/modules/services/family-context";
 import type { ServerStaffContextResponse } from "@/modules/services/staff-context";
 import {
-  invoiceSummary,
-  mapServerInvoice,
+  mapServerInvoiceView,
   mapServerReceipt,
   type ServerInvoiceRow,
   type ServerReceiptRow,
@@ -30,30 +31,44 @@ async function financeClient() {
   return createSupabaseServerClient();
 }
 
+async function requireServerActor() {
+  const pathname = (await headers()).get("x-fass-pathname") ?? "/";
+  const actor = await getServerActor();
+  if (actor === null) {
+    const signInPath = pathname.startsWith("/staff") ? "/sign-in/staff" : "/sign-in";
+    redirect(`${signInPath}?next=${encodeURIComponent(pathname)}`);
+  }
+  if (pathname.startsWith("/staff") && actor.aal !== "aal2") {
+    redirect(`/sign-in/totp?next=${encodeURIComponent(pathname)}`);
+  }
+  return actor;
+}
+
 /** Request-scoped family context for protected Server Components. */
-export async function loadServerFamilyContext(): Promise<ServerFamilyContextResponse> {
+export const loadServerFamilyContext = cache(async (): Promise<ServerFamilyContextResponse> => {
+  const actor = await requireServerActor();
   const client = await createSupabaseServerClient();
   const cookieStore = await cookies();
   const result = await resolveFamilyContext(client, {
     studentId: cookieStore.get("fass-active-student")?.value,
-  });
+  }, actor);
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Family context could not be loaded.");
   return result.value as unknown as ServerFamilyContextResponse;
-}
+});
 
 /** Request-scoped staff context for protected Server Components. */
-export async function loadServerStaffContext(): Promise<ServerStaffContextResponse> {
-  const actor = await getServerActor();
-  if (actor === null) throw new Error("Staff context requires an authenticated account.");
+export const loadServerStaffContext = cache(async (): Promise<ServerStaffContextResponse> => {
+  const actor = await requireServerActor();
   if (actor.aal !== "aal2") throw new Error("Staff verification is required.");
   const client = await createSupabaseServerClient();
   const cookieStore = await cookies();
-  const result = await resolveStaffContext(client, actor.personId, cookieStore.get("fass-active-workspace")?.value);
+  const result = await resolveStaffContext(client, actor.personId, cookieStore.get("fass-active-workspace")?.value, actor);
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Staff context could not be loaded.");
   return result.value as unknown as ServerStaffContextResponse;
-}
+});
 
-export async function loadServerInvoices(studentId?: string): Promise<InvoiceView[]> {
+export const loadServerInvoices = cache(async (studentId?: string): Promise<InvoiceView[]> => {
+  await requireServerActor();
   const client = await financeClient();
   const [invoiceResult, receiptResult] = await Promise.all([financeListMyInvoices(client), financeListMyReceipts(client)]);
   if (!invoiceResult.ok) throw new Error(invoiceResult.errors[0]?.message ?? "Invoices could not be loaded.");
@@ -61,27 +76,13 @@ export async function loadServerInvoices(studentId?: string): Promise<InvoiceVie
   const receipts = (receiptResult.value as unknown as ServerReceiptRow[]).map(mapServerReceipt);
   return (invoiceResult.value as unknown as ServerInvoiceRow[])
     .filter((row) => studentId === undefined || row.student_id === studentId)
-    .map((row) => {
-    const invoice = mapServerInvoice(row);
-    const totals = invoiceSummary(invoice);
-    return {
-      invoice,
-      studentId: invoice.studentId,
-      studentName: "Linked student",
-      status: invoice.status,
-      ...totals,
-      payments: invoice.payments,
-      receipts: receipts.filter((receipt) => receipt.invoiceRef === invoice.ref),
-      ledgerEntries: [],
-    } satisfies InvoiceView;
-    });
-}
+    .map((row) => mapServerInvoiceView(row, receipts) satisfies InvoiceView);
+});
 
-export async function loadServerActiveStudentInvoices(): Promise<InvoiceView[]> {
-  const contextResult = await resolveFamilyContext(await financeClient());
-  if (!contextResult.ok) throw new Error(contextResult.errors[0]?.message ?? "Family context could not be loaded.");
-  return loadServerInvoices(contextResult.value.activeStudentId ?? undefined);
-}
+export const loadServerActiveStudentInvoices = cache(async (): Promise<InvoiceView[]> => {
+  const context = await loadServerFamilyContext();
+  return loadServerInvoices(context.activeStudentId ?? undefined);
+});
 
 export async function loadServerVacancies(): Promise<Vacancy[]> {
   const result = await jobsListPublishedVacancies(await financeClient());
@@ -106,26 +107,26 @@ export async function loadServerVacancies(): Promise<Vacancy[]> {
 }
 
 export async function loadServerJobs(): Promise<JobApplicationRecord[]> {
-  const result = await serverAdapterCall<ServerJobRow[]>("jobs.staffQueue");
+  const result = await serverAdapterOperation<ServerJobRow[]>("jobs.staffQueue");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Applications could not be loaded.");
   return result.value.map(mapServerJob);
 }
 
 export async function loadServerJobByRef(reference: string): Promise<JobApplicationRecord | null> {
-  const result = await serverAdapterCall<ServerJobRow[]>("jobs.listMine");
+  const result = await serverAdapterOperation<ServerJobRow[]>("jobs.listMine");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Job application could not be loaded.");
   const row = result.value.find((candidate) => candidate.reference === reference);
   return row ? mapServerJob(row) : null;
 }
 
 export async function loadServerAdmissions(): Promise<ApplicationRecord[]> {
-  const result = await serverAdapterCall<ServerAdmissionRow[]>("admissions.staffQueue");
+  const result = await serverAdapterOperation<ServerAdmissionRow[]>("admissions.staffQueue");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Admissions could not be loaded.");
   return result.value.map((row) => mapServerApplication(row));
 }
 
 export async function loadServerAdmissionByRef(reference: string): Promise<ApplicationRecord | null> {
-  const result = await serverAdapterCall<ServerAdmissionRow[]>("admissions.listMine");
+  const result = await serverAdapterOperation<ServerAdmissionRow[]>("admissions.listMine");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Application could not be loaded.");
   const row = result.value.find((candidate) => candidate.reference === reference);
   return row ? mapServerApplication(row) : null;
@@ -159,18 +160,21 @@ export async function loadServerPublicAdmissionConfiguration(): Promise<Admissio
 }
 
 export async function loadServerReceipts(): Promise<Receipt[]> {
+  await requireServerActor();
   const result = await financeListMyReceipts(await financeClient());
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Receipts could not be loaded.");
   return (result.value as unknown as ServerReceiptRow[]).map(mapServerReceipt);
 }
 
 export async function loadServerPaymentAttempts(): Promise<FinanceAttemptProjectionRow[]> {
+  await requireServerActor();
   const result = await financeListAllAttempts(await financeClient());
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Payment attempts could not be loaded.");
   return result.value;
 }
 
 export async function loadServerReconciliationProjection(): Promise<FinanceReconciliationProjectionRow[]> {
+  await requireServerActor();
   const result = await financeListReconciliationProjection(await financeClient());
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Reconciliation could not be loaded.");
   return result.value;
@@ -180,37 +184,37 @@ export async function loadServerReconciliationProjection(): Promise<FinanceRecon
  * Components on the server adapter boundary; they never issue an
  * unauthenticated relative fetch or seed client fixtures in Supabase mode. */
 export async function loadServerResultsBatches(): Promise<unknown[]> {
-  const result = await serverAdapterCall<unknown[]>("results.listBatches");
+  const result = await serverAdapterOperation<unknown[]>("results.listBatches");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Results could not be loaded.");
   return result.value;
 }
 
 export async function loadServerResultBatch(batchId: string): Promise<unknown> {
-  const result = await serverAdapterCall<unknown>("results.getBatch", { batchRef: batchId });
+  const result = await serverAdapterOperation<unknown>("results.getBatch", { batchRef: batchId });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Result batch could not be loaded.");
   return result.value;
 }
 
 export async function loadServerResultVersions(batchRef: string): Promise<unknown[]> {
-  const result = await serverAdapterCall<unknown[]>("results.listVersions", { sheetRef: batchRef });
+  const result = await serverAdapterOperation<unknown[]>("results.listVersions", { sheetRef: batchRef });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Result versions could not be loaded.");
   return result.value;
 }
 
 export async function loadServerResultPublications(studentId?: string): Promise<unknown[]> {
-  const result = await serverAdapterCall<unknown[]>("results.listReleases", studentId ? { studentRef: studentId } : {});
+  const result = await serverAdapterOperation<unknown[]>("results.listReleases", studentId ? { studentRef: studentId } : {});
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Published results could not be loaded.");
   return result.value;
 }
 
 export async function loadServerTimetable(gradeSectionId: string): Promise<unknown | null> {
-  const result = await serverAdapterCall<unknown | null>("timetable.effective", { gradeSectionRef: gradeSectionId });
+  const result = await serverAdapterOperation<unknown | null>("timetable.effective", { gradeSectionRef: gradeSectionId });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Timetable could not be loaded.");
   return result.value;
 }
 
 export async function loadServerContent(scope: "public" | "family" | "staff"): Promise<ContentNotice[]> {
-  const result = await serverAdapterCall<ServerContentRow[]>("content.list", { scope });
+  const result = await serverAdapterOperation<ServerContentRow[]>("content.list", { scope });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Content could not be loaded.");
   return (result.value as unknown as ServerContentRow[]).map(mapServerContentRow);
 }
@@ -223,20 +227,56 @@ export async function loadServerPublicContent(): Promise<ContentNotice[]> {
   return (result.value as unknown as ServerContentRow[]).map(mapServerContentRow);
 }
 
+/** Published public page body for one route slug, or null when the page is
+ * not published. Falls back to nothing so the route can keep its concept
+ * copy until the school publishes a managed page. */
+export async function loadServerPublicPageBody(slug: string): Promise<{ title: string; body: string[]; updatedAtIso: string | null } | null> {
+  const result = await contentListPublic(await financeClient());
+  if (!result.ok) return null;
+  const row = (result.value as unknown as ServerContentRow[]).find(
+    (candidate) => candidate.kind === "page" && candidate.slug === slug && candidate.current_status === "published",
+  );
+  if (!row) return null;
+  const { mapServerPublicPageRow } = await import("@/modules/services/content");
+  const page = mapServerPublicPageRow(row);
+  if (page.reviewStatus !== "published") return null;
+  const versionRow = [...(row.content_versions ?? [])].sort((left, right) => right.version - left.version)[0];
+  if (!versionRow) return null;
+  const parsed = parseServerPageBody(versionRow.body);
+  return {
+    title: versionRow.title,
+    body: parsed.length > 0 ? parsed : ["Published school page."],
+    updatedAtIso: versionRow.published_at ?? versionRow.created_at,
+  };
+}
+
+function parseServerPageBody(value: unknown): string[] {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const object = value as { blocks?: unknown };
+    if (Array.isArray(object.blocks)) {
+      return object.blocks
+        .map((block) => (typeof block === "object" && block !== null && typeof (block as { text?: unknown }).text === "string" ? (block as { text: string }).text : ""))
+        .filter(Boolean);
+    }
+  }
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  return typeof value === "string" ? [value] : [];
+}
+
 export async function loadServerSupport(scope: "mine" | "staff"): Promise<Grievance[]> {
-  const result = await serverAdapterCall<ServerSupportRow[]>("support.list", { scope });
+  const result = await serverAdapterOperation<ServerSupportRow[]>("support.list", { scope });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Support could not be loaded.");
   return result.value.map(mapServerSupportRow);
 }
 
 export async function loadServerNotifications(): Promise<NotificationItem[]> {
-  const result = await serverAdapterCall<ServerNotificationRow[]>("notifications.list");
+  const result = await serverAdapterOperation<ServerNotificationRow[]>("notifications.list");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Notifications could not be loaded.");
   return result.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: notificationKind(item), text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null, href: notificationHref(item) }));
 }
 
 export async function loadServerAudit(): Promise<unknown[]> {
-  const result = await serverAdapterCall<unknown[]>("audit.list", { limit: 100 });
+  const result = await serverAdapterOperation<unknown[]>("audit.list", { limit: 100 });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Audit could not be loaded.");
   return result.value;
 }
@@ -244,7 +284,7 @@ export async function loadServerAudit(): Promise<unknown[]> {
 export type ServerDocumentProjection = { ref: string; ownerReference?: string; category: string; filename: string; processingState: string; mimeType: string; sizeBytes: number };
 
 export async function loadServerDocuments(ownerDomain: string, ownerRecordId: string): Promise<ServerDocumentProjection[]> {
-  const result = await serverAdapterCall<Array<{ reference?: string; ref?: string; ownerReference?: string; category: string; filename?: string; safe_filename?: string; processingState?: string; status?: string; mimeType?: string; mime_type?: string; sizeBytes?: number; size_bytes?: number }>>("documents.list", { ownerDomain, ownerRecordId });
+  const result = await serverAdapterOperation<Array<{ reference?: string; ref?: string; ownerReference?: string; category: string; filename?: string; safe_filename?: string; processingState?: string; status?: string; mimeType?: string; mime_type?: string; sizeBytes?: number; size_bytes?: number }>>("documents.list", { ownerDomain, ownerRecordId });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Documents could not be loaded.");
   return result.value.map((row) => ({ ref: row.ref ?? row.reference ?? "", ownerReference: row.ownerReference, category: row.category, filename: row.filename ?? row.safe_filename ?? "", processingState: row.processingState ?? row.status ?? "pending_scan", mimeType: row.mimeType ?? row.mime_type ?? "", sizeBytes: row.sizeBytes ?? row.size_bytes ?? 0 }));
 }

@@ -16,7 +16,18 @@ module.exports = {
     try {
       await page.goto(`${base}/careers`, { waitUntil: "networkidle" });
       check("careers lists vacancies", (await page.locator("body").innerText()).length > 300);
-      await page.locator('a[href^="/careers/"]').first().click();
+      /* Let the Next.js Link hydration settle before clicking so the
+         client-side navigation is not raced by the initial hydrate. */
+      await page.waitForTimeout(900);
+      /* Retry the click until the client-side navigation lands — a click
+         during hydration is silently swallowed by the router. */
+      let navigated = false;
+      for (let attempt = 0; attempt < 4 && !navigated; attempt += 1) {
+        await page.locator('a[href^="/careers/"]').first().click();
+        await page.waitForTimeout(1200);
+        navigated = page.url().startsWith(`${base}/careers/`);
+        if (!navigated && attempt < 3) await page.waitForTimeout(600);
+      }
       await page.waitForLoadState("networkidle");
       const detail = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("vacancy detail has an apply CTA", detail.includes("Apply for this position"), detail.slice(-120));

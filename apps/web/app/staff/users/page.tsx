@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -34,6 +35,7 @@ type GrantErrors = { role?: string; reason?: string };
 export default function UsersPage() {
   const { summary } = useStaffContext();
   const canManage = canRole(summary?.role ?? "", "users.manage");
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState("");
@@ -242,7 +244,7 @@ export default function UsersPage() {
           </div>
             <p className={styles.inviteResultCopy}>
               <strong>{inviteResult.userRow.name}</strong> has been invited as{" "}
-              <strong>{inviteResult.userRow.role}</strong>. {clientAdapterMode() === "supabase"
+              <strong>{inviteResult.userRow.role}</strong>. {supabaseMode
                 ? "Supabase Auth has sent a signed invitation to the verified contact."
                 : "Share this one-time reference with the invitee — it is shown only once:"}
             </p>
@@ -257,7 +259,7 @@ export default function UsersPage() {
           <p className={styles.inviteResultNote}>
             The invitee completes setup at{" "}
             {inviteResult.invitationRef ? (
-              <a href={`/sign-in/invite?invitation=${encodeURIComponent(inviteResult.invitationRef)}`}>the invitation page</a>
+              <Link prefetch={false} href={`/sign-in/invite?invitation=${encodeURIComponent(inviteResult.invitationRef)}`}>the invitation page</Link>
             ) : (
               "the invitation link"
             )}. The account is <em>Invited</em> until acceptance.
@@ -270,7 +272,7 @@ export default function UsersPage() {
           <h2 id="users-list-heading" className={styles.panelTitle}>
             Staff accounts
           </h2>
-          <span className="demo-badge">Demo data</span>
+          {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
         </div>
 
         {announcement && (
@@ -468,10 +470,12 @@ export default function UsersPage() {
       </section>
 
       <p className={styles.note}>Privileged roles require MFA once authentication is live.</p>
-      <p className="demo-note">
-        <span className="demo-badge">Demo data</span> All people, roles and emails are fictional. Changes persist in
-        this browser session only.
-      </p>
+      {!supabaseMode ? (
+        <p className="demo-note">
+          <span className="demo-badge">Demo data</span> All people, roles and emails are fictional. Changes persist in
+          this browser session only.
+        </p>
+      ) : null}
     </div>
   );
 }

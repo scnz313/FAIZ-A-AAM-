@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -22,7 +23,7 @@ export default async function ResultBatchPage({ params }: { params: Promise<{ re
     : await academicsService.listVersions(resultBatchRef);
 
   if (batch === null) {
-    return <div className={styles.page}><a className="link-arrow" href="/staff/results">← Results</a><h1 className="workspace-title">Batch not found</h1><p className="workspace-intro">No result entry sheet carries the reference <span className="num">{resultBatchRef}</span>.</p></div>;
+    return <div className={styles.page}><Link prefetch={false} className="link-arrow" href="/staff/results">← Results</Link><h1 className="workspace-title">Batch not found</h1><p className="workspace-intro">No result entry sheet carries the reference <span className="num">{resultBatchRef}</span>.</p></div>;
   }
   if (batch === undefined) return <p className={styles.loading}>Result entry sheet unavailable.</p>;
   const status = ENTRY_BATCH_STATUS_META[batch.status];
@@ -30,7 +31,7 @@ export default async function ResultBatchPage({ params }: { params: Promise<{ re
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
-        <p className={styles.backLink}><a className="link-arrow" href="/staff/results">← Results</a></p>
+        <p className={styles.backLink}><Link prefetch={false} className="link-arrow" href="/staff/results">← Results</Link></p>
         <p className="eyebrow">Staff · Results</p>
         <h1 className="workspace-title">{batch.exam} · {batch.className}</h1>
         <p className={`workspace-intro ${styles.meta}`}><span className="num">{batch.ref}</span> · {entered}/{batch.rows.length} marks entered · v{batch.version}</p>
@@ -40,7 +41,7 @@ export default async function ResultBatchPage({ params }: { params: Promise<{ re
         <p className="section-label" id="version-history-heading">Version history</p>
         {versions.length > 0 ? <ol className={styles.versionList}>{versions.map((version) => <li key={version.version} className={styles.versionRow}><strong className={`num ${styles.versionNum}`}>v{version.version}</strong><span className={styles.versionCopy}><span className={styles.versionNote}>{version.note}</span><small>{formatKolkata(version.atIso, { format: "full" })} · {version.by}</small></span></li>)}</ol> : <p className={styles.noVersions}>No corrections recorded.</p>}
       </section>
-      <div className={styles.ruleNote}><p>Published results are versioned; corrections never silently rewrite history.</p><p>{ACADEMICS_DEMO_NOTE}</p></div>
+      <div className={styles.ruleNote}><p>Published results are versioned; corrections never silently rewrite history.</p>{dataAdapter() !== "supabase" ? <p>{ACADEMICS_DEMO_NOTE}</p> : null}</div>
     </div>
   );
 }

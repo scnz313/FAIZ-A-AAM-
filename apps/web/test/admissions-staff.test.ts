@@ -180,6 +180,25 @@ describe("admissions staff decisions", () => {
     await expect(admissionsService.staffMoveToAssessment("APP-2026-0418")).rejects.toThrow(/assessment/);
   });
 
+  it("staffStartReview moves a submitted application to Under review", async () => {
+    const updated = await admissionsService.staffStartReview("APP-2026-0422");
+
+    expect(updated.status).toBe("Under review");
+    expect(updated.timeline[updated.timeline.length - 1]).toEqual({
+      status: "Under review",
+      atIso: PINNED_ISO,
+      actor: "Admissions office",
+      note: "Review started.",
+    });
+
+    /* A second start review from Under review is invalid. */
+    await expect(admissionsService.staffStartReview("APP-2026-0422")).rejects.toThrow(/start review/);
+
+    /* Once in review, the canonical next step is assessment. */
+    const assessed = await admissionsService.staffMoveToAssessment("APP-2026-0422");
+    expect(assessed.status).toBe("Assessment");
+  });
+
   it("staffWaitlist requires a reason and works from Assessment", async () => {
     await expect(admissionsService.staffWaitlist("APP-2026-0418", "   ")).rejects.toThrow(/reason/);
 

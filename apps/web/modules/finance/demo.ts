@@ -55,6 +55,11 @@ export type Payment = {
   method: PaymentMethod;
   amountPaise: number;
   receiptRef: string;
+  /** Provider transaction/order identity used to collapse a posted payment
+      with the succeeded attempt that produced it. Never shown as credentials. */
+  providerTxnRef?: string;
+  /** Durable attempt id when the server projection includes it. */
+  attemptId?: string;
 };
 
 export type InvoiceStatus = "paid" | "partial" | "unpaid" | "overdue";

@@ -77,12 +77,13 @@ afterEach(() => {
 
 describe("relationship contracts and deterministic graph", () => {
   it("parses every I0 record through its shared Zod schema", () => {
-    expect(personSchema.array().parse(demoPeople)).toHaveLength(8);
-    expect(userAccountSchema.array().parse(demoUserAccounts)).toHaveLength(5);
+    expect(personSchema.array().parse(demoPeople)).toHaveLength(9);
+    expect(userAccountSchema.array().parse(demoUserAccounts)).toHaveLength(6);
     /* 10 seeded grants + 6 Phase-1 grants (311–316: four approval/management
-       grants for Rania, exam review for Sana, content publishing for Aisha). */
-    expect(roleGrantSchema.array().parse(demoRoleGrants)).toHaveLength(16);
-    expect(staffMemberSchema.array().parse(demoStaffMembers)).toHaveLength(4);
+       grants for Rania, exam review for Sana, content publishing for Aisha)
+       + 1 independent content-publisher grant (317) for maker/checker. */
+    expect(roleGrantSchema.array().parse(demoRoleGrants)).toHaveLength(17);
+    expect(staffMemberSchema.array().parse(demoStaffMembers)).toHaveLength(5);
     expect(staffAssignmentSchema.array().parse(demoStaffAssignments)).toHaveLength(3);
     expect(guardianSchema.array().parse(demoGuardians)).toHaveLength(2);
     expect(studentSchema.array().parse(demoStudents)).toHaveLength(3);

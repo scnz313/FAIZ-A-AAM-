@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
@@ -100,10 +101,12 @@ export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" })
         codeRef.current?.focus();
         return;
       }
+      /* After MFA verification, use a full-page navigation so the
+         middleware refreshes the AAL2 session cookie before the
+         protected staff layout reads it server-side. */
       const recorded = await fetch("/api/auth/mfa/verified", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       if (!recorded.ok) throw new Error("MFA record failed");
-      router.push(safeNext);
-      router.refresh();
+      window.location.assign(safeNext);
     } catch {
       setRejected("Verification could not complete — try again in a moment.");
     } finally {
@@ -120,9 +123,9 @@ export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" })
           demo guardian or staff identity from the sign-in screen instead.
         </p>
         <p className={styles.back}>
-          <a className="link-arrow" href="/sign-in">
+          <Link className="link-arrow" prefetch={false} href="/sign-in">
             ← Back to sign-in
-          </a>
+          </Link>
         </p>
       </div>
     );
@@ -139,9 +142,9 @@ export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" })
           {fatal}
         </p>
         <p className={styles.back}>
-          <a className="link-arrow" href="/sign-in">
+          <Link className="link-arrow" prefetch={false} href="/sign-in">
             ← Restart sign-in
-          </a>
+          </Link>
         </p>
       </div>
     );
@@ -216,9 +219,9 @@ export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" })
       </form>
 
       <p className={styles.back}>
-        <a className="link-arrow" href="/sign-in">
+        <Link className="link-arrow" prefetch={false} href="/sign-in">
           ← Back to sign in
-        </a>
+        </Link>
       </p>
     </div>
   );

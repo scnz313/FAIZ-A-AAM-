@@ -1,19 +1,19 @@
 # Project Status — Faiz Aam School Platform
 
-Last updated: 28 August 2026
-Current phase: C5 staging/provider activation gate; local implementation through Slice 6 is verified
+Last updated: 31 August 2026
+Current phase: C5 staging/provider activation gate; local implementation through migration `000041` is verified
 Release state: not deployed; staging backend exists historically, production authorization/deployment does not
 
 ## Current state
 
-The repository contains the completed frontend reference, the committed remote Supabase foundation through migration `000015`, and a local-only provider-ready working set through migration `000030`. The demo adapter remains the default runtime. C0/C1, the C2 application cutover, and the local implementations for Storage/PDF, Resend/outbox, cron, health, and Vercel readiness are verified locally with fakes and scratch PostgreSQL. No remote Supabase, Storage, Resend, payment, or Vercel action was performed. Staging and production are not verified.
+The repository contains the completed frontend reference, the committed remote Supabase foundation through migration `000015`, and a local-only provider-ready working set through migration `000041`. The demo adapter remains the default runtime. C0/C1, the C2 application cutover, and the local implementations for Storage/PDF, Resend/outbox, cron, health, and Vercel readiness are verified locally with fakes and scratch PostgreSQL. No remote Supabase, Storage, Resend, payment, or Vercel action was performed. Staging and production are not verified.
 
 | Area | Demo UI | Database/RPC | Application cutover | Live verification |
 |---|---|---|---|---|
 | Identity, invitations, contexts | `VERIFIED` | `VERIFIED` locally through `000026` | `VERIFIED` locally | `NOT STARTED` for current staging credentials |
-| Admissions, careers, enrollment, uploads | `VERIFIED` | `VERIFIED` locally through `000027` | `VERIFIED` locally; provider calls use fakes | `NOT STARTED` |
-| Results and timetable | `VERIFIED` | `VERIFIED` locally through `000028` | `VERIFIED` locally, including report releases | `NOT STARTED` |
-| Finance, content, support, settings, users, audit, notifications | `VERIFIED` | `VERIFIED` locally through `000029` | `VERIFIED` locally | `NOT STARTED` |
+| Admissions, careers, enrollment, uploads | `VERIFIED` | `VERIFIED` locally through `000041` | `VERIFIED` locally; provider calls use fakes | `NOT STARTED` |
+| Results and timetable | `VERIFIED` | `VERIFIED` locally through `000040` | `VERIFIED` locally, including report releases | `NOT STARTED` |
+| Finance, content, support, settings, users, audit, notifications | `VERIFIED` | `VERIFIED` locally through `000039` | `VERIFIED` locally | `NOT STARTED` |
 | Storage, PDF, Resend, outbox, cron, health | Demo/fake contracts `VERIFIED` | `VERIFIED` locally through `000030` | Provider-ready; credentials/configuration `BLOCKED` | `NOT STARTED` |
 | Vercel and production | N/A | N/A | Readiness config only | `NOT STARTED` |
 
@@ -39,7 +39,7 @@ The frontend handoff gate passed. `plan.md` is the active C0–C5 Supabase cutov
 - **Application interface**: `lib/supabase/env.ts` (adapter + env validation), `client.ts` (browser), `server.ts` (SSR, Next 15 cookie convention), `admin.ts` (secret-key, RLS-bypass restricted), `database.types.ts` placeholder for generated types; `db:reset` / `db:test` / `db:types` npm scripts.
 - The original foundation gates are retained as historical evidence; current gate counts are recorded only in the validation table below.
 
-**C0–C4 local implementation exit is verified**: migrations `000001–000030` apply from zero. The RLS/RPC suites, Slice 4 results/timetable release suite, Slice 5 operational suite, and Slice 6 provider-job suite pass. The latest application gate is 394 web tests, 47 contract tests, typecheck, zero-warning lint, a green protected-path cutover guard, and a 76-route production build. Remote migration/advisor/provider verification remains intentionally deferred.
+**C0–C4 local implementation exit is verified**: migrations `000001–000041` apply from zero on scratch PostgreSQL 17. The RLS/RPC suites, Slice 4 results/timetable release suite, Slice 5 operational suite, and Slice 6 provider-job suite pass. The latest application gate is 477 web tests, 47 contract tests, typecheck, zero-warning lint, a green protected-path cutover guard, and a 79-route production build. Remote migration/advisor/provider verification remains intentionally deferred.
 
 ## Historical backend foundation evidence (B1–B6 architecture slices)
 

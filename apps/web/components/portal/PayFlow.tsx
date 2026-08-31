@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { formatINR } from "@/modules/services/finance";
@@ -458,12 +459,12 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
             {supabaseMode ? "Local sandbox evidence is recorded by the server; the gateway provider remains deferred." : "Demo — in production this redirects to the gateway and verifies the signed webhook before posting to the ledger exactly once."}
           </p>
           <p className={styles.successLinks}>
-            <a className="link-arrow" href={`/portal/receipts/${receipt.ref}`}>
+            <Link prefetch={false} className="link-arrow" href={`/portal/receipts/${receipt.ref}`}>
               View receipt {receipt.ref} →
-            </a>
-            <a className="link-arrow" href="/portal/fees">
+            </Link>
+            <Link prefetch={false} className="link-arrow" href="/portal/fees">
               Back to the fee ledger →
-            </a>
+            </Link>
           </p>
         </div>
       ) : null}

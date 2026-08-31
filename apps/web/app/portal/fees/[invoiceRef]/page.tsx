@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { financeService } from "@/modules/services/finance";
 import { dataAdapter } from "@/lib/supabase/env";
@@ -20,9 +21,9 @@ function InvoiceNotFound({ reference }: { reference: string }) {
         No invoice with the reference <span className="num">{reference}</span> exists in this demo ledger. Check the
         reference in the address, or return to the fee ledger.
       </p>
-      <a className="link-arrow" href="/portal/fees">
+      <Link prefetch={false} className="link-arrow" href="/portal/fees">
         ← Back to fees
-      </a>
+      </Link>
     </div>
   );
 }

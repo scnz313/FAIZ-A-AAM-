@@ -126,3 +126,22 @@ Use these exact meanings in `PROJECT-STATUS.md`:
 - `RELEASED` — verified work is deployed to the named environment and post-deploy checks passed.
 
 Never describe `VERIFIED` work as `RELEASED` without deployment evidence.
+
+## Test staff accounts (synthetic, staging only)
+
+`scripts/seed-test-accounts.mjs` creates one fictional test account per staff
+role in the linked Supabase project (auth user → person → user_account →
+role_grant → staff_member). It is idempotent and safe to re-run; accounts are
+keyed by `test.<role>@faizaam.example`. The shared password is printed by the
+script. First sign-in at `/sign-in/staff` still enrolls TOTP (plan.md §4).
+Never use these accounts in production or with real data.
+
+## Local performance workflow
+
+Use Node 22 (`nvm use 22`) and start development with `npm run dev`. Development
+uses Turbopack and `.next-dev`; production builds use `.next`, so a dev compiler
+cannot corrupt a running production build. Run only one development server per
+checkout. First visits in development include route compilation and are not a
+production performance measurement; benchmark a warm route or a Node 22
+`npm run build` + `npm start` run. Supabase adapter mode still contacts the
+configured remote project—it is not a local database.

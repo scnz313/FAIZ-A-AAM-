@@ -12,9 +12,8 @@ export const metadata: Metadata = {
 };
 
 export default async function StaffAdmissionsPage() {
-  /* Fixture-derived rows server-side; the queue component refreshes from
-     the demo session on mount so live decisions and new submissions show. */
-  const rows = dataAdapter() === "supabase" ? await loadServerAdmissions() : await admissionsService.listStaffRecords();
+  const supabaseMode = dataAdapter() === "supabase";
+  const rows = supabaseMode ? await loadServerAdmissions() : await admissionsService.listStaffRecords();
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
@@ -25,7 +24,9 @@ export default async function StaffAdmissionsPage() {
 
       <AdmissionsQueue rows={rows} />
 
-      <p className="demo-note">Demo session — every application above is fictional concept data.</p>
+      {!supabaseMode ? (
+        <p className="demo-note">Demo session — every application above is fictional concept data.</p>
+      ) : null}
     </div>
   );
 }

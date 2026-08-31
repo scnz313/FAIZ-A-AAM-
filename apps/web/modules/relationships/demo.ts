@@ -69,6 +69,14 @@ export const demoPeople: Person[] = [
     status: "active",
   },
   {
+    id: "00000000-0000-4000-8000-000000000107",
+    ref: "PER-2026-0107",
+    givenName: "Naseer",
+    familyName: "Lone",
+    displayName: "Naseer Lone",
+    status: "active",
+  },
+  {
     id: "00000000-0000-4000-8000-000000000108",
     ref: "PER-2026-0108",
     givenName: "Aisha",
@@ -121,6 +129,13 @@ export const demoUserAccounts: UserAccount[] = [
     personId: "00000000-0000-4000-8000-000000000109",
     status: "active",
     verifiedAtIso: "2026-06-21T08:00:00.000Z",
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000206",
+    ref: "ACC-2026-0206",
+    personId: "00000000-0000-4000-8000-000000000107",
+    status: "active",
+    verifiedAtIso: "2026-06-22T08:00:00.000Z",
   },
 ];
 
@@ -329,6 +344,18 @@ export const demoRoleGrants: RoleGrant[] = [
     effectiveFromIso: "2026-01-01T08:00:00.000Z",
     effectiveToIso: null,
   },
+  {
+    id: "00000000-0000-4000-8000-000000000317",
+    ref: "ROLE-2026-0317",
+    accountId: "00000000-0000-4000-8000-000000000206",
+    role: "content_publisher",
+    status: "active",
+    grantedByPersonId: null,
+    reason: "Independent content publisher for maker/checker separation.",
+    scope: { academicYearIds: [], gradeSectionIds: [], subjectIds: [] },
+    effectiveFromIso: "2026-01-01T08:00:00.000Z",
+    effectiveToIso: null,
+  },
 ];
 
 export const demoStaffMembers: StaffMember[] = [
@@ -359,6 +386,13 @@ export const demoStaffMembers: StaffMember[] = [
     personId: "00000000-0000-4000-8000-000000000109",
     status: "active",
     title: "Admissions and finance approver",
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000405",
+    ref: "STAFF-2026-0405",
+    personId: "00000000-0000-4000-8000-000000000107",
+    status: "active",
+    title: "Content publisher",
   },
 ];
 

@@ -54,7 +54,10 @@ export type GrievanceInput = {
 };
 
 export interface SupportService {
+  /** Public (anonymous) grievance submission through the CAPTCHA-protected route. */
   submitGrievance(input: GrievanceInput): Promise<{ ref: string }>;
+  /** Authenticated grievance submission through the adapter (portal users). */
+  submitAuthenticatedGrievance(input: GrievanceInput): Promise<{ ref: string }>;
   /** The requester-safe record; null when the reference is unknown. */
   getGrievance(ref: string): Promise<Grievance | null>;
   listGrievances(): Promise<Grievance[]>;
@@ -177,6 +180,11 @@ export function createDemoSupportService(latencyMs = 200): SupportService {
       return { ref };
     },
 
+    async submitAuthenticatedGrievance(input) {
+      /* In demo mode, authenticated submission behaves the same as public. */
+      return this.submitGrievance(input);
+    },
+
     async getGrievance(ref) {
       await sleep(latencyMs);
       const found = readStore().grievances.find((item) => item.ref === ref);
@@ -273,6 +281,12 @@ supportService.submitGrievance = async (input) => {
   const value = (await response.json().catch(() => null)) as { value?: { reference?: string }; errors?: Array<{ message: string }> } | null;
   if (!response.ok || !value?.value?.reference) throw new Error(value?.errors?.[0]?.message ?? "Support intake is unavailable.");
   return { ref: value.value.reference };
+};
+supportService.submitAuthenticatedGrievance = async (input) => {
+  if (clientAdapterMode() !== "supabase") return originalSupport.submitAuthenticatedGrievance(input);
+  const result = await adapterCall<{ reference: string }>("support.create", { category: input.category, subject: input.subject, body: input.message, priority: "normal" });
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Support intake is unavailable.");
+  return { ref: result.value.reference };
 };
 supportService.getGrievance = async (ref) => {
   if (clientAdapterMode() !== "supabase") return originalSupport.getGrievance(ref);

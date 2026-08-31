@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
@@ -45,7 +46,7 @@ const FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
 export function CareersQueue({ initial, vacancyTitles, demoMode }: { initial: JobApplicationRecord[]; vacancyTitles: Record<string, string>; demoMode: boolean }) {
   const [records, setRecords] = useState<JobApplicationRecord[]>(initial);
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [refreshing, setRefreshing] = useState(true);
+  const [refreshing, setRefreshing] = useState(demoMode);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
@@ -59,8 +60,14 @@ export function CareersQueue({ initial, vacancyTitles, demoMode }: { initial: Jo
   }, []);
 
   useEffect(() => {
+    if (!demoMode) {
+      setRecords(initial);
+      setRefreshing(false);
+      setError(null);
+      return;
+    }
     void refresh();
-  }, [refresh]);
+  }, [demoMode, initial, refresh]);
 
   const visible = filter === "all" ? records : records.filter((record) => record.status === filter);
 
@@ -99,9 +106,9 @@ export function CareersQueue({ initial, vacancyTitles, demoMode }: { initial: Jo
             {visible.map((record) => (
               <tr key={record.ref} className={styles.queueRow}>
                 <td>
-                  <a className={styles.rowLink} href={`/staff/careers/${record.ref}`}>
+                  <Link prefetch={false} className={styles.rowLink} href={`/staff/careers/${record.ref}`}>
                     <strong className="num">{record.ref}</strong>
-                  </a>
+                  </Link>
                 </td>
                 <td>{record.name}</td>
                 <td>{vacancyTitles[record.vacancySlug] ?? record.vacancySlug}</td>

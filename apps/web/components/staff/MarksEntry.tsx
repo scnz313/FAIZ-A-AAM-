@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
@@ -9,6 +10,7 @@ import { assignmentsCoverClass, canRole } from "@/modules/services/staff-authori
 import { staffContextService } from "@/modules/services/staff-context";
 import { academicsService, ENTRY_BATCH_STATUS_META, gradeForPercentage } from "@/modules/services/academics";
 import type { AcademicError, BatchVersion, EntryBatch, MarksRow } from "@/modules/services/academics";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./MarksEntry.module.css";
 
@@ -81,10 +83,11 @@ type MarksEntryProps = {
  * The working marks-entry workspace: editable sheet, inline validation,
  * draft save, submit for moderation, returned-with-reason, approve,
  * publish confirmation (with a portal link), and correction v2. All state
- * transitions go through `academicsService`; the workspace re-reads the
- * batch on mount so the session state is always the source of truth.
+ * transitions go through `academicsService`; demo mode re-reads the batch on
+ * mount so the session state is always the source of truth.
  */
 export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [batch, setBatch] = useState<EntryBatch | null>(initialBatch);
   const [rows, setRows] = useState<MarksRow[]>(() => cloneRows(initialBatch.rows));
   const [versions, setVersions] = useState<BatchVersion[]>([]);
@@ -138,7 +141,8 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([academicsService.getBatch(batchRef), academicsService.listVersions(batchRef)])
+    const batchRequest = supabaseMode ? Promise.resolve(initialBatch) : academicsService.getBatch(batchRef);
+    void Promise.all([batchRequest, academicsService.listVersions(batchRef)])
       .then(([nextBatch, nextVersions]) => {
         if (cancelled) return;
         if (nextBatch) {
@@ -153,7 +157,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     return () => {
       cancelled = true;
     };
-  }, [batchRef]);
+  }, [batchRef, initialBatch, supabaseMode]);
 
   function applyBatch(next: EntryBatch) {
     setBatch(next);
@@ -191,7 +195,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
       return;
     }
     applyBatch(result.value);
-    setLive(`Draft saved (demo) — ${result.value.ref}`);
+    setLive(`Draft saved${supabaseMode ? "" : " (demo)"} — ${result.value.ref}`);
   }
 
   async function submitForModeration() {
@@ -218,7 +222,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
       return;
     }
     applyBatch(result.value);
-    setLive(`${result.value.ref} submitted for moderation (demo)`);
+    setLive(`${result.value.ref} submitted for moderation${supabaseMode ? "" : " (demo)"}`);
   }
 
   async function approve() {
@@ -230,7 +234,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
       return;
     }
     applyBatch(result.value);
-    setLive(`${result.value.ref} approved (demo)`);
+    setLive(`${result.value.ref} approved${supabaseMode ? "" : " (demo)"}`);
   }
 
   async function confirmReturn() {
@@ -249,7 +253,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     applyBatch(result.value);
     setReturnOpen(false);
     setReturnReason("");
-    setLive(`${result.value.ref} returned to entry with a reason (demo)`);
+    setLive(`${result.value.ref} returned to entry with a reason${supabaseMode ? "" : " (demo)"}`);
   }
 
   async function confirmPublish() {
@@ -264,7 +268,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     if (next) applyBatch(next);
     setPublishedRef(result.value.ref);
     setPublishOpen(false);
-    setLive(`Published as ${result.value.ref} (demo)`);
+    setLive(`Published as ${result.value.ref}${supabaseMode ? "" : " (demo)"}`);
   }
 
   async function confirmCorrection() {
@@ -283,7 +287,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     applyBatch(result.value);
     setCorrectOpen(false);
     setCorrectionReason("");
-    setLive(`Correction v${result.value.version} started (demo)`);
+    setLive(`Correction v${result.value.version} started${supabaseMode ? "" : " (demo)"}`);
   }
 
   async function confirmWithdraw() {
@@ -302,7 +306,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     applyBatch(result.value);
     setWithdrawOpen(false);
     setWithdrawalReason("");
-    setLive(`${result.value.ref} withdrawn — the live portal publication was removed (demo)`);
+    setLive(`${result.value.ref} withdrawn — the live portal publication was removed${supabaseMode ? "" : " (demo)"}`);
   }
 
   if (!batch) {
@@ -327,9 +331,9 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
             on your teaching assignment. If this is wrong, the school office must update the assignment.
           </p>
           <p className={styles.returnedHint}>
-            <a className="link-arrow" href="/staff/results">
+            <Link prefetch={false} className="link-arrow" href="/staff/results">
               Back to the batch queue →
-            </a>
+            </Link>
           </p>
         </div>
       </div>
@@ -346,9 +350,9 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     <div className={styles.workspace}>
       <header className={`workspace-header ${styles.header}`}>
         <p className={styles.backLink}>
-          <a className="link-arrow" href={`/staff/results/${batch.ref}`}>
+          <Link prefetch={false} className="link-arrow" href={`/staff/results/${batch.ref}`}>
             ← {batch.exam} · {batch.className}
-          </a>
+          </Link>
         </p>
         <p className="eyebrow">Staff · Results · Marks entry</p>
         <h1 className="workspace-title">Marks entry</h1>
@@ -358,7 +362,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         </p>
         <div className={styles.badgeRow}>
           <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
-          <span className="demo-badge">Demo data</span>
+          {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
         </div>
       </header>
 
@@ -564,7 +568,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
               <strong>
                 Publish v{batch.version} to {batch.className}?
               </strong>{" "}
-              A new publication reference is created and the portal report updates immediately (demo).
+              A new publication reference is created and the portal report updates immediately{!supabaseMode ? " (demo)" : ""}.
             </p>
             <div className={styles.confirmActions}>
               <Button variant="saffron" onClick={confirmPublish} disabled={busy !== null}>
@@ -620,7 +624,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
                 Withdraw v{batch.version} from {batch.className}?
               </strong>{" "}
               The live portal report is removed and the term shows not-published; the published record stays on file
-              (demo).
+              {!supabaseMode ? " (demo)" : ""}.
             </p>
             <label className={styles.confirmLabel} htmlFor="withdraw-reason">
               Reason for withdrawal (required)
@@ -659,11 +663,11 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         {publishedRef ? (
           <p className={styles.publishSuccess}>
             <strong>
-              Published as <span className="num">{publishedRef}</span> (demo).
+              Published as <span className="num">{publishedRef}</span>{!supabaseMode ? " (demo)" : ""}.
             </strong>{" "}
-            <a className="link-arrow" href="/portal/results">
+            <Link prefetch={false} className="link-arrow" href="/portal/results">
               View in portal →
-            </a>
+            </Link>
           </p>
         ) : null}
       </section>

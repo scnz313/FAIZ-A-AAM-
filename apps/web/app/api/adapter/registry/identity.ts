@@ -37,7 +37,7 @@ export const identityModule: AdapterModule = {
         const persisted = await contextStaffSelect(supabase, { roleGrantId: payload.roleGrantId });
         if (!persisted.ok) return persisted;
       }
-      return resolveStaffContext(supabase, actor.personId, payload.roleGrantId ?? selection.staffRoleGrantId);
+      return resolveStaffContext(supabase, actor.personId, payload.roleGrantId ?? selection.staffRoleGrantId, actor);
     }),
     operation("context.staff.select", z.object({ roleGrantId: uuid, expectedVersion: z.number().int().nonnegative().optional() }), ({ supabase }, payload) => contextStaffSelect(supabase, payload)),
     operation("identity.hasStaff", emptyPayload, ({ supabase }) => accountHasStaffGrant(supabase)),

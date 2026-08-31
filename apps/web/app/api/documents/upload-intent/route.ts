@@ -22,6 +22,47 @@ type UploadInput = {
   sizeBytes: number;
 };
 
+type UploadConstraints = {
+  allowedMimeTypes: string[];
+  maxBytes: number;
+};
+
+/** Resolve the authoritative upload constraints for an owner record. The
+ * browser-declared type/size is never trusted: admission documents resolve
+ * their configured requirement through the public configuration projection;
+ * job/student uploads use the conservative platform default until
+ * per-requirement configuration exists. */
+async function resolveUploadConstraints(
+  client: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  ownerDomain: UploadInput["ownerDomain"],
+  ownerRecordId: string,
+  attachmentCode: string,
+): Promise<UploadConstraints> {
+  if (ownerDomain === "admission_application") {
+    const { data: application } = await client
+      .from("admission_applications")
+      .select("academic_year_id, grade_id")
+      .eq("id", ownerRecordId)
+      .maybeSingle();
+    if (application?.academic_year_id !== undefined && application?.grade_id !== undefined) {
+      const { data: configuration } = await callAppRpc<{
+        windows?: Array<{ id: string; gradeId: string }>;
+        documentRequirements?: Array<{ windowId: string; code: string; allowedMimeTypes: string[]; maxBytes: number }>;
+      }>(client, "admission_public_configuration", { p_academic_year_id: application.academic_year_id });
+      if (configuration !== null) {
+        const windowId = (configuration.windows ?? []).find((window) => window.gradeId === application.grade_id)?.id;
+        const requirement = (configuration.documentRequirements ?? []).find(
+          (candidate) => candidate.windowId === windowId && candidate.code === attachmentCode,
+        );
+        if (requirement?.allowedMimeTypes !== undefined && requirement?.maxBytes !== undefined) {
+          return { allowedMimeTypes: requirement.allowedMimeTypes, maxBytes: Number(requirement.maxBytes) };
+        }
+      }
+    }
+  }
+  return { allowedMimeTypes: Object.keys(MIME_EXTENSIONS), maxBytes: MAX_BYTES };
+}
+
 async function resolveOwnerId(
   client: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   actorId: string,
@@ -82,6 +123,16 @@ export async function POST(request: Request) {
   const ownerRecordId = await resolveOwnerId(userClient, actor.accountId, input);
   if (!ownerRecordId) return NextResponse.json({ error: "The document owner is not accessible to this account." }, { status: 404, headers: { "Cache-Control": "no-store" } });
 
+  /* Server-authoritative constraints: the declared type/size is validated
+   * against the resolved requirement, never the other way around. */
+  const constraints = await resolveUploadConstraints(userClient, input.ownerDomain, ownerRecordId, input.attachmentCode);
+  if (!constraints.allowedMimeTypes.includes(input.mimeType) || !MIME_EXTENSIONS[input.mimeType]) {
+    return NextResponse.json({ error: "File type is not allowed for this document." }, { status: 422, headers: { "Cache-Control": "no-store" } });
+  }
+  if (input.sizeBytes <= 0 || input.sizeBytes > constraints.maxBytes) {
+    return NextResponse.json({ error: "File size is not allowed for this document." }, { status: 422, headers: { "Cache-Control": "no-store" } });
+  }
+
   const extension = MIME_EXTENSIONS[input.mimeType];
   const safeName = input.filename.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 120) || `upload.${extension}`;
   const objectKey = `uploads/${crypto.randomUUID()}.${extension}`;
@@ -92,8 +143,8 @@ export async function POST(request: Request) {
     p_safe_filename: safeName,
     p_declared_mime_type: input.mimeType,
     p_declared_size: input.sizeBytes,
-    p_allowed_mime_types: [input.mimeType],
-    p_max_bytes: MAX_BYTES,
+    p_allowed_mime_types: constraints.allowedMimeTypes,
+    p_max_bytes: constraints.maxBytes,
     p_object_key: objectKey,
   });
   if (metadata.error !== null || metadata.data === null) return NextResponse.json({ error: "Upload record could not be created.", correlationId }, { status: 422, headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId } });

@@ -17,6 +17,7 @@ import {
   type DemoPolicy,
   type DemoPolicyKey,
 } from "@/modules/services/demo-policy";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./page.module.css";
 
@@ -83,6 +84,7 @@ function ToggleRow({ id, checked, onChange, disabled = false, help, children }: 
 export default function SettingsPage() {
   const { summary } = useStaffContext();
   const canManage = canRole(summary?.role ?? "", "settings.manage");
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [view, setView] = useState<SettingsView | null>(null);
   const [gradingScheme, setGradingScheme] = useState("Letter grades (A1–E2)");
   const [twoReviewers, setTwoReviewers] = useState(true);
@@ -198,7 +200,7 @@ export default function SettingsPage() {
             </div>
             <StatusBadge tone="good">Active</StatusBadge>
           </div>
-          <p className="field-help">The active year locks once results are published. Disabled in the demo.</p>
+          <p className="field-help">The active year locks once results are published.{!supabaseMode ? " Disabled in the demo." : ""}</p>
         </Section>
 
         <Section title="Admission window" pending={pending("admission-window")} savedBy={view.savedBy} savedAtIso={view.savedAtIso}>
@@ -213,7 +215,7 @@ export default function SettingsPage() {
             </div>
           </div>
           <p className="field-help">
-            The admission window follows the confirmed academic calendar — dates shown are fictional until then.
+            The admission window follows the confirmed academic calendar{!supabaseMode ? " — dates shown are fictional until then." : "."}
           </p>
         </Section>
 
@@ -344,6 +346,7 @@ export default function SettingsPage() {
         </div>
       </form>
 
+      {!supabaseMode ? (
       <section className={`panel ${styles.dangerZone}`} aria-labelledby="demo-policy-heading">
         <div className={styles.sectionHead}>
           <h2 id="demo-policy-heading" className={styles.sectionTitle}>
@@ -376,7 +379,9 @@ export default function SettingsPage() {
         </div>
         <p className={styles.savedBy}>Session-only — changes apply to this browser session and reset on reload.</p>
       </section>
+      ) : null}
 
+      {!supabaseMode ? (
       <section className={`panel ${styles.dangerZone}`} aria-labelledby="danger-heading">
         <h2 id="danger-heading" className={styles.sectionTitle}>
           Danger zone
@@ -400,11 +405,14 @@ export default function SettingsPage() {
           Saved by {view.savedBy} · {formatKolkata(view.savedAtIso, { format: "day" })}
         </p>
       </section>
+      ) : null}
 
       <p className={styles.note}>Configuration cannot rewrite issued or published history.</p>
-      <p className="demo-note">
-        <span className="demo-badge">Demo data</span> All settings shown are fictional defaults for design and testing.
-      </p>
+      {!supabaseMode ? (
+        <p className="demo-note">
+          <span className="demo-badge">Demo data</span> All settings shown are fictional defaults for design and testing.
+        </p>
+      ) : null}
     </div>
   );
 }

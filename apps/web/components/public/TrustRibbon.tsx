@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import styles from "./TrustRibbon.module.css";
 
 /**
@@ -9,9 +11,9 @@ export default function TrustRibbon() {
   return (
     <p className={styles.ribbon}>
       Admissions open · Classes 6–10 ·{" "}
-      <a className={styles.link} href="/disclosure">
+      <Link className={styles.link} href="/disclosure">
         affiliation pending verification
-      </a>
+      </Link>
     </p>
   );
 }

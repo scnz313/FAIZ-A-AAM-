@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -91,9 +92,9 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
             <dd className="num">{result.grantRef}</dd>
           </div>
         </dl>
-        <a className="button button--primary" href={demo ? "/sign-in" : "/sign-in/totp?next=%2Fstaff"}>
+        <Link prefetch={false} className="button button--primary" href={demo ? "/sign-in" : "/sign-in/totp?next=%2Fstaff"}>
           {demo ? "Continue to sign in" : "Set up two-step verification"}
-        </a>
+        </Link>
       </section>
     );
   }
@@ -180,7 +181,7 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
         <Button variant="primary" type="submit" disabled={busy}>
           {busy ? "Accepting…" : "Accept invitation"}
         </Button>
-        <a className="link-arrow" href="/sign-in">Already have access? Sign in →</a>
+        <Link prefetch={false} className="link-arrow" href="/sign-in">Already have access? Sign in →</Link>
       </div>
     </form>
   );

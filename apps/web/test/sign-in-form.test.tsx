@@ -63,9 +63,9 @@ describe("Supabase sign-in privacy", () => {
     expect(screen.queryByLabelText(/verification code/i)).toBeNull();
   });
 
-  it("uses password first factor for staff and routes verified staff to TOTP", async () => {
+  it("uses password first factor for staff and routes directly to TOTP", async () => {
     const user = userEvent.setup();
-    render(<SignInForm adapter="supabase" audience="staff" />);
+    render(<SignInForm adapter="supabase" audience="staff" navigate={routerMocks.push} />);
     await user.type(screen.getByLabelText(/^email/i), "staff@example.test");
     await user.type(screen.getByLabelText(/^password/i), "SecurePass9");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
@@ -74,20 +74,18 @@ describe("Supabase sign-in privacy", () => {
       email: "staff@example.test",
       password: "SecurePass9",
     }));
-    expect(adapterMocks.call).toHaveBeenCalledWith("identity.hasStaff");
     expect(routerMocks.push).toHaveBeenCalledWith("/sign-in/totp?next=%2Fstaff");
   });
 
-  it("rejects a valid Auth session that has no staff grant", async () => {
-    adapterMocks.call.mockResolvedValue({ ok: true, value: false });
+  it("shows a recoverable error for a failed staff sign-in", async () => {
+    authMocks.signInWithPassword.mockResolvedValue({ error: { message: "Invalid credentials" } });
     const user = userEvent.setup();
     render(<SignInForm adapter="supabase" audience="staff" />);
-    await user.type(screen.getByLabelText(/^email/i), "applicant@example.test");
+    await user.type(screen.getByLabelText(/^email/i), "staff@example.test");
     await user.type(screen.getByLabelText(/^password/i), "SecurePass9");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    await waitFor(() => expect(authMocks.signOut).toHaveBeenCalledWith({ scope: "local" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(/could not be accepted/i);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/could not be accepted/i));
     expect(routerMocks.push).not.toHaveBeenCalled();
   });
 });

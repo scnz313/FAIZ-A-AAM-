@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { StatusTone } from "@/components/ui/StatusBadge";
 import { FINANCE_DEMO_NOTE, formatINR, type PaymentMethod } from "@/modules/services/finance";
@@ -6,6 +7,7 @@ import { financeService } from "@/modules/services/finance";
 import { dataAdapter } from "@/lib/supabase/env";
 import { loadServerInvoices, loadServerPaymentAttempts } from "@/lib/supabase/server-loaders";
 import { formatKolkata } from "@/modules/iot/domain";
+import { mergePaymentRegisterRows } from "@/modules/services/finance-server-map";
 
 import styles from "./page.module.css";
 
@@ -24,6 +26,10 @@ type PaymentRow = {
   invoiceRef: string;
   status: PaymentStatus;
   receiptRef: string | null;
+  /** Attempt identity used to merge the posted payment with its source attempt. */
+  attemptId?: string | null;
+  /** Safe provider transaction/order identity used only to merge projections. */
+  providerTxnRef?: string | null;
   /** Demo-only marker; Supabase rows are always authoritative attempts. */
   demo?: boolean;
 };
@@ -50,20 +56,28 @@ export default async function PaymentsPage() {
       invoiceRef: view.invoice.ref,
       status: "success" as const,
       receiptRef: payment.receiptRef,
+      attemptId: payment.attemptId,
+      providerTxnRef: payment.providerTxnRef,
     })),
   );
+  const invoiceByRef = new Map(views.map((view) => [view.invoice.ref, view] as const));
 
   const authoritativeAttempts: PaymentRow[] = supabaseMode
-    ? (await loadServerPaymentAttempts()).map((attempt) => ({
-        ref: attempt.reference,
-        studentName: "Linked student",
-        method: attempt.method as PaymentMethod,
-        amountPaise: attempt.amount_paise,
-        paidAtIso: attempt.updated_at,
-        invoiceRef: attempt.invoices?.reference ?? "—",
-        status: attempt.status === "succeeded" ? "success" : ["failed", "cancelled"].includes(attempt.status) ? "failed" : "pending",
-        receiptRef: null,
-      }))
+    ? (await loadServerPaymentAttempts()).map((attempt) => {
+        const invoiceRef = attempt.invoices?.reference ?? "—";
+        return {
+          ref: attempt.reference,
+          studentName: invoiceByRef.get(invoiceRef)?.studentName ?? "Linked student",
+          method: attempt.method as PaymentMethod,
+          amountPaise: attempt.amount_paise,
+          paidAtIso: attempt.updated_at,
+          invoiceRef,
+          status: attempt.status === "succeeded" ? "success" : ["failed", "cancelled"].includes(attempt.status) ? "failed" : "pending",
+          receiptRef: null,
+          attemptId: attempt.id,
+          providerTxnRef: attempt.provider_order_ref,
+        };
+      })
     : [];
 
   // Demo-only gateway attempts remain visible only in demo mode.
@@ -92,11 +106,10 @@ export default async function PaymentsPage() {
     },
   ];
 
-  const ledgerRefs = new Set([...ledgerPayments, ...authoritativeAttempts].map((payment) => payment.ref));
-  const paymentRows: PaymentRow[] = [
-    ...ledgerPayments,
-    ...(supabaseMode ? authoritativeAttempts : demoAttempts.filter((row) => !ledgerRefs.has(row.ref))),
-  ];
+  const paymentRows = mergePaymentRegisterRows(
+    ledgerPayments,
+    supabaseMode ? authoritativeAttempts : demoAttempts,
+  );
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
@@ -148,9 +161,9 @@ export default async function PaymentsPage() {
                   </td>
                   <td>
                     {payment.receiptRef ? (
-                      <a className="link-arrow" href={`/portal/receipts/${payment.receiptRef}`}>
+                      <Link prefetch={false} className="link-arrow" href={`/portal/receipts/${payment.receiptRef}`}>
                         {payment.receiptRef}
-                      </a>
+                      </Link>
                     ) : (
                       "—"
                     )}

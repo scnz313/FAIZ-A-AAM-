@@ -76,9 +76,11 @@ export default async function InvoicesPage() {
           </table>
           )}
         </div>
-        <p className={styles.footNote}>
-          Print is a demo placeholder — printable invoice copies arrive with the finance backend.
-        </p>
+        {!supabaseMode ? (
+          <p className={styles.footNote}>
+            Print is a demo placeholder — printable invoice copies arrive with the finance backend.
+          </p>
+        ) : null}
       </section>
 
       <div className={styles.ruleNote}>

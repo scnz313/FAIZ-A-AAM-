@@ -4,6 +4,7 @@ import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { useFamilyContext } from "@/components/portal/FamilyContextProvider";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { gradeSectionLabel } from "@/modules/services/family-context";
 
 import styles from "./page.module.css";
@@ -17,6 +18,7 @@ import styles from "./page.module.css";
 export default function ProfilePage() {
   const { status, activeStudent, students, guardianName } = useFamilyContext();
   const child = activeStudent;
+  const supabaseMode = clientAdapterMode() === "supabase";
 
   return (
     <div className={styles.page}>
@@ -39,7 +41,7 @@ export default function ProfilePage() {
             </div>
             <div className={styles.row}>
               <dt>Workspace</dt>
-              <dd>Parent portal · demo session</dd>
+              <dd>{supabaseMode ? "Guardian account" : "Parent portal · demo session"}</dd>
             </div>
           </dl>
         </section>
@@ -125,10 +127,12 @@ export default function ProfilePage() {
         </p>
       </div>
 
-      <p className={styles.demoNote}>
-        <span className="demo-badge">Demo data</span>
-        <span>Fictional family details — real guardian and student records appear once accounts are linked.</span>
-      </p>
+      {!supabaseMode ? (
+        <p className={styles.demoNote}>
+          <span className="demo-badge">Demo data</span>
+          <span>Fictional family details — real guardian and student records appear once accounts are linked.</span>
+        </p>
+      ) : null}
     </div>
   );
 }

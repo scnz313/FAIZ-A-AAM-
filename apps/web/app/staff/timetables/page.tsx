@@ -22,8 +22,12 @@ export default function TimetablesPage() {
       <TimetableManager dateSheet={dataAdapter() === "supabase" ? [] : getDemoDateSheet()} />
 
       <div className={styles.ruleNote}>
-        <p>{ACADEMICS_DEMO_NOTE} The editor, conflicts, and versions are session demo state — nothing is persisted
-        server-side until the timetable backend connects.</p>
+        {dataAdapter() !== "supabase" ? (
+          <p>{ACADEMICS_DEMO_NOTE} The editor, conflicts, and versions are session demo state — nothing is persisted
+          server-side until the timetable backend connects.</p>
+        ) : (
+          <p>Timetable versions, conflicts, and overrides are validated and persisted through the school timetable service.</p>
+        )}
       </div>
     </div>
   );

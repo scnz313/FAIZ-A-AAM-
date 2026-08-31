@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { useFamilyContext } from "@/components/portal/FamilyContextProvider";
-import { documentsService, formatINR, type ReportCardDocument, type StudentDocumentBundle } from "@/modules/services/documents";
+import { PrivateDocumentList } from "@/components/ui/PrivateDocumentList";
 import { formatKolkata } from "@/modules/iot/domain";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
+import { documentsService, formatINR, type ReportCardDocument, type StudentDocumentBundle } from "@/modules/services/documents";
 
 import styles from "./page.module.css";
 
@@ -198,7 +201,8 @@ export default function DocumentsPage() {
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const { context, activeStudent, documentMetadata: seededMetadata } = useFamilyContext();
+  const { context, activeStudent } = useFamilyContext();
+  const supabaseMode = clientAdapterMode() === "supabase";
   const childName = activeStudent ? activeStudent.student.displayName : "the linked student";
 
   /* The whole page reads the per-student document bundle through the
@@ -212,7 +216,7 @@ export default function DocumentsPage() {
     void documentsService
       .listForStudent(context.accountId, activeStudent.student.id)
       .then((next) => {
-        if (!cancelled) setBundle(next.metadata !== undefined || seededMetadata.length === 0 ? next : { ...next, metadata: seededMetadata });
+        if (!cancelled) setBundle(next);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -222,7 +226,7 @@ export default function DocumentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [context, activeStudent, reloadKey, seededMetadata]);
+  }, [context, activeStudent, reloadKey]);
 
   function openPreview(file: PreviewDocument, trigger: HTMLButtonElement) {
     triggerRef.current = trigger;
@@ -256,6 +260,19 @@ export default function DocumentsPage() {
         </div>
       ) : (
         <>
+          {supabaseMode ? (
+            <section aria-labelledby="private-files-heading">
+              <h2 id="private-files-heading" className={styles.groupTitle}>
+                Private files
+              </h2>
+              <PrivateDocumentList
+                documents={bundle.metadata ?? []}
+                emptyTitle="No private files yet"
+                emptyNote={`Files generated or uploaded for ${childName} appear here with their finalization and scan state.`}
+              />
+            </section>
+          ) : null}
+
           <section aria-labelledby="report-cards-heading">
             <h2 id="report-cards-heading" className={styles.groupTitle}>
               Report cards
@@ -278,16 +295,18 @@ export default function DocumentsPage() {
                     </div>
                     {available ? (
                       <span className={styles.rowRight}>
-                        <a className="link-arrow" href={`/portal/results?term=${term.termId}`}>
+                        <Link prefetch={false} className="link-arrow" href={`/portal/results?term=${term.termId}`}>
                           View results →
-                        </a>
-                        <button
-                          type="button"
-                          className={`button button--quiet button--small ${styles.documentButton}`}
-                          onClick={(event) => openPreview(document, event.currentTarget)}
-                        >
-                          Preview (demo)
-                        </button>
+                        </Link>
+                        {!supabaseMode ? (
+                          <button
+                            type="button"
+                            className={`button button--quiet button--small ${styles.documentButton}`}
+                            onClick={(event) => openPreview(document, event.currentTarget)}
+                          >
+                            Preview (demo)
+                          </button>
+                        ) : null}
                       </span>
                     ) : (
                       <span className={styles.muted}>—</span>
@@ -308,9 +327,9 @@ export default function DocumentsPage() {
                 <p className="workspace-state-note">
                   Numbered receipts appear here after a payment is recorded for {childName}.
                 </p>
-                <a className="link-arrow" href="/portal/fees">
+                <Link prefetch={false} className="link-arrow" href="/portal/fees">
                   Go to the fee ledger →
-                </a>
+                </Link>
               </div>
             ) : (
               <div className={styles.rows}>
@@ -334,16 +353,18 @@ export default function DocumentsPage() {
                     </div>
                     <span className={styles.rowRight}>
                       <span className={`num ${styles.amount}`}>{formatINR(receipt.amountPaise)}</span>
-                      <a className="link-arrow" href={`/portal/receipts/${receipt.ref}`}>
+                      <Link prefetch={false} className="link-arrow" href={`/portal/receipts/${receipt.ref}`}>
                         View receipt →
-                      </a>
-                      <button
-                        type="button"
-                        className={`button button--quiet button--small ${styles.documentButton}`}
-                        onClick={(event) => openPreview(document, event.currentTarget)}
-                      >
-                        Preview (demo)
-                      </button>
+                      </Link>
+                      {!supabaseMode ? (
+                        <button
+                          type="button"
+                          className={`button button--quiet button--small ${styles.documentButton}`}
+                          onClick={(event) => openPreview(document, event.currentTarget)}
+                        >
+                          Preview (demo)
+                        </button>
+                      ) : null}
                     </span>
                   </div>
                 );
@@ -386,14 +407,16 @@ export default function DocumentsPage() {
             </div>
           </section>
 
-          <p className={styles.demoNote}>
-            <span className="demo-badge">Demo data</span>
-            <span>Fictional documents for {childName} — previews show metadata only; no private file or real download is available.</span>
-          </p>
+          {!supabaseMode ? (
+            <p className={styles.demoNote}>
+              <span className="demo-badge">Demo data</span>
+              <span>Fictional documents for {childName} — previews show metadata only; no private file or real download is available.</span>
+            </p>
+          ) : null}
         </>
       )}
 
-      {preview ? (
+      {!supabaseMode && preview ? (
         <DocumentPreviewDialog
           key={preview.id}
           file={preview}

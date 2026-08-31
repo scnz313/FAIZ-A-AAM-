@@ -36,7 +36,7 @@ export default async function MarksEntryPage({ params }: { params: Promise<{ res
 
       <div className={styles.ruleNote}>
         <p>Published results are versioned; corrections never silently rewrite history.</p>
-        <p>{ACADEMICS_DEMO_NOTE}</p>
+        {dataAdapter() !== "supabase" ? <p>{ACADEMICS_DEMO_NOTE}</p> : null}
       </div>
     </div>
   );

@@ -872,12 +872,14 @@ export async function processOutboxBatch(input: {
   // mode uses the real Resend adapter only when an email event is claimed.
   const sender = input.sender;
   const storage = input.storage ?? new SupabaseStorageProvider(input.admin);
+  /* Lazy scanner: defer configuration until a storage.scan event is actually
+   * claimed so email/PDF batches do not require a scanner endpoint. When a
+   * scan is needed, pass the real verified input through — never empty
+   * placeholder values that would make the scanner decision meaningless. */
   const scanner = input.scanner ?? {
-    scan: async () => {
-      // Do not make email/PDF batches depend on scanner configuration; the
-      // error is raised only when a storage scan job is actually claimed.
+    scan: async (scanInput: { bucket: string; objectKey: string; declaredMimeType: string; sizeBytes: number; checksumSha256: string }) => {
       const configured = createConfiguredDocumentScanner();
-      return configured.scan({ bucket: "", objectKey: "", declaredMimeType: "", sizeBytes: 0, checksumSha256: "" });
+      return configured.scan(scanInput);
     },
   };
   const batchSize = input.batchSize ?? 10;

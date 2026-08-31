@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -40,11 +41,10 @@ function filterViews(views: InvoiceView[], filter: LedgerFilter): InvoiceView[] 
 }
 
 /**
- * Client island for the fee ledger. Re-reads the adapter on mount (and on
- * child switch) so the active student's session payments — posted from an
- * invoice page — appear in the per-invoice Paid and Balance columns and the
- * summary after navigation. The server `initial` prop stays Aarif's default
- * for first paint; the provider resolves the real active child.
+ * Client island for the fee ledger. Demo mode re-reads the adapter on mount,
+ * and both modes reload on child switch so session payments posted from an
+ * invoice page appear in the per-invoice Paid and Balance columns and the
+ * summary after navigation. The server `initial` prop covers first paint.
  */
 export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
   const supabaseMode = clientAdapterMode() === "supabase";
@@ -56,6 +56,7 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
   const statementTriggerRef = useRef<HTMLButtonElement>(null);
   const { activeStudent } = useFamilyContext();
   const activeStudentId = activeStudent?.student.id;
+  const previousStudentId = useRef(activeStudentId);
   const studentLine = activeStudent
     ? `${activeStudent.student.displayName} · ${gradeSectionLabel(activeStudent.gradeSection)}`
     : null;
@@ -70,10 +71,17 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
     setFilter(initialFilter);
   }, [initialFilter]);
 
-  // The active-child ledger. Skipped until the provider resolves so the
-  // server-rendered initial (Aarif) covers first paint; child switches reload.
+  // The active-child ledger. Skipped until the provider resolves; the
+  // authoritative server initial covers Supabase first paint, while demo
+  // mount refreshes and child switches reload through the client service.
   useEffect(() => {
     if (activeStudentId === undefined) return;
+    const sameStudent = previousStudentId.current === activeStudentId;
+    previousStudentId.current = activeStudentId;
+    if (supabaseMode && sameStudent) {
+      setViews(initial);
+      return;
+    }
     let cancelled = false;
     void financeService
       .listInvoices(activeStudentId)
@@ -86,7 +94,7 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeStudentId]);
+  }, [activeStudentId, initial, supabaseMode]);
 
   const visible = filterViews(views, filter);
   const outstanding = views.filter((view) => view.balancePaise > 0);
@@ -195,14 +203,14 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
           {TABS.map((tab) => {
             const active = filter === tab.key;
             return (
-              <a
+              <Link prefetch={false}
                 key={tab.key}
                 href={tab.href}
                 className={active ? styles.active : undefined}
                 aria-current={active ? "true" : undefined}
               >
                 {tab.label}
-              </a>
+              </Link>
             );
           })}
         </div>
@@ -231,9 +239,9 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
                 visible.map((view) => (
                   <tr key={view.invoice.ref}>
                     <td>
-                      <a className={styles.rowLink} href={`/portal/fees/${view.invoice.ref}`}>
+                      <Link prefetch={false} className={styles.rowLink} href={`/portal/fees/${view.invoice.ref}`}>
                         <strong className="num">{view.invoice.ref}</strong>
-                      </a>
+                      </Link>
                     </td>
                     <td className={styles.desc}>
                       <strong>{view.invoice.term}</strong>

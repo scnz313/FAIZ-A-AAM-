@@ -10,6 +10,7 @@ import { canRole } from "@/modules/services/staff-authorization";
 import { formatKolkata } from "@/modules/iot/domain";
 import { supportService } from "@/modules/services/support";
 import type { Grievance, GrievanceEvent, GrievanceStatus } from "@/modules/services/support";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./GrievanceInbox.module.css";
 
@@ -64,6 +65,7 @@ function ResponseThread({ events }: { events: GrievanceEvent[] }) {
 export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } = {}) {
   const { summary } = useStaffContext();
   const canRespond = canRole(summary?.role ?? "", "support.respond");
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [items, setItems] = useState<Grievance[]>(initialItems ?? []);
   const [loading, setLoading] = useState(initialItems === undefined);
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -167,7 +169,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
       setResolveAfterSend(false);
       setPrivateNote(false);
       setError(null);
-      setLiveMessage(`Response recorded (demo) — ${updated.ref}`);
+      setLiveMessage(`Response recorded${supabaseMode ? "" : " (demo)"} — ${updated.ref}`);
       focusTarget.current = resolveAfterSend ? "heading" : "textarea";
     } finally {
       setSending(false);
@@ -180,7 +182,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
     try {
       const updated = await supportService.reopen(selected.ref, RESPONSE_AUTHOR);
       setItems((prev) => prev.map((item) => (item.ref === updated.ref ? updated : item)));
-      setLiveMessage(`${updated.ref} reopened as New (demo)`);
+      setLiveMessage(`${updated.ref} reopened as New${supabaseMode ? "" : " (demo)"}`);
       focusTarget.current = "textarea";
     } finally {
       setSending(false);
@@ -237,7 +239,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
             <h2 id="inbox-heading" className="section-label">
               Inbox
             </h2>
-            <span className="demo-badge">Demo data</span>
+            {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
           </div>
 
           {visible.length === 0 ? (

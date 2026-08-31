@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   invoiceSummary,
   mapServerInvoice,
+  mapServerInvoiceView,
   mapServerReceipt,
+  mergePaymentRegisterRows,
   type ServerInvoiceRow,
   type ServerReceiptRow,
 } from "@/modules/services/finance-server-map";
@@ -19,6 +21,7 @@ function invoiceRow(overrides: Partial<ServerInvoiceRow> = {}): ServerInvoiceRow
     status: "unpaid",
     issue_date: "2026-04-01T06:00:00Z",
     due_date: "2026-04-20T14:00:00Z",
+    version: 1,
     invoice_items: [{ label: "Tuition fee", amount_paise: 100000, kind: "fee" }],
     ledger_entries: [],
     payment_allocations: [],
@@ -255,6 +258,45 @@ describe("mapServerInvoice", () => {
       ]);
     });
 
+    it("maps the method from the nested payment attempt projection", () => {
+      const row = invoiceRow({
+        payment_allocations: [
+          {
+            amount_paise: 25000,
+            payments: {
+              id: "payment-nested-method",
+              reference: "PAY-NESTED-METHOD",
+              amount_paise: 25000,
+              created_at: "2026-04-05T08:30:00Z",
+              payment_attempts: { method: "net banking" },
+            },
+          },
+        ],
+        receipts: [
+          {
+            reference: "RC-NESTED-METHOD",
+            payment_id: "payment-nested-method",
+            issued_at: "2026-04-05T08:30:00Z",
+          },
+        ],
+      });
+
+      expect(mapServerInvoice(row).payments[0]).toMatchObject({
+        method: "Net banking",
+        receiptRef: "RC-NESTED-METHOD",
+      });
+      expect(
+        mapServerReceipt(
+          receiptRow({
+            payments: {
+              amount_paise: 25000,
+              payment_attempts: { method: "card" },
+            },
+          }),
+        ).method,
+      ).toBe("Card");
+    });
+
     it("uses allocation amount_paise not payments amount_paise", () => {
       const row = invoiceRow({
         payment_allocations: [
@@ -266,7 +308,28 @@ describe("mapServerInvoice", () => {
       expect(inv.payments[0]?.amountPaise).toBe(12345);
     });
 
-    it("maps receiptRef by index and defaults to empty string when missing", () => {
+    it("matches receipts by payment id despite order and never borrows another payment's receipt", () => {
+      const row = invoiceRow({
+        payment_allocations: [
+          { amount_paise: 1000, payments: { id: "payment-1", reference: "PAY-1", amount_paise: 1000, created_at: "2026-04-05T08:30:00Z", payment_attempts: { method: "UPI" } } },
+          { amount_paise: 2000, payments: { id: "payment-2", reference: "PAY-2", amount_paise: 2000, created_at: "2026-04-06T08:30:00Z", payment_attempts: { method: "Card" } } },
+          { amount_paise: 3000, payments: { id: "payment-without-receipt", reference: "PAY-3", amount_paise: 3000, created_at: "2026-04-07T08:30:00Z", payment_attempts: { method: "Cash" } } },
+        ],
+        receipts: [
+          { reference: "RC-2", payment_id: "payment-2", issued_at: "2026-04-06T08:30:00Z" },
+          { reference: "RC-OTHER", payment_id: "another-payment", issued_at: "2026-04-08T08:30:00Z" },
+          { reference: "RC-1", payment_id: "payment-1", issued_at: "2026-04-05T08:30:00Z" },
+        ],
+      });
+      const invoice = mapServerInvoice(row);
+      expect(invoice.payments.map((payment) => [payment.ref, payment.method, payment.receiptRef])).toEqual([
+        ["PAY-1", "UPI", "RC-1"],
+        ["PAY-2", "Card", "RC-2"],
+        ["PAY-3", "Cash", ""],
+      ]);
+    });
+
+    it("falls back to receipt order when legacy rows omit payment ids", () => {
       const row = invoiceRow({
         payment_allocations: [
           { amount_paise: 1000, payments: { reference: "PAY-1", method: "UPI", amount_paise: 1000, created_at: "2026-04-05T08:30:00Z" } },
@@ -345,6 +408,53 @@ describe("mapServerInvoice", () => {
   });
 });
 
+describe("mapServerInvoiceView signed ledger parity", () => {
+  it("preserves concession, adjustment, and refund signs in the authoritative balance", () => {
+    const row = invoiceRow({
+      status: "paid",
+      invoice_items: [{ label: "Term fee", amount_paise: 600000, kind: "fee" }],
+      payment_allocations: [
+        {
+          amount_paise: 600000,
+          payments: {
+            id: "payment-1",
+            reference: "PAY-1",
+            amount_paise: 600000,
+            provider_txn_id: "sbx-order-1",
+            created_at: "2026-04-05T08:30:00Z",
+            payment_attempts: { method: "UPI", provider_order_ref: "sbx-order-1" },
+          },
+        },
+      ],
+      receipts: [
+        { reference: "RC-1", payment_id: "payment-1", issued_at: "2026-04-05T08:30:00Z" },
+      ],
+      ledger_entries: [
+        { entry_type: "charge", amount_paise: 600000 },
+        { entry_type: "payment", amount_paise: -600000 },
+        { reference: "LED-CONCESSION", entry_type: "concession", amount_paise: -50000, reason: "ADJ-1: Merit concession" },
+        { reference: "LED-ADJUSTMENT", entry_type: "adjustment", amount_paise: -20000, reason: "ADJ-2: Billing correction" },
+        { reference: "LED-REFUND", entry_type: "refund", amount_paise: 125000, reason: "RFD-1: Partial refund" },
+      ],
+    });
+
+    const view = mapServerInvoiceView(row);
+
+    expect(view.ledgerEntries.map(({ kind, amountPaise }) => [kind, amountPaise])).toEqual([
+      ["concession", -50000],
+      ["adjustment", -20000],
+      ["refund", 125000],
+    ]);
+    expect(view).toMatchObject({
+      totalPaise: 600000,
+      paidPaise: 600000,
+      balancePaise: 55000,
+      status: "partial",
+    });
+    expect(view.invoice.status).toBe(view.status);
+  });
+});
+
 describe("invoiceSummary", () => {
   function makeInvoice(overrides: Partial<Invoice> = {}): Invoice {
     return {
@@ -411,6 +521,41 @@ describe("invoiceSummary", () => {
     const s = invoiceSummary(inv);
     expect(s.totalPaise).toBe(-30000);
     expect(s.balancePaise).toBe(0);
+  });
+});
+
+describe("mergePaymentRegisterRows", () => {
+  it("suppresses the succeeded attempt already represented by a posted provider transaction", () => {
+    const posted = [
+      { ref: "PAY-POSTED", status: "success" as const, providerTxnRef: "sbx-order-1", source: "ledger" },
+    ];
+    const attempts = [
+      { ref: "ATTEMPT-SUCCEEDED", status: "success" as const, providerTxnRef: " sbx-order-1 ", source: "attempt" },
+      { ref: "ATTEMPT-PENDING", status: "pending" as const, providerTxnRef: "sbx-order-1", source: "attempt" },
+      { ref: "ATTEMPT-FAILED", status: "failed" as const, providerTxnRef: "sbx-order-2", source: "attempt" },
+    ];
+
+    const merged = mergePaymentRegisterRows(posted, attempts);
+
+    expect(merged.map((row) => row.ref)).toEqual([
+      "PAY-POSTED",
+      "ATTEMPT-PENDING",
+      "ATTEMPT-FAILED",
+    ]);
+    expect(merged.filter((row) => row.providerTxnRef?.trim() === "sbx-order-1" && row.status === "success")).toHaveLength(1);
+  });
+
+  it("deduplicates repeated references without hiding distinct succeeded attempts", () => {
+    const posted = [
+      { ref: "PAY-1", status: "success" as const, providerTxnRef: null },
+      { ref: "PAY-1", status: "success" as const, providerTxnRef: null },
+    ];
+    const attempts = [
+      { ref: "PAY-1", status: "success" as const, providerTxnRef: null },
+      { ref: "ATTEMPT-2", status: "success" as const, providerTxnRef: "sbx-order-2" },
+    ];
+
+    expect(mergePaymentRegisterRows(posted, attempts).map((row) => row.ref)).toEqual(["PAY-1", "ATTEMPT-2"]);
   });
 });
 

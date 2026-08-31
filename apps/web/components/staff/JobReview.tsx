@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
@@ -8,6 +9,7 @@ import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
 import { canRole } from "@/modules/services/staff-authorization";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 import {
   applicationReviewer,
   careersService,
@@ -115,7 +117,7 @@ const DECISIONS: Record<DecisionKind, DecisionMeta> = {
     noteLabel: "Note (optional)",
     noteHelp: "Reviewers see this note; applicants only see the stage.",
     confirmTitle: "Shortlist this candidate?",
-    confirmText: "The applicant's status becomes Shortlisted and a timeline event is recorded in the demo session.",
+    confirmText: "The applicant's status becomes Shortlisted and a timeline event is recorded.",
   },
   interview: {
     label: "Request interview",
@@ -345,9 +347,9 @@ function timelineFor(record: JobApplicationRecord): TimelineEvent[] {
  * Staff review of a single job application: application and document panels
  * on the left; the ruled status timeline, reviewer scorecard, and reasoned
  * decision actions on the right. The server page SSR-renders the `initial`
- * record; this component refreshes it from the careers service on mount and
- * after every decision, so the status, timeline, and badge always match the
- * persisted demo-session record — never a local echo.
+ * record; demo mode refreshes it from the careers service on mount, and every
+ * decision refreshes it in either mode, so the status, timeline, and badge
+ * always match the persisted record — never a local echo.
  */
 export function JobReview({
   applicationRef,
@@ -358,8 +360,9 @@ export function JobReview({
   initial: JobApplicationRecord;
   vacancyTitle: string;
 }) {
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [record, setRecord] = useState<JobApplicationRecord>(initial);
-  const [refreshing, setRefreshing] = useState(true);
+  const [refreshing, setRefreshing] = useState(!supabaseMode);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<DecisionKind | null>(null);
@@ -371,6 +374,32 @@ export function JobReview({
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewDocument | null>(null);
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  const [scoreInput, setScoreInput] = useState("5");
+  const [scoreNotes, setScoreNotes] = useState("");
+  const [savingScore, setSavingScore] = useState(false);
+  const [scoreError, setScoreError] = useState<string | null>(null);
+
+  async function handleSaveScorecard() {
+    if (savingScore) return;
+    const numeric = Number(scoreInput);
+    if (!Number.isInteger(numeric) || numeric < 1 || numeric > 5) {
+      setScoreError("Score must be a whole number from 1 to 5.");
+      return;
+    }
+    setSavingScore(true);
+    setScoreError(null);
+    try {
+      const updated = await careersService.saveScorecard(applicationRef, numeric, scoreNotes);
+      setRecord(updated);
+      setScoreNotes("");
+      setAnnouncement(`Scorecard saved — ${numeric} / 5.`);
+    } catch (error) {
+      setScoreError(error instanceof Error ? error.message : "The scorecard could not be saved.");
+    } finally {
+      setSavingScore(false);
+    }
+  }
 
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
   const summaryRef = useRef<HTMLDivElement | null>(null);
@@ -393,8 +422,14 @@ export function JobReview({
   }, [applicationRef]);
 
   useEffect(() => {
+    if (supabaseMode) {
+      setRecord(initial);
+      setRefreshing(false);
+      setRefreshError(null);
+      return;
+    }
     void load();
-  }, [load]);
+  }, [initial, load, supabaseMode]);
 
   /* A client-side navigation to another application must not keep the old
      record between the prop change and the refreshed fetch. */
@@ -479,10 +514,24 @@ export function JobReview({
     }
   }
 
-  const qualificationLine = QUALIFICATION_LINES[applicationRef] ?? {
-    qualification: "As listed in the vacancy",
-    experience: "Not recorded",
-  };
+  const snapshot = record.submittedSnapshot ?? {};
+  const qualificationLine = supabaseMode
+    ? {
+        qualification:
+          typeof snapshot.qualification === "string" && snapshot.qualification.trim() !== ""
+            ? snapshot.qualification
+            : "As listed in the vacancy",
+        experience:
+          typeof snapshot.experience === "string" && snapshot.experience.trim() !== ""
+            ? snapshot.experience
+            : typeof snapshot.currentRole === "string" && snapshot.currentRole.trim() !== ""
+              ? snapshot.currentRole
+              : "Not recorded",
+      }
+    : QUALIFICATION_LINES[applicationRef] ?? {
+        qualification: "As listed in the vacancy",
+        experience: "Not recorded",
+      };
   const fileSlug = record.name.trim().toLowerCase().replace(/\s+/g, "-");
   const files: Record<DocumentKey, string> = {
     CV: `${fileSlug}-cv.demo.pdf`,
@@ -492,7 +541,7 @@ export function JobReview({
 
   const interviewScore = record.status === "Interview" || record.status === "Offered" ? "4 / 5" : "—";
   const timeline = timelineFor(record);
-  const reviewer = applicationReviewer(record);
+  const reviewer = supabaseMode ? (record.reviewerAccountId ?? null) : applicationReviewer(record);
   const availableActions = ACTIONS_BY_STATUS[record.status];
   const withdrawn = record.status === "Withdrawn";
   /* Phase-1 maker/checker split: reviewers score, approvers decide. The
@@ -507,9 +556,9 @@ export function JobReview({
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
         <p className={styles.backLink}>
-          <a className="link-arrow" href="/staff/careers">
+          <Link prefetch={false} className="link-arrow" href="/staff/careers">
             ← Careers
-          </a>
+          </Link>
         </p>
         <p className="eyebrow">Staff · Careers</p>
         <h1 className="workspace-title">{record.name}</h1>
@@ -518,7 +567,7 @@ export function JobReview({
         </p>
         <div className={styles.badgeRow}>
           <StatusBadge tone={STATUS_TONE[record.status]}>{record.status}</StatusBadge>
-          <span className="demo-badge">Demo data</span>
+          {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
         </div>
         <p className={styles.reviewer}>
           {reviewer ? `Reviewer ${reviewer}` : "No reviewer assigned yet"}
@@ -638,21 +687,68 @@ export function JobReview({
                 <h2 id="scorecard-heading" className="section-label">
                   Scorecard
                 </h2>
-                <span className="demo-badge">Demo scorecard</span>
+                {!supabaseMode ? <span className="demo-badge">Demo scorecard</span> : null}
               </div>
-              <div className={styles.scoreRow}>
-                <span className={styles.scoreLabel}>{SCORE_LABELS[0]}</span>
-                <span className={`num ${styles.scoreValue}`}>4 / 5</span>
-              </div>
-              <div className={styles.scoreRow}>
-                <span className={styles.scoreLabel}>{SCORE_LABELS[1]}</span>
-                <span className={`num ${styles.scoreValue}`}>3 / 5</span>
-              </div>
-              <div className={styles.scoreRow}>
-                <span className={styles.scoreLabel}>Interview / demonstration</span>
-                <span className={`num ${styles.scoreValue}`}>{interviewScore}</span>
-              </div>
+              {supabaseMode ? (
+                record.scorecards !== undefined && record.scorecards.length > 0 ? (
+                  record.scorecards.map((card, index) => (
+                    <div className={styles.scoreRow} key={`${card.atIso}-${index}`}>
+                      <span className={styles.scoreLabel}>
+                        Score {index + 1}
+                        {card.notes ? <small className={styles.cellNote}>{card.notes}</small> : null}
+                      </span>
+                      <span className={`num ${styles.scoreValue}`}>{card.score} / 5</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className={styles.panelNote}>No scorecard recorded yet. Save a score to start the review evidence.</p>
+                )
+              ) : (
+                <>
+                  <div className={styles.scoreRow}>
+                    <span className={styles.scoreLabel}>{SCORE_LABELS[0]}</span>
+                    <span className={`num ${styles.scoreValue}`}>4 / 5</span>
+                  </div>
+                  <div className={styles.scoreRow}>
+                    <span className={styles.scoreLabel}>{SCORE_LABELS[1]}</span>
+                    <span className={`num ${styles.scoreValue}`}>3 / 5</span>
+                  </div>
+                  <div className={styles.scoreRow}>
+                    <span className={styles.scoreLabel}>Interview / demonstration</span>
+                    <span className={`num ${styles.scoreValue}`}>{interviewScore}</span>
+                  </div>
+                </>
+              )}
               <p className={styles.panelNote}>Scorecards are visible to reviewers only — the service enforces the grant.</p>
+              <div className={styles.scorecardForm}>
+                <div className={styles.scoreField}>
+                  <label htmlFor="job-score">Score (1–5)</label>
+                  <select
+                    id="job-score"
+                    className="select"
+                    value={scoreInput}
+                    onChange={(event) => { setScoreInput(event.target.value); setScoreError(null); }}
+                    disabled={savingScore}
+                  >
+                    {[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </div>
+                <div className={styles.scoreField}>
+                  <label htmlFor="job-score-notes">Notes (optional)</label>
+                  <textarea
+                    id="job-score-notes"
+                    className="textarea"
+                    rows={2}
+                    value={scoreNotes}
+                    onChange={(event) => setScoreNotes(event.target.value)}
+                    disabled={savingScore}
+                  />
+                </div>
+                {scoreError ? <p className="field-error" role="alert">{scoreError}</p> : null}
+                <Button variant="quiet" disabled={savingScore} onClick={() => void handleSaveScorecard()}>
+                  {savingScore ? "Saving…" : "Save score"}
+                </Button>
+              </div>
             </section>
           ) : (
             <section className={`panel ${styles.panel}`} aria-labelledby="scorecard-heading">
@@ -804,7 +900,7 @@ export function JobReview({
       </div>
 
       <div className={styles.ruleNote}>
-        <p>{CONTENT_DEMO_NOTE}</p>
+        {!supabaseMode ? <p>{CONTENT_DEMO_NOTE}</p> : null}
       </div>
 
       {preview ? (

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { JobReview } from "@/components/staff/JobReview";
 import { careersService } from "@/modules/services/careers";
@@ -25,9 +26,9 @@ export default async function ApplicationReviewPage({
       <div className={styles.page}>
         <header className={`workspace-header ${styles.header}`}>
           <p className={styles.backLink}>
-            <a className="link-arrow" href="/staff/careers">
+            <Link prefetch={false} className="link-arrow" href="/staff/careers">
               ← Careers
-            </a>
+            </Link>
           </p>
           <p className="eyebrow">Staff · Careers</p>
           <h1 className="workspace-title">Application not found</h1>

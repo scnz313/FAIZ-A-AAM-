@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import StateGallery from "@/app/ui-states/StateGallery";
 import styles from "./page.module.css";
@@ -33,21 +34,21 @@ export default function UiStatesPage() {
         <nav className={styles.links} aria-label="State examples in the product">
           <p className="section-label">Open related screens</p>
           <div className={styles.linkList}>
-            <a className="link-arrow" href="/sign-in">
+            <Link prefetch={false} className="link-arrow" href="/sign-in">
               Sign-in and recovery →
-            </a>
-            <a className="link-arrow" href="/access-denied">
+            </Link>
+            <Link prefetch={false} className="link-arrow" href="/access-denied">
               Access denied →
-            </a>
-            <a className="link-arrow" href="/session-expired">
+            </Link>
+            <Link prefetch={false} className="link-arrow" href="/session-expired">
               Session expired →
-            </a>
-            <a className="link-arrow" href="/portal/documents">
+            </Link>
+            <Link prefetch={false} className="link-arrow" href="/portal/documents">
               Document states →
-            </a>
-            <a className="link-arrow" href="/portal/fees">
+            </Link>
+            <Link prefetch={false} className="link-arrow" href="/portal/fees">
               Fee ledger states →
-            </a>
+            </Link>
           </div>
         </nav>
       </div>

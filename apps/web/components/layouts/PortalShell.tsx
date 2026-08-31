@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -78,7 +79,7 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
     return () => query.removeEventListener("change", sync);
   }, []);
 
-  /* Nav links are real <a> tags; a route change closes the drawer. */
+  /* A route change closes the drawer. */
   useEffect(() => {
     setNavOpen(false);
   }, [pathname]);
@@ -174,7 +175,7 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
         inert={mounted && isMobile && !navOpen}
         onClick={handleNavClick}
       >
-        <a className="facility-brand" href="/portal">
+        <Link className="facility-brand" href="/portal" prefetch={false}>
           <Crest size="sm" />
           <span className="facility-brand-copy">
             <strong>Faiz Aam</strong>
@@ -183,7 +184,7 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
             </span>
             <small>Parent portal</small>
           </span>
-        </a>
+        </Link>
 
         <div className={styles.childSwitcher}>
           <label htmlFor="portal-child">Linked child</label>
@@ -229,14 +230,15 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
           {NAV_LINKS.map((link) => {
             const active = link.exact ? pathname === link.href : pathname.startsWith(link.href);
             return (
-              <a
+              <Link
                 key={link.href}
                 href={link.href}
+                prefetch={false}
                 className={active ? "active" : undefined}
                 aria-current={active ? "page" : undefined}
               >
                 {link.label}
-              </a>
+              </Link>
             );
           })}
         </nav>
@@ -261,9 +263,9 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
             </button>
           </div>
           {signOutError ? <p className={styles.switcherError} role="alert">{signOutError}</p> : null}
-          <a className="support-link" href="/portal/support">
+          <Link className="support-link" href="/portal/support" prefetch={false}>
             Support &amp; grievances
-          </a>
+          </Link>
         </div>
       </aside>
 
@@ -292,9 +294,9 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
             <div className="topbar-actions">
               <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoGuardianNotifications())} accountId={context?.accountId ?? undefined} />
               {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
-              <a className="link-arrow" href="/portal/support">
+              <Link className="link-arrow" href="/portal/support" prefetch={false}>
                 Get help ↗
-              </a>
+              </Link>
             </div>
           </div>
 

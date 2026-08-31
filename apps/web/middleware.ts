@@ -1,23 +1,29 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-import { createServerClient } from "@supabase/ssr";
-
 /**
  * Session refresh middleware (plan.md §4, @supabase/ssr Next.js 15
  * convention). Runs on every request; in demo mode (no Supabase public env)
  * it is a pure pass-through so the frontend prototype is untouched.
  *
- * getUser() triggers the refresh-token flow when needed; refreshed cookies
- * are written back on supabaseResponse. Do not run code between
- * createServerClient and getUser().
+ * getClaims() verifies the token and triggers refresh when needed; refreshed
+ * cookies are written back on supabaseResponse. Do not run code between
+ * createServerClient and getClaims().
+ *
+ * The Supabase SSR client is imported lazily so the edge bundle never
+ * evaluates its code-generation helpers when the demo adapter is active.
  */
 export async function updateSession(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-fass-pathname", request.nextUrl.pathname);
   const nextResponse = () => NextResponse.next({ request: { headers: requestHeaders } });
+  const sessionPath = ["/portal", "/staff", "/apply", "/sign-in", "/auth", "/api", "/register", "/session-expired", "/access-denied"]
+    .some((prefix) => request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`));
+  if (!sessionPath) return nextResponse();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !publishableKey) return nextResponse();
+
+  const { createServerClient } = await import("@supabase/ssr");
 
   let supabaseResponse = nextResponse();
 
@@ -35,11 +41,9 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Do not run code between createServerClient and getUser().
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  void user;
+  // Do not run code between createServerClient and getClaims().
+  const { data } = await supabase.auth.getClaims();
+  void data?.claims;
 
   return supabaseResponse;
 }

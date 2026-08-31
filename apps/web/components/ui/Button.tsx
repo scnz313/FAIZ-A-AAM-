@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
+import Link from "next/link";
 
 export type ButtonVariant = "primary" | "quiet" | "danger" | "small" | "saffron";
 
@@ -42,6 +43,19 @@ export default function Button({
     const handleClick = disabled
       ? (event: MouseEvent<HTMLAnchorElement>) => event.preventDefault()
       : onClick;
+    if (href.startsWith("/")) {
+      return (
+        <Link
+          href={href}
+          prefetch={false}
+          className={classes}
+          onClick={handleClick}
+          aria-disabled={disabled || undefined}
+        >
+          {children}
+        </Link>
+      );
+    }
     return (
       <a
         href={href}

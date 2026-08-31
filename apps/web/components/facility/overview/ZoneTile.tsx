@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { MetricType, Zone } from "@fass/contracts";
 import { METRIC_META, ZONE_KIND_LABELS } from "@fass/contracts";
 import { bandForMetric, floorLabel, zoneStatus, zoneStatusLabel, type ZoneStatus } from "@/modules/iot/domain";
@@ -29,7 +31,7 @@ export function ZoneTile({ data }: { data: ZoneTileData }) {
   const sparkMeta = spark ? METRIC_META[spark.metric] : null;
 
   return (
-    <a href={`/staff/facility/zones/${zone.id}`} className={styles.tile}>
+    <Link prefetch={false} href={`/staff/facility/zones/${zone.id}`} className={styles.tile}>
       <ChinarMark size={12} tone="ink" className={styles.mark} />
       <h3 className={styles.name}>{zone.name}</h3>
       <p className={`kicker ${styles.kind}`}>{ZONE_KIND_LABELS[zone.kind]}</p>
@@ -67,6 +69,6 @@ export function ZoneTile({ data }: { data: ZoneTileData }) {
           />
         ) : null}
       </div>
-    </a>
+    </Link>
   );
 }

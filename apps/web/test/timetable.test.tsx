@@ -6,7 +6,7 @@
  * reflects, and a resolve without a change is rejected.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setDemoNow } from "@/modules/demo/clock";
 import { timetableByDay, weekDays } from "@/modules/academics/demo";
@@ -28,9 +28,16 @@ import {
   validateDraft,
   validateResolve,
 } from "@/modules/services/timetable";
+import { FamilyContextProvider } from "@/components/portal/FamilyContextProvider";
+import { TimetablePageClient } from "@/components/portal/TimetablePageClient";
 import { TimetableEditor } from "@/components/staff/TimetableEditor";
+import { DEMO_GUARDIAN_ACCOUNT_ID, familyContextService } from "@/modules/services/family-context";
 
 const PINNED_NOW = new Date("2026-08-04T06:30:00Z");
+
+function jsonResponse(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
+}
 
 beforeEach(() => {
   setDemoNow(PINNED_NOW);
@@ -40,6 +47,10 @@ beforeEach(() => {
 afterEach(() => {
   setDemoNow(null);
   clearTimetableSession();
+  clearTimetableSession("10-B");
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("fixture conflicts", () => {
@@ -264,6 +275,111 @@ describe("resolve rules", () => {
     const suggestion = suggestedResolve(claim, timetableByDay, TIMETABLE_CLASS);
     expect(suggestion).toMatchObject({ field: "teacher", value: "N. Lone" });
     expect(suggestion?.reason).toContain("N. Lone covers Mon 14:15");
+  });
+});
+
+describe("Supabase portal timetable projection", () => {
+  it("renders the published server date sheet and omits the demo badge", async () => {
+    const [context, students, summary] = await Promise.all([
+      familyContextService.getContext(DEMO_GUARDIAN_ACCOUNT_ID),
+      familyContextService.listAccessibleStudentContexts(DEMO_GUARDIAN_ACCOUNT_ID),
+      familyContextService.getAccountSummary(DEMO_GUARDIAN_ACCOUNT_ID),
+    ]);
+    const first = students[0];
+    expect(first).toBeDefined();
+    if (first === undefined) return;
+    const sectionId = "00000000-0000-4000-8000-00000000b101";
+    const subjectId = "00000000-0000-4000-8000-00000000c201";
+    const roomId = "00000000-0000-4000-8000-00000000c202";
+    const assignmentId = "00000000-0000-4000-8000-00000000c203";
+    const tenB = {
+      ...first,
+      gradeSection: {
+        ...first.gradeSection,
+        id: sectionId,
+        ref: "GS-10-B",
+        gradeLabel: "Class 10",
+        sectionLabel: "B",
+      },
+      enrollment: { ...first.enrollment, gradeSectionId: sectionId },
+    };
+
+    vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+      if (request.op === "config.read") {
+        return jsonResponse({ ok: true, value: {
+          gradeSections: [{ id: sectionId, ref: "GS-10-B", gradeLabel: "Class 10", sectionLabel: "B" }],
+          subjects: [{ id: subjectId, code: "BIO", name: "Biology" }],
+          assignments: [{ id: assignmentId, ref: "SA-10B-BIO", gradeSectionId: sectionId, subjectId, teacherName: "Z. Qadri" }],
+          rooms: [{ id: roomId, code: "LAB-B", label: "Biology lab" }],
+          periods: [{ dayOfWeek: 2, periodNumber: 4, startsAt: "10:30:00", endsAt: "11:15:00" }],
+        } });
+      }
+      if (request.op === "timetable.effective") {
+        return jsonResponse({ ok: true, value: {
+          id: "00000000-0000-4000-8000-00000000c204",
+          reference: "TTV-10B-2",
+          grade_section_id: sectionId,
+          status: "published",
+          version: 2,
+          effective_from: "2026-09-14",
+          effective_to: null,
+          created_at: "2026-09-10T08:00:00Z",
+          timetable_periods: [{
+            day_of_week: 2,
+            period_number: 4,
+            starts_at: "10:30:00",
+            ends_at: "11:15:00",
+            subject_id: subjectId,
+            teacher_assignment_id: assignmentId,
+            room_id: roomId,
+            kind: "class",
+            subjects: { name: "Biology" },
+            staff_assignments: { staff_members: { people: { display_name: "Z. Qadri" } } },
+            rooms: { label: "Biology lab" },
+          }],
+          timetable_publications: [{ reference: "TTP-10B-2", published_at: "2026-09-10T08:00:00Z", note: "Published Class 10-B timetable" }],
+        } });
+      }
+      if (request.op === "timetable.listOverrides") return jsonResponse({ ok: true, value: [] });
+      if (request.op === "timetable.listDateSheets") {
+        return jsonResponse({ ok: true, value: [{
+          id: "00000000-0000-4000-8000-00000000c205",
+          reference: "ESV-10B-3",
+          grade_section_id: sectionId,
+          version: 3,
+          status: "published",
+          created_at: "2026-09-11T05:00:00Z",
+          published_at: "2026-09-12T05:30:00Z",
+          exam_schedule_entries: [{
+            exam_date: "2026-10-06",
+            subject_id: subjectId,
+            room_id: roomId,
+            starts_at: "09:45:00",
+            ends_at: "11:15:00",
+            subjects: { name: "Biology" },
+            rooms: { label: "Biology lab" },
+          }],
+        }] });
+      }
+      return jsonResponse({ ok: false, errors: [{ code: "unavailable", message: "unexpected operation", field: null }] }, 500);
+    }));
+
+    const user = userEvent.setup();
+    render(
+      <FamilyContextProvider initialState={{ context, students: [tenB], guardianName: summary.displayName }}>
+        <TimetablePageClient />
+      </FamilyContextProvider>,
+    );
+
+    const examTab = await screen.findByRole("button", { name: "Exam date sheet" });
+    await user.click(examTab);
+    await waitFor(() => expect(screen.getByText("Tue 06 Oct")).toBeInTheDocument());
+    expect(screen.getByText("Biology")).toBeInTheDocument();
+    expect(screen.getByText("v3 · published")).toBeInTheDocument();
+    expect(document.querySelector(".demo-badge")).toBeNull();
   });
 });
 

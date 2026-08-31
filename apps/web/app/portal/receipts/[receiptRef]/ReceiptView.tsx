@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { ReceiptPanel } from "@/components/portal/ReceiptPanel";
@@ -140,9 +141,9 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
           <Button variant="quiet" onClick={() => void retryReceipt()} disabled={retrying}>
             {retrying ? "Retrying…" : "Retry"}
           </Button>
-          <a className="link-arrow" href="/portal/fees">
+          <Link prefetch={false} className="link-arrow" href="/portal/fees">
             ← Back to fees
-          </a>
+          </Link>
         </div>
         <p className={styles.liveNotice} role="status" aria-live="polite">
           {notice || "Receipt unavailable — retry"}
@@ -179,9 +180,9 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
             <button type="button" className="button button--quiet button--small" onClick={retry}>
               Try again
             </button>
-            <a className="link-arrow" href="/portal/fees">
+            <Link prefetch={false} className="link-arrow" href="/portal/fees">
               ← Back to fees
-            </a>
+            </Link>
           </div>
         </div>
       ) : access === "none" ? (
@@ -191,9 +192,9 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
             The receipt you opened is not linked to this family account, so its details are not shown here. If you
             believe this is a mistake, contact the school office.
           </p>
-          <a className="link-arrow" href="/portal/fees">
+          <Link prefetch={false} className="link-arrow" href="/portal/fees">
             ← Back to fees
-          </a>
+          </Link>
         </div>
       ) : (
         <>
@@ -226,9 +227,9 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
           ) : null}
 
           <div className={styles.pageHeader}>
-            <a className="link-arrow" href="/portal/fees">
+            <Link prefetch={false} className="link-arrow" href="/portal/fees">
               ← Fees
-            </a>
+            </Link>
             <p className="eyebrow">Portal · Receipt</p>
             <h1 className={styles.title}>
               Receipt · <span className="num">{receipt.ref}</span>

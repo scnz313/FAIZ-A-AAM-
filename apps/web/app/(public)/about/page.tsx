@@ -5,6 +5,8 @@ import PageSection from "@/components/public/pages/PageSection";
 import RuledList from "@/components/public/pages/RuledList";
 import ConceptNote from "@/components/public/pages/ConceptNote";
 import { CampusScene } from "@/components/ui/art";
+import { dataAdapter } from "@/lib/supabase/env";
+import { loadServerPublicPageBody } from "@/lib/supabase/server-loaders";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
@@ -31,7 +33,26 @@ const APPROACH = [
   },
 ] as const;
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  /* A published managed page overrides the concept copy; otherwise the
+     concept page remains the honest fallback. */
+  const managed = dataAdapter() === "supabase" ? await loadServerPublicPageBody("about") : null;
+  if (managed !== null) {
+    return (
+      <div className={styles.page}>
+        <PageIntro eyebrow="The school" title={managed.title} deck={managed.body[0] ?? ""} />
+        <PageSection label="About" heading={managed.title} headingId="managed-about-heading">
+          <div className={styles.story}>
+            {managed.body.slice(1).map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
+          </div>
+        </PageSection>
+        <ConceptNote>This page is published by the school through the content workspace.</ConceptNote>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <PageIntro

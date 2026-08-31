@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
@@ -22,6 +23,7 @@ type SignInFormProps = {
   /** Runtime data adapter — "supabase" runs the real email-OTP flow. */
   adapter: "demo" | "supabase";
   audience?: "family" | "staff";
+  navigate?: (href: string) => void;
 };
 
 const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["identifier", "password", "code"];
@@ -42,7 +44,7 @@ function fieldId(field: keyof FieldErrors): string {
  * - Demo mode: the honest prototype flow (+91 90000 00000, any password of
  *   6+ characters) which moves to the demo verification screen.
  */
-export default function SignInForm({ adapter, audience = "family" }: SignInFormProps) {
+export default function SignInForm({ adapter, audience = "family", navigate }: SignInFormProps) {
   const router = useRouter();
   const [safeNext, setSafeNext] = useState(audience === "staff" ? "/staff" : "/portal");
   const supabaseMode = adapter === "supabase";
@@ -143,19 +145,9 @@ export default function SignInForm({ adapter, audience = "family" }: SignInFormP
       setRejected(error.status === 429 ? "Too many sign-in attempts. Wait before trying again." : "Sign-in could not be accepted. Check your details and try again.");
       return;
     }
-    try {
-      const staffCheck = await adapterCall<boolean>("identity.hasStaff");
-      if (!staffCheck.ok || !staffCheck.value) {
-        await supabase.auth.signOut({ scope: "local" });
-        setRejected("Sign-in could not be accepted. Check your staff invitation or contact the school office.");
-        return;
-      }
-      await adapterCall("identity.recordAuthEvent", { event: "signed_in" }).catch(() => null);
-      router.push(`/sign-in/totp?next=${encodeURIComponent(safeNext.startsWith("/staff") ? safeNext : "/staff")}`);
-    } catch {
-      await supabase.auth.signOut({ scope: "local" });
-      setRejected("Staff access could not be verified. Check your connection and try again.");
-    }
+    const destination = `/sign-in/totp?next=${encodeURIComponent(safeNext.startsWith("/staff") ? safeNext : "/staff")}`;
+    if (navigate) navigate(destination);
+    else window.location.assign(destination);
   }
 
   async function verifyCode(): Promise<void> {
@@ -385,21 +377,21 @@ export default function SignInForm({ adapter, audience = "family" }: SignInFormP
 
       <div className={styles.links}>
         {supabaseMode && !staffPasswordMode ? (
-          <a className="link-arrow" href={`/register/applicant?purpose=${safeNext.startsWith("/apply/job") ? "job_application" : "student_admission"}&next=${encodeURIComponent(safeNext)}`}>
+          <Link className="link-arrow" prefetch={false} href={`/register/applicant?purpose=${safeNext.startsWith("/apply/job") ? "job_application" : "student_admission"}&next=${encodeURIComponent(safeNext)}`}>
             New applicant? Create an account →
-          </a>
+          </Link>
         ) : null}
-        <a className="link-arrow" href="/sign-in/recovery">
+        <Link className="link-arrow" prefetch={false} href="/sign-in/recovery">
           Forgot password →
-        </a>
+        </Link>
         {supabaseMode ? (
-          <a className="link-arrow" href={staffPasswordMode ? "/sign-in" : "/sign-in/staff"}>
+          <Link className="link-arrow" prefetch={false} href={staffPasswordMode ? "/sign-in" : "/sign-in/staff"}>
             {staffPasswordMode ? "Family or applicant sign in →" : "Staff sign in →"}
-          </a>
+          </Link>
         ) : (
-          <a className="link-arrow" href="/staff">
+          <Link className="link-arrow" prefetch={false} href="/staff">
             Demo staff access →
-          </a>
+          </Link>
         )}
       </div>
       {!supabaseMode && <p className={styles.staffNote}>{STAFF_DEMO_NOTE}</p>}

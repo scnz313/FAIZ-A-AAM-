@@ -1,11 +1,19 @@
+import { createElement } from "react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { careersService } from "@/modules/services/careers";
+import { CareersQueue } from "@/components/staff/CareersQueue";
+import { JobReview } from "@/components/staff/JobReview";
+import { careersService, type JobApplicationRecord } from "@/modules/services/careers";
 import { contentService } from "@/modules/services/content";
 import { auditService } from "@/modules/services/audit";
 import { notificationsService } from "@/modules/services/notifications";
 import { settingsService } from "@/modules/services/settings";
 import { supportService } from "@/modules/services/support";
+
+vi.mock("@/components/staff/StaffContextProvider", () => ({
+  useStaffContext: () => ({ summary: null }),
+}));
 
 const APP_ID = "00000000-0000-4000-8000-00000000e101";
 const JOB_REF = "JOB-2026-0101";
@@ -17,6 +25,15 @@ function json(value: unknown, status = 200): Response {
 }
 
 const jobRow = { id: APP_ID, reference: JOB_REF, applicant_name: "Test Applicant", owner_account_id: "00000000-0000-4000-8000-000000000001", vacancy_id: VACANCY_ID, current_status: "draft", version: 0, created_at: "2026-08-10T05:00:00.000Z", job_vacancies: { title: "Teacher - Mathematics", reference: "VAC-2026-0101" }, job_application_versions: [], job_events: [], job_interviews: [] };
+
+const INITIAL_JOB: JobApplicationRecord = {
+  ref: JOB_REF,
+  vacancySlug: "teacher-mathematics",
+  name: "Server Candidate",
+  submittedAtIso: "2026-08-10T05:00:00.000Z",
+  status: "Submitted",
+  timeline: [{ status: "Submitted", atIso: "2026-08-10T05:00:00.000Z", actor: "Applicant", note: "Submitted" }],
+};
 
 beforeEach(() => {
   vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
@@ -60,5 +77,45 @@ describe("C2.4 Supabase facade contracts", () => {
   it("fails closed for public support when the route denies intake", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => json({ ok: false, errors: [{ code: "unavailable", message: "rate limit reached", field: null }] }, 429)));
     await expect(supportService.submitGrievance({ category: "Other", subject: "Question", message: "Help", contactName: "Parent", contactPhone: "+919000000000" })).rejects.toThrow(/rate limit/);
+  });
+});
+
+describe("server-hydrated careers components", () => {
+  it("uses authoritative Supabase queue and detail props without duplicate reads", () => {
+    const list = vi.spyOn(careersService, "listStaffRecords").mockResolvedValue([]);
+    const get = vi.spyOn(careersService, "getApplication").mockResolvedValue(null);
+
+    const queue = render(
+      createElement(CareersQueue, {
+        initial: [INITIAL_JOB],
+        vacancyTitles: { "teacher-mathematics": "Teacher - Mathematics" },
+        demoMode: false,
+      }),
+    );
+    expect(screen.getByText("Server Candidate")).toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
+    queue.unmount();
+
+    render(createElement(JobReview, {
+      applicationRef: JOB_REF,
+      initial: INITIAL_JOB,
+      vacancyTitle: "Teacher - Mathematics",
+    }));
+    expect(screen.getByRole("heading", { name: "Server Candidate" })).toBeInTheDocument();
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("keeps the demo queue mount refresh", async () => {
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "demo");
+    const list = vi.spyOn(careersService, "listStaffRecords").mockResolvedValue([INITIAL_JOB]);
+
+    render(createElement(CareersQueue, {
+      initial: [],
+      vacancyTitles: { "teacher-mathematics": "Teacher - Mathematics" },
+      demoMode: true,
+    }));
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Server Candidate")).toBeInTheDocument();
   });
 });

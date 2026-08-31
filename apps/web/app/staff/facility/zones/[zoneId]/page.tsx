@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ZONE_KIND_LABELS } from "@fass/contracts";
 import { getZoneDetail, getZoneHistory } from "@/lib/iot/api";
 import { floorLabel } from "@/modules/iot/domain";
@@ -16,16 +18,16 @@ export default async function FacilityZoneDetailPage({ params }: FacilityZoneDet
   if (!zone) {
     return (
       <div className={styles.page}>
-        <a className={`link-arrow ${styles.backLink}`} href="/staff/facility/zones">
+        <Link prefetch={false} className={`link-arrow ${styles.backLink}`} href="/staff/facility/zones">
           ← Zones
-        </a>
+        </Link>
         <h1 className="workspace-title">Zone not found</h1>
         <p className={styles.notFoundIntro}>
           This zone may have been removed, or the link you followed is incorrect.
         </p>
-        <a className="link-arrow" href="/staff/facility/zones">
+        <Link prefetch={false} className="link-arrow" href="/staff/facility/zones">
           Back to all zones →
-        </a>
+        </Link>
       </div>
     );
   }
@@ -52,9 +54,9 @@ export default async function FacilityZoneDetailPage({ params }: FacilityZoneDet
     <div className={styles.page}>
       <header className={`workspace-header ${styles.head}`}>
         <p className={styles.backLink}>
-          <a className="link-arrow" href="/staff/facility/zones">
+          <Link prefetch={false} className="link-arrow" href="/staff/facility/zones">
             ← Zones
-          </a>
+          </Link>
         </p>
         <p className="eyebrow">Facility · Zones</p>
         <h1 className="workspace-title">{zone.name}</h1>

@@ -1,11 +1,13 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import PageIntro from "@/components/public/PageIntro";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { contentService, noticeCategories, type ContentNotice, type DownloadItem, type NoticeCategory } from "@/modules/services/content";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { formatKolkata } from "@/modules/iot/domain";
 
 import styles from "./page.module.css";
@@ -239,9 +241,9 @@ function NoticesBody() {
             <button type="button" className="button button--primary" onClick={load}>
               Try again
             </button>
-            <a className="link-arrow" href="/">
+            <Link className="link-arrow" href="/">
               Return to the school homepage →
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -269,22 +271,22 @@ function NoticesBody() {
   return (
     <div className={styles.body}>
       <nav className={styles.filters} aria-label="Filter notices by category">
-        <a
+        <Link
           className={active === null ? `${styles.filter} ${styles.active}` : styles.filter}
           href="/notices"
           aria-current={active === null ? "true" : undefined}
         >
           All
-        </a>
+        </Link>
         {noticeCategories.map((item) => (
-          <a
+          <Link
             key={item}
             className={active === item ? `${styles.filter} ${styles.active}` : styles.filter}
             href={`/notices?category=${item}`}
             aria-current={active === item ? "true" : undefined}
           >
             {item}
-          </a>
+          </Link>
         ))}
       </nav>
 
@@ -297,10 +299,10 @@ function NoticesBody() {
               {notice.urgent ? <span className="status-badge status-badge--alert">Urgent</span> : null}
               {notice.pinned ? <span className="status-badge status-badge--watch">Pinned</span> : null}
             </div>
-            <a className={styles.rowLink} href={`/notices/${notice.slug}`}>
+            <Link className={styles.rowLink} href={`/notices/${notice.slug}`}>
               <strong>{notice.title}</strong>
               <span className={styles.rowExcerpt}>{notice.excerpt}</span>
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
@@ -315,7 +317,7 @@ function NoticesBody() {
               Forms and documents.
             </h2>
           </div>
-          <span className="demo-badge">Demo data</span>
+          <span className="demo-badge">{clientAdapterMode() === "supabase" ? "Authoritative register" : "Demo data"}</span>
         </div>
         <div className="table--scroll">
           <table className="table">

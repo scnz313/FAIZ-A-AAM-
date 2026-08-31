@@ -10,6 +10,7 @@ import {
   admissionReviewAdvance,
   admissionSaveDraft,
   admissionSubmit,
+  admissionWithdraw,
   contextFamilySelect,
   enrollmentConvert,
   enrollmentReadiness,
@@ -100,6 +101,11 @@ export const admissionsModule: AdapterModule = {
       ({ supabase }, payload) => admissionRespondOffer(supabase, payload as Parameters<typeof admissionRespondOffer>[1]),
     ),
     operation(
+      "admissions.withdraw",
+      applicationTarget({ expectedVersion: z.number().int().nonnegative().nullable().optional(), idempotencyKey: z.string().min(3).optional() }),
+      ({ supabase }, payload) => admissionWithdraw(supabase, payload as Parameters<typeof admissionWithdraw>[1]),
+    ),
+    operation(
       "enrollment.readiness",
       target,
       ({ supabase }, payload) => enrollmentReadiness(supabase, payload.applicationId!),
@@ -112,12 +118,12 @@ export const admissionsModule: AdapterModule = {
     operation(
       "context.family",
       z.object({ studentId: uuid.optional(), studentRef: publicReference.optional() }),
-      async ({ supabase, selection }, payload) => {
+      async ({ supabase, actor, selection }, payload) => {
         if (payload.studentId !== undefined) {
           const persisted = await contextFamilySelect(supabase, { studentId: payload.studentId });
           if (!persisted.ok) return persisted;
         }
-        return resolveFamilyContext(supabase, { studentId: payload.studentId ?? selection.familyStudentId });
+        return resolveFamilyContext(supabase, { studentId: payload.studentId ?? selection.familyStudentId }, actor);
       },
     ),
     operation(

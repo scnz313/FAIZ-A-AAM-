@@ -27,7 +27,7 @@ export default async function ResultsPage() {
 
       <div className={styles.ruleNote}>
         <p>Published results are versioned; corrections never silently rewrite history.</p>
-        <p>{ACADEMICS_DEMO_NOTE}</p>
+        {dataAdapter() !== "supabase" ? <p>{ACADEMICS_DEMO_NOTE}</p> : null}
       </div>
     </div>
   );

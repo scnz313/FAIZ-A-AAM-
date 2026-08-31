@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import styles from "./ProgressRail.module.css";
 
 export type ProgressRailStep = {
@@ -56,7 +58,7 @@ export default function ProgressRail({ steps, current, contextTitle, contextSubt
       <div className={styles.help}>
         <strong>Need help?</strong>
         <p>Call the admissions office, or write to us with your application reference.</p>
-        <a href="/admissions/apply">Contact admissions →</a>
+        <Link href="/admissions/apply" prefetch={false}>Contact admissions →</Link>
       </div>
     </nav>
   );

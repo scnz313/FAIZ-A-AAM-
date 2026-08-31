@@ -10,7 +10,7 @@ import { admissionsService, type ApplicationRecord } from "@/modules/services/ad
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { sessionKey } from "@/modules/services/session";
 import { DEMO_ADMISSION_CONFIGURATION, schoolConfigService, type AdmissionConfiguration, type AdmissionDocumentRequirement } from "@/modules/services/school-config";
-import { uploadDocumentFile } from "@/modules/services/document-upload";
+import { getDocumentUploadStatus, uploadDocumentFile } from "@/modules/services/document-upload";
 
 import styles from "./ApplicationForm.module.css";
 
@@ -40,6 +40,7 @@ const STEP_INTRO: readonly string[] = [
 const STORAGE_KEY = sessionKey("application-draft");
 
 type DocKey = string;
+type UploadState = "uploading" | "checking" | "pending" | "ready" | "quarantined" | "failed";
 
 function documentAccept(requirement: AdmissionDocumentRequirement): string {
   return requirement.allowedMimeTypes.map((mime) => mime === "application/pdf" ? ".pdf" : mime === "image/jpeg" ? ".jpg,.jpeg" : mime === "image/png" ? ".png" : mime).join(",");
@@ -249,7 +250,13 @@ function restoreTabDraft(raw: unknown): { draft: Draft; step: number; savedAtIso
   return { draft, step, savedAtIso };
 }
 
-function validateStep(step: number, draft: Draft, documents: readonly AdmissionDocumentRequirement[]): Record<string, string> {
+function validateStep(
+  step: number,
+  draft: Draft,
+  documents: readonly AdmissionDocumentRequirement[],
+  uploadStates: Record<string, UploadState> = {},
+  requireReady = false,
+): Record<string, string> {
   const errors: Record<string, string> = {};
   switch (step) {
     case 0:
@@ -286,7 +293,17 @@ function validateStep(step: number, draft: Draft, documents: readonly AdmissionD
       break;
     case 6:
       for (const doc of documents.filter((candidate) => candidate.required)) {
-        if (!draft.documents[doc.code]) errors[`doc-${doc.code}`] = `Attach the ${doc.label.toLowerCase()}.`;
+        const documentRef = draft.documents[doc.code];
+        const uploadState = uploadStates[doc.code];
+        if (!documentRef) {
+          errors[`doc-${doc.code}`] = `Attach the ${doc.label.toLowerCase()}.`;
+        } else if (requireReady && uploadState !== "ready") {
+          errors[`doc-${doc.code}`] = uploadState === "quarantined"
+            ? `Replace the ${doc.label.toLowerCase()}; security scanning quarantined this file.`
+            : uploadState === "failed"
+              ? `Retry or replace the ${doc.label.toLowerCase()}; processing failed.`
+              : `Wait for the ${doc.label.toLowerCase()} security scan, then check its status.`;
+        }
       }
       break;
     case 7:
@@ -454,7 +471,8 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
   /* Local start-over confirmation replaces a browser confirm() so the
      destructive step keeps a visible context and a safe default. */
   const [confirmingReset, setConfirmingReset] = useState(false);
-  const [uploadStates, setUploadStates] = useState<Record<string, "uploading" | "ready" | "failed">>({});
+  const [uploadStates, setUploadStates] = useState<Record<string, UploadState>>({});
+  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const startOverRef = useRef<HTMLButtonElement>(null);
@@ -617,6 +635,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
       return;
     }
     setUploadStates((current) => ({ ...current, [key]: "uploading" }));
+    setUploadErrors((current) => ({ ...current, [key]: "" }));
     try {
       /* The upload owner is durable before the browser requests a signed URL.
        * The returned public application reference is reused for every later
@@ -634,9 +653,37 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
         maxBytes: documentRequirements.find((requirement) => requirement.code === key)?.maxBytes,
       });
       setDoc(key, result.documentRef);
-      setUploadStates((current) => ({ ...current, [key]: result.status === "ready" ? "ready" : "uploading" }));
-    } catch {
+      setUploadStates((current) => ({ ...current, [key]: result.status === "ready" ? "ready" : "pending" }));
+    } catch (error) {
       setUploadStates((current) => ({ ...current, [key]: "failed" }));
+      setUploadErrors((current) => ({
+        ...current,
+        [key]: error instanceof Error ? error.message : "The upload failed. Choose the file and try again.",
+      }));
+    }
+  }
+
+  async function refreshDocumentStatus(key: DocKey) {
+    const documentRef = draft.documents[key];
+    if (!documentRef) return;
+    setUploadStates((current) => ({ ...current, [key]: "checking" }));
+    setUploadErrors((current) => ({ ...current, [key]: "" }));
+    try {
+      const result = await getDocumentUploadStatus(documentRef);
+      const next: UploadState = result.state === "ready"
+        ? "ready"
+        : result.state === "quarantined"
+          ? "quarantined"
+          : result.state === "failed" || result.state === "denied" || result.state === "expired"
+            ? "failed"
+            : "pending";
+      setUploadStates((current) => ({ ...current, [key]: next }));
+    } catch (error) {
+      setUploadStates((current) => ({ ...current, [key]: "failed" }));
+      setUploadErrors((current) => ({
+        ...current,
+        [key]: error instanceof Error ? error.message : "The document status could not be checked.",
+      }));
     }
   }
 
@@ -695,6 +742,8 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     setLastSavedIso(null);
     setSaveMessage(null);
     setSaveFailed(false);
+    setUploadStates({});
+    setUploadErrors({});
     setCurrentStep(0);
     setConfirmingReset(false);
     headingRef.current?.focus();
@@ -706,7 +755,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
 
     /* Intermediate steps: validate this section, then continue. */
     if (currentStep < APPLICATION_STEPS.length - 1) {
-      const nextErrors = validateStep(currentStep, draft, requiredDocumentRequirements);
+      const nextErrors = validateStep(currentStep, draft, requiredDocumentRequirements, uploadStates, supabaseMode);
       if (Object.keys(nextErrors).length > 0) {
         setErrors(nextErrors);
         focusFirstError(nextErrors);
@@ -719,7 +768,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
 
     /* Final step: validate everything; jump to the first invalid section. */
     for (let step = 0; step < APPLICATION_STEPS.length; step += 1) {
-      const stepErrors = validateStep(step, draft, requiredDocumentRequirements);
+      const stepErrors = validateStep(step, draft, requiredDocumentRequirements, uploadStates, supabaseMode);
       if (Object.keys(stepErrors).length > 0) {
         setErrors(stepErrors);
         setCurrentStep(step);

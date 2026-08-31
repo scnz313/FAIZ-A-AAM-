@@ -3,43 +3,73 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { contentService, noticeCategories, type ContentNotice, type NoticeCategory } from "@/modules/services/content";
 import { formatKolkata } from "@/modules/iot/domain";
-import { canRole } from "@/modules/services/staff-authorization";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
+import {
+  contentService,
+  noticeCategories,
+  type ContentActor,
+  type ContentNotice,
+  type ContentResult,
+  type NoticeCategory,
+} from "@/modules/services/content";
+import { canRole } from "@/modules/services/staff-authorization";
 
 import styles from "./NoticePublisher.module.css";
 
-type RowStatus = "Published" | "Draft" | "Scheduled" | "Expired";
+type RowStatus = "Published" | "Draft" | "In review" | "Approved" | "Scheduled" | "Expired" | "Archived";
 
 type NoticeRow = {
   key: string;
   title: string;
   category: NoticeCategory;
+  audience: ContentNotice["audience"];
   status: RowStatus;
   publishedLabel: string;
   owner: string;
   reviewDue: string;
+  version: number;
+  itemVersion: number;
+  authorAccountId: string | null;
+  publishNote?: string;
 };
 
 const STATUS_TONE: Record<RowStatus, "good" | "neutral" | "watch" | "alert"> = {
   Published: "good",
   Draft: "neutral",
+  "In review": "watch",
+  Approved: "watch",
   Scheduled: "watch",
   Expired: "alert",
+  Archived: "neutral",
 };
 
-/** Note recorded when a row is (re)published directly from the list. */
-const LIST_REPUBLISH_NOTE = "Published from the notices list (demo)";
+const AUDIENCE_LABEL: Record<ContentNotice["audience"], string> = {
+  public: "Public",
+  family: "Family",
+};
 
 function rowStatus(notice: ContentNotice): RowStatus {
   if (notice.status === "expired") return "Expired";
-  if (notice.status === "draft") return "Draft";
-  if (notice.scheduledForIso !== null && notice.scheduledForIso > new Date().toISOString()) return "Scheduled";
-  return "Published";
+  if (notice.status === "archived") return "Archived";
+  if (notice.status === "scheduled") return "Scheduled";
+  if (notice.status === "published") return "Published";
+  if (notice.reviewStatus === "in_review") return "In review";
+  if (notice.reviewStatus === "approved") return "Approved";
+  return "Draft";
+}
+
+function dateLabel(notice: ContentNotice): string {
+  const value = notice.status === "scheduled" ? notice.scheduledForIso : notice.status === "published" ? notice.dateIso : null;
+  if (!value) return "—";
+  try {
+    return formatKolkata(value, { format: "day" });
+  } catch {
+    return "—";
+  }
 }
 
 function toRows(notices: ContentNotice[]): NoticeRow[] {
@@ -47,10 +77,15 @@ function toRows(notices: ContentNotice[]): NoticeRow[] {
     key: notice.slug,
     title: notice.title,
     category: notice.category,
+    audience: notice.audience,
     status: rowStatus(notice),
-    publishedLabel: notice.status === "published" ? formatKolkata(notice.dateIso, { format: "day" }) : "—",
-    owner: "A. Lone",
+    publishedLabel: dateLabel(notice),
+    owner: notice.authorAccountId ? "Recorded editor" : "Content team",
     reviewDue: notice.reviewDue,
+    version: notice.version,
+    itemVersion: notice.itemVersion,
+    authorAccountId: notice.authorAccountId,
+    publishNote: notice.publishNote,
   }));
 }
 
@@ -61,26 +96,27 @@ type NoticePublisherProps = {
 };
 
 /**
- * Demo notice publisher: the notice list plus the draft/schedule/publish
- * form. Every write goes through the content service, so a published notice
- * immediately reaches the public and portal lists and the version bumps with
- * a recorded publish note. Real scheduling and delivery arrive with the CMS
- * backend; nothing here is persisted beyond the demo session.
+ * Canonical content maker/checker workspace. An editor saves immutable draft
+ * versions and requests review. A different publisher approves that exact
+ * version, then publishes or schedules it. Every successful mutation reloads
+ * the authoritative staff projection rather than fabricating a local version.
  */
 export function NoticePublisher({ notices }: NoticePublisherProps) {
-  const [rows, setRows] = useState<NoticeRow[]>(() => toRows(notices));
-  /* Phase-1 split: editors draft (content.draft), publishers review and
-     publish (content.publish). Hidden controls stay hidden — the content
-     service and later the backend enforce the grant. */
+  const [records, setRecords] = useState<ContentNotice[]>(() => notices.map((notice) => ({ ...notice, body: [...notice.body] })));
   const { summary } = useStaffContext();
   const canPublish = canRole(summary?.role ?? "", "content.publish");
   const canDraft = canRole(summary?.role ?? "", "content.draft");
+  const actor: ContentActor | null = summary
+    ? { accountId: summary.accountId, displayName: summary.displayName, role: summary.role }
+    : null;
+  const isSupabase = clientAdapterMode() === "supabase";
+  const rows = toRows(records);
+
   const [busy, setBusy] = useState(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<NoticeCategory>("General");
   const [body, setBody] = useState("");
-  const [scheduleDate, setScheduleDate] = useState("");
-  const [publishNote, setPublishNote] = useState("");
+  const [reviewNote, setReviewNote] = useState("");
   const [urgent, setUrgent] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [announcement, setAnnouncement] = useState<{ key: number; text: string } | null>(null);
@@ -88,123 +124,210 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
   const [editTitle, setEditTitle] = useState("");
   const [editCategory, setEditCategory] = useState<NoticeCategory>("General");
   const [editBody, setEditBody] = useState("");
+  const [editReviewNote, setEditReviewNote] = useState("");
+  const [releaseSlug, setReleaseSlug] = useState("");
+  const [scheduleDate, setScheduleDate] = useState("");
+
+  const releaseCandidates = records.filter(
+    (notice) =>
+      notice.status === "draft" &&
+      notice.reviewStatus === "approved" &&
+      notice.authorAccountId !== summary?.accountId,
+  );
+  const selectedReleaseSlug = releaseCandidates.some((notice) => notice.slug === releaseSlug)
+    ? releaseSlug
+    : (releaseCandidates[0]?.slug ?? "");
+  const selectedRelease = releaseCandidates.find((notice) => notice.slug === selectedReleaseSlug) ?? null;
 
   function announce(text: string) {
-    setAnnouncement((prev) => ({ key: (prev?.key ?? 0) + 1, text }));
+    setAnnouncement((previous) => ({ key: (previous?.key ?? 0) + 1, text }));
   }
 
-  /** Re-read the service list so every consumer shows the same records. */
+  function persistenceSuffix(): string {
+    return isSupabase ? "" : " in this demo session";
+  }
+
+  /** Re-read the service list so state and version come from the owning source. */
   async function refreshRows(): Promise<void> {
     const list = await contentService.listForStaff();
-    setRows(toRows(list));
+    setRecords(list.map((notice) => ({ ...notice, body: [...notice.body] })));
   }
 
-  function validate(needsNote: boolean): boolean {
+  async function surfaceFailure<T>(result: Extract<ContentResult<T>, { ok: false }>): Promise<void> {
+    announce(result.message);
+    if (result.code === "stale-version") {
+      try {
+        await refreshRows();
+      } catch {
+        announce(`${result.message} The latest content could not be reloaded; retry the page.`);
+      }
+    }
+  }
+
+  function validateDraft(): boolean {
     const next: Errors = {
       title: title.trim() ? undefined : "Title is required.",
       body: body.trim() ? undefined : "Body is required.",
-      note: needsNote && publishNote.trim() === "" ? "A publish note is required." : undefined,
     };
     setErrors(next);
-    return next.title === undefined && next.body === undefined && next.note === undefined;
+    return next.title === undefined && next.body === undefined;
   }
 
   function clearError(field: keyof Errors) {
-    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+    setErrors((previous) => (previous[field] ? { ...previous, [field]: undefined } : previous));
   }
 
-  function resetForm() {
+  function resetDraftForm() {
     setTitle("");
     setBody("");
-    setScheduleDate("");
-    setPublishNote("");
+    setReviewNote("");
     setUrgent(false);
   }
 
-  async function handlePublish(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
-    const immediate = scheduleDate.trim() === "";
-    if (!validate(immediate)) return;
+    if (busy || actor === null || !canDraft || !validateDraft()) return;
     setBusy(true);
     try {
-      const created = await contentService.createNotice({
+      await contentService.createNotice({
         title,
         category,
         body: [body.trim()],
         urgent,
-        scheduledForIso: immediate ? null : `${scheduleDate.trim()}T00:00:00.000Z`,
+        audience: "public",
+        publishNote: reviewNote,
+        actor,
       });
-      if (immediate) {
-        const result = await contentService.publishNotice(created.slug, {
-          note: publishNote.trim(),
-          audience: "public",
-        });
-        if (result.ok) {
-          await refreshRows();
-          resetForm();
-          announce("Notice published (demo).");
-        } else {
-          setErrors({ note: result.message });
-        }
-      } else {
-        await refreshRows();
-        resetForm();
-        announce("Notice scheduled (demo).");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleSaveDraft() {
-    if (busy) return;
-    if (!validate(false)) return;
-    setBusy(true);
-    try {
-      await contentService.createNotice({ title, category, body: [body.trim()], urgent });
       await refreshRows();
-      resetForm();
-      announce("Draft saved (demo).");
+      resetDraftForm();
+      announce(`Draft saved${persistenceSuffix()}. Add a review note if needed, then request publisher review.`);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "The draft could not be saved. Try again.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function toggleStatus(row: NoticeRow) {
-    if (busy) return;
+  async function requestReview(row: NoticeRow) {
+    if (busy || actor === null || !canDraft) return;
     setBusy(true);
     try {
-      if (row.status === "Published" || row.status === "Scheduled") {
-        const result = await contentService.unpublishNotice(row.key);
-        if (result.ok) {
-          await refreshRows();
-          announce(`Notice "${row.title}" unpublished (demo).`);
-        }
-      } else {
-        const result = await contentService.publishNotice(row.key, { note: LIST_REPUBLISH_NOTE });
-        if (result.ok) {
-          await refreshRows();
-          announce(`Notice "${row.title}" published (demo).`);
-        }
+      const result = await contentService.requestReview(row.key, {
+        actor,
+        expectedVersion: row.version,
+      });
+      if (!result.ok) {
+        await surfaceFailure(result);
+        return;
       }
+      await refreshRows();
+      announce(`Notice "${row.title}" sent for review${persistenceSuffix()}. A different publisher must approve it.`);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "Review could not be requested. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve(row: NoticeRow) {
+    if (busy || actor === null || !canPublish) return;
+    setBusy(true);
+    try {
+      const result = await contentService.approveVersion(row.key, {
+        actor,
+        expectedVersion: row.version,
+      });
+      if (!result.ok) {
+        await surfaceFailure(result);
+        return;
+      }
+      await refreshRows();
+      setReleaseSlug(row.key);
+      announce(`Version ${result.value.version} of "${row.title}" approved${persistenceSuffix()}. Publish or schedule it next.`);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "The version could not be approved. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function release(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || actor === null || !canPublish || selectedRelease === null) return;
+    if (!selectedRelease.publishNote?.trim()) {
+      setErrors((previous) => ({ ...previous, note: "The approved version has no publish note. Return it to an editor." }));
+      return;
+    }
+    setBusy(true);
+    try {
+      const scheduledForIso = scheduleDate ? `${scheduleDate}T00:00:00+05:30` : null;
+      const result = await contentService.publishVersionV2(selectedRelease.slug, {
+        actor,
+        expectedVersion: selectedRelease.version,
+        note: selectedRelease.publishNote,
+        scheduledForIso,
+      });
+      if (!result.ok) {
+        await surfaceFailure(result);
+        return;
+      }
+      await refreshRows();
+      setReleaseSlug("");
+      setScheduleDate("");
+      setErrors((previous) => ({ ...previous, note: undefined }));
+      announce(
+        scheduledForIso
+          ? `Notice "${selectedRelease.title}" scheduled${persistenceSuffix()}.`
+          : `Notice "${selectedRelease.title}" published${persistenceSuffix()}.`,
+      );
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "The approved notice could not be released. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unpublish(row: NoticeRow) {
+    if (busy || actor === null || !canPublish) return;
+    setBusy(true);
+    try {
+      const result = await contentService.unpublishNotice(row.key, {
+        actor,
+        expectedVersion: row.itemVersion,
+        reason: "Archived from the notices workspace.",
+      });
+      if (!result.ok) {
+        await surfaceFailure(result);
+        return;
+      }
+      await refreshRows();
+      announce(`Notice "${row.title}" archived${persistenceSuffix()}.`);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "The notice could not be archived. Try again.");
     } finally {
       setBusy(false);
     }
   }
 
   function editRow(row: NoticeRow) {
+    const notice = records.find((candidate) => candidate.slug === row.key);
+    if (!notice) return;
     setEditingSlug(row.key);
-    setEditTitle(row.title);
-    setEditCategory(row.category);
-    const notice = notices.find((n) => n.slug === row.key);
-    setEditBody(notice ? notice.body.join("\n") : "");
+    setEditTitle(notice.title);
+    setEditCategory(notice.category);
+    setEditBody(notice.body.join("\n"));
+    setEditReviewNote(notice.publishNote ?? "");
   }
 
   async function saveEdit() {
-    if (busy || editingSlug === null) return;
+    if (busy || editingSlug === null || actor === null || !canDraft) return;
     if (!editTitle.trim() || !editBody.trim()) {
       announce("Title and body are required to save edits.");
+      return;
+    }
+    const current = records.find((notice) => notice.slug === editingSlug);
+    if (!current) {
+      announce("The notice is no longer in the current list. Reload and try again.");
       return;
     }
     setBusy(true);
@@ -212,15 +335,20 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
       const result = await contentService.editNotice(editingSlug, {
         title: editTitle.trim(),
         category: editCategory,
-        body: editBody.split("\n").filter((line) => line.trim() !== ""),
+        body: editBody.split("\n").map((line) => line.trim()).filter(Boolean),
+        publishNote: editReviewNote,
+        actor,
+        expectedVersion: current.itemVersion,
       });
-      if (result.ok) {
-        await refreshRows();
-        announce(`Notice "${editTitle.trim()}" updated (demo).`);
-        cancelEdit();
-      } else {
-        announce(result.message);
+      if (!result.ok) {
+        await surfaceFailure(result);
+        return;
       }
+      await refreshRows();
+      announce(`Draft "${editTitle.trim()}" saved as version ${result.value.version}${persistenceSuffix()}.`);
+      cancelEdit();
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "The draft changes could not be saved. Try again.");
     } finally {
       setBusy(false);
     }
@@ -231,6 +359,7 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
     setEditTitle("");
     setEditCategory("General");
     setEditBody("");
+    setEditReviewNote("");
   }
 
   return (
@@ -240,7 +369,7 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
           <h2 id="notice-list-heading" className={styles.panelTitle}>
             Notices
           </h2>
-      <span className="demo-badge">{clientAdapterMode() === "supabase" ? "Live projection" : "Demo data"}</span>
+          {!isSupabase ? <span className="demo-badge">Demo data</span> : null}
         </div>
 
         {announcement && (
@@ -251,14 +380,17 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
 
         <div className="table--scroll">
           <table className={`table ${styles.table}`}>
-            <caption className="sr-only">Notices with status, owner and review due date</caption>
+            <caption className="sr-only">Notices with audience, workflow status, version, owner, review note and due date</caption>
             <thead>
               <tr>
                 <th scope="col">Title</th>
                 <th scope="col">Category</th>
+                <th scope="col">Audience</th>
                 <th scope="col">Status</th>
-                <th scope="col" className="num">Published</th>
+                <th scope="col" className="num">Version</th>
+                <th scope="col" className="num">Publish date</th>
                 <th scope="col">Owner</th>
+                <th scope="col">Review note</th>
                 <th scope="col" className="num">Review due</th>
                 <th scope="col">
                   <span className="sr-only">Actions</span>
@@ -266,35 +398,67 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.key}>
-                  <td className={styles.cellTitle}>{row.title}</td>
-                  <td>{row.category}</td>
-                  <td>
-                    <StatusBadge tone={STATUS_TONE[row.status]}>{row.status}</StatusBadge>
-                  </td>
-                  <td className="num">{row.publishedLabel}</td>
-                  <td>{row.owner}</td>
-                  <td className="num">{row.reviewDue}</td>
-                  <td className={styles.cellActions}>
-                    <Button variant="quiet" onClick={() => editRow(row)} disabled={busy || editingSlug !== null}>
-                      Edit
-                    </Button>
-                    {canPublish ? (
-                      <Button variant="quiet" disabled={busy} onClick={() => void toggleStatus(row)}>
-                        {row.status === "Draft" || row.status === "Expired" ? "Publish" : "Unpublish"}
-                      </Button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const selfAuthored = row.authorAccountId !== null && row.authorAccountId === summary?.accountId;
+                const editorCanRevise = row.status === "Draft" || row.status === "Archived" || row.status === "Expired";
+                return (
+                  <tr key={row.key}>
+                    <td className={styles.cellTitle}>{row.title}</td>
+                    <td>{row.category}</td>
+                    <td>{AUDIENCE_LABEL[row.audience]}</td>
+                    <td>
+                      <StatusBadge tone={STATUS_TONE[row.status]}>{row.status}</StatusBadge>
+                    </td>
+                    <td className="num">v{row.version}</td>
+                    <td className="num">{row.publishedLabel}</td>
+                    <td>{row.owner}</td>
+                    <td>{row.publishNote ?? "Not added"}</td>
+                    <td className="num">{row.reviewDue}</td>
+                    <td className={styles.cellActions}>
+                      {canDraft && editorCanRevise ? (
+                        <Button variant="quiet" type="button" onClick={() => editRow(row)} disabled={busy || editingSlug !== null}>
+                          {row.status === "Draft" ? "Edit" : "Start revision"}
+                        </Button>
+                      ) : null}
+                      {canDraft && row.status === "Draft" ? (
+                        <Button variant="quiet" type="button" disabled={busy} onClick={() => void requestReview(row)}>
+                          Request review
+                        </Button>
+                      ) : null}
+                      {canPublish && row.status === "In review" ? (
+                        selfAuthored ? (
+                          <span>A different publisher must approve</span>
+                        ) : (
+                          <Button variant="quiet" type="button" disabled={busy} onClick={() => void approve(row)}>
+                            Approve
+                          </Button>
+                        )
+                      ) : null}
+                      {canPublish && row.status === "Approved" ? (
+                        selfAuthored ? (
+                          <span>A different publisher must publish</span>
+                        ) : (
+                          <Button variant="quiet" type="button" disabled={busy} onClick={() => setReleaseSlug(row.key)}>
+                            Prepare release
+                          </Button>
+                        )
+                      ) : null}
+                      {canPublish && (row.status === "Published" || row.status === "Scheduled") ? (
+                        <Button variant="quiet" type="button" disabled={busy} onClick={() => void unpublish(row)}>
+                          Unpublish
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         {editingSlug !== null && (
           <div className={styles.editPanel} aria-label={`Editing notice ${editTitle}`}>
-            <h3 className={styles.panelTitle}>Edit notice</h3>
+            <h3 className={styles.panelTitle}>Edit draft version</h3>
             <div className="field">
               <label htmlFor="edit-title">Title</label>
               <input
@@ -329,12 +493,24 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
                 onChange={(event) => setEditBody(event.target.value)}
               />
             </div>
-            <p className="field-help">Only draft and scheduled notices can be edited. Published notices must be unpublished first.</p>
+            <div className="field">
+              <label htmlFor="edit-review-note">Review and publish note</label>
+              <input
+                id="edit-review-note"
+                className="input"
+                type="text"
+                value={editReviewNote}
+                onChange={(event) => setEditReviewNote(event.target.value)}
+                placeholder="What changed and why it should be published."
+              />
+              <p className="field-help">Required before review; it becomes part of the immutable reviewed version.</p>
+            </div>
+            <p className="field-help">A version already in review or approved cannot be changed. Save a new draft revision instead.</p>
             <div className={styles.formActions}>
-              <Button variant="primary" disabled={busy} onClick={() => void saveEdit()}>
+              <Button variant="primary" type="button" disabled={busy} onClick={() => void saveEdit()}>
                 Save changes
               </Button>
-              <Button variant="quiet" disabled={busy} onClick={cancelEdit}>
+              <Button variant="quiet" type="button" disabled={busy} onClick={cancelEdit}>
                 Cancel
               </Button>
             </div>
@@ -343,134 +519,154 @@ export function NoticePublisher({ notices }: NoticePublisherProps) {
       </section>
 
       <section className="panel" aria-labelledby="publisher-heading">
-        <h2 id="publisher-heading" className={styles.panelTitle}>
-          Publish a notice
-        </h2>
-
-        <form className={styles.form} onSubmit={(event) => void handlePublish(event)} noValidate>
-          <div className={`field ${errors.title ? "field--invalid" : ""}`}>
-            <label htmlFor="notice-title">Title</label>
-            <input
-              id="notice-title"
-              className="input"
-              type="text"
-              value={title}
-              onChange={(event) => {
-                setTitle(event.target.value);
-                clearError("title");
-              }}
-              placeholder="e.g. School photograph day"
-              aria-invalid={errors.title !== undefined}
-              aria-describedby={errors.title ? "notice-title-error" : undefined}
-            />
-            {errors.title && (
-              <p className="field-error" id="notice-title-error">
-                {errors.title}
-              </p>
-            )}
-          </div>
-
-          <div className={styles.formGrid}>
-            <div className="field">
-              <label htmlFor="notice-category">Category</label>
-              <select
-                id="notice-category"
-                className="select"
-                value={category}
-                onChange={(event) => setCategory(event.target.value as NoticeCategory)}
-              >
-                {noticeCategories.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {canPublish ? (
-              <div className="field">
-                <label htmlFor="notice-schedule">Schedule publish (optional)</label>
+        {canDraft ? (
+          <>
+            <h2 id="publisher-heading" className={styles.panelTitle}>Create a notice draft</h2>
+            <form className={styles.form} onSubmit={(event) => void handleSaveDraft(event)} noValidate>
+              <div className={`field ${errors.title ? "field--invalid" : ""}`}>
+                <label htmlFor="notice-title">Title</label>
                 <input
-                  id="notice-schedule"
+                  id="notice-title"
                   className="input"
-                  type="date"
-                  value={scheduleDate}
-                  onChange={(event) => setScheduleDate(event.target.value)}
+                  type="text"
+                  value={title}
+                  onChange={(event) => {
+                    setTitle(event.target.value);
+                    clearError("title");
+                  }}
+                  placeholder="e.g. School photograph day"
+                  aria-invalid={errors.title !== undefined}
+                  aria-describedby={errors.title ? "notice-title-error" : undefined}
                 />
+                {errors.title && <p className="field-error" id="notice-title-error">{errors.title}</p>}
               </div>
-            ) : null}
-          </div>
 
-          <div className={`field ${errors.body ? "field--invalid" : ""}`}>
-            <label htmlFor="notice-body">Body</label>
-            <textarea
-              id="notice-body"
-              className="textarea"
-              value={body}
-              onChange={(event) => {
-                setBody(event.target.value);
-                clearError("body");
-              }}
-              placeholder="What families need to know."
-              aria-invalid={errors.body !== undefined}
-              aria-describedby={errors.body ? "notice-body-error" : undefined}
-            />
-            {errors.body && (
-              <p className="field-error" id="notice-body-error">
-                {errors.body}
-              </p>
+              <div className="field">
+                <label htmlFor="notice-category">Category</label>
+                <select
+                  id="notice-category"
+                  className="select"
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value as NoticeCategory)}
+                >
+                  {noticeCategories.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={`field ${errors.body ? "field--invalid" : ""}`}>
+                <label htmlFor="notice-body">Body</label>
+                <textarea
+                  id="notice-body"
+                  className="textarea"
+                  value={body}
+                  onChange={(event) => {
+                    setBody(event.target.value);
+                    clearError("body");
+                  }}
+                  placeholder="What families need to know."
+                  aria-invalid={errors.body !== undefined}
+                  aria-describedby={errors.body ? "notice-body-error" : undefined}
+                />
+                {errors.body && <p className="field-error" id="notice-body-error">{errors.body}</p>}
+              </div>
+
+              <div className="field">
+                <label htmlFor="notice-note">Review and publish note</label>
+                <input
+                  id="notice-note"
+                  className="input"
+                  type="text"
+                  value={reviewNote}
+                  onChange={(event) => {
+                    setReviewNote(event.target.value);
+                    clearError("note");
+                  }}
+                  placeholder="What changed and why it should be published."
+                />
+                <p className="field-help">You may save without it, but a note is required before requesting review.</p>
+              </div>
+
+              <label className={styles.checkRow}>
+                <input
+                  className={styles.check}
+                  type="checkbox"
+                  checked={urgent}
+                  onChange={(event) => setUrgent(event.target.checked)}
+                />
+                <span>Mark as urgent</span>
+              </label>
+
+              <div className={styles.formActions}>
+                <Button variant="primary" type="submit" disabled={busy}>Save draft</Button>
+              </div>
+            </form>
+          </>
+        ) : canPublish ? (
+          <>
+            <h2 id="publisher-heading" className={styles.panelTitle}>Release an approved notice</h2>
+            {releaseCandidates.length === 0 ? (
+              <p className="field-help">No approved notice from another editor is ready. Approve an in-review version first.</p>
+            ) : (
+              <form className={styles.form} onSubmit={(event) => void release(event)} noValidate>
+                <div className="field">
+                  <label htmlFor="release-notice">Approved notice</label>
+                  <select
+                    id="release-notice"
+                    className="select"
+                    value={selectedReleaseSlug}
+                    onChange={(event) => {
+                      setReleaseSlug(event.target.value);
+                      setErrors((previous) => ({ ...previous, note: undefined }));
+                    }}
+                  >
+                    {releaseCandidates.map((notice) => (
+                      <option key={notice.slug} value={notice.slug}>v{notice.version} · {notice.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <span>Approved publish note</span>
+                  <p>{selectedRelease?.publishNote ?? "No note recorded"}</p>
+                  {errors.note && <p className="field-error" role="alert">{errors.note}</p>}
+                </div>
+                <div className="field">
+                  <span>Approved audience</span>
+                  <p>{selectedRelease ? AUDIENCE_LABEL[selectedRelease.audience] : "—"}</p>
+                  <p className="field-help">The approved audience is locked for this release.</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="notice-schedule">Schedule publish (optional)</label>
+                  <input
+                    id="notice-schedule"
+                    className="input"
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(event) => setScheduleDate(event.target.value)}
+                  />
+                  <p className="field-help">The selected date begins at 00:00 in Asia/Kolkata. Leave blank to publish now.</p>
+                </div>
+                <div className={styles.formActions}>
+                  <Button variant="primary" type="submit" disabled={busy}>
+                    {scheduleDate ? "Schedule publication" : "Publish now"}
+                  </Button>
+                </div>
+              </form>
             )}
-          </div>
+          </>
+        ) : (
+          <>
+            <h2 id="publisher-heading" className={styles.panelTitle}>Notice workflow</h2>
+            <p className="field-help">This workspace is read-only for the active role.</p>
+          </>
+        )}
 
-          {canPublish ? (
-            <div className={`field ${errors.note ? "field--invalid" : ""}`}>
-              <label htmlFor="notice-note">Publish note</label>
-              <input
-                id="notice-note"
-                className="input"
-                type="text"
-                value={publishNote}
-                onChange={(event) => {
-                  setPublishNote(event.target.value);
-                  clearError("note");
-                }}
-                placeholder="Why this notice is published now."
-                aria-invalid={errors.note !== undefined}
-                aria-describedby={errors.note ? "notice-note-error" : undefined}
-              />
-              {errors.note && (
-                <p className="field-error" id="notice-note-error">
-                  {errors.note}
-                </p>
-              )}
-              <p className="field-help">Required for immediate publish — the note is recorded with the published version.</p>
-            </div>
-          ) : null}
-
-          <label className={styles.checkRow}>
-            <input
-              className={styles.check}
-              type="checkbox"
-              checked={urgent}
-              onChange={(event) => setUrgent(event.target.checked)}
-            />
-            <span>Mark as urgent</span>
-          </label>
-
-          <p className="field-help">A notice with a future date stays in Scheduled until it publishes.</p>
-
-          <div className={styles.formActions}>
-            {canPublish ? (
-              <Button variant="primary" type="submit" disabled={busy}>
-                Publish now
-              </Button>
-            ) : null}
-            {canDraft ? (
-              <Button variant="quiet" type="button" onClick={() => void handleSaveDraft()} disabled={busy}>
-                Save draft
-              </Button>
-            ) : null}
-          </div>
-        </form>
+        <p className="field-help">
+          {isSupabase
+            ? "Draft, review, approval and release use immutable content versions. The approved publish note and audience cannot be changed during release."
+            : "Demo writes persist for this browser session. A different account is still required for approval; switching only the same account's role does not satisfy maker/checker."}
+        </p>
       </section>
     </div>
   );

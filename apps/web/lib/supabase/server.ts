@@ -11,13 +11,14 @@
  *   `user_metadata` (plan.md §4).
  */
 
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 import type { Database } from "@/lib/supabase/database.types";
 import { requireSupabasePublicEnv } from "@/lib/supabase/env";
 
-export async function createSupabaseServerClient() {
+export const createSupabaseServerClient = cache(async () => {
   const { url, publishableKey } = requireSupabasePublicEnv();
   const cookieStore = await cookies();
 
@@ -36,4 +37,4 @@ export async function createSupabaseServerClient() {
       },
     },
   });
-}
+});

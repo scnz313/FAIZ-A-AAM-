@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { useFamilyContext } from "@/components/portal/FamilyContextProvider";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -124,9 +125,9 @@ export function OverviewFinanceBand({ classNames = {} }: { classNames?: Overview
             ) : latestTerm === null ? (
               "No published report yet"
             ) : (
-              <a className="link-arrow" href="/portal/results">
+              <Link className="link-arrow" href="/portal/results" prefetch={false}>
                 Published — view results →
-              </a>
+              </Link>
             )}
           </p>
         </section>

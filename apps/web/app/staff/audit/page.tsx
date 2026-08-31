@@ -8,7 +8,8 @@ import styles from "./page.module.css";
 export default async function AuditPage() {
   /* Safe events only — actor/action/target/outcome, no secrets — read
      through the audit service; the explorer renders and filters them. */
-  const events = dataAdapter() === "supabase" ? await loadServerAudit() as Awaited<ReturnType<typeof auditService.listEvents>> : await auditService.listEvents();
+  const supabaseMode = dataAdapter() === "supabase";
+  const events = supabaseMode ? await loadServerAudit() as Awaited<ReturnType<typeof auditService.listEvents>> : await auditService.listEvents();
 
   return (
     <div className={styles.page}>
@@ -21,9 +22,11 @@ export default async function AuditPage() {
       <AuditExplorer events={events} />
 
       <p className={styles.note}>Audit events are append-only and cannot be edited or deleted.</p>
-      <p className="demo-note">
-        <span className="demo-badge">Demo data</span> Fictional audit trail — real events arrive with the backend.
-      </p>
+      {!supabaseMode ? (
+        <p className="demo-note">
+          <span className="demo-badge">Demo data</span> Fictional audit trail — real events arrive with the backend.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { formatKolkata } from "@/modules/iot/domain";
 import type { ApplicationStatus } from "@/modules/admissions/demo";
 import { admissionsService, type StaffQueueRecord } from "@/modules/services/admissions";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./AdmissionsQueue.module.css";
 
@@ -36,17 +38,22 @@ const FILTERS: ReadonlyArray<{ key: "all" | ApplicationStatus; label: string }> 
 ];
 
 /**
- * Staff admissions queue. The server renders the initial rows; on mount the
- * component refreshes from the admissions service so decisions recorded
- * earlier in the demo session (and applications submitted by applicants in
- * the same session) show here with their real status.
+ * Staff admissions queue. The server renders the initial rows; in demo mode
+ * the component refreshes from the admissions service on mount so decisions
+ * recorded earlier in the session (and applications submitted by applicants
+ * in the same session) show here with their real status.
  */
 export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [filter, setFilter] = useState<"all" | ApplicationStatus>("all");
   const [liveRows, setLiveRows] = useState<StaffQueueRecord[]>(rows);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    if (supabaseMode) {
+      setLiveRows(rows);
+      return;
+    }
     let cancelled = false;
     setRefreshing(true);
     admissionsService
@@ -63,7 +70,7 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
     return () => {
       cancelled = true;
     };
-  }, [rows]);
+  }, [rows, supabaseMode]);
 
   const visible = filter === "all" ? liveRows : liveRows.filter((row) => row.status === filter);
 
@@ -102,7 +109,7 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
         <h2 id="queue-heading" className="section-label">
           Application queue
         </h2>
-        <span className="demo-badge">Demo data</span>
+        {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
       </div>
 
       <div className="tabs" role="group" aria-label="Filter applications by status">
@@ -122,7 +129,7 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
 
       {refreshing ? (
         <p className={styles.empty} role="status">
-          Refreshing from the demo session…
+          {supabaseMode ? "Refreshing the queue…" : "Refreshing from the demo session…"}
         </p>
       ) : null}
 
@@ -142,9 +149,9 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
             {visible.map((row) => (
               <tr key={row.ref} className={row.flagged ? styles.flaggedRow : undefined}>
                 <td>
-                  <a className={styles.rowLink} href={`/staff/admissions/${row.ref}`}>
+                  <Link prefetch={false} className={styles.rowLink} href={`/staff/admissions/${row.ref}`}>
                     <strong className="num">{row.ref}</strong>
-                  </a>
+                  </Link>
                 </td>
                 <td>
                   {row.studentName}

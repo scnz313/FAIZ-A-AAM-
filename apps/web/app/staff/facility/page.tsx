@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { MetricType } from "@fass/contracts";
 import { getAlerts, getOverview, getZoneHistory, getZones } from "@/lib/iot/api";
 import { zoneStatus, type ZoneStatus } from "@/modules/iot/domain";
@@ -84,9 +86,9 @@ export default async function FacilityOverviewPage() {
           Comfort and air-quality bands follow the school&apos;s thermal policy and CPCB guidance; readings are
           sampled demo data.
         </span>
-        <a className="link-arrow" href="/staff/facility/history">
+        <Link prefetch={false} className="link-arrow" href="/staff/facility/history">
           Review the full history →
-        </a>
+        </Link>
       </p>
     </div>
   );

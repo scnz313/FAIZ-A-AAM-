@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Crest } from "@/components/ui/Crest";
@@ -64,7 +65,7 @@ export function PublicHeader({ tone = "light" }: PublicHeaderProps) {
     return () => query.removeEventListener("change", sync);
   }, []);
 
-  /* Nav links are real <a> tags; a route change closes the menu. */
+  /* A route change closes the menu. */
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
@@ -136,7 +137,7 @@ export function PublicHeader({ tone = "light" }: PublicHeaderProps) {
       )}
 
       <div className="public-header-main">
-        <a className="brand" href="/" aria-label="Faiz Aam Secondary School home">
+        <Link className="brand" href="/" prefetch={false} aria-label="Faiz Aam Secondary School home">
           <Crest size="md" tone={dark ? "chalk" : "ink"} />
           <span className="brand-copy">
             <span className="brand-name-row">
@@ -147,7 +148,7 @@ export function PublicHeader({ tone = "light" }: PublicHeaderProps) {
             </span>
             <small>Secondary School · Bandipora</small>
           </span>
-        </a>
+        </Link>
 
         <button
           ref={menuButtonRef}
@@ -171,24 +172,25 @@ export function PublicHeader({ tone = "light" }: PublicHeaderProps) {
             const active =
               pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
-              <a
+              <Link
                 key={link.label}
                 href={link.href}
+                prefetch={false}
                 aria-current={active ? "page" : undefined}
               >
                 {link.label}
-              </a>
+              </Link>
             );
           })}
         </nav>
 
         <div className="header-actions">
-          <a className="text-action" href="/portal/fees">
+          <Link className="text-action" href="/portal/fees" prefetch={false}>
             Pay fees
-          </a>
-          <a className="portal-button" href="/portal">
+          </Link>
+          <Link className="portal-button" href="/portal" prefetch={false}>
             Portal <span aria-hidden="true">↗</span>
-          </a>
+          </Link>
         </div>
       </div>
     </header>

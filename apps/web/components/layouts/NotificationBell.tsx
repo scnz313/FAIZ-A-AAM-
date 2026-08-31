@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { relativeTime } from "@/modules/iot/domain";
@@ -63,7 +64,7 @@ export function NotificationBell({ items: initialItems, accountId }: { items: No
   /* With an account, refresh the list from the service so its per-account
      read state (set elsewhere in the session) is reflected here. */
   useEffect(() => {
-    if (!accountId) return;
+    if (!accountId || !open) return;
     let cancelled = false;
     void notificationsService
       .listForAccount(accountId)
@@ -76,7 +77,7 @@ export function NotificationBell({ items: initialItems, accountId }: { items: No
     return () => {
       cancelled = true;
     };
-  }, [accountId]);
+  }, [accountId, open]);
 
   const unreadCount = items.filter((item) => item.unread && !readIds.has(item.id)).length;
 
@@ -187,7 +188,7 @@ export function NotificationBell({ items: initialItems, accountId }: { items: No
                         </time>
                       </p>
                       {item.href ? (
-                        <a className={`${styles.text} ${styles.textLink}`} href={item.href} onClick={() => markRead(item.id)}>{item.text}</a>
+                        <Link className={`${styles.text} ${styles.textLink}`} href={item.href} prefetch={false} onClick={() => markRead(item.id)}>{item.text}</Link>
                       ) : (
                         <p className={styles.text}>{item.text}</p>
                       )}

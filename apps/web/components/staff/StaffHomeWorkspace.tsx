@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { DashboardQueues } from "@/components/staff/DashboardQueues";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { canRole } from "@/modules/services/staff-authorization";
-import { admissionsService } from "@/modules/services/admissions";
+import { admissionsService, type StaffQueueRecord } from "@/modules/services/admissions";
+import { careersService, type JobApplicationRecord } from "@/modules/services/careers";
 import { contentService } from "@/modules/services/content";
 import { familyContextService } from "@/modules/services/family-context";
 import { financeService } from "@/modules/services/finance";
@@ -28,6 +30,7 @@ export function StaffHomeWorkspace() {
   const ready = status === "ready" && summary !== null;
 
   const showAdmissions = canRole(role, "admissions.view");
+  const showCareers = canRole(role, "careers.view");
   const showFinance = canRole(role, "finance.view");
   const showSupport = canRole(role, "support.view");
   const showResults = canRole(role, "results.view");
@@ -43,49 +46,60 @@ export function StaffHomeWorkspace() {
   const [pendingLinks, setPendingLinks] = useState<number | null>(null);
   const [staffCount, setStaffCount] = useState<number | null>(null);
   const [queueCounts, setQueueCounts] = useState({ applications: 0, assessment: 0, offers: 0, invoicesDue: 0, payments: 0, invoiceTotal: 0, supportNew: 0, supportProgress: 0, supportResolved: 0, notices: 0 });
+  const [admissionRows, setAdmissionRows] = useState<StaffQueueRecord[]>([]);
+  const [jobRows, setJobRows] = useState<JobApplicationRecord[]>([]);
 
   useEffect(() => {
-    if (!showAdmin) return;
     let cancelled = false;
+    const pendingPromise = showAdmin
+      ? supabaseMode
+        ? familyContextService.listLinkRequestSummaries().then((rows) => rows.length)
+        : Promise.all([familyContextService.listLinkRequests(), familyContextService.listLinkRequestSummaries()])
+            .then(([requests, links]) => requests.filter((row) => row.request.status === "pending").length + links.filter((row) => row.link.status === "pending_verification").length)
+      : Promise.resolve(null);
     void Promise.all([
-      familyContextService.listLinkRequests(),
-      familyContextService.listLinkRequestSummaries(),
-      usersService.listUsers(),
-      admissionsService.listStaffRecords(),
-      financeService.listAllInvoices(),
-      supportService.listGrievances(),
-      contentService.listForStaff(),
+      pendingPromise,
+      showAdmin ? usersService.listUsers() : Promise.resolve(null),
+      showAdmissions ? admissionsService.listStaffRecords() : Promise.resolve(null),
+      showFinance ? financeService.listAllInvoices() : Promise.resolve(null),
+      showSupport ? supportService.listGrievances() : Promise.resolve(null),
+      showContent ? contentService.listForStaff() : Promise.resolve(null),
+      showCareers ? careersService.listStaffRecords() : Promise.resolve(null),
     ])
-      .then(([requests, graphLinks, users, applications, invoiceViews, grievances, content]) => {
+      .then(([pending, users, applications, invoiceViews, grievances, content, jobs]) => {
         if (cancelled) return;
-        const pendingRequests = requests.filter((row) => row.request.status === "pending").length;
-        const pendingGraphLinks = graphLinks.filter((row) => row.link.status === "pending_verification").length;
-        setPendingLinks(pendingRequests + pendingGraphLinks);
-        setStaffCount(users.length);
+        if (pending !== null) setPendingLinks(pending);
+        if (users !== null) setStaffCount(users.length);
+        setAdmissionRows(applications ?? []);
+        setJobRows(jobs ?? []);
         const now = Date.now();
         setQueueCounts({
-          applications: applications.filter((row) => ["Submitted", "Under review", "Changes requested"].includes(row.status)).length,
-          assessment: applications.filter((row) => row.status === "Assessment").length,
-          offers: applications.filter((row) => row.status === "Offered").length,
-          invoicesDue: invoiceViews.filter((view) => view.balancePaise > 0 && Date.parse(view.invoice.dueAtIso) >= now && Date.parse(view.invoice.dueAtIso) <= now + 14 * 86_400_000).length,
+          applications: applications?.filter((row) => ["Submitted", "Under review", "Changes requested"].includes(row.status)).length ?? 0,
+          assessment: applications?.filter((row) => row.status === "Assessment").length ?? 0,
+          offers: applications?.filter((row) => row.status === "Offered").length ?? 0,
+          invoicesDue: invoiceViews?.filter((view) => view.balancePaise > 0 && Date.parse(view.invoice.dueAtIso) >= now && Date.parse(view.invoice.dueAtIso) <= now + 14 * 86_400_000).length ?? 0,
           payments: 0,
-          invoiceTotal: invoiceViews.length,
-          supportNew: grievances.filter((g) => g.status === "New").length,
-          supportProgress: grievances.filter((g) => g.status === "In progress").length,
-          supportResolved: grievances.filter((g) => g.status === "Resolved").length,
-          notices: content.length,
+          invoiceTotal: invoiceViews?.length ?? 0,
+          supportNew: grievances?.filter((g) => g.status === "New").length ?? 0,
+          supportProgress: grievances?.filter((g) => g.status === "In progress").length ?? 0,
+          supportResolved: grievances?.filter((g) => g.status === "Resolved").length ?? 0,
+          notices: content?.length ?? 0,
         });
       })
       .catch(() => {
         if (!cancelled) {
-          setPendingLinks(0);
-          setStaffCount(0);
+          setAdmissionRows([]);
+          setJobRows([]);
+          if (showAdmin) {
+            setPendingLinks(0);
+            setStaffCount(0);
+          }
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [showAdmin]);
+  }, [showAdmin, showAdmissions, showCareers, showFinance, showSupport, showContent, supabaseMode]);
 
   return (
     <div className={styles.page}>
@@ -117,9 +131,9 @@ export function StaffHomeWorkspace() {
                 <span className="num">{queueCounts.offers}</span> offers outstanding
               </li>
             </ul>
-            <a className="link-arrow" href="/staff/admissions">
+            <Link prefetch={false} className="link-arrow" href="/staff/admissions">
               Review the queue →
-            </a>
+            </Link>
           </div>
         ) : null}
 
@@ -140,9 +154,9 @@ export function StaffHomeWorkspace() {
                 <span className="num">{queueCounts.invoiceTotal}</span> invoices in ledger
               </li>
             </ul>
-            <a className="link-arrow" href="/staff/finance">
+            <Link prefetch={false} className="link-arrow" href="/staff/finance">
               Open the ledger →
-            </a>
+            </Link>
           </div>
         ) : null}
 
@@ -163,14 +177,14 @@ export function StaffHomeWorkspace() {
                 <span className="num">{queueCounts.supportResolved}</span> resolved
               </li>
             </ul>
-            <a className="link-arrow" href="/staff/support">
+            <Link prefetch={false} className="link-arrow" href="/staff/support">
               Open the support inbox →
-            </a>
+            </Link>
           </div>
         ) : null}
       </section>
 
-      <DashboardQueues />
+      <DashboardQueues admissions={admissionRows} jobs={jobRows} />
 
       {showResults || showTimetables || showContent ? (
         <section aria-labelledby="publishing-heading" className={styles.publishing}>
@@ -187,28 +201,28 @@ export function StaffHomeWorkspace() {
           ) : null}
           <div className={styles.quickLinks}>
             {showResults ? (
-              <a className="tile-link" href="/staff/results">
+              <Link prefetch={false} className="tile-link" href="/staff/results">
                 <span className="tile-link__num">01</span>
                 <span className="tile-link__title">Review results</span>
                 <span className="tile-link__line">Moderation queue for Term 2 batches.</span>
                 <span className="tile-link__more">Open →</span>
-              </a>
+              </Link>
             ) : null}
             {showTimetables ? (
-              <a className="tile-link" href="/staff/timetables">
+              <Link prefetch={false} className="tile-link" href="/staff/timetables">
                 <span className="tile-link__num">02</span>
                 <span className="tile-link__title">Manage timetables</span>
                 <span className="tile-link__line">Versions, overrides, and date sheets.</span>
                 <span className="tile-link__more">Open →</span>
-              </a>
+              </Link>
             ) : null}
             {showContent ? (
-              <a className="tile-link" href="/staff/notices">
+              <Link prefetch={false} className="tile-link" href="/staff/notices">
                 <span className="tile-link__num">03</span>
                 <span className="tile-link__title">Publish notices</span>
                 <span className="tile-link__line">Draft, schedule, and publish notices.</span>
                 <span className="tile-link__more">Open →</span>
-              </a>
+              </Link>
             ) : null}
           </div>
         </section>
@@ -226,11 +240,11 @@ export function StaffHomeWorkspace() {
             <h2 id="admin-heading" className="section-label">
               Administration
             </h2>
-            <span className="demo-badge">Demo data</span>
+            <span className="demo-badge">{supabaseMode ? "Live projection" : "Demo data"}</span>
           </div>
           <div className={styles.quickLinks}>
             {showUsers ? (
-              <a className="tile-link" href="/staff/users">
+              <Link prefetch={false} className="tile-link" href="/staff/users">
                 <span className="tile-link__num">01</span>
                 <span className="tile-link__title">Manage users</span>
                 <span className="tile-link__line">
@@ -238,10 +252,10 @@ export function StaffHomeWorkspace() {
                   — invite, grant, and revoke roles.
                 </span>
                 <span className="tile-link__more">Open →</span>
-              </a>
+              </Link>
             ) : null}
             {showLinks ? (
-              <a className="tile-link" href="/staff/link-requests">
+              <Link prefetch={false} className="tile-link" href="/staff/link-requests">
                 <span className="tile-link__num">02</span>
                 <span className="tile-link__title">Link requests</span>
                 <span className="tile-link__line">
@@ -249,23 +263,23 @@ export function StaffHomeWorkspace() {
                   — approve or reject guardian links.
                 </span>
                 <span className="tile-link__more">Open →</span>
-              </a>
+              </Link>
             ) : null}
             {showSettings ? (
-              <a className="tile-link" href="/staff/settings">
+              <Link prefetch={false} className="tile-link" href="/staff/settings">
                 <span className="tile-link__num">03</span>
                 <span className="tile-link__title">Settings</span>
                 <span className="tile-link__line">Academic year, admission window, fee and result policy.</span>
                 <span className="tile-link__more">Open →</span>
-              </a>
+              </Link>
             ) : null}
             {showAudit ? (
-              <a className="tile-link" href="/staff/audit">
+              <Link prefetch={false} className="tile-link" href="/staff/audit">
                 <span className="tile-link__num">04</span>
                 <span className="tile-link__title">Audit trail</span>
                 <span className="tile-link__line">Read-only evidence of every meaningful action.</span>
                 <span className="tile-link__more">Open →</span>
-              </a>
+              </Link>
             ) : null}
           </div>
         </section>

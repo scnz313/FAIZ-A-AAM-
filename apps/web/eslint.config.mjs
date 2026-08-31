@@ -14,18 +14,16 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals"),
   {
-    ignores: [".next/**", "node_modules/**", "out/**", "next-env.d.ts"],
+    ignores: [".next/**", ".next-dev/**", "node_modules/**", "out/**", "next-env.d.ts"],
   },
   {
     /*
-     * The design system deliberately renders internal navigation as plain
-     * styled anchors (the editorial link-arrow pattern; the Button
-     * primitive also renders an anchor when given an href) — the app has
-     * no next/link usage by design. Migrating to <Link> is a navigation
-     * architecture decision for the backend phase, not a lint fix.
+     * Internal page navigation uses Next client transitions so shared shells,
+     * authenticated context, and route data are not discarded on every click.
+     * External links, downloads, and explicit document reloads remain anchors.
      */
     rules: {
-      "@next/next/no-html-link-for-pages": "off",
+      "@next/next/no-html-link-for-pages": "error",
     },
   },
 ];

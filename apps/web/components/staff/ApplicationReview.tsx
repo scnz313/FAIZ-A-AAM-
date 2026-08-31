@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
@@ -8,6 +9,7 @@ import { formatKolkata } from "@/modules/iot/domain";
 import type { ApplicationStatus } from "@/modules/admissions/demo";
 import { admissionsService, type ApplicationRecord } from "@/modules/services/admissions";
 import { canRole } from "@/modules/services/staff-authorization";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./ApplicationReview.module.css";
 
@@ -80,7 +82,7 @@ const DOCUMENTS: ReadonlyArray<ApplicationDocument> = [
   },
 ];
 
-type DecisionAction = "assessment" | "change" | "offer" | "waitlist" | "decline";
+type DecisionAction = "review" | "assessment" | "change" | "offer" | "waitlist" | "decline";
 
 type ActionMeta = {
   label: string;
@@ -90,6 +92,12 @@ type ActionMeta = {
 };
 
 const ACTION_DETAILS: Record<DecisionAction, ActionMeta> = {
+  review: {
+    label: "Start review",
+    description: "Begin verification and review of the submitted application.",
+    requiresReason: false,
+    tone: "primary",
+  },
   assessment: {
     label: "Move to assessment",
     description: "Send the application to the assessment panel.",
@@ -122,12 +130,14 @@ const ACTION_DETAILS: Record<DecisionAction, ActionMeta> = {
   },
 };
 
-/** Actions offered per status — invalid transitions are never presented. */
+/** Actions offered per status — invalid transitions are never presented.
+ * The canonical flow is Submitted → Under review → Assessment → decision;
+ * a fresh submission starts with review, not with a decision. */
 const AVAILABLE_ACTIONS: Record<ApplicationStatus, DecisionAction[]> = {
   Draft: [],
-  Submitted: ["assessment", "change", "waitlist", "decline"],
-  "Under review": ["assessment", "change", "waitlist", "decline"],
-  "Changes requested": ["assessment", "decline"],
+  Submitted: ["review", "change"],
+  "Under review": ["assessment", "change"],
+  "Changes requested": ["review", "decline"],
   Assessment: ["offer", "waitlist", "decline"],
   Offered: [],
   Waitlisted: ["decline"],
@@ -137,6 +147,7 @@ const AVAILABLE_ACTIONS: Record<ApplicationStatus, DecisionAction[]> = {
 };
 
 const TARGET_STATUS: Record<DecisionAction, ApplicationStatus> = {
+  review: "Under review",
   assessment: "Assessment",
   change: "Changes requested",
   offer: "Offered",
@@ -163,7 +174,7 @@ const ASSESSMENT_DEFAULT_NOTE = "Moved to the assessment panel.";
  * service enforces the grant regardless of what the UI shows.
  */
 function actionNeeds(action: DecisionAction, canReview: boolean, canApprove: boolean): boolean {
-  if (action === "assessment" || action === "change") return canReview;
+  if (action === "review" || action === "assessment" || action === "change") return canReview;
   return canApprove;
 }
 
@@ -333,11 +344,11 @@ function DocumentPreviewDialog({
 
 /**
  * Staff review workspace for one admission application. The record comes
- * from the admissions service — the server renders the initial record, the
- * component refreshes it from the demo session on mount and after every
- * decision. Consequential decisions require a written reason and an inline
- * confirmation, and every recorded decision appends a timeline event that
- * the queue and applicant views read back through the same service.
+ * from the admissions service — the server renders the initial record, demo
+ * mode refreshes it from the session on mount, and every decision refreshes
+ * it in either mode. Consequential decisions require a written reason and an
+ * inline confirmation, and every recorded decision appends a timeline event
+ * that the queue and applicant views read back through the same service.
  */
 export function ApplicationReview({
   applicationRef,
@@ -346,8 +357,9 @@ export function ApplicationReview({
   applicationRef: string;
   initial: ApplicationRecord | null;
 }) {
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [record, setRecord] = useState<ApplicationRecord | null>(initial);
-  const [loading, setLoading] = useState(initial === null);
+  const [loading, setLoading] = useState(!supabaseMode && initial === null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [action, setAction] = useState<DecisionAction | null>(null);
@@ -389,6 +401,11 @@ export function ApplicationReview({
      the session (or a just-submitted application) shows here too. The first
      render always matches the SSR initial record. */
   useEffect(() => {
+    if (supabaseMode) {
+      setRecord(initial);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     admissionsService
       .getApplication(applicationRef)
@@ -401,7 +418,7 @@ export function ApplicationReview({
     return () => {
       cancelled = true;
     };
-  }, [applicationRef]);
+  }, [applicationRef, initial, supabaseMode]);
 
   /* Move focus with each panel state so keyboard users always know where
      the decision flow stands. */
@@ -455,7 +472,9 @@ export function ApplicationReview({
     setActionError(null);
     try {
       const note = reason.trim();
-      if (action === "assessment") {
+      if (action === "review") {
+        await admissionsService.staffStartReview(applicationRef, note || undefined, actorAccountId);
+      } else if (action === "assessment") {
         await admissionsService.staffMoveToAssessment(applicationRef, note || undefined, actorAccountId);
       } else if (action === "change") {
         await admissionsService.requestChange(applicationRef, note);
@@ -467,7 +486,7 @@ export function ApplicationReview({
         await admissionsService.staffDecline(applicationRef, note, actorAccountId);
       }
       /* Re-read through the service so the panel shows exactly what the
-         demo session now holds. */
+         authoritative service now holds. */
       const updated = await admissionsService.getApplication(applicationRef);
       if (!updated) throw new Error("The record could not be reloaded after the decision.");
       setRecord(updated);
@@ -490,7 +509,7 @@ export function ApplicationReview({
       <div className={styles.review}>
         {loading ? (
           <p className={styles.note} role="status">
-            Loading application {applicationRef} from the demo session…
+            Loading application {applicationRef}{!supabaseMode ? " from the demo session" : ""}…
           </p>
         ) : loadError ? (
           <div className="panel">
@@ -508,9 +527,9 @@ export function ApplicationReview({
             <h2 className="section-label">Application not found</h2>
             <p className={styles.note}>No application carries the reference {applicationRef}. It may have been removed, or the link is incorrect.</p>
             <div className={styles.actions}>
-              <a className="button button--quiet" href="/staff/admissions">
+              <Link prefetch={false} className="button button--quiet" href="/staff/admissions">
                 Back to all applications →
-              </a>
+              </Link>
             </div>
           </div>
         )}
@@ -594,7 +613,7 @@ export function ApplicationReview({
                       )
                     }
                   >
-                    Preview (demo)
+                    {!supabaseMode ? "Preview (demo)" : "Preview"}
                   </button>
                 </li>
               ))}
@@ -659,7 +678,7 @@ export function ApplicationReview({
                     <dd>{action ? TARGET_STATUS[action] : null}</dd>
                   </div>
                 </dl>
-                <p className={styles.note}>This decision is recorded in the demo session with a timestamp and reason, and shows on the status history.</p>
+                <p className={styles.note}>This decision is recorded{!supabaseMode ? " in the demo session" : ""} with a timestamp and reason, and shows on the status history.</p>
                 {actionError ? (
                   <p className="field-error" role="alert" tabIndex={-1} ref={actionErrorRef}>
                     {actionError}
@@ -746,7 +765,7 @@ export function ApplicationReview({
                 the service enforces the decision.
               </p>
             ) : null}
-            <p className={styles.note}>UI demo — recorded in the demo session only. Internal notes are visible to staff only; applicants never see them.</p>
+            <p className={styles.note}>{!supabaseMode ? "UI demo — recorded in the demo session only. " : ""}Internal notes are visible to staff only; applicants never see them.</p>
           </section>
         </div>
       </div>

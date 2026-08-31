@@ -150,7 +150,7 @@ const SERVER_STATUS_TO_APPLICATION: Record<string, ApplicationStatus> = {
   waitlisted: "Waitlisted",
   declined: "Declined",
   enrolled: "Enrolled",
-  withdrawn: "Declined",
+  withdrawn: "Withdrawn",
   duplicate_review: "Under review",
 };
 
@@ -166,6 +166,7 @@ const SERVER_EVENT_TO_STATUS: Record<string, ApplicationStatus> = {
   offer_declined: "Declined",
   invoice_issued: "Offered",
   enrolled: "Enrolled",
+  withdrawn: "Withdrawn",
 };
 
 const serverAdmissionIds = new Map<string, { id: string; version: number; offerVersion: number }>();
@@ -313,6 +314,11 @@ export interface AdmissionsService {
    * `actorAccountId` is supplied; legacy callers may omit it.
    */
   staffMoveToAssessment(ref: string, note?: string, actorAccountId?: string): Promise<ApplicationRecord>;
+  /**
+   * Staff action: start review on a submitted application (submitted → under_review).
+   * Records the acting account as the reviewer for maker/checker separation.
+   */
+  staffStartReview(ref: string, note?: string, actorAccountId?: string): Promise<ApplicationRecord>;
   /**
    * Staff action: offer a seat after assessment; reason required; a safe
    * no-op when already Offered. Rejects when `actorAccountId` is the same
@@ -503,6 +509,7 @@ function requiredReason(action: string, note?: string): string {
 }
 
 const MOVE_TO_ASSESSMENT_FROM: readonly ApplicationStatus[] = ["Submitted", "Under review", "Changes requested"];
+const START_REVIEW_FROM: readonly ApplicationStatus[] = ["Submitted", "Changes requested"];
 const WAITLIST_FROM: readonly ApplicationStatus[] = ["Assessment", "Submitted", "Under review"];
 const DECLINE_FROM: readonly ApplicationStatus[] = ["Submitted", "Under review", "Changes requested", "Assessment", "Waitlisted"];
 
@@ -775,7 +782,22 @@ export const admissionsService: AdmissionsService = {
 
   async withdraw(ref, by) {
     if (clientAdapterMode() === "supabase") {
-      throw new Error("Applicant withdrawal is not yet available through the school service.");
+      const target = serverAdmissionIds.get(ref);
+      if (target === undefined) {
+        await serverAdmissionRows("mine");
+      }
+      const resolved = serverAdmissionIds.get(ref);
+      if (resolved === undefined) throw new Error("Application not found.");
+      const idempotencyKey = `withdraw:${ref}:v${resolved.version}`;
+      const result = await adapterCall<unknown>("admissions.withdraw", {
+        applicationRef: ref,
+        expectedVersion: resolved.version,
+        idempotencyKey,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Withdrawal could not be completed.");
+      const updated = await serverApplicationByRef(ref, "mine");
+      if (updated) return updated;
+      return { ref, session: "", grade: "", studentName: "", parentName: by, contact: "", submittedAtIso: new Date().toISOString(), status: "Withdrawn" as ApplicationStatus, timeline: [{ status: "Withdrawn", atIso: new Date().toISOString(), actor: by, note: "Application withdrawn by the applicant." }] };
     }
     /* Withdrawal is gated on the explicit fictional demo policy (plan L1.1);
        the settings page can flip the rule so both states are testable. */
@@ -848,6 +870,30 @@ export const admissionsService: AdmissionsService = {
         timeline: [
           ...record.timeline,
           { status: "Assessment", atIso: demoNowIso(), actor: "Admissions office", note: note?.trim() || "Moved to the assessment panel." },
+        ],
+      };
+      saveRecord(updated);
+      return updated;
+    });
+  },
+
+  async staffStartReview(ref, note, actorAccountId) {
+    if (clientAdapterMode() === "supabase") {
+      return serverAdmissionDecision(ref, "reviewAdvance", { action: "under_review", visibleReason: note ?? null, privateNote: null });
+    }
+    return respond(() => {
+      const record = loadRecord(ref);
+      if (!record) throw new Error("Application not found.");
+      if (!START_REVIEW_FROM.includes(record.status)) {
+        throw new Error(`Cannot start review on an application in "${record.status}" — it must be Submitted or Changes requested.`);
+      }
+      const updated: ApplicationRecord = {
+        ...record,
+        status: "Under review",
+        reviewedByAccountId: actorAccountId ?? record.reviewedByAccountId,
+        timeline: [
+          ...record.timeline,
+          { status: "Under review", atIso: demoNowIso(), actor: "Admissions office", note: note?.trim() || "Review started." },
         ],
       };
       saveRecord(updated);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { useFamilyContext } from "@/components/portal/FamilyContextProvider";
@@ -27,10 +28,11 @@ type InvoiceDetailProps = {
 };
 
 /**
- * Client island for one invoice. Re-reads the ledger through financeService
- * on mount so session payments (posted by PayFlow) survive route changes,
- * and renders the payment attempts for this invoice alongside the payments.
- * The "Pay {balance}" CTA uses the adapter's live balance.
+ * Client island for one invoice. Demo mode re-reads the ledger through
+ * financeService on mount so session payments survive route changes; both
+ * modes refresh after PayFlow posts a payment. Payment attempts render
+ * alongside the payments. The "Pay {balance}" CTA uses the adapter's live
+ * balance.
  *
  * Access scope (plan.md Phase 2): the owning student is classified against
  * the family account once the context resolves — "current" renders as
@@ -71,8 +73,13 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
   }, [invoiceRef]);
 
   useEffect(() => {
+    if (supabaseMode) {
+      setView(initial);
+      void financeService.listAttempts(invoiceRef).then(setAttempts).catch(() => {});
+      return;
+    }
     void refresh();
-  }, [refresh]);
+  }, [initial, invoiceRef, refresh, supabaseMode]);
 
   /* Classify the invoice's owning student against the family account. The
      classifier needs the account id from the resolved context; null owners
@@ -139,9 +146,9 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
-      <a className={`link-arrow ${styles.backLink}`} href="/portal/fees">
+      <Link prefetch={false} className={`link-arrow ${styles.backLink}`} href="/portal/fees">
         ← Fees
-      </a>
+      </Link>
 
       {contextStatus === "error" ? (
         <div className="workspace-state" role="alert">
@@ -160,9 +167,9 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
             The invoice you opened is not linked to this family account, so its details are not shown here. If you
             believe this is a mistake, contact the school office.
           </p>
-          <a className="link-arrow" href="/portal/fees">
+          <Link prefetch={false} className="link-arrow" href="/portal/fees">
             ← Back to fees
-          </a>
+          </Link>
         </div>
       ) : (
         <>
@@ -303,9 +310,9 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
                       </span>
                       <span className={`num ${styles.paymentAmount}`}>{formatINR(payment.amountPaise)}</span>
                       {view.receipts.some((receipt) => receipt.ref === payment.receiptRef) ? (
-                        <a className="link-arrow" href={`/portal/receipts/${payment.receiptRef}`}>
+                        <Link prefetch={false} className="link-arrow" href={`/portal/receipts/${payment.receiptRef}`}>
                           Receipt →
-                        </a>
+                        </Link>
                       ) : (
                         <span className={styles.receiptRecovery}>
                           Receipt unavailable —{" "}
@@ -378,9 +385,9 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
                 <p className={styles.paidText}>
                   This invoice is fully paid{receiptHref || firstPayment ? " — " : "."}
                   {receiptHref ? (
-                    <a className="link-arrow" href={receiptHref}>
+                    <Link prefetch={false} className="link-arrow" href={receiptHref}>
                       view receipt →
-                    </a>
+                    </Link>
                   ) : firstPayment ? (
                     <span className={styles.receiptRecovery}>
                       Receipt unavailable —{" "}

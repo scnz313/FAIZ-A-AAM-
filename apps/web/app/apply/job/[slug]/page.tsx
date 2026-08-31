@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import JobForm from "@/components/applicant/JobForm";
 import { PublicFooter } from "@/components/layouts/PublicFooter";
@@ -40,9 +41,9 @@ export default async function ApplyJobPage({ params }: Props) {
               Applications are accepted only for vacancies that are open. The position may have been filled, or the
               address may be incorrect.
             </p>
-            <a className="link-arrow" href="/careers">
+            <Link className="link-arrow" href="/careers">
               See current vacancies →
-            </a>
+            </Link>
           </div>
         )}
       </main>

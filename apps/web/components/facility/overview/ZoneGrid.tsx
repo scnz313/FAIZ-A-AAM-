@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { ZoneTileData } from "./ZoneTile";
 import { ZoneTile } from "./ZoneTile";
 
@@ -21,9 +23,9 @@ export function ZoneGrid({ tiles }: ZoneGridProps) {
         <h2 id="zone-grid-heading" className={styles.heading}>
           Zones
         </h2>
-        <a className="link-arrow" href="/staff/facility/zones">
+        <Link prefetch={false} className="link-arrow" href="/staff/facility/zones">
           View all zones →
-        </a>
+        </Link>
       </div>
       <div className={styles.grid}>
         {tiles.map((tile) => (

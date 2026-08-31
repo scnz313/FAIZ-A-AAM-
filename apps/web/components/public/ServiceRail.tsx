@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import styles from "./ServiceRail.module.css";
 
 const ITEMS = [
@@ -15,7 +17,7 @@ export default function ServiceRail() {
   return (
     <nav className={styles.rail} aria-label="School services">
       {ITEMS.map((item) => (
-        <a key={item.num} className={styles.item} href={item.href}>
+        <Link key={item.num} className={styles.item} href={item.href} prefetch={item.href.startsWith("/portal") ? false : undefined}>
           <span className={`serif-num ${styles.num}`}>{item.num}</span>
           <span className={styles.copy}>
             <small className={styles.audience}>{item.audience}</small>
@@ -24,7 +26,7 @@ export default function ServiceRail() {
           <span className={styles.arrow} aria-hidden="true">
             →
           </span>
-        </a>
+        </Link>
       ))}
     </nav>
   );

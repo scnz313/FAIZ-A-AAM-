@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { ChinarMark } from "@/components/ui/ChinarMark";
@@ -630,7 +631,7 @@ export default function JobForm({ vacancy }: { vacancy: Vacancy }) {
         <div className={styles.railHelp}>
           <strong>Application closes</strong>
           <p>{formatKolkata(vacancy.deadlineIso, { format: "full" })}</p>
-          <a href={`/careers/${vacancy.slug}`}>View vacancy details →</a>
+          <Link href={`/careers/${vacancy.slug}`}>View vacancy details →</Link>
         </div>
       </aside>
 

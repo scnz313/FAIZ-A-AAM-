@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
@@ -46,22 +48,22 @@ export default async function NoticesPage({ searchParams }: NoticesPageProps) {
 
       <div>
         <div className="tabs" role="group" aria-label="Filter by category">
-          <a
+          <Link prefetch={false}
             href="/portal/notices"
             className={`${styles.tabLink}${category === null ? ` ${styles.tabLinkActive}` : ""}`}
             aria-current={category === null ? "true" : undefined}
           >
             All
-          </a>
+          </Link>
           {noticeCategories.map((item) => (
-            <a
+            <Link prefetch={false}
               key={item}
               href={`/portal/notices?category=${encodeURIComponent(item)}`}
               className={`${styles.tabLink}${category === item ? ` ${styles.tabLinkActive}` : ""}`}
               aria-current={category === item ? "true" : undefined}
             >
               {item}
-            </a>
+            </Link>
           ))}
         </div>
 
@@ -78,9 +80,9 @@ export default async function NoticesPage({ searchParams }: NoticesPageProps) {
                 <p className="workspace-state-note">
                   No {category} notices are posted right now. Try another category or view all notices.
                 </p>
-                <a className="link-arrow" href="/portal/notices">
+                <Link prefetch={false} className="link-arrow" href="/portal/notices">
                   View all notices →
-                </a>
+                </Link>
               </>
             )}
           </div>
@@ -123,10 +125,12 @@ export default async function NoticesPage({ searchParams }: NoticesPageProps) {
         )}
       </div>
 
-      <p className={styles.demoNote}>
-        <span className="demo-badge">Demo data</span>
-        <span>{CONTENT_DEMO_NOTE}</span>
-      </p>
+      {dataAdapter() !== "supabase" ? (
+        <p className={styles.demoNote}>
+          <span className="demo-badge">Demo data</span>
+          <span>{CONTENT_DEMO_NOTE}</span>
+        </p>
+      ) : null}
     </div>
   );
 }

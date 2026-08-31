@@ -27,7 +27,13 @@ const GROUP_ORDER: ReadonlyArray<InvoiceStatus> = ["paid", "partial", "unpaid", 
  * register. Views carry live totals and the owning student, so parent and
  * staff balances agree.
  */
-export function FeeLedgerTable({ views }: { views: ReadonlyArray<InvoiceView> }) {
+export function FeeLedgerTable({
+  views,
+  mode = "demo",
+}: {
+  views: ReadonlyArray<InvoiceView>;
+  mode?: "demo" | "supabase";
+}) {
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const visible = filter === "all" ? views : views.filter((view) => view.status === filter);
@@ -45,7 +51,7 @@ export function FeeLedgerTable({ views }: { views: ReadonlyArray<InvoiceView> })
         <h2 id="ledger-heading" className="section-label">
           Term ledger
         </h2>
-        <span className="demo-badge">Demo data</span>
+        <span className="demo-badge">{mode === "supabase" ? "Authoritative ledger" : "Demo data"}</span>
       </div>
 
       <div className="tabs" role="group" aria-label="Filter invoices by status">

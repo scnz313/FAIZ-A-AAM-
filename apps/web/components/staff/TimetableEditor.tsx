@@ -10,6 +10,7 @@ import {
   validateDraft,
   type EditField,
 } from "@/modules/services/timetable";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./TimetableEditor.module.css";
 
@@ -19,6 +20,11 @@ type TimetableEditorProps = {
   weekDays: readonly string[];
   editedKeys: ReadonlySet<string>;
   preview: boolean;
+  className?: string;
+  subjects?: readonly string[];
+  teachers?: readonly string[];
+  /** Demo-only peer fixtures may block edits locally; live conflicts come from the server validator. */
+  checkClientConflicts?: boolean;
   onEdit: (day: string, time: string, field: EditField, value: string) => void;
 };
 
@@ -32,6 +38,7 @@ function periodNumber(periods: Period[], index: number): string {
   if (period === undefined) return "";
   if (period.kind === "break") return "—";
   if (period.kind === "assembly") return "A";
+  if (period.periodNumber !== undefined) return String(period.periodNumber);
   let n = 0;
   for (let i = 0; i <= index; i += 1) {
     const other = periods[i];
@@ -52,8 +59,16 @@ export function TimetableEditor({
   weekDays,
   editedKeys,
   preview,
+  className = TIMETABLE_CLASS,
+  subjects,
+  teachers,
+  checkClientConflicts,
   onEdit,
 }: TimetableEditorProps) {
+  const live = clientAdapterMode() === "supabase";
+  const subjectOptions = subjects ?? (live ? [] : timetableSubjects);
+  const teacherOptions = teachers ?? (live ? [] : timetableTeachers);
+  const shouldCheckClientConflicts = checkClientConflicts ?? !live;
   const [day, setDay] = useState(weekDays[0] ?? "Monday");
   const [blocked, setBlocked] = useState<BlockedEdit | null>(null);
   const roomStart = useRef<{ value: string } | null>(null);
@@ -76,7 +91,9 @@ export function TimetableEditor({
       });
       return;
     }
-    const conflict = detectEditConflict(timetable, { day, time, field, value }, TIMETABLE_CLASS);
+    const conflict = shouldCheckClientConflicts
+      ? detectEditConflict(timetable, { day, time, field, value }, className)
+      : null;
     if (conflict) {
       setBlocked({ day, time, field, message: conflict.message, detail: conflict.detail });
       return;
@@ -96,7 +113,9 @@ export function TimetableEditor({
     const period = timetable[day]?.find((p) => p.time === time);
     if (!period) return;
     if (start && start.value === period.room) return;
-    const conflict = detectEditConflict(timetable, { day, time, field: "room", value: period.room }, TIMETABLE_CLASS);
+    const conflict = shouldCheckClientConflicts
+      ? detectEditConflict(timetable, { day, time, field: "room", value: period.room }, className)
+      : null;
     if (conflict) {
       onEdit(day, time, "room", start?.value ?? "");
       setBlocked({ day, time, field: "room", message: conflict.message, detail: conflict.detail });
@@ -105,6 +124,7 @@ export function TimetableEditor({
 
   function renderSelect(key: string, time: string, field: EditField, value: string, options: readonly string[]) {
     const issue = issueFor(key, field);
+    const availableOptions = value !== "" && !options.includes(value) ? [value, ...options] : options;
     const isBlockedCell =
       blocked !== null && blocked.day === day && blocked.time === time && blocked.field === field;
     return (
@@ -124,7 +144,7 @@ export function TimetableEditor({
           className={issue !== undefined || isBlockedCell ? styles.invalid : undefined}
         >
           <option value="">Select {FIELD_LABEL[field].toLowerCase()}…</option>
-          {options.map((option) => (
+          {availableOptions.map((option) => (
             <option key={option} value={option}>
               {option}
             </option>
@@ -213,7 +233,7 @@ export function TimetableEditor({
       <div className="table--scroll">
         <table className={`table ${styles.editorTable}`}>
           <caption className="sr-only">
-            Editable Class {TIMETABLE_CLASS} timetable for {day} — subject, teacher, and room per period
+            Editable Class {className} timetable for {day} — subject, teacher, and room per period
           </caption>
           <thead>
             <tr>
@@ -254,14 +274,14 @@ export function TimetableEditor({
                     {preview ? (
                       period.subject
                     ) : (
-                      renderSelect(key, period.time, "subject", period.subject, timetableSubjects)
+                      renderSelect(key, period.time, "subject", period.subject, subjectOptions)
                     )}
                   </td>
                   <td>
                     {preview ? (
                       period.teacher
                     ) : (
-                      renderSelect(key, period.time, "teacher", period.teacher, timetableTeachers)
+                      renderSelect(key, period.time, "teacher", period.teacher, teacherOptions)
                     )}
                   </td>
                   <td>{renderRoom(key, period.time, period.room)}</td>

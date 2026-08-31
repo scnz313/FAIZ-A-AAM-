@@ -3,26 +3,53 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getServerActor } from "@/lib/auth/actor";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import type { Database } from "@/lib/supabase/database.types";
 import { dataAdapter } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { documentActorCanAccess, storedDocumentAvailability, type StoredDocumentAccessRecord } from "@/modules/services/document-access.server";
+
+const NO_STORE = { "Cache-Control": "private, no-store" };
 
 export async function GET(_request: Request, { params }: { params: Promise<{ documentRef: string }> }) {
-  if (dataAdapter() !== "supabase") return NextResponse.json({ error: "document stat is not active in demo mode" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  if (dataAdapter() !== "supabase") {
+    return NextResponse.json({ error: "Document status is not active in demo mode." }, { status: 503, headers: NO_STORE });
+  }
   const actor = await getServerActor();
-  if (!actor) return NextResponse.json({ error: "Sign in to continue." }, { status: 401, headers: { "Cache-Control": "no-store" } });
+  if (!actor) return NextResponse.json({ error: "Sign in to continue." }, { status: 401, headers: NO_STORE });
+
   const { documentRef } = await params;
   const admin = createSupabaseAdminClient();
+  const db = admin as unknown as SupabaseClient<Database>;
+  const { data: document } = await db
+    .from("documents")
+    .select("reference, owner_domain, owner_record_id, safe_filename, mime_type, size_bytes, actual_mime_type, actual_size_bytes, checksum_verified, scan_status, finalized_at, attachment_code, storage_stat_at, retention_until, legal_hold_until, deleted_at")
+    .eq("reference", documentRef)
+    .maybeSingle();
+  if (!document) return NextResponse.json({ error: "Document not found or unavailable." }, { status: 404, headers: NO_STORE });
+
+  /* The generated database types do not yet expose storage_stat_at (nor the
+   * retention/hold/deleted columns used by the availability helper), so the
+   * select above resolves to a SelectQueryError. Cast to a string-keyed record
+   * before accessing those columns, exactly like the finalize route. */
+  const doc = document as unknown as Record<string, unknown>;
+
   const userClient = await createSupabaseServerClient();
-  const db = admin as unknown as SupabaseClient;
-  const { data: document } = await db.from("documents").select("id, reference, owner_domain, owner_record_id, safe_filename, mime_type, size_bytes, actual_mime_type, actual_size_bytes, checksum, checksum_verified, scan_status, finalized_at, attachment_code, storage_bucket, storage_stat_at").eq("reference", documentRef).maybeSingle();
-  if (!document) return NextResponse.json({ error: "Document not found." }, { status: 404, headers: { "Cache-Control": "no-store" } });
-  let authorized = false;
-  if (document.owner_domain === "admission_application") authorized = (await userClient.from("admission_applications").select("id").eq("id", document.owner_record_id).eq("owner_account_id", actor.accountId).maybeSingle()).data !== null;
-  else if (document.owner_domain === "job_application") authorized = (await userClient.from("job_applications").select("id").eq("id", document.owner_record_id).eq("owner_account_id", actor.accountId).maybeSingle()).data !== null;
-  else if (document.owner_domain === "invoice") {
-    const { data: invoice } = await userClient.from("invoices").select("student_id").eq("id", document.owner_record_id).maybeSingle();
-    authorized = invoice?.student_id !== null && invoice?.student_id !== undefined && (await userClient.from("guardian_student_links").select("id").eq("student_id", invoice.student_id).eq("status", "active").maybeSingle()).data !== null;
-  } else authorized = (await userClient.from("guardian_student_links").select("id").eq("student_id", document.owner_record_id).eq("status", "active").maybeSingle()).data !== null;
-  if (!authorized) return NextResponse.json({ error: "Document not found." }, { status: 404, headers: { "Cache-Control": "no-store" } });
-  return NextResponse.json({ documentRef: document.reference, filename: document.safe_filename, declaredMimeType: document.mime_type, actualMimeType: document.actual_mime_type, declaredSizeBytes: document.size_bytes, actualSizeBytes: document.actual_size_bytes, checksum: document.checksum, checksumVerified: document.checksum_verified, status: document.scan_status, finalizedAt: document.finalized_at, storageStatAt: document.storage_stat_at, attachmentCode: document.attachment_code }, { headers: { "Cache-Control": "no-store" } });
+  if (!(await documentActorCanAccess(userClient, actor, doc as unknown as Pick<StoredDocumentAccessRecord, "owner_domain" | "owner_record_id">))) {
+    return NextResponse.json({ error: "Document not found or unavailable." }, { status: 404, headers: NO_STORE });
+  }
+
+  return NextResponse.json({
+    documentRef: doc.reference as string,
+    filename: doc.safe_filename as string,
+    declaredMimeType: doc.mime_type as string,
+    actualMimeType: doc.actual_mime_type as string | null,
+    declaredSizeBytes: doc.size_bytes as number,
+    actualSizeBytes: doc.actual_size_bytes as number | null,
+    checksumVerified: doc.checksum_verified as boolean,
+    state: storedDocumentAvailability(doc as unknown as StoredDocumentAccessRecord),
+    scanState: (doc.scan_status as string) === "clean" ? "ready" : doc.scan_status as string,
+    finalizedAt: doc.finalized_at as string | null,
+    storageStatAt: doc.storage_stat_at as string | null,
+    attachmentCode: doc.attachment_code as string | null,
+  }, { headers: NO_STORE });
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { OverviewFinanceBand } from "@/components/portal/OverviewFinanceBand";
@@ -56,7 +57,7 @@ export default async function PortalOverviewPage() {
         <ul className={styles.noticeList}>
           {pinnedNotices.map((notice) => (
             <li key={notice.slug}>
-              <a className={styles.noticeRow} href="/portal/notices">
+              <Link className={styles.noticeRow} href="/portal/notices" prefetch={false}>
                 <span className={styles.noticeDate}>
                   {formatKolkata(notice.dateIso, { format: "day" })}
                   {notice.urgent ? <span className={styles.urgentMark}> · Urgent</span> : null}
@@ -68,7 +69,7 @@ export default async function PortalOverviewPage() {
                 <span className={styles.noticeArrow} aria-hidden="true">
                   →
                 </span>
-              </a>
+              </Link>
             </li>
           ))}
         </ul>
@@ -80,23 +81,25 @@ export default async function PortalOverviewPage() {
         </p>
         <div className={styles.quickGrid}>
           {QUICK_LINKS.map((link) => (
-            <a key={link.num} className="tile-link" href={link.href}>
+            <Link key={link.num} className="tile-link" href={link.href} prefetch={false}>
               <span className="tile-link__num">{link.num}</span>
               <span className="tile-link__title">{link.title}</span>
               <span className="tile-link__line">{link.line}</span>
               <span className="tile-link__more">Open →</span>
-            </a>
+            </Link>
           ))}
         </div>
       </section>
 
-      <aside className="panel">
-        <p className="section-label">About this data</p>
-        <p className={styles.demoPanelText}>
-          <span className="demo-badge">Demo session</span> {FINANCE_DEMO_NOTE} {CONTENT_DEMO_NOTE} Nothing shown
-          here is a real student record, amount, or notice.
-        </p>
-      </aside>
+      {dataAdapter() !== "supabase" ? (
+        <aside className="panel">
+          <p className="section-label">About this data</p>
+          <p className={styles.demoPanelText}>
+            <span className="demo-badge">Demo session</span> {FINANCE_DEMO_NOTE} {CONTENT_DEMO_NOTE} Nothing shown
+            here is a real student record, amount, or notice.
+          </p>
+        </aside>
+      ) : null}
     </div>
   );
 }

@@ -105,7 +105,7 @@ export function SupportForm() {
     }
     setSubmitting(true);
     try {
-      const { ref } = await supportService.submitGrievance({
+      const { ref } = await supportService.submitAuthenticatedGrievance({
         category: category as GrievanceCategory,
         subject: subject.trim(),
         message: message.trim(),

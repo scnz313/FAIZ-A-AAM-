@@ -11,6 +11,7 @@ import {
   type LinkRequestSummary,
 } from "@/modules/services/family-context";
 import { formatKolkata } from "@/modules/iot/domain";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./page.module.css";
 
@@ -31,6 +32,7 @@ import styles from "./page.module.css";
 export default function LinkRequestsPage() {
   const { summary } = useStaffContext();
   const canVerify = canRole(summary?.role ?? "", "links.verify");
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [requests, setRequests] = useState<LinkRequestRow[] | null>(null);
   const [graphLinks, setGraphLinks] = useState<LinkRequestSummary[] | null>(null);
   const [activeLinks, setActiveLinks] = useState<LinkRequestSummary[] | null>(null);
@@ -190,10 +192,12 @@ export default function LinkRequestsPage() {
         </p>
       </header>
 
-      <p className={styles.demoLine}>
-        <span className="demo-badge">Demo data</span> Deterministic demo decisions through the relationship
-        service — real verification evidence and revocation arrive with the backend.
-      </p>
+      {!supabaseMode ? (
+        <p className={styles.demoLine}>
+          <span className="demo-badge">Demo data</span> Deterministic demo decisions through the relationship
+          service — real verification evidence and revocation arrive with the backend.
+        </p>
+      ) : null}
 
       <h2 className="section-label">Guardian requests</h2>
       {pendingRequests.length === 0 ? (
@@ -401,13 +405,15 @@ export default function LinkRequestsPage() {
         {notice}
       </p>
 
-      <p className={styles.demoNote}>
-        <span className="demo-badge">Demo data</span>
-        <span>
-          Decisions are recorded in this browser session only. Approving the seeded Nida Bhat request for Zoya Khan
-          makes the child accessible in that guardian&apos;s portal context immediately.
-        </span>
-      </p>
+      {!supabaseMode ? (
+        <p className={styles.demoNote}>
+          <span className="demo-badge">Demo data</span>
+          <span>
+            Decisions are recorded in this browser session only. Approving the seeded Nida Bhat request for Zoya Khan
+            makes the child accessible in that guardian&apos;s portal context immediately.
+          </span>
+        </p>
+      ) : null}
     </div>
   );
 }

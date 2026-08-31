@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import { FeeLedgerTable } from "@/components/staff/FeeLedgerTable";
 import { FinanceActions } from "@/components/staff/FinanceActions";
@@ -13,9 +14,9 @@ import styles from "./page.module.css";
 
 /**
  * Client island for the staff finance workspace. The server renders the
- * fixture-based first paint; on mount this re-reads the SAME finance service
- * the family portal uses, so payments posted in the browser session (by the
- * shared checkout) appear here too — family and staff balances agree
+ * initial first paint; demo mode re-reads the SAME finance service on mount
+ * so browser-session payments appear here too. Supabase mode keeps the
+ * authoritative server projection until a mutation explicitly refreshes it
  * (§6.5 / UI-COMPLETION-PLAN §5.4 invalidation contract).
  */
 export function FinanceWorkspace({
@@ -33,7 +34,17 @@ export function FinanceWorkspace({
   const [receipts, setReceipts] = useState<Receipt[]>(initialReceipts);
   const [reconciliation] = useState<FinanceReconciliationProjectionRow[]>(initialReconciliation ?? []);
 
+  const refreshLedger = useCallback(async () => {
+    const [nextViews, nextReceipts] = await Promise.all([
+      financeService.listAllInvoices(),
+      financeService.listReceipts(),
+    ]);
+    setViews(nextViews);
+    setReceipts(nextReceipts);
+  }, []);
+
   useEffect(() => {
+    if (mode !== "demo") return;
     let cancelled = false;
     void Promise.all([financeService.listAllInvoices(), financeService.listReceipts()])
       .then(([nextViews, nextReceipts]) => {
@@ -47,7 +58,7 @@ export function FinanceWorkspace({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mode]);
 
   const collected = views.reduce((sum, view) => sum + view.paidPaise, 0);
   const outstanding = views.reduce((sum, view) => sum + Math.max(0, view.balancePaise), 0);
@@ -79,7 +90,7 @@ export function FinanceWorkspace({
           <h2 id="ledger-summary-heading" className="section-label">
             Ledger summary
           </h2>
-          <span className="demo-badge">{mode === "supabase" ? "Live projection" : "Demo data"}</span>
+          <span className="demo-badge">{mode === "supabase" ? "Authoritative ledger" : "Demo data"}</span>
         </div>
         <div className="metric-grid">
           <div className="metric-cell">
@@ -108,33 +119,33 @@ export function FinanceWorkspace({
           <h2 id="finance-queue-heading" className="section-label">
             Queue
           </h2>
-          <span className="demo-badge">{mode === "supabase" ? "Live projection" : "Demo data"}</span>
+          <span className="demo-badge">{mode === "supabase" ? "Authoritative ledger" : "Demo data"}</span>
         </div>
         <ul className={styles.queue}>
           {queue.map((item) => (
             <li key={item.href}>
-              <a className={styles.queueRow} href={item.href}>
+              <Link prefetch={false} className={styles.queueRow} href={item.href}>
                 <p className={styles.queueCopy}>
                   {item.label} <strong className="num">{item.count}</strong>
                 </p>
                 <span className="link-arrow">Open →</span>
-              </a>
+              </Link>
             </li>
           ))}
           <li>
-            <a className={styles.queueRow} href="/staff/finance/reconciliation">
+            <Link prefetch={false} className={styles.queueRow} href="/staff/finance/reconciliation">
               <p className={styles.queueCopy}>
                 Reconciliation run — {reconciliation[0]?.run_at ? <strong className="num">last {formatKolkata(reconciliation[0].run_at, { format: "day" })}</strong> : <strong>not run</strong>}
               </p>
               <span className="link-arrow">Open →</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </section>
 
-      <FeeLedgerTable views={views} />
+      <FeeLedgerTable views={views} mode={mode} />
 
-      <FinanceActions views={views} />
+      <FinanceActions views={views} mode={mode} onLedgerChanged={refreshLedger} />
     </>
   );
 }

@@ -12,8 +12,10 @@
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { FeeLedger } from "@/app/portal/fees/FeeLedger";
+import { InvoiceDetail } from "@/app/portal/fees/[invoiceRef]/InvoiceDetail";
 import { ReceiptView } from "@/app/portal/receipts/[receiptRef]/ReceiptView";
 import { FamilyContextProvider } from "@/components/portal/FamilyContextProvider";
 import { setDemoNow } from "@/modules/demo/clock";
@@ -24,7 +26,7 @@ import {
   familyContextService,
   RELATIONSHIPS_SESSION_KEY,
 } from "@/modules/services/family-context";
-import { FINANCE_SESSION_KEYS } from "@/modules/services/finance";
+import { FINANCE_SESSION_KEYS, financeService } from "@/modules/services/finance";
 import { sessionKey, sessionRemove, sessionSet } from "@/modules/services/session";
 
 const PINNED = new Date("2026-08-10T05:00:00.000Z");
@@ -98,6 +100,8 @@ beforeEach(() => {
 afterEach(() => {
   clearDemoSession();
   setDemoNow(null);
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 function renderReceipt(receiptRef: string): void {
@@ -107,6 +111,73 @@ function renderReceipt(receiptRef: string): void {
     </FamilyContextProvider>,
   );
 }
+
+async function familyInitialState() {
+  const [context, students, summary] = await Promise.all([
+    familyContextService.getContext(DEMO_GUARDIAN_ACCOUNT_ID),
+    familyContextService.listAccessibleStudentContexts(DEMO_GUARDIAN_ACCOUNT_ID),
+    familyContextService.getAccountSummary(DEMO_GUARDIAN_ACCOUNT_ID),
+  ]);
+  return { context, students, guardianName: summary.displayName };
+}
+
+describe("server-hydrated finance components", () => {
+  it("uses the authoritative Supabase ledger prop on mount", async () => {
+    const [initial, initialState] = await Promise.all([
+      financeService.listInvoices(STUDENT_AARIF_ID),
+      familyInitialState(),
+    ]);
+    vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    const listInvoices = vi.spyOn(financeService, "listInvoices").mockResolvedValue([]);
+
+    render(
+      <FamilyContextProvider initialState={initialState}>
+        <FeeLedger initial={initial} initialFilter="all" />
+      </FamilyContextProvider>,
+    );
+
+    expect(listInvoices).not.toHaveBeenCalled();
+  });
+
+  it("keeps the demo ledger mount refresh", async () => {
+    const initialState = await familyInitialState();
+    vi.stubEnv("FASS_DATA_ADAPTER", "demo");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "demo");
+    const listInvoices = vi.spyOn(financeService, "listInvoices").mockResolvedValue([]);
+
+    render(
+      <FamilyContextProvider initialState={initialState}>
+        <FeeLedger initial={[]} initialFilter="all" />
+      </FamilyContextProvider>,
+    );
+
+    await waitFor(() => expect(listInvoices).toHaveBeenCalledWith(STUDENT_AARIF_ID));
+  });
+
+  it("loads attempts without refetching an authoritative Supabase invoice", async () => {
+    const [initial, initialState] = await Promise.all([
+      financeService.getInvoice("INV-2026-0101"),
+      familyInitialState(),
+    ]);
+    expect(initial).not.toBeNull();
+    if (initial === null) return;
+    vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    const getInvoice = vi.spyOn(financeService, "getInvoice").mockResolvedValue(null);
+    const listAttempts = vi.spyOn(financeService, "listAttempts").mockResolvedValue([]);
+    vi.spyOn(familyContextService, "classifyStudentAccess").mockResolvedValue("current");
+
+    render(
+      <FamilyContextProvider initialState={initialState}>
+        <InvoiceDetail invoiceRef={initial.invoice.ref} initial={initial} />
+      </FamilyContextProvider>,
+    );
+
+    expect(getInvoice).not.toHaveBeenCalled();
+    await waitFor(() => expect(listAttempts).toHaveBeenCalledOnce());
+  });
+});
 
 describe("classifyStudentAccess", () => {
   it("classifies the active child as current", async () => {

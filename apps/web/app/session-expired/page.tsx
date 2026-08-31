@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
@@ -31,9 +32,9 @@ export default function SessionExpiredPage() {
             <Button href="/sign-in" variant="primary">
               Sign in again →
             </Button>
-            <a className="link-arrow" href="/">
+            <Link className="link-arrow" href="/">
               Back to the school home →
-            </a>
+            </Link>
           </div>
           {demo ? (
             <p className={styles.demoNote}>

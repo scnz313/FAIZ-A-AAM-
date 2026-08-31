@@ -1,9 +1,11 @@
 import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { SupportForm } from "@/components/portal/SupportForm";
+import { dataAdapter } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
 
 export default function SupportPage() {
+  const supabaseMode = dataAdapter() === "supabase";
   return (
     <div className={styles.page}>
       <header>
@@ -45,10 +47,12 @@ export default function SupportPage() {
         </aside>
       </div>
 
-      <p className={styles.demoNote}>
-        <span className="demo-badge">Demo</span>
-        <span>This form is fictional — nothing is sent. Real grievance handling arrives with the support backend.</span>
-      </p>
+      {!supabaseMode ? (
+        <p className={styles.demoNote}>
+          <span className="demo-badge">Demo</span>
+          <span>This form is fictional — nothing is sent. Real grievance handling arrives with the support backend.</span>
+        </p>
+      ) : null}
     </div>
   );
 }

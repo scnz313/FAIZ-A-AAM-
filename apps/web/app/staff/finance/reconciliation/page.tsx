@@ -5,6 +5,7 @@ import { FINANCE_DEMO_NOTE, formatINR, type PaymentMethod } from "@/modules/serv
 import { financeService } from "@/modules/services/finance";
 import { dataAdapter } from "@/lib/supabase/env";
 import { loadServerInvoices, loadServerReconciliationProjection } from "@/lib/supabase/server-loaders";
+import { mapServerReconciliationRun } from "@/modules/services/finance-server-map";
 import { ReconciliationRun } from "./ReconciliationRun";
 
 import styles from "./page.module.css";
@@ -62,6 +63,7 @@ export default async function ReconciliationPage() {
   // Matched rows come from the service ledger so the comparison always
   // reflects posted state; a demo event whose ref has since posted is dropped.
   const views = supabaseMode ? await loadServerInvoices() : await financeService.listAllInvoices();
+  const projection = supabaseMode ? await loadServerReconciliationProjection() : [];
   const ledgerRefs = new Set<string>();
   const matchedRows: ReconRow[] = [];
   for (const view of views) {
@@ -78,21 +80,28 @@ export default async function ReconciliationPage() {
       });
     }
   }
-  const authoritativeRows: ReconRow[] = supabaseMode
-    ? (await loadServerReconciliationProjection()).flatMap((run) => run.reconciliation_evidence.map((evidence) => {
-        const matched = evidence.provider_txn_id !== null && ledgerRefs.has(evidence.provider_txn_id);
-        return {
-          payRef: evidence.provider_txn_id ?? evidence.reference,
-          method: "Challan" as PaymentMethod,
-          amountPaise: evidence.amount_paise,
-          gateway: evidence.state,
-          ledger: matched ? "Posted" : "Exception",
-          ledgerNote: matched ? undefined : run.reconciliation_exceptions.find((exception) => exception.evidence_id === evidence.id)?.kind,
-          matchLabel: matched ? "Matched" : "Discrepancy",
-          matchTone: matched ? "good" : "alert",
-        };
-      }))
-    : [];
+  const authoritativeRows: ReconRow[] = [];
+  const seenEvidence = new Set<string>();
+  for (const run of projection) {
+    for (const evidence of run.reconciliation_evidence) {
+      const payRef = evidence.provider_txn_id ?? evidence.reference;
+      if (seenEvidence.has(payRef)) continue;
+      seenEvidence.add(payRef);
+      const matched = evidence.provider_txn_id !== null && ledgerRefs.has(evidence.provider_txn_id);
+      const exception = run.reconciliation_exceptions.find((candidate) => candidate.evidence_id === evidence.id);
+      const resolved = exception?.status === "resolved";
+      authoritativeRows.push({
+        payRef,
+        method: "Challan",
+        amountPaise: evidence.amount_paise,
+        gateway: evidence.state,
+        ledger: matched ? "Posted" : resolved ? "Exception resolved" : "Exception",
+        ledgerNote: matched ? undefined : exception?.resolution_reason ?? exception?.kind,
+        matchLabel: matched ? "Matched" : resolved ? "Resolved" : "Discrepancy",
+        matchTone: matched || resolved ? "good" : "alert",
+      });
+    }
+  }
   const reconRows: ReconRow[] = supabaseMode
     ? authoritativeRows
     : [...matchedRows, ...demoGatewayEvents.filter((row) => !ledgerRefs.has(row.payRef))];
@@ -152,6 +161,7 @@ export default async function ReconciliationPage() {
 
       <ReconciliationRun
         mode={supabaseMode ? "supabase" : "demo"}
+        initialRuns={projection.map(mapServerReconciliationRun)}
         matchedCount={reconRows.filter((r) => r.matchLabel === "Matched").length}
         discrepancyCount={reconRows.filter((r) => r.matchLabel === "Discrepancy").length}
         pendingCount={reconRows.filter((r) => r.matchLabel === "Pending" || r.matchLabel === "Refunded — appended").length}

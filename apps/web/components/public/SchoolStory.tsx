@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 import styles from "./SchoolStory.module.css";
 
@@ -24,9 +25,9 @@ export default function SchoolStory() {
             the town and the Wular lake. Small classes, clear rules, and teachers who stay for years — that is the
             whole method.
           </p>
-          <a className="link-arrow" href="/about">
+          <Link className="link-arrow" href="/about">
             Read about the school
-          </a>
+          </Link>
           <p className={styles.note}>
             Concept copy for design review — the school&apos;s official history is yet to be confirmed.
           </p>

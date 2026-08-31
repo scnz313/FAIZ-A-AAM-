@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import LinkChildForm from "@/components/identity/LinkChildForm";
+import { dataAdapter } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
 
@@ -30,10 +31,12 @@ export default function LinkChildPage() {
 
       <LinkChildForm />
 
-      <p className={styles.demoNote}>
-        <span className="demo-badge">Demo data</span>
-        <span>Linking is not real yet — requests are recorded in this browser session only.</span>
-      </p>
+      {dataAdapter() !== "supabase" ? (
+        <p className={styles.demoNote}>
+          <span className="demo-badge">Demo data</span>
+          <span>Linking is not real yet — requests are recorded in this browser session only.</span>
+        </p>
+      ) : null}
     </div>
   );
 }

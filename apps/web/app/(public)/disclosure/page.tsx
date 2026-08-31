@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import PageIntro from "@/components/public/PageIntro";
 import PageSection from "@/components/public/pages/PageSection";
@@ -25,9 +26,9 @@ const DISCLOSURES = [
   {
     term: "Fee schedule",
     detail: (
-      <a className="link-arrow" href="/policies/fees-and-refunds">
+      <Link className="link-arrow" href="/policies/fees-and-refunds">
         Fees &amp; refunds policy <span aria-hidden="true">→</span>
-      </a>
+      </Link>
     ),
   },
   {

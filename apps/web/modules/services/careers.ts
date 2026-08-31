@@ -62,6 +62,12 @@ export type JobApplicationRecord = {
   timeline: JobApplicationEvent[];
   /** Interview slot once the panel fixes a time; absent until then. */
   interview?: { atIso: string; note?: string };
+  /** Reviewer account id once assigned (staff projection). */
+  reviewerAccountId?: string;
+  /** Attributed scorecard rows (staff projection). */
+  scorecards?: Array<{ score: number; notes: string | null; byAccountId: string; atIso: string }>;
+  /** The latest immutable submitted snapshot (staff projection). */
+  submittedSnapshot?: Record<string, unknown>;
 };
 
 /** The boundary every careers caller uses; the demo adapter is replaceable. */
@@ -89,6 +95,10 @@ export interface CareersService {
   staffOffer(ref: string, note: string): Promise<JobApplicationRecord>;
   /** Staff decision: record not-selected (a reason is required). */
   staffNotSelected(ref: string, note: string): Promise<JobApplicationRecord>;
+  /** HR approver: assign a reviewer to an application (returns the refreshed record). */
+  assignReviewer(ref: string, reviewerAccountId: string): Promise<JobApplicationRecord>;
+  /** HR reviewer: record an attributed scorecard (returns the refreshed record). */
+  saveScorecard(ref: string, score: number, notes?: string): Promise<JobApplicationRecord>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -398,6 +408,37 @@ export const careersService: CareersService = {
     void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Candidate not selected" });
     return result;
   },
+
+  async assignReviewer(ref, reviewerAccountId) {
+    /* Demo mode keeps the assignment in the session record for UI parity. */
+    const result = await respond(() => {
+      const record = loadRecord(ref);
+      if (!record) throw new Error("Application not found.");
+      const updated = { ...record, reviewerAccountId };
+      saveRecord(updated);
+      return updated;
+    });
+    void auditService.record({ actor: "HR office", action: "Reviewer assigned", target: ref, outcome: "Success", reason: "Reviewer assignment recorded" });
+    return result;
+  },
+
+  async saveScorecard(ref, score, notes) {
+    const result = await respond(() => {
+      const record = loadRecord(ref);
+      if (!record) throw new Error("Application not found.");
+      if (!Number.isInteger(score) || score < 1 || score > 5) {
+        throw new Error("Score must be a whole number from 1 to 5.");
+      }
+      const updated = {
+        ...record,
+        scorecards: [...(record.scorecards ?? []), { score, notes: notes?.trim() || null, byAccountId: "demo-reviewer", atIso: demoNowIso() }],
+      };
+      saveRecord(updated);
+      return updated;
+    });
+    void auditService.record({ actor: "HR office", action: "Scorecard saved", target: ref, outcome: "Success", reason: `Score ${score} recorded` });
+    return result;
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -418,6 +459,8 @@ export type ServerJobRow = {
   job_interviews?: Array<{ scheduled_at: string; notes: string | null; outcome: string | null }> | null;
   job_application_versions: Array<{ version: number; snapshot: Record<string, unknown> }> | null;
   job_events: Array<{ event_type: string; visible_to_applicant: boolean; copy: string; created_at: string }> | null;
+  job_review_assignments?: Array<{ reviewer_account_id: string; status: string; assigned_at: string }> | null;
+  job_scorecards?: Array<{ score: number; notes: string | null; created_by_account_id: string; created_at: string }> | null;
 };
 
 const SERVER_STATUS_TO_DEMO: Record<string, JobApplicationStatus> = {
@@ -467,6 +510,9 @@ export function mapServerJob(row: ServerJobRow): JobApplicationRecord {
         ? latestSnapshot.name
         : row.reference;
   const interviewEvent = (row.job_events ?? []).find((event) => event.event_type === "interview");
+  const reviewer = [...(row.job_review_assignments ?? [])]
+    .sort((left, right) => left.assigned_at.localeCompare(right.assigned_at))
+    .at(-1);
   return {
     ref: row.reference,
     vacancySlug: slugifyTitle(row.job_vacancies?.title ?? row.job_vacancies?.reference ?? "vacancy"),
@@ -479,6 +525,14 @@ export function mapServerJob(row: ServerJobRow): JobApplicationRecord {
       : interviewEvent !== undefined && typeof (latestSnapshot.interviewAtIso as unknown) === "string"
         ? { atIso: String(latestSnapshot.interviewAtIso), note: undefined }
         : undefined,
+    reviewerAccountId: reviewer?.status !== "revoked" ? reviewer?.reviewer_account_id : undefined,
+    scorecards: (row.job_scorecards ?? []).map((card) => ({
+      score: card.score,
+      notes: card.notes,
+      byAccountId: card.created_by_account_id,
+      atIso: card.created_at,
+    })),
+    submittedSnapshot: latestSnapshot,
   };
 }
 
@@ -512,6 +566,8 @@ const originalStaffShortlist = careersService.staffShortlist.bind(careersService
 const originalStaffRequestInterview = careersService.staffRequestInterview.bind(careersService);
 const originalStaffOffer = careersService.staffOffer.bind(careersService);
 const originalStaffNotSelected = careersService.staffNotSelected.bind(careersService);
+const originalAssignReviewer = careersService.assignReviewer.bind(careersService);
+const originalSaveScorecard = careersService.saveScorecard.bind(careersService);
 
 /** Submit through the live pipeline: resolve the vacancy, create the draft
     application, then append the immutable submitted version. */
@@ -655,4 +711,20 @@ careersService.staffOffer = async (ref, note) => {
 careersService.staffNotSelected = async (ref, note) => {
   if (!isServerCareers()) return originalStaffNotSelected(ref, note);
   return serverDecide(ref, "not_selected", note);
+};
+careersService.assignReviewer = async (ref, reviewerAccountId) => {
+  if (!isServerCareers()) return originalAssignReviewer(ref, reviewerAccountId);
+  const applicationId = serverJobIds.get(ref);
+  if (applicationId === undefined) throw new Error("Application not found in the queue.");
+  const result = await adapterCall<unknown>("jobs.assignReviewer", { applicationRef: ref, reviewerAccountId });
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Reviewer assignment failed.");
+  return (await serverJobs("staff")).find((candidate) => candidate.ref === ref) as JobApplicationRecord;
+};
+careersService.saveScorecard = async (ref, score, notes) => {
+  if (!isServerCareers()) return originalSaveScorecard(ref, score, notes);
+  const applicationId = serverJobIds.get(ref);
+  if (applicationId === undefined) throw new Error("Application not found in the queue.");
+  const result = await adapterCall<unknown>("jobs.saveScorecard", { applicationRef: ref, score, notes: notes?.trim() || null });
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Scorecard could not be saved.");
+  return (await serverJobs("staff")).find((candidate) => candidate.ref === ref) as JobApplicationRecord;
 };

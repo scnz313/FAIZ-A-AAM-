@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import Button from "@/components/ui/Button";
@@ -12,6 +13,7 @@ import { admissionsService, type ApplicationRecord, type ApplicationStatus } fro
 import { getDemoPolicy } from "@/modules/services/demo-policy";
 import { formatINR } from "@/modules/finance/demo";
 import { formatKolkata } from "@/modules/iot/domain";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./ApplicationStatusView.module.css";
 
@@ -50,6 +52,7 @@ const WITHDRAWABLE: readonly ApplicationStatus[] = [
  * responses and requested-change edits are recorded through the service.
  */
 export default function ApplicationStatusView({ applicationRef, initial }: { applicationRef: string; initial?: ApplicationRecord | null }) {
+  const supabaseMode = clientAdapterMode() === "supabase";
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<ApplicationRecord | null>(initial ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -148,7 +151,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
           </p>
           <div className={styles.badgeRow}>
             <StatusBadge tone="neutral">Not found</StatusBadge>
-            <span className="demo-badge">{ADMISSIONS_DEMO_NOTE}</span>
+            {!supabaseMode ? <span className="demo-badge">{ADMISSIONS_DEMO_NOTE}</span> : null}
           </div>
         </header>
 
@@ -173,9 +176,9 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
               </p>
             </section>
             <p className={styles.backLink}>
-              <a className="link-arrow" href="/admissions">
+              <Link className="link-arrow" href="/admissions">
                 Back to admissions →
-              </a>
+              </Link>
             </p>
           </aside>
         </div>
@@ -197,7 +200,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
         </p>
         <div className={styles.badgeRow}>
           <StatusBadge tone={statusTone(record.status)}>{record.status}</StatusBadge>
-          <span className="demo-badge">{ADMISSIONS_DEMO_NOTE}</span>
+          {!supabaseMode ? <span className="demo-badge">{ADMISSIONS_DEMO_NOTE}</span> : null}
         </div>
       </header>
 
@@ -353,13 +356,13 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
 
           {canWithdraw ? (
             <section className={styles.withdrawBlock} aria-label="Withdrawal">
-              {getDemoPolicy()["admission.withdrawal"] ? (
+              {supabaseMode || getDemoPolicy()["admission.withdrawal"] ? (
                 confirmingWithdraw ? (
                   <div className={styles.withdrawConfirm} role="group" aria-label="Confirm withdrawal">
                     <p className={styles.sideNote}>
                       Withdraw the application for <strong>{record.studentName}</strong>? This ends the application —
-                      the school can no longer review or decide it. This is a fictional demo rule; the school&apos;s real
-                      withdrawal policy remains pending.
+                      the school can no longer review or decide it.
+                      {!supabaseMode ? " This is a fictional demo rule; the school's real withdrawal policy remains pending." : ""}
                     </p>
                     <div className={styles.withdrawActions}>
                       <Button variant="danger" onClick={() => void handleWithdraw()} disabled={responding}>
@@ -381,8 +384,9 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
                       Withdraw application
                     </Button>
                     <p className={styles.sideNote}>
-                      Fictional demo policy — withdrawal is allowed before a final decision under the demo rules; the
-                      school&apos;s real policy is still pending.
+                      {!supabaseMode
+                        ? "Fictional demo policy — withdrawal is allowed before a final decision under the demo rules; the school's real policy is still pending."
+                        : "Withdrawal is allowed before a final decision is recorded."}
                     </p>
                   </>
                 )

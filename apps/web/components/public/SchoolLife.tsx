@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import {
   ArtsMark,
   AssembliesMark,
@@ -57,13 +59,13 @@ export default function SchoolLife() {
       <ul className={styles.grid}>
         {ACTIVITIES.map((activity) => (
           <li className={styles.cell} key={activity.num}>
-            <a className={`tile-link ${styles.tile}`} href="/school-life">
+            <Link className={`tile-link ${styles.tile}`} href="/school-life">
               <activity.Mark ariaHidden className={styles.mark} />
               <span className="tile-link__num serif-num">{activity.num}</span>
               <span className="tile-link__title">{activity.title}</span>
               <span className="tile-link__line">{activity.line}</span>
               <span className="tile-link__more">Read more <span aria-hidden="true">→</span></span>
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

@@ -20,6 +20,7 @@ export type StaffAction =
   | "careers.view"
   | "careers.review"
   | "careers.approve"
+  | "documents.view"
   | "finance.view"
   | "finance.operate"
   | "finance.approve"
@@ -54,24 +55,24 @@ const ROLE_ACTIONS: Record<string, ReadonlySet<StaffAction>> = {
   content_editor: new Set(["home.view", "content.view", "content.draft"]),
   content_publisher: new Set(["home.view", "content.view", "content.publish"]),
   /* Admissions: officer reviews, approver decides. */
-  admissions_officer: new Set(["home.view", "admissions.view", "admissions.review"]),
-  admissions_approver: new Set(["home.view", "admissions.view", "admissions.approve"]),
+  admissions_officer: new Set(["home.view", "admissions.view", "admissions.review", "documents.view"]),
+  admissions_approver: new Set(["home.view", "admissions.view", "admissions.approve", "documents.view"]),
   /* Finance: officer operates, approver approves. */
-  finance_officer: new Set(["home.view", "finance.view", "finance.operate"]),
-  finance_approver: new Set(["home.view", "finance.view", "finance.approve"]),
+  finance_officer: new Set(["home.view", "finance.view", "finance.operate", "documents.view"]),
+  finance_approver: new Set(["home.view", "finance.view", "finance.approve", "documents.view"]),
   /* Careers: reviewer scores, approver advances/rejects/offers. */
-  hr_reviewer: new Set(["home.view", "careers.view", "careers.review"]),
-  hr_approver: new Set(["home.view", "careers.view", "careers.approve"]),
+  hr_reviewer: new Set(["home.view", "careers.view", "careers.review", "documents.view"]),
+  hr_approver: new Set(["home.view", "careers.view", "careers.approve", "documents.view"]),
   /* Results: teacher enters assigned marks, reviewer moderates, publisher releases. */
   teacher: new Set(["home.view", "results.view", "results.enter", "timetable.view"]),
-  exam_reviewer: new Set(["home.view", "results.view", "results.approve"]),
-  result_publisher: new Set(["home.view", "results.view", "results.publish"]),
+  exam_reviewer: new Set(["home.view", "results.view", "results.approve", "documents.view"]),
+  result_publisher: new Set(["home.view", "results.view", "results.publish", "documents.view"]),
   /* Timetable: manager creates, validates, publishes, overrides. */
   timetable_manager: new Set(["home.view", "timetable.view", "timetable.manage"]),
   /* Support: officer responds and reviews guardian links. */
   support_officer: new Set(["home.view", "support.view", "support.respond", "links.verify", "facility.view"]),
-  /* Auditor: read-only audit. */
-  auditor: new Set(["home.view", "audit.view"]),
+  /* Auditor: read-only audit and owning-record document evidence permitted by database policy. */
+  auditor: new Set(["home.view", "audit.view", "documents.view"]),
   /* System administrator: configuration and access grants ONLY. */
   system_administrator: new Set(["home.view", "users.manage", "settings.manage", "audit.view", "links.verify", "facility.view", "facility.manage"]),
 };
@@ -128,6 +129,7 @@ export type DemoStaffIdentity = {
  * - Sana Wani — finance operations, result publication, admissions review, exam review.
  * - Firdous Ahmad — teacher (also a guardian; the multi-role person).
  * - Aisha Lone — content drafting/publishing, support, audit, system administration.
+ * - Naseer Lone — independent content publisher (maker/checker separation).
  * - Rania Mir — approval workspaces (admissions/finance/HR) and timetable management.
  */
 export const DEMO_STAFF_IDENTITIES: ReadonlyArray<DemoStaffIdentity> = [
@@ -145,6 +147,11 @@ export const DEMO_STAFF_IDENTITIES: ReadonlyArray<DemoStaffIdentity> = [
     accountId: "00000000-0000-4000-8000-000000000204",
     displayName: "Aisha Lone",
     summaryLabel: "Content · Support · Audit · Admin",
+  },
+  {
+    accountId: "00000000-0000-4000-8000-000000000206",
+    displayName: "Naseer Lone",
+    summaryLabel: "Content publisher",
   },
   {
     accountId: "00000000-0000-4000-8000-000000000205",

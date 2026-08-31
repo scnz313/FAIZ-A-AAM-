@@ -262,6 +262,10 @@ export type Period = {
   room: string;
   kind?: "class" | "break" | "assembly";
   change?: boolean;
+  /** Authoritative configured slot number when periods come from Supabase. */
+  periodNumber?: number;
+  /** Authoritative end time when periods come from Supabase. */
+  endsAt?: string;
 };
 
 const CLASS = "8-A";

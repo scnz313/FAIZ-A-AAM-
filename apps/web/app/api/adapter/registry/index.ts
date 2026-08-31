@@ -59,6 +59,7 @@ type RefTable =
   | "result_correction_requests"
   | "timetable_versions"
   | "timetable_publications"
+  | "timetable_overrides"
   | "exam_schedule_versions"
   | "staff_assignments"
   | "staff_members"
@@ -124,6 +125,7 @@ export async function resolveAdapterReferences(
     case "admissions.reviewAdvance":
     case "admissions.decide":
     case "admissions.respondOffer":
+    case "admissions.withdraw":
     case "enrollment.readiness":
     case "enrollment.convert":
       await resolveField(supabase, payload, "applicationId", "applicationRef", "admission_applications");
@@ -191,10 +193,14 @@ export async function resolveAdapterReferences(
       await resolveField(supabase, payload, "requestId", "requestRef", "result_correction_requests");
       break;
     case "timetable.effective":
+    case "timetable.listOverrides":
+    case "timetable.listDateSheets":
     case "timetable.saveDraft":
     case "timetable.saveOverride":
     case "timetable.saveDateSheet":
       await resolveField(supabase, payload, "gradeSectionId", "gradeSectionRef", "grade_sections");
+      if (op === "timetable.saveDraft") await resolveField(supabase, payload, "versionId", "versionRef", "timetable_versions");
+      if (op === "timetable.saveDateSheet") await resolveField(supabase, payload, "versionId", "versionRef", "exam_schedule_versions");
       if (Array.isArray(payload.periods)) {
         payload.periods = await Promise.all((payload.periods as unknown[]).map(async (period) => {
           if (typeof period !== "object" || period === null) return period;
@@ -209,10 +215,15 @@ export async function resolveAdapterReferences(
         }));
       }
       break;
+    case "timetable.revokeOverride":
+      await resolveField(supabase, payload, "overrideId", "overrideRef", "timetable_overrides");
+      break;
     case "timetable.validateDraft":
     case "timetable.publish":
-    case "timetable.publishDateSheet":
       await resolveField(supabase, payload, "versionId", "versionRef", "timetable_versions");
+      break;
+    case "timetable.publishDateSheet":
+      await resolveField(supabase, payload, "versionId", "versionRef", "exam_schedule_versions");
       break;
     case "content.unpublish":
       await resolveField(supabase, payload, "contentItemId", "contentItemRef", "content_items");

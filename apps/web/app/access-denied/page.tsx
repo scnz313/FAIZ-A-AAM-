@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
@@ -29,9 +30,9 @@ export default function AccessDeniedPage() {
           <p>
             This area requires a role your account does not have. If this is wrong, contact the school office.
           </p>
-          <a className="link-arrow" href="/">
+          <Link className="link-arrow" href="/">
             Return home →
-          </a>
+          </Link>
           {demo ? (
             <p className={styles.demoNote}>
               <span className="demo-badge">UI demo</span>

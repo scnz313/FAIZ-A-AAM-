@@ -6,7 +6,8 @@ import { loadServerSupport } from "@/lib/supabase/server-loaders";
 import styles from "./page.module.css";
 
 export default async function SupportPage() {
-  const initialItems = dataAdapter() === "supabase" ? await loadServerSupport("staff") : undefined;
+  const supabaseMode = dataAdapter() === "supabase";
+  const initialItems = supabaseMode ? await loadServerSupport("staff") : undefined;
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
@@ -17,9 +18,11 @@ export default async function SupportPage() {
 
       <GrievanceInbox initialItems={initialItems} />
 
-      <p className="demo-note">
-        <span className="demo-badge">Demo data</span> {SUPPORT_DEMO_NOTE}
-      </p>
+      {!supabaseMode ? (
+        <p className="demo-note">
+          <span className="demo-badge">Demo data</span> {SUPPORT_DEMO_NOTE}
+        </p>
+      ) : null}
     </div>
   );
 }

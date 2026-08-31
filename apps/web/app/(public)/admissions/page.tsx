@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import PageIntro from "@/components/public/PageIntro";
@@ -136,9 +137,9 @@ export default async function AdmissionsPage() {
             <Button href="/admissions/apply" variant="primary">
               Begin an application →
             </Button>
-            <a className="link-arrow" href="/apply/student">
+            <Link className="link-arrow" href="/apply/student" prefetch={false}>
               Track an application →
-            </a>
+            </Link>
           </div>
           <p className={styles.ctaHint}>Have your reference ready.</p>
           <p className={styles.ctaNote}>

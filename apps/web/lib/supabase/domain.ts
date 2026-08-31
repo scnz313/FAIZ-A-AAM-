@@ -271,6 +271,21 @@ export function admissionRespondOffer(
   });
 }
 
+export function admissionWithdraw(
+  supabase: SupabaseClient<Database>,
+  input: { applicationId: string; expectedVersion?: number | null; idempotencyKey?: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "admissions_withdraw", {
+      p_application_id: input.applicationId,
+      p_expected_version: input.expectedVersion ?? null,
+      p_idempotency_key: input.idempotencyKey ?? null,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "admission withdrawal");
+  });
+}
+
 export function admissionListStaffQueue(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
@@ -316,7 +331,7 @@ export function financeListMyInvoices(supabase: SupabaseClient<Database>) {
     const { data, error } = await supabase
       .from("invoices")
       .select(
-        "id, reference, student_id, academic_year_id, schedule_version_id, applicant_ref, term, status, issue_date, due_date, version, invoice_items(label, amount_paise, kind), ledger_entries(entry_type, amount_paise), payment_allocations(amount_paise, payments(reference, method, amount_paise, provider_txn_id, created_at)), receipts(reference, issued_at)",
+        "id, reference, student_id, academic_year_id, schedule_version_id, applicant_ref, term, status, issue_date, due_date, version, students(people(display_name)), invoice_items(label, amount_paise, kind), ledger_entries(reference, entry_type, amount_paise, reason, created_by_account_id, created_at), payment_allocations(amount_paise, payments(id, reference, amount_paise, provider_txn_id, attempt_id, paid_at, created_at, payment_attempts(method, provider_order_ref))), receipts(reference, issued_at, payment_id)",
       )
       .order("issue_date", { ascending: false });
     if (error !== null) throw mapRpcError(error);
@@ -328,7 +343,7 @@ export function financeListMyReceipts(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
       .from("receipts")
-      .select("id, reference, payment_id, invoice_id, issued_at, payments(method, amount_paise), invoices(reference, student_id)")
+      .select("id, reference, payment_id, invoice_id, issued_at, payments(amount_paise, payment_attempts(method)), invoices(reference, student_id)")
       .order("issued_at", { ascending: false });
     if (error !== null) throw mapRpcError(error);
     return data;
@@ -450,7 +465,7 @@ export function financeApplyConcession(supabase: SupabaseClient<Database>, input
     const { data, error } = await callAppRpc<Json>(supabase, "finance_request_adjustment", {
       p_invoice_id: input.invoiceId,
       p_amount_paise: input.amountPaise,
-      p_kind: input.type === "concession" ? "concession" : "adjustment",
+      p_kind: input.type === "concession" ? "concession" : input.type === "write_off" ? "write_off" : "adjustment",
       p_reason: input.reason,
       p_expected_invoice_version: (input as FinanceConcessionInput & { expectedVersion?: number }).expectedVersion ?? null,
       p_idempotency_key: (input as FinanceConcessionInput & { idempotencyKey?: string }).idempotencyKey ?? null,
@@ -463,25 +478,26 @@ export function financeApplyConcession(supabase: SupabaseClient<Database>, input
 
 export function financeListAdjustments(supabase: SupabaseClient<Database>) {
   return result(async () => {
-    const { data, error } = await (supabase as unknown as { from: (table: string) => ReturnType<SupabaseClient<Database>["from"]> }).from("finance_adjustment_requests")
+    const { data, error } = await supabase
+      .from("finance_adjustment_requests")
       .select("id, reference, invoice_id, invoices(reference), kind, amount_paise, reason, status, requested_by_account_id, approved_by_account_id, decided_at, posted_at, version, created_at")
       .order("created_at", { ascending: false });
     if (error !== null) throw mapRpcError(error);
-    return (data ?? []).map((row: Record<string, unknown>) => ({
-      id: row.id as string,
-      ref: row.reference as string,
-      invoiceRef: (row.invoices as { reference?: string } | null)?.reference ?? "",
-      type: row.kind as string,
-      amountPaise: row.amount_paise as number,
-      reason: row.reason as string,
-      requestedBy: row.requested_by_account_id as string,
-      requestedAtIso: row.created_at as string,
-      status: row.status as string,
-      decidedBy: (row.approved_by_account_id as string | null) ?? null,
-      decidedAtIso: (row.decided_at as string | null) ?? null,
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      ref: row.reference,
+      invoiceRef: row.invoices?.reference ?? "",
+      type: row.kind,
+      amountPaise: row.amount_paise,
+      reason: row.reason,
+      requestedBy: row.requested_by_account_id,
+      requestedAtIso: row.created_at,
+      status: row.status === "requested" ? "pending" : row.status,
+      decidedBy: row.approved_by_account_id,
+      decidedAtIso: row.decided_at,
       decisionReason: null,
-      postedAtIso: (row.posted_at as string | null) ?? null,
-      version: row.version as number,
+      postedAtIso: row.posted_at,
+      version: row.version,
     }));
   });
 }
@@ -511,28 +527,28 @@ export function financeListRefunds(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
       .from("refund_requests")
-      .select("id, reference, payment_id, payments(reference, invoices(reference)), amount_paise, reason, status, requested_by_account_id, approver_account_id, decided_at, version, created_at")
+      .select("id, reference, payment_id, payments(reference, payment_allocations(invoices(reference))), refunds(reference, provider_ref, status, updated_at), amount_paise, reason, status, requested_by_account_id, approver_account_id, decided_at, version, created_at")
       .order("created_at", { ascending: false });
     if (error !== null) throw mapRpcError(error);
     return (data ?? []).map((row) => {
-      const record = row as Record<string, unknown>;
-      const payment = record.payments as { reference?: string; invoices?: { reference?: string } | null } | null;
+      const allocations = row.payments?.payment_allocations ?? [];
+      const refund = row.refunds;
       return {
-        id: record.id as string,
-        ref: record.reference as string,
-        paymentRef: payment?.reference ?? "",
-        invoiceRef: payment?.invoices?.reference ?? "",
-        amountPaise: record.amount_paise as number,
-        reason: record.reason as string,
-        requestedBy: record.requested_by_account_id as string,
-        requestedAtIso: record.created_at as string,
-        status: record.status as string,
-        decidedBy: (record.approver_account_id as string | null) ?? null,
-        decidedAtIso: (record.decided_at as string | null) ?? null,
+        id: row.id,
+        ref: row.reference,
+        paymentRef: row.payments?.reference ?? "",
+        invoiceRef: allocations[0]?.invoices?.reference ?? "",
+        amountPaise: row.amount_paise,
+        reason: row.reason,
+        requestedBy: row.requested_by_account_id,
+        requestedAtIso: row.created_at,
+        status: row.status === "requested" ? "pending" : row.status === "processed" ? "posted" : row.status,
+        decidedBy: row.approver_account_id,
+        decidedAtIso: row.decided_at,
         decisionReason: null,
-        providerRefundRef: null,
-        postedAtIso: null,
-        version: record.version as number,
+        providerRefundRef: refund?.provider_ref ?? null,
+        postedAtIso: refund?.status === "confirmed" ? refund.updated_at : null,
+        version: row.version,
       };
     });
   });
@@ -940,40 +956,57 @@ export function enrollmentConvert(supabase: SupabaseClient<Database>, applicatio
   });
 }
 
-export function resolveFamilyContext(supabase: SupabaseClient<Database>, input: { studentId?: string } = {}) {
+export function resolveFamilyContext(
+  supabase: SupabaseClient<Database>,
+  input: { studentId?: string } = {},
+  actor?: { accountId: string; personId: string; displayName: string },
+) {
   return result(async () => {
-    const { data: links, error } = await supabase
-      .from("guardian_student_links")
-      .select(
-        "id, reference, guardian_id, student_id, relationship_label, status, verification_source, approved_at, effective_from, effective_to, restriction_reason, rejection_reason, contact_priority, is_emergency_contact, is_billing_contact, version, students(id, reference, status, people(display_name)), guardian_link_capabilities(capability)",
-      )
-      .eq("status", "active");
+    let accountId = actor?.accountId ?? null;
+    let personId = actor?.personId ?? null;
+    let displayName = actor?.displayName ?? "Guardian";
+    if (actor === undefined) {
+      const { data: user } = await supabase.auth.getUser();
+      const { data: account } = user.user
+        ? await supabase.from("user_accounts").select("id, person_id, people(display_name)").eq("id", user.user.id).maybeSingle()
+        : { data: null };
+      accountId = account?.id ?? null;
+      personId = account?.person_id ?? null;
+      displayName = account?.people?.display_name ?? "Guardian";
+    }
+
+    const [linksResult, enrollmentsResult, guardianResult, preferenceResult] = await Promise.all([
+      supabase
+        .from("guardian_student_links")
+        .select(
+          "id, reference, guardian_id, student_id, relationship_label, status, verification_source, approved_at, effective_from, effective_to, restriction_reason, rejection_reason, contact_priority, is_emergency_contact, is_billing_contact, version, students(id, reference, status, people(display_name)), guardian_link_capabilities(capability)",
+        )
+        .eq("status", "active"),
+      supabase
+        .from("enrollments")
+        .select("id, reference, student_id, academic_year_id, grade_section_id, status, effective_from, effective_to, grade_sections(id, reference, section_label, academic_year_id, status, grades(label)), academic_years(id, reference, label, starts_on, ends_on, status)")
+        .eq("status", "active"),
+      personId
+        ? supabase.from("guardians").select("id").eq("person_id", personId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      accountId
+        ? supabase
+            .from("account_context_preferences")
+            .select("active_student_id")
+            .eq("account_id", accountId)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+    const { data: links, error } = linksResult;
     if (error !== null) throw mapRpcError(error);
-
-    const { data: enrollments, error: enrollmentError } = await supabase
-      .from("enrollments")
-      .select("id, reference, student_id, academic_year_id, grade_section_id, status, effective_from, effective_to, grade_sections(id, reference, section_label, academic_year_id, status, grades(label)), academic_years(id, reference, label, starts_on, ends_on, status)")
-      .eq("status", "active");
+    const { data: enrollments, error: enrollmentError } = enrollmentsResult;
     if (enrollmentError !== null) throw mapRpcError(enrollmentError);
-
-    const { data: user } = await supabase.auth.getUser();
-    const { data: account } = user.user
-      ? await supabase.from("user_accounts").select("id, person_id, people(display_name)").eq("id", user.user.id).maybeSingle()
-      : { data: null };
-    const { data: guardian } = account?.person_id
-      ? await supabase.from("guardians").select("id").eq("person_id", account.person_id).maybeSingle()
-      : { data: null };
+    const guardian = guardianResult.data;
 
     /* The HttpOnly selection cookie is only a cache hint. The account-owned
      * preference is the durable default and is revalidated against the active
      * link below on every request. */
-    const { data: preference } = account?.id
-      ? await supabase
-          .from("account_context_preferences")
-          .select("active_student_id")
-          .eq("account_id", account.id)
-          .maybeSingle()
-      : { data: null };
+    const preference = preferenceResult.data;
 
     type RawLink = {
       id: string;
@@ -1034,9 +1067,9 @@ export function resolveFamilyContext(supabase: SupabaseClient<Database>, input: 
     if (input.studentId !== undefined && selected === undefined) throw new DomainError("forbidden", "That student is not linked to this account.");
 
     return {
-      accountId: user.user?.id ?? null,
-      personId: account?.person_id ?? null,
-      displayName: account?.people?.display_name ?? "Guardian",
+      accountId,
+      personId,
+      displayName,
       guardianId: guardian?.id ?? null,
       activeStudentId: selected?.student.id ?? null,
       activeEnrollmentId: selected?.enrollment.id ?? null,
@@ -1484,6 +1517,55 @@ export function resultsCorrectionDecide(
   });
 }
 
+export type TimetableOverrideProjection = {
+  id: string;
+  reference: string;
+  grade_section_id: string;
+  override_date: string;
+  day_of_week: number;
+  period_number: number;
+  kind: string;
+  subject_id: string | null;
+  room_id: string | null;
+  substitute_teacher_assignment_id: string | null;
+  note: string | null;
+  created_at: string;
+  created_by_account_id?: string | null;
+  updated_at?: string;
+  version: number;
+  revoked_at: string | null;
+  revoked_by_account_id?: string | null;
+  revocation_reason: string | null;
+  subjects?: { name: string } | null;
+  rooms?: { label: string } | null;
+  staff_assignments?: {
+    reference?: string;
+    staff_members?: { people?: { display_name: string } | null } | null;
+  } | null;
+};
+
+export type ExamScheduleProjection = {
+  id: string;
+  reference: string;
+  grade_section_id: string;
+  version: number;
+  status: string;
+  created_at: string;
+  published_at?: string | null;
+  published_by_account_id?: string | null;
+  publication_note?: string | null;
+  exam_schedule_entries?: Array<{
+    id: string;
+    exam_date: string;
+    subject_id: string;
+    room_id: string | null;
+    starts_at: string;
+    ends_at: string;
+    subjects?: { name: string } | null;
+    rooms?: { label: string } | null;
+  }>;
+};
+
 export function timetableListVersions(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
@@ -1506,6 +1588,38 @@ export function timetableGetEffective(supabase: SupabaseClient<Database>, gradeS
       .maybeSingle();
     if (error !== null) throw mapRpcError(error);
     return data;
+  });
+}
+
+/** RLS-backed override history. Guardians see only active rows for their
+ * academics-capable linked section; scoped timetable staff can also see the
+ * revoked history. */
+export function timetableListOverrides(supabase: SupabaseClient<Database>, gradeSectionId: string) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("timetable_overrides")
+      .select("id, reference, grade_section_id, override_date, day_of_week, period_number, kind, subject_id, room_id, substitute_teacher_assignment_id, note, created_at, created_by_account_id, updated_at, version, revoked_at, revoked_by_account_id, revocation_reason, subjects(name), rooms(label), staff_assignments(reference, staff_members(people(display_name)))")
+      .eq("grade_section_id", gradeSectionId)
+      .order("override_date", { ascending: true })
+      .order("period_number", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (error !== null) throw mapRpcError(error);
+    return (data ?? []) as unknown as TimetableOverrideProjection[];
+  });
+}
+
+/** RLS-backed published exam date sheets for one section. Drafts and
+ * superseded rows remain staff history and are not part of the portal read. */
+export function examScheduleListPublished(supabase: SupabaseClient<Database>, gradeSectionId: string) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("exam_schedule_versions")
+      .select("id, reference, grade_section_id, version, status, created_at, published_at, published_by_account_id, publication_note, exam_schedule_entries(id, exam_date, subject_id, room_id, starts_at, ends_at, subjects(name), rooms(label))")
+      .eq("grade_section_id", gradeSectionId)
+      .eq("status", "published")
+      .order("version", { ascending: false });
+    if (error !== null) throw mapRpcError(error);
+    return (data ?? []) as unknown as ExamScheduleProjection[];
   });
 }
 
@@ -1565,6 +1679,21 @@ export function timetableSaveOverride(
   });
 }
 
+export function timetableRevokeOverride(
+  supabase: SupabaseClient<Database>,
+  input: { overrideId: string; expectedVersion: number; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "timetable_revoke_override", {
+      p_override_id: input.overrideId,
+      p_expected_version: input.expectedVersion,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "timetable override") as unknown as TimetableOverrideProjection;
+  });
+}
+
 export function examScheduleSaveDraft(supabase: SupabaseClient<Database>, input: { gradeSectionId: string; entries: Json; versionId?: string | null }) {
   return result(async () => {
     const { data, error } = await callAppRpc<Json>(supabase, "exam_schedule_save_draft", {
@@ -1589,35 +1718,52 @@ export function examSchedulePublish(supabase: SupabaseClient<Database>, input: {
 /* Staff workspace context                                              */
 /* ------------------------------------------------------------------ */
 
-export function resolveStaffContext(supabase: SupabaseClient<Database>, personId: string, roleGrantId?: string) {
+export function resolveStaffContext(
+  supabase: SupabaseClient<Database>,
+  personId: string,
+  roleGrantId?: string,
+  actor?: { accountId: string; personId: string; displayName: string },
+) {
   return result(async () => {
-    const { data: member, error } = await supabase
-      .from("staff_members")
-      .select("id, reference, employment_status, title")
-      .eq("person_id", personId)
-      .maybeSingle();
-    if (error !== null) throw mapRpcError(error);
-    if (member === null) throw new DomainError("forbidden", "No staff record for this account");
+    const account = actor === undefined
+      ? (await supabase
+          .from("user_accounts")
+          .select("id, person_id, people(display_name)")
+          .eq("person_id", personId)
+          .maybeSingle()).data
+      : { id: actor.accountId, person_id: actor.personId, people: { display_name: actor.displayName } };
+    if (account === null) throw new DomainError("forbidden", "No account for this staff record");
 
     const nowIso = new Date().toISOString();
-    const { data: account } = await supabase
-      .from("user_accounts")
-      .select("id, person_id, people(display_name)")
-      .eq("person_id", personId)
-      .maybeSingle();
-    if (account === null) throw new DomainError("forbidden", "No account for this staff record");
-    const { data: preference } = await supabase
-      .from("account_context_preferences")
-      .select("active_role_grant_id")
-      .eq("account_id", account.id)
-      .maybeSingle();
-    const { data: grants, error: grantsError } = await supabase
-      .from("role_grants")
-      .select("id, reference, account_id, role_code, status, granted_by_account_id, reason, effective_from, effective_to, version")
-      .eq("account_id", account.id)
-      .eq("status", "active")
-      .lte("effective_from", nowIso)
-      .or(`effective_to.is.null,effective_to.gt.${nowIso}`);
+    const [memberResult, preferenceResult, grantsResult, academicYearResult] = await Promise.all([
+      supabase
+        .from("staff_members")
+        .select("id, reference, employment_status, title")
+        .eq("person_id", personId)
+        .maybeSingle(),
+      supabase
+        .from("account_context_preferences")
+        .select("active_role_grant_id")
+        .eq("account_id", account.id)
+        .maybeSingle(),
+      supabase
+        .from("role_grants")
+        .select("id, reference, account_id, role_code, status, granted_by_account_id, reason, effective_from, effective_to, version")
+        .eq("account_id", account.id)
+        .eq("status", "active")
+        .lte("effective_from", nowIso)
+        .or(`effective_to.is.null,effective_to.gt.${nowIso}`),
+      supabase
+        .from("academic_years")
+        .select("id, reference, label, starts_on, ends_on, status")
+        .eq("status", "current")
+        .maybeSingle(),
+    ]);
+    const { data: member, error } = memberResult;
+    if (error !== null) throw mapRpcError(error);
+    if (member === null) throw new DomainError("forbidden", "No staff record for this account");
+    const preference = preferenceResult.data;
+    const { data: grants, error: grantsError } = grantsResult;
     if (grantsError !== null) throw mapRpcError(grantsError);
     const requestedRoleGrantId = roleGrantId ?? preference?.active_role_grant_id ?? undefined;
     const selectedGrant = requestedRoleGrantId === undefined
@@ -1634,12 +1780,6 @@ export function resolveStaffContext(supabase: SupabaseClient<Database>, personId
       .eq("status", "active")
       .lte("effective_from", nowIso)
       .or(`effective_to.is.null,effective_to.gt.${nowIso}`);
-
-    const { data: academicYear } = await supabase
-      .from("academic_years")
-      .select("id, reference, label, starts_on, ends_on, status")
-      .eq("status", "current")
-      .maybeSingle();
 
     return {
       accountId: account.id,
@@ -1672,7 +1812,7 @@ export function resolveStaffContext(supabase: SupabaseClient<Database>, personId
         gradeLabel: assignment.grade_sections?.grades?.label ?? null,
         sectionLabel: assignment.grade_sections?.section_label ?? null,
       })),
-      academicYear,
+      academicYear: academicYearResult.data,
     };
   });
 }
@@ -2186,7 +2326,7 @@ export function jobsListStaffQueue(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
       .from("job_applications")
-      .select("id, reference, applicant_name, owner_account_id, vacancy_id, current_status, version, created_at, job_vacancies(title, reference), job_application_drafts(draft, schema_version, expires_at, updated_at), job_application_versions(version, snapshot), job_events(event_type, visible_to_applicant, copy, created_at), job_interviews(scheduled_at, notes, outcome)")
+      .select("id, reference, applicant_name, owner_account_id, vacancy_id, current_status, version, created_at, job_vacancies(title, reference), job_application_drafts(draft, schema_version, expires_at, updated_at), job_application_versions(version, snapshot), job_events(event_type, visible_to_applicant, copy, created_at), job_interviews(scheduled_at, notes, outcome), job_review_assignments(reviewer_account_id, status, assigned_at), job_scorecards(score, notes, created_by_account_id, created_at)")
       .not("current_status", "eq", "draft")
       .order("created_at", { ascending: false });
     if (error !== null) throw mapRpcError(error);

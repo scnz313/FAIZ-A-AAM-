@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { FINANCE_DEMO_NOTE } from "@/modules/services/finance";
 import { financeService } from "@/modules/services/finance";
 import { dataAdapter } from "@/lib/supabase/env";
-import { loadServerInvoices, loadServerReceipts, loadServerReconciliationProjection } from "@/lib/supabase/server-loaders";
+import { loadServerInvoices, loadServerReconciliationProjection } from "@/lib/supabase/server-loaders";
 import { FinanceWorkspace } from "./FinanceWorkspace";
 
 import styles from "./page.module.css";
@@ -19,11 +19,15 @@ export const metadata: Metadata = {
  */
 export default async function FinancePage() {
   const supabaseMode = dataAdapter() === "supabase";
-  const [views, receipts] =
-    supabaseMode
-      ? await Promise.all([loadServerInvoices(), loadServerReceipts()])
-      : await Promise.all([financeService.listAllInvoices(), financeService.listReceipts()]);
-  const reconciliation = supabaseMode ? await loadServerReconciliationProjection() : [];
+  const viewsPromise = supabaseMode ? loadServerInvoices() : financeService.listAllInvoices();
+  const receiptsPromise = supabaseMode
+    ? viewsPromise.then((views) => [...new Map(views.flatMap((view) => view.receipts).map((receipt) => [receipt.ref, receipt])).values()])
+    : financeService.listReceipts();
+  const [views, receipts, reconciliation] = await Promise.all([
+    viewsPromise,
+    receiptsPromise,
+    supabaseMode ? loadServerReconciliationProjection() : Promise.resolve([]),
+  ]);
 
   return (
     <div className={styles.page}>
@@ -37,7 +41,7 @@ export default async function FinancePage() {
 
       <div className={styles.ruleNote}>
         <p>Financial entries are append-only; corrections create new lines.</p>
-        {!supabaseMode ? <p>{FINANCE_DEMO_NOTE}</p> : <p>Finance projections are sourced from the local sandbox ledger and database attempts.</p>}
+        {!supabaseMode ? <p>{FINANCE_DEMO_NOTE}</p> : <p>Finance projections are sourced from the authoritative ledger; online payment attempts use the local sandbox provider.</p>}
       </div>
     </div>
   );

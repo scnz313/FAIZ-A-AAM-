@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { Alert, AlertSeverity } from "@fass/contracts";
 
 import styles from "./AlertStrip.module.css";
@@ -43,9 +45,9 @@ export function AlertStrip({ alerts }: AlertStripProps) {
         <strong className="num">{open.length}</strong> open {unit} — {titles}
         {remainder}
       </p>
-      <a className="link-arrow" href="/staff/facility/alerts">
+      <Link prefetch={false} className="link-arrow" href="/staff/facility/alerts">
         Review alerts →
-      </a>
+      </Link>
     </div>
   );
 }

@@ -153,6 +153,8 @@ export type SnapshotMarkRow = {
   obtained: number | null;
   grade?: Grade;
   remark?: string;
+  /** Explicit result status from the published snapshot: present, absent, exempt, not_applicable. */
+  markStatus?: string;
 };
 
 /**
@@ -866,9 +868,9 @@ async function getStudentResultSnapshot(studentId: string, academicYearId: strin
       for (const item of publication.items ?? []) {
         const snapshot = item.snapshot;
         if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) continue;
-        const value = snapshot as { term?: string; subject?: string; marks?: Array<{ max?: number; obtained?: number | null; component?: string; remark?: string; markStatus?: string }> };
+        const value = snapshot as { term?: string; subject?: string; marks?: Array<{ max?: number; obtained?: number | null; component?: string; remark?: string; markStatus?: string; status?: string }> };
         const term = value.term ?? publication.term ?? "Results";
-        terms[term] = [...(terms[term] ?? []), ...(value.marks ?? []).map((mark) => ({ subject: mark.component ?? value.subject ?? "Subject", max: Number(mark.max ?? 0), obtained: mark.obtained === null || mark.obtained === undefined ? null : Number(mark.obtained), remark: mark.remark }))];
+        terms[term] = [...(terms[term] ?? []), ...(value.marks ?? []).map((mark) => ({ subject: mark.component ?? value.subject ?? "Subject", max: Number(mark.max ?? 0), obtained: mark.obtained === null || mark.obtained === undefined ? null : Number(mark.obtained), remark: mark.remark, markStatus: mark.markStatus ?? mark.status }))];
       }
     }
     return Object.keys(terms).length === 0 ? null : { studentId, academicYearId, terms };
