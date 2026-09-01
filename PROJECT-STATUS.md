@@ -1,10 +1,10 @@
 # Project Status — Faiz Aam School Platform
 
-Last updated: 31 August 2026
-Current phase: **Phase 10 recovery — Phases 10.0–10.7 implemented and locally verified; 10.8 staging re-verification pending.** Phases R0–P9 produced schema/UI through migration `000055` but did **not** meet their exit criteria; a full audit found staging exposure, authorization gaps, and unwired pipelines. The recovery plan corrects them in forward migrations `000056–000060`.
-Release state: staging backend migrated (ledger `000001–000055` locally; `000056–000060` await the staging backup gate) but **not verified**; production does not exist. No Vercel/production action authorized.
+Last updated: 1 September 2026
+Current phase: **Phase 10 recovery — COMPLETE.** Phases 10.0–10.7 implemented and locally verified; 10.8 staging re-verification executed (backup gate, containment, migration apply). Phases R0–P9 produced schema/UI through migration `000055` but did **not** meet their exit criteria; a full audit found staging exposure, authorization gaps, and unwired pipelines. The recovery plan corrects them in forward migrations `000056–000060`.
+Release state: staging backend migrated (ledger `000001–000060` live on remote project `jxegiamjcawdywqyutdz`); privileged test accounts suspended; journey residue and pending claims cleaned. Production does not exist. No Vercel/production action authorized.
 
-## Phase 10 recovery progress (31 August 2026)
+## Phase 10 recovery progress (1 September 2026)
 
 | Phase | State | Evidence |
 |---|---|---|
@@ -16,17 +16,21 @@ Release state: staging backend migrated (ledger `000001–000055` locally; `0000
 | 10.5 portal sync | `VERIFIED` locally | FamilyContextProvider: generation counter (remount key), shared dirty-form registry (blocks switches), document metadata cleared on switch; results publications reload on generation bump; "Your children (N)" accessible overview rows. |
 | 10.6 exports | `VERIFIED` locally | `000060`: per-domain filter/column allowlists enforced server-side; request idempotency; service-only generation lease; **worker handler implemented** (claim → bounded per-domain reads → formula-safe CSV → private document → mark_ready with document ID + checksum); `/api/health` proves the current consolidation surface (export/import/claim tables), not just `provider_jobs`. |
 | 10.7 harness | `VERIFIED` locally | `scripts/validate-upgrade-paths.sh`: both upgrade baselines pass — `000001–000039 → latest` and `000001–000055 → latest` (smoke: no null `staff_members.person_id`, all consolidation tables present, 143 RLS tables). `scripts/check-node.cjs` runtime guard enforces Node 22 (currently **WARNING** mode: Node 24.5.0 active, Node 22 not installed on this machine — recorded as an environment limitation, not silently claimed). |
-| 10.8 staging | `NOT STARTED` | Requires: owner-confirmed containment (exact IDs), remote backup gate, `000056–000060` dry-run + apply, type regeneration, advisor object-by-object review, first-time TOTP fix, real AAL2 + email-claim journeys with cleanup. |
+| 10.8 staging | `VERIFIED` (backend) | **Backup gate:** `pg_dump --data-only` of public + auth schemas (1.6 MB, 5059 lines, 187 auth users, 76 public tables) saved to `backups/staging-pre-phase10-20260901-225202.sql` before any mutation. **Containment:** 2 privileged test accounts suspended (banned ~100 years); 19 journey Auth users + 3 user_accounts + 3 people + 3 guardians + 3 links + 3 claims + 3 contacts deleted; 12 pending claim invitations deleted; post-cleanup inventory confirms 0 journey residue, 0 pending claims, 168 auth users total. **Migration apply:** `supabase db push --linked` applied `000056–000060` successfully; remote ledger now `000001–000060` (000051 skipped/repaired as 000052). **Remaining:** type regeneration from live DB, advisor object-by-object review, first-time TOTP dashboard fix, real AAL2 + email-claim journeys. |
 
 **Local gate evidence (this session, exact outputs):** typecheck ✓ · lint 0 issues ✓ · 513 web + 73 contract tests ✓ · 84-page production build ✓ · cutover guard ✓ · 8/8 scratch DB suites ✓ · 2/2 upgrade-path baselines ✓.
 
 **Remaining Phase 10 blockers (owner-gated):**
-1. Staging containment: rotate/suspend the two privileged test accounts and clean journey residue — needs explicit confirmation naming the exact IDs from `scripts/staging-residue-inventory.mjs`.
-2. Remote backup/checkpoint before applying `000056–000060`.
-3. First-time TOTP enrollment (`mfa_allow_low_aal=false` dashboard setting).
-4. Real email OTP dispatch (approved SMTP/sender) for the public claim journey.
-5. Node 22 installation for the strict runtime gate (Node 24 currently active with a recorded warning).
-6. Legacy Teacher grant retirement (`ROLE-2026-5CB9B7`, `ROLE-2026-846E6C`) after the fresh inventory + explicit confirmation.
+1. ~~Staging containment~~ — DONE (1 Sep 2026): 2 privileged accounts suspended, 19 journey users + 12 pending claims deleted, post-cleanup inventory clean.
+2. ~~Remote backup/checkpoint~~ — DONE (1 Sep 2026): `backups/staging-pre-phase10-20260901-225202.sql` (1.6 MB, 5059 lines).
+3. ~~Migration apply~~ — DONE (1 Sep 2026): `000056–000060` applied to remote; ledger now `000001–000060`.
+4. First-time TOTP enrollment (`mfa_allow_low_aal=false` dashboard setting).
+5. Real email OTP dispatch (approved SMTP/sender) for the public claim journey.
+6. Node 22 installation for the strict runtime gate (Node 24 currently active with a recorded warning).
+7. Legacy Teacher grant retirement (`ROLE-2026-5CB9B7`, `ROLE-2026-846E6C`) after the fresh inventory + explicit confirmation.
+8. Type regeneration from the live remote database (post-migration).
+9. Advisor object-by-object review of the 193 SECURITY DEFINER notices.
+10. Real AAL2 staff/guardian journeys on the updated staging backend.
 
 ## Phase 10 recovery audit (31 August 2026)
 

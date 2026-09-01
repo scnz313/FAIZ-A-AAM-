@@ -17,3 +17,4 @@ supabase/.temp/
 supabase/.branches/
 supabase/.env.local
 supabase/signing_keys.json
+backups/
