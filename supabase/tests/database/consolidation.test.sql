@@ -236,6 +236,7 @@ begin
     perform app.guardian_claim_create(v_guardian_id, v_contact_id, 'sms', now() + interval '7 days', null, 'Duplicate attempt.');
   exception when others then v_denied := true; end;
   assert v_denied, 'stage5: duplicate pending claim is denied';
+  perform set_config('fass.claim_secret', v_secret, false);
 end $$;
 reset role;
 
@@ -246,7 +247,9 @@ declare
   v_guardian_id uuid;
   v_denied boolean;
   v_result jsonb;
+  v_secret text;
 begin
+  v_secret := current_setting('fass.claim_secret', true);
   select c.reference, c.guardian_id into v_claim_ref, v_guardian_id
     from public.guardian_claim_invitations c
     join public.external_record_keys ek on ek.entity = 'guardian' and ek.record_id = c.guardian_id
@@ -262,14 +265,14 @@ begin
   perform set_config('request.jwt.claims', '{"aal":"aal2","role":"authenticated","email":"verify.principal@example.in"}', false);
   v_denied := false;
   begin
-    perform app.guardian_claim_accept(v_claim_ref, 'Wrong', 'Actor');
+    perform app.guardian_claim_accept(v_claim_ref, 'Wrong', 'Actor', 'wrong-secret');
   exception when others then v_denied := true; end;
   assert v_denied, 'stage5: wrong provider subject cannot accept the claim';
 
   -- The bound claimant accepts; one account, one Guardian grant, exact links.
   perform set_config('request.jwt.claim.sub', '90000000-0000-4000-8000-000000000003', false);
   perform set_config('request.jwt.claims', '{"aal":"aal2","role":"authenticated","email":"verify.guardian@example.in","phone":"+919000000001"}', false);
-  v_result := app.guardian_claim_accept(v_claim_ref, 'Verify', 'Guardian');
+  v_result := app.guardian_claim_accept(v_claim_ref, 'Verify', 'Guardian', v_secret);
   assert (v_result ->> 'accountId') = '90000000-0000-4000-8000-000000000003', 'stage5: acceptance binds the claimant account';
   assert exists (
     select 1 from public.role_grants
@@ -286,7 +289,7 @@ begin
   -- Reuse is denied.
   v_denied := false;
   begin
-    perform app.guardian_claim_accept(v_claim_ref, 'Verify', 'Guardian');
+    perform app.guardian_claim_accept(v_claim_ref, 'Verify', 'Guardian', v_secret);
   exception when others then v_denied := true; end;
   assert v_denied, 'stage5: claim reuse is denied';
 end $$;
