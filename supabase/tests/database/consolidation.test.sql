@@ -310,11 +310,11 @@ begin
   -- Non-allowlisted filter identifiers are rejected.
   v_denied := false;
   begin
-    perform app.data_export_request('students', '{"DROP TABLE x": "1"}'::jsonb, '[]'::jsonb, 'csv', 'Verification purpose.', 'Verification reason.');
+    perform app.data_export_request('students', '{"DROP TABLE x": "1"}'::jsonb, '[]'::jsonb, 'csv', 'Verification purpose.', 'Verification reason.', null);
   exception when others then v_denied := true; end;
   assert v_denied, 'stage7: non-allowlisted filter field is rejected';
 
-  v_request := app.data_export_request('students', '{}'::jsonb, '[]'::jsonb, 'csv', 'Verification export purpose.', 'Verification reason.');
+  v_request := app.data_export_request('students', '{}'::jsonb, '[]'::jsonb, 'csv', 'Verification export purpose.', 'Verification reason.', 'verify-export-0001');
   v_ref := v_request ->> 'reference';
   assert v_ref is not null, 'stage7: export request created';
 

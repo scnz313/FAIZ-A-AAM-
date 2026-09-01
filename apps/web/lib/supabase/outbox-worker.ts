@@ -52,6 +52,7 @@ import {
 } from "@/lib/email/templates";
 import { callAppRpc } from "@/lib/supabase/rpc";
 import { PdfTransientError, generateReceiptPdf, generateReportCardPdf, generatedObjectKey, type GeneratedPdf } from "@/lib/pdf/adapter";
+import { generateCsv } from "@/lib/exports/csv-generator";
 import { SupabaseStorageProvider } from "@/lib/documents/providers";
 import { createConfiguredDocumentScanner, detectContentType, type DocumentScanner, type StorageProvider } from "@/modules/services/document-providers";
 
@@ -65,6 +66,192 @@ export type OutboxEventRow = {
   status: string;
   attempts: number;
   next_attempt_at?: string;
+};
+
+/**
+ * Protected data export generation (Phase 10.6): claims the generation
+ * lease, reads the domain rows through bounded domain-specific queries
+ * (no arbitrary SQL), generates a formula-safe CSV, uploads it as a
+ * private generated document, and marks the request ready with the
+ * artifact document ID. Failures are transient (retryable) or permanent.
+ */
+async function dispatchDataExportGenerate(
+  admin: SupabaseClient<Database>,
+  event: OutboxEventRow,
+): Promise<DispatchOutcome> {
+  const reference = event.target_reference;
+  const { data: claimed, error: claimError } = await callAppRpc<Record<string, unknown>>(
+    admin, "data_export_claim_generation", { p_request_reference: reference },
+  );
+  if (claimError !== null) return { kind: "transient", error: claimError.message };
+
+  const { data: request, error: requestError } = await admin
+    .from("data_export_requests")
+    .select("domain, format, filters, columns")
+    .eq("reference", reference)
+    .maybeSingle();
+  if (requestError !== null || request === null) {
+    return { kind: "permanent", error: `export request ${reference} not found` };
+  }
+
+  try {
+    const rows = await readExportRows(admin, request.domain as string, (request.filters ?? {}) as Record<string, unknown>);
+    const columns = normalizeExportColumns(request.domain as string, (request.columns ?? []) as string[]);
+    const csv = generateCsv({ columns, rows });
+    const checksum = sha256(csv);
+    const objectKey = `exports/${reference}.csv`;
+    const storage = new SupabaseStorageProvider(admin);
+    await storage.upload({
+      bucket: "fass-generated-documents",
+      objectKey,
+      bytes: new TextEncoder().encode(csv),
+      contentType: "text/csv; charset=utf-8",
+    });
+    const { data: document, error: documentError } = await (admin as unknown as SupabaseClient)
+      .from("documents")
+      .insert({
+        owner_domain: "data_export",
+        owner_record_id: reference,
+        storage_bucket: "fass-generated-documents",
+        object_key: objectKey,
+        filename: `${reference}.csv`,
+        mime_type: "text/csv",
+        size_bytes: Buffer.byteLength(csv, "utf8"),
+        processing_state: "clean",
+        generated: true,
+      })
+      .select("id")
+      .single();
+    if (documentError !== null || document === null) {
+      return { kind: "transient", error: documentError?.message ?? "export document row unavailable" };
+    }
+    const { error: readyError } = await callAppRpc<Record<string, unknown>>(
+      admin, "data_export_mark_ready",
+      { p_request_reference: reference, p_row_count: rows.length, p_document_id: document.id },
+    );
+    if (readyError !== null) return { kind: "transient", error: readyError.message };
+    await (admin as unknown as SupabaseClient).from("data_export_requests").update({ artifact_checksum: checksum }).eq("reference", reference);
+    return { kind: "delivered", providerIds: [`export:${reference}:${rows.length}rows`] };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown export generation error";
+    await callAppRpc<Record<string, unknown>>(admin, "data_export_mark_failed", {
+      p_request_reference: reference, p_error: message,
+    });
+    return { kind: "permanent", error: message };
+  }
+}
+
+/** Bounded, domain-specific export reads — no arbitrary SQL or dynamic
+ * column interpolation. Each domain selects only its allowlisted columns. */
+async function readExportRows(
+  admin: SupabaseClient<Database>,
+  domain: string,
+  filters: Record<string, unknown>,
+): Promise<Array<Record<string, unknown>>> {
+  const EXPORT_MAX_ROWS = 50_000;
+  const filterValues = (allowed: string[]): Array<[string, string]> =>
+    Object.entries(filters)
+      .filter(([key, value]) => allowed.includes(key) && typeof value === "string")
+      .map(([key, value]) => [key, value as string]);
+  const finish = async (
+    query: ReturnType<SupabaseClient<Database>["from"]>,
+  ): Promise<Array<Record<string, unknown>>> => {
+    const { data, error } = await query.limit(EXPORT_MAX_ROWS);
+    if (error !== null) throw new Error(error.message);
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => flattenExportRow(row));
+  };
+  switch (domain) {
+    case "students": {
+      let query = admin.from("students").select("reference, people(display_name), status, school_student_number, enrollments(status, grade_sections(grades(label), section_label), academic_years(label))");
+      for (const [key, value] of filterValues(["status"])) query = query.eq(key, value);
+      return finish(query);
+    }
+    case "guardians": {
+      let query = admin.from("guardians").select("reference, people(display_name), status");
+      for (const [key, value] of filterValues(["status"])) query = query.eq(key, value);
+      return finish(query);
+    }
+    case "guardian_student_links": {
+      let query = admin.from("guardian_student_links").select("reference, guardians(people(display_name)), students(people(display_name)), relationship_label, status, verification_source, effective_from");
+      for (const [key, value] of filterValues(["status", "verification_source"])) query = query.eq(key, value);
+      return finish(query);
+    }
+    case "enrollments": {
+      let query = admin.from("enrollments").select("reference, students(people(display_name)), grade_sections(grades(label), section_label), academic_years(label), status, effective_from");
+      for (const [key, value] of filterValues(["status"])) query = query.eq(key, value);
+      return finish(query);
+    }
+    case "admissions": {
+      let query = admin.from("admission_applications").select("reference, student_name, parent_name, current_status, grade_sections(grades(label)), academic_years(label), submitted_at");
+      for (const [key, value] of filterValues(["current_status"])) query = query.eq(key, value);
+      return finish(query);
+    }
+    case "invoices": {
+      let query = admin.from("invoices").select("reference, students(people(display_name)), term, status, amount_paise, paid_paise, due_date");
+      for (const [key, value] of filterValues(["status", "term"])) query = query.eq(key, value);
+      return finish(query);
+    }
+    case "results": {
+      let query = admin.from("result_report_releases").select("reference, students(people(display_name)), term, status, version, published_at");
+      for (const [key, value] of filterValues(["status", "term"])) query = query.eq(key, value);
+      return finish(query);
+    }
+    default:
+      throw new Error(`export domain ${domain} is not implemented`);
+  }
+}
+
+/** Flatten nested PostgREST joins into a flat row keyed by allowlisted
+ * column names. */
+function flattenExportRow(row: Record<string, unknown>): Record<string, unknown> {
+  const flat: Record<string, unknown> = {};
+  const visit = (prefix: string, value: unknown): void => {
+    if (value === null || value === undefined) {
+      flat[prefix] = null;
+      return;
+    }
+    if (Array.isArray(value)) {
+      if (value.length > 0 && typeof value[0] === "object" && value[0] !== null) {
+        visit(prefix, value[0]);
+      } else {
+        flat[prefix] = value.join(", ");
+      }
+      return;
+    }
+    if (typeof value === "object") {
+      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+        visit(prefix === "" ? key : `${prefix}_${key}`, nested);
+      }
+      return;
+    }
+    flat[prefix] = value;
+  };
+  visit("", row);
+  return flat;
+}
+
+/** Normalize requested columns to the domain's allowlist; empty request
+ * means the default minimal column set (the allowlist itself). */
+function normalizeExportColumns(domain: string, requested: string[]): string[] {
+  const allowed = EXPORT_COLUMN_CATALOG.data_export_allowed_columns?.(domain) ?? [];
+  if (requested.length === 0) return [...allowed];
+  return requested.filter((column) => allowed.includes(column));
+}
+
+/* Static mirror of the SQL allowlist catalog (000060) for the worker. */
+const EXPORT_COLUMN_CATALOG: Record<string, (domain: string) => string[] | null> = {
+  data_export_allowed_columns: (domain: string): string[] | null => {
+    const catalog: Record<string, string[]> = {
+      students: ["reference", "people_display_name", "status", "school_student_number", "enrollments_status", "enrollments_grade_sections_grades_label", "enrollments_grade_sections_section_label", "enrollments_academic_years_label"],
+      guardians: ["reference", "people_display_name", "status"],
+      guardian_student_links: ["reference", "guardians_people_display_name", "students_people_display_name", "relationship_label", "status", "verification_source", "effective_from"],
+      enrollments: ["reference", "students_people_display_name", "grade_sections_grades_label", "grade_sections_section_label", "academic_years_label", "status", "effective_from"],
+      admissions: ["reference", "student_name", "parent_name", "current_status", "grade_sections_grades_label", "academic_years_label", "submitted_at"],
+      invoices: ["reference", "students_people_display_name", "term", "status", "amount_paise", "paid_paise", "due_date"],
+      results: ["reference", "students_people_display_name", "term", "status", "version", "published_at"],
+    };
+    return catalog[domain] ?? null;
+  },
 };
 
 export type WorkerSummary = {
@@ -718,6 +905,9 @@ async function dispatchEvent(
       const message = error instanceof Error ? error.message : "unknown pdf generation error";
       return { kind: "permanent", error: message };
     }
+  }
+  if (event.kind === "data.export.generate" || event.kind === "data_export_generate") {
+    return dispatchDataExportGenerate(admin, event);
   }
   const isEmailEvent = event.kind === "email.deliver" || event.kind.startsWith("security.") || event.event_key.startsWith("email.");
   if (!isEmailEvent) {

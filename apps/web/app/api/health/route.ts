@@ -32,11 +32,19 @@ export async function GET(_request: NextRequest) {
     try {
       const admin = createSupabaseAdminClient();
       const db = admin as unknown as SupabaseClient;
-      const [schemaProbe, latestRun] = await Promise.all([
+      /* Migration readiness proves the CURRENT consolidation surface, not
+         just the old provider_jobs table: the export pipeline (000060),
+         import pipeline (000058), and claim security (000059) tables must
+         all exist. */
+      const [schemaProbe, exportProbe, importProbe, claimProbe, latestRun] = await Promise.all([
         db.from("provider_jobs").select("id").limit(1),
+        db.from("data_export_requests").select("id").limit(1),
+        db.from("data_import_batches").select("id").limit(1),
+        db.from("guardian_claim_invitations").select("id").limit(1),
         db.from("job_runs").select("finished_at, status").eq("job_name", "outbox").order("started_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
-      migrationReady = schemaProbe.error === null;
+      migrationReady = schemaProbe.error === null && exportProbe.error === null
+        && importProbe.error === null && claimProbe.error === null;
       workerLastRunAt = latestRun.data?.finished_at ?? null;
     } catch {
       migrationReady = false;
