@@ -137,20 +137,25 @@ begin
   v_version := (v_batch ->> 'version')::int;
   assert v_batch_id is not null, 'stage4: batch created';
 
-  -- Store normalized rows (students + a guardian + a relationship).
+  -- Store normalized rows (students + a guardian + a relationship) in one
+  -- family group so the group-atomic commit processes them together.
   perform app.data_import_store_rows(v_batch_id, '[
-    {"rowNumber":1,"entity":"students","sourceKey":"VSTU-1","normalized":{"givenName":"Verify","familyName":"Student","displayName":"Verify Student"},"status":"valid"},
-    {"rowNumber":2,"entity":"guardians","sourceKey":"VGDN-1","normalized":{"givenName":"Verify","familyName":"Guardian","displayName":"Verify Guardian","contact":"+919000000001"},"status":"valid"},
-    {"rowNumber":3,"entity":"guardian_student_relationships","sourceKey":"VREL-1","normalized":{"guardianKey":"VGDN-1","studentKey":"VSTU-1","relationshipLabel":"Father"},"status":"valid"}
+    {"rowNumber":1,"entity":"students","sourceKey":"VSTU-1","normalized":{"givenName":"Verify","familyName":"Student","displayName":"Verify Student","familyKey":"VFAM-1"},"status":"valid"},
+    {"rowNumber":2,"entity":"guardians","sourceKey":"VGDN-1","normalized":{"givenName":"Verify","familyName":"Guardian","displayName":"Verify Guardian","contact":"+919000000001","familyKey":"VFAM-1"},"status":"valid"},
+    {"rowNumber":3,"entity":"guardian_student_relationships","sourceKey":"VREL-1","normalized":{"guardianKey":"VGDN-1","studentKey":"VSTU-1","relationshipLabel":"Father","familyKey":"VFAM-1"},"status":"valid"}
   ]'::jsonb);
   -- store_rows mutates the batch; re-read the optimistic version for commit.
-  select version into v_version from public.data_import_batches where id = v_batch_id;
+  v_version := (v_batch ->> 'version')::int + 1;
 
-  -- Walk the state machine to ready before commit (Upload → Validate → Ready).
+  -- Walk the state machine to ready before commit (Upload → Scan → Map → Validate → Ready).
+  perform app.data_import_set_state(v_batch_id, 'scanning', v_version);
+  v_version := v_version + 1;
+  perform app.data_import_set_state(v_batch_id, 'mapping', v_version);
+  v_version := v_version + 1;
   perform app.data_import_set_state(v_batch_id, 'validating', v_version);
-  select version into v_version from public.data_import_batches where id = v_batch_id;
+  v_version := v_version + 1;
   perform app.data_import_set_state(v_batch_id, 'ready', v_version);
-  select version into v_version from public.data_import_batches where id = v_batch_id;
+  v_version := v_version + 1;
 
   v_preview := app.data_import_preview(v_batch_id);
   assert (v_preview ->> 'createCount')::int >= 1, 'stage4: preview counts creates';
