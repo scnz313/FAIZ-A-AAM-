@@ -45,28 +45,34 @@ If code disagrees with the blueprint, do not silently copy the inconsistency. Re
 - Do not add Redis, GraphQL, Kafka, a second backend, a mobile app, an LMS, transport tracking, attendance, payroll, or chat unless the blueprint is explicitly expanded.
 - Do not expose student results, documents, application data, or fee records through public search or predictable identifiers.
 
-## Active phase — three-portal consolidation (Administrator, Principal, Guardian)
+## Active phase — Phase 11: complete the three-portal platform end to end
 
-The signed-in product is being consolidated into exactly three portal
-experiences: **Administrator** (`/administrator/*`), **Principal**
-(`/principal/*`), and **Guardian** (`/portal/*`). The Teacher portal and
-Student portal are removed; teachers remain non-login school records for
-timetable and subject attribution, and students remain school records linked
-to guardians. The previous C5 staging sequence is paused while this
-consolidation lands; do not resume C5 staging migrations or Vercel work until
-the two-profile migration and local gates pass.
+The signed-in product has three portal experiences: **Administrator**
+(`/administrator/*`), **Principal** (`/principal/*`), and **Guardian**
+(`/portal/*`). The Teacher portal and Student portal are removed; teachers
+remain non-login school records for timetable and subject attribution, and
+students remain school records linked to guardians. Phase 11 completes the
+platform end to end: canonical portal routing, teaching/timetable/results
+cutover, real CSV imports, guardian activation, exports/documents, staging
+acceptance, and production. All new database corrections start at `000061`.
+Remote mutations are frozen pending credential rotation.
 
-### Migration ledger divergence
+### Migration ledger
 
-- Remote Supabase has applied migrations `000001–000050` and `000052–000055`
-  (ledger `000051` was repaired→reverted; the corrected function shipped as
-  `000052`). The consolidation migrations are live on staging.
-- **Phase 10 recovery is active.** The prior "staging verified" claim was
-  retracted: privileged test accounts used a committed fallback password,
-  journey residue accumulated, several new SECURITY DEFINER reads lack
-  internal actor checks, and the import/export pipelines are unwired.
-- All database corrections must be **forward migrations from `000056`**.
-  Never edit live migrations `000001–000055`.
+- Remote Supabase has applied migrations `000001–000060` (ledger `000051`
+  was repaired→reverted; the corrected function shipped as `000052`). The
+  Phase 10 recovery migrations `000056–000060` are live on staging.
+- **Phase 11 is active.** The prior "Phase 10 complete" claim is retracted:
+  green local gates do not prove end-to-end completion. Browser suites
+  still use `/staff` and Teacher personas; imports do not upload or parse;
+  guardian activation has no public flow; timetable still uses legacy
+  `staff_assignments`; export UI cannot select fields, download, retry, or
+  recover; child switching does not refresh all server projections.
+- All database corrections must be **forward migrations from `000061`**.
+  Never edit live migrations `000001–000060`.
+- **Remote mutations are frozen** pending credential rotation. The Supabase
+  CLI login role database password was exposed in a terminal session and
+  must be rotated in the dashboard before any further remote action.
 - No Vercel/production action. Teacher-grant retirement requires a fresh
   masked inventory and explicit owner confirmation naming
   `ROLE-2026-5CB9B7` and `ROLE-2026-846E6C`.

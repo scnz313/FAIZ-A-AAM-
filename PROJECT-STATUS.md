@@ -1,10 +1,32 @@
 # Project Status — Faiz Aam School Platform
 
 Last updated: 1 September 2026
-Current phase: **Phase 10 recovery — COMPLETE.** Phases 10.0–10.7 implemented and locally verified; 10.8 staging re-verification executed (backup gate, containment, migration apply). Phases R0–P9 produced schema/UI through migration `000055` but did **not** meet their exit criteria; a full audit found staging exposure, authorization gaps, and unwired pipelines. The recovery plan corrects them in forward migrations `000056–000060`.
-Release state: staging backend migrated (ledger `000001–000060` live on remote project `jxegiamjcawdywqyutdz`); privileged test accounts suspended; journey residue and pending claims cleaned. Production does not exist. No Vercel/production action authorized.
+Current phase: **Phase 11 — complete the three-portal platform end to end.** Phase 10 recovery migrations `000056–000060` are live on staging, but the "Phase 10 complete" claim is **retracted**: green local gates do not prove end-to-end completion. Browser suites still use `/staff` and Teacher personas; imports do not upload or parse; guardian activation has no public flow; timetable still uses legacy `staff_assignments`; export UI cannot select fields, download, retry, or recover; child switching does not refresh all server projections; providers are unverified with real staging sessions.
+Release state: staging backend migrated (ledger `000001–000060` live on remote project `jxegiamjcawdywqyutdz`); privileged test accounts suspended; journey residue cleaned. **Remote mutations frozen** pending credential rotation. Production does not exist. No Vercel/production action authorized.
 
-## Phase 10 recovery progress (1 September 2026)
+### P0 — Credential exposure (owner action required)
+
+The Supabase CLI login role database password was printed in cleartext in a terminal session during Phase 10.8 dry-run operations. It must be treated as **compromised**:
+1. Rotate or revoke the exposed database/login credential in the Supabase dashboard.
+2. Revoke associated temporary CLI access.
+3. Prove the old credential fails.
+4. Ensure it is absent from Git, logs, plans, screenshots, and artifacts.
+Until rotation is confirmed, **no further remote mutations are authorized**.
+
+## Phase 11 progress (1 September 2026)
+
+| Phase | State | Evidence |
+|---|---|---|
+| 11.0 truth reset | `IN PROGRESS` | Docs updated to retract "Phase 10 complete"; credential exposure flagged; containment script replaced with manifest-hash executor; all new corrections start at `000061`. |
+| 11.1 canonical portals | `NOT STARTED` | Replace `/staff` URLs with `canonicalStaffUrl(profileCode, suffix)`; preserve URL/query through auth flows; remove Teacher branches; recoverable errors; strengthen `check:cutover`; rewrite browser/accessibility/link/responsive suites. |
+| 11.2 teaching/timetable/results | `NOT STARTED` | `000061`: backfill `teaching_assignment_id`; make `teaching_assignments` authoritative for timetable; restrict result entry to Principal `result_entry_officer` + AAL2; independent Administrator moderation/publication; immutable report releases. |
+| 11.3 CSV imports + uploads | `NOT STARTED` | `000062`: private source document required; strict state transitions; `data_import_parse` outbox handler; signed browser upload; Upload→Map→Validate→Resolve→Commit→Report UI; group-atomic commit. |
+| 11.4 guardian activation + child sync | `NOT STARTED` | `000063`: token-hash-only claims; `/activate/guardian` routes; eliminate student-reference activation; versioned contact-change; atomic child switching with dirty-form guard; `router.refresh()` + remount + reload all projections. |
+| 11.5 exports/documents/operational | `NOT STARTED` | `000064`–`000065`: export catalogs; cursor pagination; opaque artifact keys; signed download; data-health workspace; document scanner; PDF generation; recoverable errors everywhere; health response. |
+| 11.6 staging acceptance | `NOT STARTED` | Dry-run + apply `000061+`; type regen; advisor review; TOTP config; Resend/SMTP; Storage buckets; real journeys with cleanup; restore rehearsal; Teacher grant retirement. |
+| 11.7 Vercel/production | `NOT STARTED` | Vercel Preview from reviewed commit; Node 22.x; staging acceptance; Mumbai production project; migrations from zero; production build; post-deploy checks. |
+
+## Phase 10 recovery progress (1 September 2026) — RETRACTED as "complete"
 
 | Phase | State | Evidence |
 |---|---|---|
@@ -20,16 +42,16 @@ Release state: staging backend migrated (ledger `000001–000060` live on remote
 
 **Local gate evidence (this session, exact outputs):** typecheck ✓ · lint 0 issues ✓ · 513 web + 73 contract tests ✓ · 84-page production build ✓ · cutover guard ✓ · 8/8 scratch DB suites ✓ · 2/2 upgrade-path baselines ✓.
 
-**Remaining Phase 10 blockers (owner-gated):**
-1. ~~Staging containment~~ — DONE (1 Sep 2026): 2 privileged accounts suspended, 19 journey users + 12 pending claims deleted, post-cleanup inventory clean.
-2. ~~Remote backup/checkpoint~~ — DONE (1 Sep 2026): `backups/staging-pre-phase10-20260901-225202.sql` (1.6 MB, 5059 lines).
-3. ~~Migration apply~~ — DONE (1 Sep 2026): `000056–000060` applied to remote; ledger now `000001–000060`.
+**Remaining Phase 11 blockers (owner-gated):**
+1. **Credential rotation** (P0): rotate the exposed database password in the Supabase dashboard; prove the old credential fails; ensure it is absent from all artifacts.
+2. **Restore rehearsal**: restore the logical dump into an isolated database built from migrations `000001–000060`; compare table counts and critical references.
+3. **Storage inventory**: inventory Storage metadata and objects separately; back up object bytes or record that buckets are empty.
 4. First-time TOTP enrollment (`mfa_allow_low_aal=false` dashboard setting).
 5. Real email OTP dispatch (approved SMTP/sender) for the public claim journey.
 6. Node 22 installation for the strict runtime gate (Node 24 currently active with a recorded warning).
-7. Legacy Teacher grant retirement (`ROLE-2026-5CB9B7`, `ROLE-2026-846E6C`) after the fresh inventory + explicit confirmation.
+7. Legacy Teacher grant retirement (`ROLE-2026-5CB9B7`, `ROLE-2026-846E6C`) after fresh inventory + explicit confirmation.
 8. Type regeneration from the live remote database (post-migration).
-9. Advisor object-by-object review of the 193 SECURITY DEFINER notices.
+9. Advisor object-by-object review of SECURITY DEFINER functions.
 10. Real AAL2 staff/guardian journeys on the updated staging backend.
 
 ## Phase 10 recovery audit (31 August 2026)

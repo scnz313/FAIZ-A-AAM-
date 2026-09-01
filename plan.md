@@ -23,47 +23,68 @@ Current environment findings:
 
 ## Current execution checkpoint — C0–C5
 
-## Active execution — three-portal consolidation (R0–P9)
+## Active execution — Phase 11: complete the three-portal platform end to end
 
-The C5 staging sequence is **PAUSED** until the three-portal consolidation
-lands and the local gates pass. The active execution order is:
+The C5 staging sequence and the R0–P9 consolidation phases are ** superseded**
+by Phase 11. The remote ledger ends at `000060`; all new corrections start at
+`000061`. Remote mutations are frozen pending credential rotation. The active
+execution order is:
 
-- **R0 — repair/rebaseline.** Reconcile the canonical documents with the
-  three-portal contracts (Administrator `/administrator/*`, Principal
-  `/principal/*`, Guardian `/portal/*`), the two-profile migration redesign
-  (`000042`), and the verified remote ledger facts.
-  *Exit gate:* documentation rebaselined and the current tree reviewed.
-- **Phase 3 — teaching records + result entry.** Add `teaching_assignments`
-  (staff member, year, section, subject) independent of role grants; central
-  result entry by the Principal profile's `result_entry_officer` with
-  independent Administrator approval/publication and no self-approval.
-  *Exit gate:* teaching assignments and central result entry pass local RLS/RPC
-  and facade contract tests.
-- **Phase 4 — imports.** School-first student/guardian import with audited
-  batches and CSV-injection-safe handling.
-  *Exit gate:* import round-trip, denial, and idempotency tests pass locally.
-- **Phase 5 — guardian claims.** School-first invitations via mobile OTP
-  (email fallback) bound to the exact guardian and approved link set; a student
-  number, name, DOB, or phone alone never activates access.
-  *Exit gate:* invitation binding, wrong-contact denial, and revocation tests
-  pass locally.
-- **Phase 6 — guardian portal.** Consolidate `/portal/*` on the imported
-  guardian/link model.
-  *Exit gate:* guardian journeys (including denial and revocation) pass
-  locally.
-- **Phase 7 — exports.** Scoped, audited exports with CSV-injection guards.
-  *Exit gate:* export scope/denial/idempotency tests pass locally.
-- **Phase 8 — full local gate.** Typecheck, lint, tests, build, scratch
-  database suites, and the `000039` upgrade harness all green from the current
-  checkout.
-  *Exit gate:* every local gate passes on a clean run, including the upgrade
-  harness.
-- **Phase 9 — staging only after explicit approval.** Project
-  classification/region/backup confirmed, dry-run first, reviewed commits only;
-  produce a masked teacher-grant dependency inventory before any teacher-grant
-  retirement; no Vercel/production work in this phase.
-  *Exit gate:* explicit owner approval recorded, dry-run reviewed, and staging
-  evidence collected — never a direct jump to production.
+- **11.0 — truth reset.** Retract "Phase 10 complete"; freeze remote
+  mutations; rotate the exposed database credential; restore rehearsal;
+  Storage inventory; replace destructive containment with manifest-hash
+  executor; update all canonical documents.
+  *Exit gate:* docs truthfully reflect the audited state; no remote mutations
+  until credential rotation is confirmed.
+- **11.1 — canonical portals and verification harness.** Replace
+  application-facing `/staff` URLs with `canonicalStaffUrl(profileCode,
+  suffix)`; preserve URL/query through auth flows; remove Teacher
+  identity/workspace branches; recoverable errors; strengthen `check:cutover`;
+  rewrite browser/accessibility/link/responsive journeys around
+  `/administrator`, `/principal`, and `/portal`.
+  *Exit gate:* no normal application or test journey uses the legacy portal;
+  wrong profile, AAL1, suspended account, and revoked grant are denied
+  without protected-content flash.
+- **11.2 — teaching, results, and timetable (`000061`).** Make
+  `teaching_assignments` authoritative for timetable reads, writes,
+  conflicts, overrides, and publications; restrict result entry to Principal
+  `result_entry_officer` + AAL2; independent Administrator
+  moderation/publication; immutable report releases.
+  *Exit gate:* Principal creates teacher + assignment, publishes timetable,
+  submits marks; Administrator returns/approves/publishes; Guardian sees
+  immutable release; legacy Teacher RPC writes fail.
+- **11.3 — real CSV imports and private uploads (`000062`).** Private source
+  document required; strict state transitions; `data_import_parse` outbox
+  handler; signed browser upload; Upload→Map→Validate→Resolve→Commit→Report
+  UI; group-atomic commit.
+  *Exit gate:* Administrator uploads a real private CSV, maps and resolves,
+  commits without partial families, retries safely, receives immutable
+  report; no roster JSON crosses `/api/adapter`.
+- **11.4 — guardian activation and child synchronization (`000063`).**
+  Token-hash-only claims; `/activate/guardian` routes; eliminate
+  student-reference activation; versioned contact-change; atomic child
+  switching with dirty-form guard, `router.refresh()`, remount, and reload
+  of all projections.
+  *Exit gate:* email activation creates or reuses exactly one Guardian
+  identity; rapid multi-child switching cannot expose stale sibling data.
+- **11.5 — exports, documents, and operational completion (`000064`–
+  `000065`).** Export catalogs; cursor pagination; opaque artifact keys;
+  signed download; data-health workspace; document scanner; PDF generation;
+  recoverable errors everywhere; health response covering schema `000065`.
+  *Exit gate:* every retained control performs an authoritative command or is
+  visibly policy-disabled; no UI claims an artifact or provider action before
+  it exists.
+- **11.6 — controlled staging acceptance.** Dry-run + apply `000061+`;
+  regenerate types; advisor review; TOTP config; Resend/SMTP; Storage
+  buckets; real journeys with run IDs and automatic cleanup; restore
+  rehearsal; Teacher grant retirement after separate confirmation.
+  *Exit gate:* all three personas complete real journeys with zero orphan
+  test residue.
+- **11.7 — Vercel preview and production.** Vercel Preview from reviewed
+  commit; Node 22.x; staging acceptance; Mumbai production project;
+  migrations from zero; production build; post-deploy checks.
+  *Exit gate:* production passes authentication, permissions, payment-sandbox
+  disablement, document, email, monitoring, and rollback checks.
 
 Each phase has a hard exit gate; no phase starts before the previous gate is
 recorded as passed. The historical C0–C5 checkpoint text below is retained
