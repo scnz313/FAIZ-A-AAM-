@@ -27,7 +27,8 @@ if (!url || !serviceKey) {
   process.exit(1);
 }
 const PROJECT_REF = (url.match(/https:\/\/([a-z0-9]+)\.supabase\.co/) ?? [])[1];
-if (PROJECT_REF !== "jxegiamjcawdywqyutdz" || readEnv("FASS_STAGING_CONFIRMED") !== "true") {
+const confirmed = process.env.FASS_STAGING_CONFIRMED === "true" || readEnv("FASS_STAGING_CONFIRMED") === "true";
+if (PROJECT_REF !== "jxegiamjcawdywqyutdz" || !confirmed) {
   console.error(`Refusing: inventory targets the approved staging project only (got ${PROJECT_REF ?? "unknown"}).`);
   process.exit(1);
 }
