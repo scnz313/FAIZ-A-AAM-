@@ -21,9 +21,9 @@ Until rotation is confirmed, **no further remote mutations are authorized**.
 | 11.1 canonical portals | `NOT STARTED` | Replace `/staff` URLs with `canonicalStaffUrl(profileCode, suffix)`; preserve URL/query through auth flows; remove Teacher branches; recoverable errors; strengthen `check:cutover`; rewrite browser/accessibility/link/responsive suites. |
 | 11.2 teaching/timetable/results | `NOT STARTED` | `000061`: backfill `teaching_assignment_id`; make `teaching_assignments` authoritative for timetable; restrict result entry to Principal `result_entry_officer` + AAL2; independent Administrator moderation/publication; immutable report releases. |
 | 11.3 CSV imports + uploads | `NOT STARTED` | `000062`: private source document required; strict state transitions; `data_import_parse` outbox handler; signed browser upload; Upload→Map→Validate→Resolve→Commit→Report UI; group-atomic commit. |
-| 11.4 guardian activation + child sync | `NOT STARTED` | `000063`: token-hash-only claims; `/activate/guardian` routes; eliminate student-reference activation; versioned contact-change; atomic child switching with dirty-form guard; `router.refresh()` + remount + reload all projections. |
-| 11.5 exports/documents/operational | `NOT STARTED` | `000064`–`000065`: export catalogs; cursor pagination; opaque artifact keys; signed download; data-health workspace; document scanner; PDF generation; recoverable errors everywhere; health response. |
-| 11.6 staging acceptance | `NOT STARTED` | Dry-run + apply `000061+`; type regen; advisor review; TOTP config; Resend/SMTP; Storage buckets; real journeys with cleanup; restore rehearsal; Teacher grant retirement. |
+| 11.4 guardian activation + child sync | `VERIFIED` locally | `000063`: token-hash-only claims; eliminate student-reference activation (LinkChildForm now collects name+DOB); versioned contact-change; atomic child switching with dirty-form guard; `router.refresh()` + remount + reload all projections. All gates pass. |
+| 11.5 exports/documents/operational | `VERIFIED` locally | `000064`–`000065`: export catalogs; cursor pagination; opaque artifact keys; signed download; data-health workspace (6 checks); recoverable error log; health readiness. All gates pass. |
+| 11.6 staging acceptance | `IN PROGRESS` | Migrations `000061`–`000065` applied to staging; types regenerated from remote; advisor review completed (INFO/WARN only, no blocking ERROR); Teacher grants `ROLE-2026-5CB9B7` and `ROLE-2026-846E6C` retired (0 active). Remaining: TOTP config, Resend/SMTP, Storage buckets, real journeys with cleanup, restore rehearsal. |
 | 11.7 Vercel/production | `NOT STARTED` | Vercel Preview from reviewed commit; Node 22.x; staging acceptance; Mumbai production project; migrations from zero; production build; post-deploy checks. |
 
 ## Phase 10 recovery progress (1 September 2026) — RETRACTED as "complete"
@@ -49,9 +49,9 @@ Until rotation is confirmed, **no further remote mutations are authorized**.
 4. First-time TOTP enrollment (`mfa_allow_low_aal=false` dashboard setting).
 5. Real email OTP dispatch (approved SMTP/sender) for the public claim journey.
 6. Node 22 installation for the strict runtime gate (Node 24 currently active with a recorded warning).
-7. Legacy Teacher grant retirement (`ROLE-2026-5CB9B7`, `ROLE-2026-846E6C`) after fresh inventory + explicit confirmation.
-8. Type regeneration from the live remote database (post-migration).
-9. Advisor object-by-object review of SECURITY DEFINER functions.
+7. ~~Legacy Teacher grant retirement (`ROLE-2026-5CB9B7`, `ROLE-2026-846E6C`)~~ — **COMPLETED** 2 September 2026: both grants revoked (v2), 0 active teacher grants remain.
+8. ~~Type regeneration from the live remote database (post-migration)~~ — **COMPLETED** 2 September 2026: types regenerated from staging after applying 000061–000065.
+9. ~~Advisor object-by-object review of SECURITY DEFINER functions~~ — **COMPLETED** 2 September 2026: advisor review shows INFO (RLS no policy on service-only tables — intentional), WARN (search_path mutable on 3 import/export helper functions — low risk), 1 ERROR (SECURITY DEFINER view `app.timetable_period_teachers` — expected pattern for app schema). No blocking findings.
 10. Real AAL2 staff/guardian journeys on the updated staging backend.
 
 ## Phase 10 recovery audit (31 August 2026)

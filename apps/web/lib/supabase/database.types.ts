@@ -17,7 +17,26 @@ export type Database = {
       [_ in never]: never
     }
     Views: {
-      [_ in never]: never
+      timetable_period_teachers: {
+        Row: {
+          academic_year_id: string | null
+          day_of_week: number | null
+          effective_subject_id: string | null
+          grade_section_id: string | null
+          kind: string | null
+          period_number: number | null
+          room_id: string | null
+          source: string | null
+          staff_member_id: string | null
+          subject_id: string | null
+          teacher_display_name: string | null
+          teacher_title: string | null
+          teaching_assignment_id: string | null
+          timetable_period_id: string | null
+          timetable_version_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       account_has_staff_grant: { Args: never; Returns: boolean }
@@ -344,21 +363,29 @@ export type Database = {
         Args: { p_expected_version?: number; p_role_grant_id: string }
         Returns: Json
       }
+      data_export_allowed_columns: {
+        Args: { p_domain: string }
+        Returns: string[]
+      }
+      data_export_allowed_filters: {
+        Args: { p_domain: string }
+        Returns: string[]
+      }
       data_export_cancel: {
         Args: { p_reason: string; p_request_reference: string }
+        Returns: Json
+      }
+      data_export_claim_generation: {
+        Args: { p_request_reference: string }
+        Returns: Json
+      }
+      data_export_create_signed_download: {
+        Args: { p_account_id?: string; p_request_reference: string }
         Returns: Json
       }
       data_export_list: { Args: never; Returns: Json[] }
       data_export_list_paginated: {
         Args: { p_cursor?: string; p_limit?: number }
-        Returns: Json
-      }
-      data_export_create_signed_download: {
-        Args: { p_request_reference: string; p_account_id?: string }
-        Returns: Json
-      }
-      data_export_set_artifact_key: {
-        Args: { p_request_reference: string }
         Returns: Json
       }
       data_export_mark_failed: {
@@ -373,17 +400,36 @@ export type Database = {
         }
         Returns: Json
       }
-      data_export_request: {
-        Args: {
-          p_columns: Json
-          p_domain: string
-          p_filters: Json
-          p_format: string
-          p_purpose: string
-          p_reason: string
-        }
+      data_export_request:
+        | {
+            Args: {
+              p_columns: Json
+              p_domain: string
+              p_filters: Json
+              p_format: string
+              p_purpose: string
+              p_reason: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_columns: Json
+              p_domain: string
+              p_filters: Json
+              p_format: string
+              p_idempotency_key?: string
+              p_purpose: string
+              p_reason: string
+            }
+            Returns: Json
+          }
+      data_export_set_artifact_key: {
+        Args: { p_request_reference: string }
         Returns: Json
       }
+      data_health_check: { Args: never; Returns: Json }
+      data_health_snapshot: { Args: never; Returns: Json }
       data_import_cancel: {
         Args: {
           p_batch_id: string
@@ -413,12 +459,26 @@ export type Database = {
         }
         Returns: Json
       }
+      data_import_flag_shared_contacts: { Args: never; Returns: number }
       data_import_list_batches: { Args: never; Returns: Json[] }
       data_import_list_issues: {
         Args: { p_batch_id: string; p_severity?: string }
         Returns: Json[]
       }
       data_import_preview: { Args: { p_batch_id: string }; Returns: Json }
+      data_import_record_issue: {
+        Args: {
+          p_batch_id: string
+          p_code: string
+          p_field: string
+          p_message: string
+          p_resolution_hint?: string
+          p_row_id: string
+          p_row_number: number
+          p_severity: string
+        }
+        Returns: string
+      }
       data_import_record_mapping: {
         Args: {
           p_batch_id: string
@@ -438,19 +498,6 @@ export type Database = {
         }
         Returns: Json
       }
-      data_import_record_issue: {
-        Args: {
-          p_batch_id: string
-          p_code: string
-          p_field: string
-          p_message: string
-          p_resolution_hint?: string
-          p_row_id: string
-          p_row_number: number
-          p_severity: string
-        }
-        Returns: string
-      }
       data_import_report: { Args: { p_batch_id: string }; Returns: Json }
       data_import_set_state: {
         Args: {
@@ -463,6 +510,10 @@ export type Database = {
       data_import_store_rows: {
         Args: { p_batch_id: string; p_rows: Json }
         Returns: number
+      }
+      data_import_valid_transition: {
+        Args: { p_from: string; p_to: string }
+        Returns: boolean
       }
       document_actor_allowed: {
         Args: { p_owner_domain: string; p_owner_record_id: string }
@@ -755,24 +806,26 @@ export type Database = {
         }
         Returns: Json
       }
-      guardian_claim_accept: {
-        Args: {
-          p_claim_reference: string
-          p_family_name: string
-          p_given_name: string
-        }
-        Returns: Json
-      }
+      guardian_claim_accept:
+        | {
+            Args: {
+              p_claim_reference: string
+              p_family_name: string
+              p_given_name: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_claim_reference: string
+              p_family_name: string
+              p_given_name: string
+              p_one_time_secret?: string
+            }
+            Returns: Json
+          }
       guardian_claim_accept_by_token: {
-        Args: {
-          p_token: string
-          p_family_name: string
-          p_given_name: string
-        }
-        Returns: Json
-      }
-      guardian_claim_verify_token: {
-        Args: { p_token: string }
+        Args: { p_family_name: string; p_given_name: string; p_token: string }
         Returns: Json
       }
       guardian_claim_create: {
@@ -799,25 +852,26 @@ export type Database = {
         Args: { p_claim_reference: string; p_reason: string }
         Returns: Json
       }
-      guardian_contact_change_request: {
-        Args: { p_new_contact: string; p_reason: string }
-        Returns: Json
-      }
+      guardian_claim_verify_token: { Args: { p_token: string }; Returns: Json }
       guardian_contact_change_approve: {
-        Args: { p_change_reference: string; p_approval_note?: string }
+        Args: { p_approval_note?: string; p_change_reference: string }
         Returns: Json
       }
-      guardian_switch_active_child: {
-        Args: { p_guardian_id: string; p_student_id: string }
-        Returns: Json
-      }
+      guardian_contact_change_request:
+        | {
+            Args: {
+              p_channel: string
+              p_guardian_id: string
+              p_new_contact_value: string
+              p_reason: string
+            }
+            Returns: Json
+          }
+        | { Args: { p_new_contact: string; p_reason: string }; Returns: Json }
       guardian_has_capability: {
         Args: { p_capability: string; p_student_id: string }
         Returns: boolean
       }
-      data_health_check: { Args: never; Returns: Json }
-      data_health_snapshot: { Args: never; Returns: Json }
-      health_readiness: { Args: never; Returns: Json }
       guardian_links_request: {
         Args: { p_relationship_label: string; p_student_id: string }
         Returns: Json
@@ -827,9 +881,14 @@ export type Database = {
         Args: { p_publication_id: string }
         Returns: boolean
       }
+      guardian_switch_active_child: {
+        Args: { p_guardian_id: string; p_student_id: string }
+        Returns: Json
+      }
       has_any_role: { Args: { p_roles: string[] }; Returns: boolean }
       has_role: { Args: { p_role: string }; Returns: boolean }
       hash_invitation_secret: { Args: { p_secret: string }; Returns: string }
+      health_readiness: { Args: never; Returns: Json }
       hr_application_scope: {
         Args: { p_application_id: string; p_roles: string[] }
         Returns: boolean
@@ -1003,7 +1062,7 @@ export type Database = {
         Args: {
           p_action: string
           p_actor_label?: string
-          p_outcome: string
+          p_outcome?: string
           p_reason?: string
           p_target_reference: string
           p_target_type: string
@@ -1230,6 +1289,10 @@ export type Database = {
         }
         Returns: Json
       }
+      staff_assignment_to_teaching_assignment: {
+        Args: { p_staff_assignment_id: string }
+        Returns: string
+      }
       staff_grade_scope_allowed: {
         Args: {
           p_academic_year_id: string
@@ -1304,6 +1367,10 @@ export type Database = {
       staff_invites_mark_provider_failed: {
         Args: { p_invitation_reference: string; p_reason: string }
         Returns: undefined
+      }
+      staff_profile_adopt: {
+        Args: { p_account_id: string; p_profile_code: string; p_reason: string }
+        Returns: Json
       }
       staff_profile_change: {
         Args: {
@@ -2708,6 +2775,51 @@ export type Database = {
           },
         ]
       }
+      data_export_catalogs: {
+        Row: {
+          available_columns: Json
+          created_at: string
+          description: string
+          display_name: string
+          domain: string
+          id: string
+          is_active: boolean
+          max_rows: number
+          optional_filters: Json
+          reference: string
+          required_filters: Json
+          updated_at: string
+        }
+        Insert: {
+          available_columns: Json
+          created_at?: string
+          description?: string
+          display_name: string
+          domain: string
+          id?: string
+          is_active?: boolean
+          max_rows?: number
+          optional_filters?: Json
+          reference?: string
+          required_filters?: Json
+          updated_at?: string
+        }
+        Update: {
+          available_columns?: Json
+          created_at?: string
+          description?: string
+          display_name?: string
+          domain?: string
+          id?: string
+          is_active?: boolean
+          max_rows?: number
+          optional_filters?: Json
+          reference?: string
+          required_filters?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       data_export_events: {
         Row: {
           actor_account_id: string | null
@@ -2752,6 +2864,7 @@ export type Database = {
       }
       data_export_requests: {
         Row: {
+          artifact_checksum: string | null
           artifact_key: string | null
           columns: Json
           completed_at: string | null
@@ -2761,7 +2874,10 @@ export type Database = {
           expires_at: string | null
           filters: Json
           format: string
+          generation_attempts: number
+          generation_started_at: string | null
           id: string
+          idempotency_key: string | null
           purpose: string
           reason: string
           reference: string
@@ -2772,6 +2888,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          artifact_checksum?: string | null
           artifact_key?: string | null
           columns?: Json
           completed_at?: string | null
@@ -2781,7 +2898,10 @@ export type Database = {
           expires_at?: string | null
           filters?: Json
           format?: string
+          generation_attempts?: number
+          generation_started_at?: string | null
           id?: string
+          idempotency_key?: string | null
           purpose: string
           reason: string
           reference?: string
@@ -2792,6 +2912,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          artifact_checksum?: string | null
           artifact_key?: string | null
           columns?: Json
           completed_at?: string | null
@@ -2801,7 +2922,10 @@ export type Database = {
           expires_at?: string | null
           filters?: Json
           format?: string
+          generation_attempts?: number
+          generation_started_at?: string | null
           id?: string
+          idempotency_key?: string | null
           purpose?: string
           reason?: string
           reference?: string
@@ -2828,127 +2952,35 @@ export type Database = {
           },
         ]
       }
-      data_export_catalogs: {
-        Row: {
-          id: string
-          reference: string
-          domain: string
-          display_name: string
-          description: string
-          available_columns: Json
-          required_filters: Json
-          optional_filters: Json
-          max_rows: number
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          reference?: string
-          domain: string
-          display_name: string
-          description?: string
-          available_columns: Json
-          required_filters?: Json
-          optional_filters?: Json
-          max_rows?: number
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          reference?: string
-          domain?: string
-          display_name?: string
-          description?: string
-          available_columns?: Json
-          required_filters?: Json
-          optional_filters?: Json
-          max_rows?: number
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       data_health_snapshots: {
         Row: {
+          checks: Json
+          created_by_account_id: string | null
           id: string
+          overall_status: string
           reference: string
           snapshot_at: string
-          checks: Json
-          overall_status: string
-          created_by_account_id: string | null
         }
         Insert: {
+          checks: Json
+          created_by_account_id?: string | null
           id?: string
+          overall_status: string
           reference?: string
           snapshot_at?: string
-          checks: Json
-          overall_status: string
-          created_by_account_id?: string | null
         }
         Update: {
+          checks?: Json
+          created_by_account_id?: string | null
           id?: string
+          overall_status?: string
           reference?: string
           snapshot_at?: string
-          checks?: Json
-          overall_status?: string
-          created_by_account_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "data_health_snapshots_created_by_account_id_fkey"
             columns: ["created_by_account_id"]
-            isOneToOne: false
-            referencedRelation: "user_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      recoverable_error_log: {
-        Row: {
-          id: string
-          reference: string
-          error_code: string
-          error_message: string
-          recoverable_action: string
-          context: Json | null
-          account_id: string | null
-          route: string | null
-          created_at: string
-          resolved_at: string | null
-        }
-        Insert: {
-          id?: string
-          reference?: string
-          error_code: string
-          error_message: string
-          recoverable_action: string
-          context?: Json | null
-          account_id?: string | null
-          route?: string | null
-          created_at?: string
-          resolved_at?: string | null
-        }
-        Update: {
-          id?: string
-          reference?: string
-          error_code?: string
-          error_message?: string
-          recoverable_action?: string
-          context?: Json | null
-          account_id?: string | null
-          route?: string | null
-          created_at?: string
-          resolved_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "recoverable_error_log_account_id_fkey"
-            columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "user_accounts"
             referencedColumns: ["id"]
@@ -2967,9 +2999,9 @@ export type Database = {
           error_count: number
           id: string
           idempotency_key: string | null
-          privacy_confirmation: boolean
           preview_computed_at: string | null
           preview_digest: string | null
+          privacy_confirmation: boolean
           reference: string
           row_count: number
           scan_column_count: number | null
@@ -2995,9 +3027,9 @@ export type Database = {
           error_count?: number
           id?: string
           idempotency_key?: string | null
-          privacy_confirmation?: boolean
           preview_computed_at?: string | null
           preview_digest?: string | null
+          privacy_confirmation?: boolean
           reference?: string
           row_count?: number
           scan_column_count?: number | null
@@ -3023,9 +3055,9 @@ export type Database = {
           error_count?: number
           id?: string
           idempotency_key?: string | null
-          privacy_confirmation?: boolean
           preview_computed_at?: string | null
           preview_digest?: string | null
+          privacy_confirmation?: boolean
           reference?: string
           row_count?: number
           scan_column_count?: number | null
@@ -3121,50 +3153,6 @@ export type Database = {
           },
         ]
       }
-      data_import_mappings: {
-        Row: {
-          column_mappings: Json
-          created_at: string
-          created_by_account_id: string | null
-          entity: string
-          id: string
-          reference: string
-          source_system: string
-          source_version: string
-          version: number
-        }
-        Insert: {
-          column_mappings?: Json
-          created_at?: string
-          created_by_account_id?: string | null
-          entity: string
-          id?: string
-          reference?: string
-          source_system: string
-          source_version: string
-          version?: number
-        }
-        Update: {
-          column_mappings?: Json
-          created_at?: string
-          created_by_account_id?: string | null
-          entity?: string
-          id?: string
-          reference?: string
-          source_system?: string
-          source_version?: string
-          version?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "data_import_mappings_created_by_account_id_fkey"
-            columns: ["created_by_account_id"]
-            isOneToOne: false
-            referencedRelation: "user_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       data_import_mapping_templates: {
         Row: {
           column_mappings: Json
@@ -3205,6 +3193,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "data_import_mapping_templates_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_import_mappings: {
+        Row: {
+          column_mappings: Json
+          created_at: string
+          created_by_account_id: string | null
+          entity: string
+          id: string
+          reference: string
+          source_system: string
+          source_version: string
+          version: number
+        }
+        Insert: {
+          column_mappings?: Json
+          created_at?: string
+          created_by_account_id?: string | null
+          entity: string
+          id?: string
+          reference?: string
+          source_system: string
+          source_version: string
+          version?: number
+        }
+        Update: {
+          column_mappings?: Json
+          created_at?: string
+          created_by_account_id?: string | null
+          entity?: string
+          id?: string
+          reference?: string
+          source_system?: string
+          source_version?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_import_mappings_created_by_account_id_fkey"
             columns: ["created_by_account_id"]
             isOneToOne: false
             referencedRelation: "user_accounts"
@@ -3255,13 +3287,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "data_import_resolutions_row_id_fkey"
-            columns: ["row_id"]
-            isOneToOne: false
-            referencedRelation: "data_import_rows"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "data_import_resolutions_issue_id_fkey"
             columns: ["issue_id"]
             isOneToOne: false
@@ -3273,6 +3298,13 @@ export type Database = {
             columns: ["resolved_by_account_id"]
             isOneToOne: false
             referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_import_resolutions_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_rows"
             referencedColumns: ["id"]
           },
         ]
@@ -4431,41 +4463,81 @@ export type Database = {
       guardian_contact_changes: {
         Row: {
           account_id: string
+          approved_by_account_id: string | null
+          change_reason: string | null
+          created_at: string
           decided_at: string | null
           decided_by_account_id: string | null
           guardian_contact_id: string
+          guardian_id: string | null
           id: string
+          new_contact_id: string | null
+          old_contact_id: string | null
           pending_value: string
+          reference: string
           requested_at: string
+          requested_by_account_id: string | null
           review_reason: string | null
           state: string
+          status: string | null
+          verification_method: string | null
+          version: number
         }
         Insert: {
           account_id: string
+          approved_by_account_id?: string | null
+          change_reason?: string | null
+          created_at?: string
           decided_at?: string | null
           decided_by_account_id?: string | null
           guardian_contact_id: string
+          guardian_id?: string | null
           id?: string
+          new_contact_id?: string | null
+          old_contact_id?: string | null
           pending_value: string
+          reference?: string
           requested_at?: string
+          requested_by_account_id?: string | null
           review_reason?: string | null
           state?: string
+          status?: string | null
+          verification_method?: string | null
+          version?: number
         }
         Update: {
           account_id?: string
+          approved_by_account_id?: string | null
+          change_reason?: string | null
+          created_at?: string
           decided_at?: string | null
           decided_by_account_id?: string | null
           guardian_contact_id?: string
+          guardian_id?: string | null
           id?: string
+          new_contact_id?: string | null
+          old_contact_id?: string | null
           pending_value?: string
+          reference?: string
           requested_at?: string
+          requested_by_account_id?: string | null
           review_reason?: string | null
           state?: string
+          status?: string | null
+          verification_method?: string | null
+          version?: number
         }
         Relationships: [
           {
             foreignKeyName: "guardian_contact_changes_account_id_fkey"
             columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_contact_changes_approved_by_account_id_fkey"
+            columns: ["approved_by_account_id"]
             isOneToOne: false
             referencedRelation: "user_accounts"
             referencedColumns: ["id"]
@@ -4482,6 +4554,34 @@ export type Database = {
             columns: ["guardian_contact_id"]
             isOneToOne: false
             referencedRelation: "guardian_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_contact_changes_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_contact_changes_new_contact_id_fkey"
+            columns: ["new_contact_id"]
+            isOneToOne: false
+            referencedRelation: "guardian_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_contact_changes_old_contact_id_fkey"
+            columns: ["old_contact_id"]
+            isOneToOne: false
+            referencedRelation: "guardian_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_contact_changes_requested_by_account_id_fkey"
+            columns: ["requested_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -4558,36 +4658,36 @@ export type Database = {
       }
       guardian_preferences: {
         Row: {
-          guardian_id: string
           active_student_id: string | null
+          guardian_id: string
           updated_at: string
           version: number
         }
         Insert: {
-          guardian_id: string
           active_student_id?: string | null
+          guardian_id: string
           updated_at?: string
           version?: number
         }
         Update: {
-          guardian_id?: string
           active_student_id?: string | null
+          guardian_id?: string
           updated_at?: string
           version?: number
         }
         Relationships: [
           {
-            foreignKeyName: "guardian_preferences_guardian_id_fkey"
-            columns: ["guardian_id"]
-            isOneToOne: true
-            referencedRelation: "guardians"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "guardian_preferences_active_student_id_fkey"
             columns: ["active_student_id"]
             isOneToOne: false
             referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_preferences_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: true
+            referencedRelation: "guardians"
             referencedColumns: ["id"]
           },
         ]
@@ -6506,6 +6606,53 @@ export type Database = {
           },
         ]
       }
+      recoverable_error_log: {
+        Row: {
+          account_id: string | null
+          context: Json | null
+          created_at: string
+          error_code: string
+          error_message: string
+          id: string
+          recoverable_action: string
+          reference: string
+          resolved_at: string | null
+          route: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          context?: Json | null
+          created_at?: string
+          error_code: string
+          error_message: string
+          id?: string
+          recoverable_action: string
+          reference?: string
+          resolved_at?: string | null
+          route?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          context?: Json | null
+          created_at?: string
+          error_code?: string
+          error_message?: string
+          id?: string
+          recoverable_action?: string
+          reference?: string
+          resolved_at?: string | null
+          route?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recoverable_error_log_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       refund_requests: {
         Row: {
           amount_paise: number
@@ -8113,7 +8260,7 @@ export type Database = {
           created_at: string
           employment_status: string
           id: string
-          person_id: string | null
+          person_id: string
           reference: string
           title: string | null
           updated_at: string
@@ -8124,7 +8271,7 @@ export type Database = {
           created_at?: string
           employment_status?: string
           id?: string
-          person_id?: string | null
+          person_id: string
           reference?: string
           title?: string | null
           updated_at?: string
@@ -8135,7 +8282,7 @@ export type Database = {
           created_at?: string
           employment_status?: string
           id?: string
-          person_id?: string | null
+          person_id?: string
           reference?: string
           title?: string | null
           updated_at?: string
@@ -8264,6 +8411,7 @@ export type Database = {
           id: string
           person_id: string
           reference: string
+          school_student_number: string | null
           status: string
           updated_at: string
         }
@@ -8272,6 +8420,7 @@ export type Database = {
           id?: string
           person_id: string
           reference?: string
+          school_student_number?: string | null
           status?: string
           updated_at?: string
         }
@@ -8280,6 +8429,7 @@ export type Database = {
           id?: string
           person_id?: string
           reference?: string
+          school_student_number?: string | null
           status?: string
           updated_at?: string
         }
@@ -8690,6 +8840,7 @@ export type Database = {
           room_id: string | null
           subject_id: string | null
           substitute_teacher_assignment_id: string | null
+          substitute_teaching_assignment_id: string | null
           teaching_assignment_id: string | null
           updated_at: string
           version: number
@@ -8711,6 +8862,7 @@ export type Database = {
           room_id?: string | null
           subject_id?: string | null
           substitute_teacher_assignment_id?: string | null
+          substitute_teaching_assignment_id?: string | null
           teaching_assignment_id?: string | null
           updated_at?: string
           version?: number
@@ -8732,6 +8884,7 @@ export type Database = {
           room_id?: string | null
           subject_id?: string | null
           substitute_teacher_assignment_id?: string | null
+          substitute_teaching_assignment_id?: string | null
           teaching_assignment_id?: string | null
           updated_at?: string
           version?: number
@@ -8777,6 +8930,13 @@ export type Database = {
             columns: ["substitute_teacher_assignment_id"]
             isOneToOne: false
             referencedRelation: "staff_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timetable_overrides_substitute_teaching_assignment_id_fkey"
+            columns: ["substitute_teaching_assignment_id"]
+            isOneToOne: false
+            referencedRelation: "teaching_assignments"
             referencedColumns: ["id"]
           },
           {
