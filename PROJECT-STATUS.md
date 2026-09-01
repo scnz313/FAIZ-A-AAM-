@@ -1,21 +1,34 @@
 # Project Status — Faiz Aam School Platform
 
 Last updated: 31 August 2026
-Current phase: three-portal consolidation (Administrator/Principal/Guardian) — Phases R0–P8 `VERIFIED` locally; **Phase 9 staging activation applied and verified** on the linked project (ledger `000001–000054`, one repair); legacy teacher-grant retirement and real-SMS dispatch remain owner-gated
-Release state: staging backend migrated and journey-verified; production authorization/deployment does not exist
+Current phase: **Phase 10 recovery — IN PROGRESS.** Phases R0–P9 produced schema/UI through migration `000055` but did **not** meet their exit criteria; a full audit found staging exposure, authorization gaps, and unwired pipelines. See the Phase 10 recovery plan.
+Release state: staging backend migrated (ledger `000001–000055`) but **not verified**; production does not exist. No Vercel/production action authorized.
 
-## Phase 9 staging evidence (31 August 2026)
+## Phase 10 recovery audit (31 August 2026)
 
-Applied to linked project `jxegiamjcawdywqyutdz` (FAIZ E AAM, eu-west-1) after explicit owner authorization:
+The prior "staging verified" claim was **retracted**. Verified facts:
 
-- **Migration ledger**: remote was exactly `000001–000039`; dry-run reviewed the exact `000040–000047` order; applied once; ledger now aligned local↔remote through `000054`. `000045b` was renamed `000047` (CLI filename pattern). `000051` was repaired→reverted per the CLI procedure after an in-place edit; the corrected function shipped as `000052`.
-- **Hardening migrations shipped during advisor review**: `000048`/`000049` (18→0 unindexed FKs on consolidation tables; anon EXECUTE revoked on staff-facing helpers — anon SECURITY DEFINER findings 5→3, only intentionally-public functions remain), `000050` (service-role EXECUTE for the provider boundary), `000052` (claim-dispatch authorization order + opaque-secret-key recognition), `000054` (service-worker audit/outbox allowance with explicit `service_worker` actor label).
+- **Staging exposure (P0):** two privileged test accounts (`test.administrator@faizaam.example`, `test.principal@faizaam.example`) use the committed fallback password `FaizAam-Test-2026`; 19 `journey.*` Auth users, 15 claim rows (12 pending), and associated synthetic records accumulated with no run ledger or cleanup.
+- **Authorization gaps (P0):** `app.teaching_staff_list`, `app.legacy_teacher_access_report`, `app.data_import_preview`, `app.data_import_report` are SECURITY DEFINER with **no internal actor check** — any authenticated account can call them.
+- **Guardian claim security (P0):** acceptance never verifies the stored `secret_hash`; the one-time token is dead security data. Contact-change RPC has an invalid `RETURNING reference` into a mismatched row type.
+- **Unwired pipelines (P1):** import UI never uploads the selected file (batch created with `source_document_id = null`); no `data_import_parse`/`data_export_generate` worker handlers exist; `generateCsv` is an unused isolated utility; export "ready" was tested with a null artifact.
+- **Teaching/results (P1):** teacher display names are discarded; timetable still reads/writes legacy `staff_assignments`; result entry still permits legacy Teacher RPC writes; publish rejects the same independent Administrator moderating+publishing, contradicting the approved model.
+- **Guardian portal (P1):** child switch clears one context object but does not remount/reload server-rendered modules; results publications and document metadata can remain from the prior child; no dirty-form guard; `/portal/link-child` still resolves student-reference existence.
+- **Verification honesty (P1):** staging journeys proved only AAL1 empty projections (not AAL2 success); claim evidence used service-role inserts and password sessions, not the public claim API; gates ran on Node 24, not required Node 22; no `000039→latest` upgrade harness; no remote backup evidence was recorded before applying migrations.
+- **Docs conflict (P1):** status previously said both "staging verified" and "no remote action"; `AGENTS.md` still describes the pre-consolidation ledger; blueprint/spec retain stale checkpoints.
+
+## Phase 9 staging evidence (31 August 2026) — historical, partially retracted
+
+Applied to linked project `jxegiamjcawdywqyutdz` (FAIZ E AAM, eu-west-1) after explicit owner authorization. **Region exception:** the blueprint requires Mumbai (`ap-south-1`); the owner explicitly selected this Ireland project for staging only — it is not production-approved.
+
+- **Migration ledger**: remote was exactly `000001–000039`; dry-run reviewed the exact `000040–000047` order; applied once; ledger now aligned local↔remote through `000055`. `000045b` was renamed `000047` (CLI filename pattern). `000051` was repaired→reverted per the CLI procedure after an in-place edit; the corrected function shipped as `000052`.
+- **Hardening migrations shipped during advisor review**: `000048`/`000049` (18→0 unindexed FKs on consolidation tables; anon EXECUTE revoked on staff-facing helpers), `000050` (service-role EXECUTE for the provider boundary), `000052` (claim-dispatch authorization order + opaque-secret-key recognition), `000054` (service-worker audit/outbox allowance with explicit `service_worker` actor label).
 - **Auth config**: `mfa_allow_low_aal=false` blocks FIRST-TIME TOTP enrollment (chicken-and-egg) — `BLOCKED` on a dashboard setting the API cannot change; owner must enable enrollment at AAL1 in Dashboard → Authentication → MFA. Leaked-password protection (HIBP) is `BLOCKED` on plan tier (HTTP 402).
 - **Linked types regenerated** from the live database: all consolidation tables present, phantom `staff_invitation_assignments` gone, `role_definitions.is_assignable` present; typecheck green.
-- **Advisor disposition**: `rls_enabled_no_policy` (11) — intentional deny-by-default infrastructure/profile tables read through SECURITY DEFINER commands; `authenticated_security_definer_function_executable` (193) — the app command surface enforces authorization inside each function (established pattern 000009–000054); performance findings on pre-existing tables — backlog.
+- **Advisor disposition — SUPERSEDED:** the blanket acceptance of 193 authenticated SECURITY DEFINER notices was invalid; several new read functions have no actor guard (see Phase 10 audit). Object-by-object review required.
 - **Masked legacy teacher inventory (read-only)**: 2 active grants (`ROLE-2026-5CB9B7`, `ROLE-2026-846E6C`), neither account holds a guardian grant or other staff grants, 1 legacy assignment, 0 timetable/override references. Retirement is low-impact and remains gated on separate owner confirmation (`scripts/legacy-teacher-inventory.mjs`; retirement command `app.legacy_teacher_access_retire` is NOT invoked).
-- **Real-session journeys (`scripts/staging-journeys.mjs`): 13/13 PASS** — profile test accounts seeded; AAL1 staff sessions leak nothing (empty projections); guardian claim end-to-end with a real GoTrue session: claim bound to provider subject, acceptance creates exactly one account + one Guardian grant, exact approved link activated, contact delivery-verified, reuse denied.
-- **Local gates re-run after staging work**: typecheck ✓ · lint ✓ · 513 web + 73 contract tests ✓ · build (84 pages) ✓ · scratch validator 8/8 suites through `000054` ✓.
+- **Real-session journeys**: 13/13 checks passed at the time, but the staff checks proved only AAL1 empty projections and the guardian claim used service-role fixtures + a password session — **not** the public claim API. Re-verification required in Phase 10.8.
+- **No remote database backup/checkpoint was recorded** before applying migrations to a project with substantial records — a Phase 10 gate before any further migration.
 
 ## Current state
 

@@ -632,7 +632,13 @@ function UserRowItem({
               </p>
 
               <h3 className={styles.detailHeading}>Internal role grants</h3>
-              {row.grants.length === 0 ? (
+              {row.profileCode !== null && row.profileCode !== undefined ? (
+                <p className={styles.noGrants}>
+                  This account is provisioned through the <strong>{row.profileLabel}</strong> access profile — its
+                  grants are bundle-locked. Use a profile change above; individual grants/revokes are denied by the
+                  server.
+                </p>
+              ) : row.grants.length === 0 ? (
                 <p className={styles.noGrants}>No active role grants.</p>
               ) : (
                 <ul className={styles.grantList}>

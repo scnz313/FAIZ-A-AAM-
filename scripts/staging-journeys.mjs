@@ -37,6 +37,25 @@ if (!url || !anonKey || !serviceKey) {
   process.exit(1);
 }
 
+/* Hard target guard: journeys create real Auth users and records. They must
+   point at the approved staging ref with an explicit confirmation, and the
+   privileged test password must come from the environment (no fallback). */
+const PROJECT_REF = (url.match(/https:\/\/([a-z0-9]+)\.supabase\.co/) ?? [])[1];
+const APPROVED_STAGING_REF = "jxegiamjcawdywqyutdz";
+if (PROJECT_REF !== APPROVED_STAGING_REF || readEnv("FASS_STAGING_CONFIRMED") !== "true") {
+  console.error(
+    `Refusing to run: journeys mutate the remote project.\n` +
+      `Expected project ${APPROVED_STAGING_REF} with FASS_STAGING_CONFIRMED=true ` +
+      `(got ${PROJECT_REF ?? "unknown"}, FASS_STAGING_CONFIRMED=${readEnv("FASS_STAGING_CONFIRMED") ?? "unset"}).`,
+  );
+  process.exit(1);
+}
+const TEST_PASSWORD = readEnv("TEST_ACCOUNT_PASSWORD") || "";
+if (TEST_PASSWORD.length < 16 || TEST_PASSWORD.toLowerCase() === "faizaam-test-2026") {
+  console.error("TEST_ACCOUNT_PASSWORD must be set (min 16 chars, not the retired fallback).");
+  process.exit(1);
+}
+
 const service = createClient(url, serviceKey, { auth: { persistSession: false } });
 const results = [];
 function record(name, ok, detail = "") {
@@ -148,7 +167,7 @@ console.log(`  guardian ${guardianRow.id} · contact ${contactRow.id} · pending
 
 console.log("\n=== 1. Administrator real-session journey ===");
 const adminEmail = "test.administrator@faizaam.example";
-const adminPassword = process.env.TEST_ACCOUNT_PASSWORD || "FaizAam-Test-2026";
+const adminPassword = TEST_PASSWORD;
 let admin;
 try {
   admin = await signInStaff(adminEmail, adminPassword);

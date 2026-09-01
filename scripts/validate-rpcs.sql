@@ -434,6 +434,14 @@ select ed.id, ed.grade_section_id, s.id, 'draft', 1
    and ed.grade_section_id in (select id from public.grade_sections where section_label = 'A')
    and s.code = 'MAT'
    and not exists (select 1 from public.result_batches rb where rb.exam_definition_id = ed.id and rb.subject_id = s.id and rb.status = 'draft');
+-- Ensure assessment components exist for the draft batch's exam definition
+-- (run as the database owner — authenticated has SELECT-only on this table).
+insert into public.assessment_components (exam_definition_id, subject_id, name, max_marks, weight, sort_order)
+select rb.exam_definition_id, rb.subject_id, 'Midterm', 100, 1, 0
+  from public.result_batches rb
+ where rb.status = 'draft'
+   and not exists (select 1 from public.assessment_components ac
+                    where ac.exam_definition_id = rb.exam_definition_id and ac.subject_id = rb.subject_id);
 insert into public.result_rosters (batch_id, student_id, enrollment_id)
 select rb.id, e.student_id, e.id
   from public.result_batches rb
@@ -550,7 +558,7 @@ begin
   assert (select current_status from public.job_applications
            where applicant_name = 'Sana Wani' limit 1) = 'offered', 'job offer requires the separate HR approver';
 
-  -- Marks: teacher (exact 8-A MAT scope) submits marks for a fresh batch;
+  -- Marks: entry officer (exact 8-A MAT scope) submits marks for a fresh batch;
   -- moderator approves; publisher publishes; publisher withdraws.
   perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', false);
   perform app.results_submit_marks(
@@ -558,7 +566,8 @@ begin
     (select jsonb_agg(jsonb_build_object(
               'rosterId', r.id,
               'componentId', (select ac.id from public.assessment_components ac
-                               where ac.exam_definition_id = (select exam_definition_id from public.result_batches where status = 'draft' limit 1)
+                               where ac.exam_definition_id = rb.exam_definition_id
+                                 and ac.subject_id = rb.subject_id
                                limit 1),
               'obtained', 85))
        from public.result_rosters r

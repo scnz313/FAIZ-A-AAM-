@@ -424,7 +424,7 @@ export function StaffShell({
             {status === "ready" && summary ? (
               <p className={styles.contextLine}>
                 <span className={styles.contextLabel}>Workspace</span>
-                <strong>{summary.roleLabel}</strong>
+                <strong>{summary.profileLabel ?? summary.roleLabel}</strong>
                 <span>· {summary.academicYearLabel}</span>
                 {summary.assignmentLabel ? <span>· {summary.assignmentLabel}</span> : null}
                 {switching ? <span className={styles.contextPending}>· Updating…</span> : null}

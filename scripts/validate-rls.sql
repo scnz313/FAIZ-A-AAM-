@@ -4,7 +4,7 @@
 -- The scratch instance stubs the Supabase auth surface. This suite upgrades
 -- the stubs to read the request GUCs (like real Supabase), seeds fictional
 -- actors (plan.md §14: synthetic only), and asserts the plan.md §7 policy
--- matrix: guardian scope, teacher assignment scope, aal2 enforcement, link
+-- matrix: guardian scope, entry-officer scope, aal2 enforcement, link
 -- revocation, anon denial, and cross-student denial.
 --
 -- Any failed assertion raises P0004 and aborts the run (ON_ERROR_STOP).
@@ -21,7 +21,7 @@ $$;
 -- 2. Fictional actors (fixed UUIDs; local validation only).
 insert into auth.users (id) values
   ('10000000-0000-4000-8000-000000000001'),  -- Sana Wani  (guardian)
-  ('10000000-0000-4000-8000-000000000002');  -- Firdous Ahmad (teacher)
+  ('10000000-0000-4000-8000-000000000002');  -- Firdous Ahmad (entry officer)
 
 insert into public.people (id, given_name, family_name, display_name) values
   ('20000000-0000-4000-8000-000000000001', 'Sana', 'Wani', 'Sana Wani'),
@@ -32,11 +32,11 @@ insert into public.people (id, given_name, family_name, display_name) values
 
 insert into public.user_accounts (id, person_id, status, verified_contact) values
   ('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'active', 'guardian.demo@example.in'),
-  ('10000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'active', 'teacher.demo@example.in');
+  ('10000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'active', 'entry.officer@example.in');
 
 insert into public.role_grants (account_id, role_code, status, effective_from) values
   ('10000000-0000-4000-8000-000000000001', 'guardian', 'active', now()),
-  ('10000000-0000-4000-8000-000000000002', 'teacher', 'active', now());
+  ('10000000-0000-4000-8000-000000000002', 'result_entry_officer', 'active', now());
 
 insert into public.guardians (person_id, status) values
   ('20000000-0000-4000-8000-000000000001', 'active');
@@ -69,7 +69,7 @@ insert into public.staff_members (person_id, employment_status, title) values
 insert into public.staff_assignments (staff_member_id, role_grant_id, academic_year_id, grade_section_id, subject_id, status, effective_from)
 select sm.id, rg.id, ay.id, gs.id, sub.id, 'active', now()
   from public.staff_members sm
-  join public.role_grants rg on rg.account_id = '10000000-0000-4000-8000-000000000002' and rg.role_code = 'teacher'
+  join public.role_grants rg on rg.account_id = '10000000-0000-4000-8000-000000000002' and rg.role_code = 'result_entry_officer'
   cross join public.academic_years ay
   cross join public.grade_sections gs
   cross join public.subjects sub
@@ -106,7 +106,7 @@ select i.id, 'Tuition fee', 1200000
                          where person_id in ('20000000-0000-4000-8000-000000000003',
                                              '20000000-0000-4000-8000-000000000005'));
 
--- Result batches: 8-A Mathematics (teacher scope) and 9-C Science (denial).
+-- Result batches: 8-A Mathematics (entry-officer scope) and 9-C Science (denial).
 insert into public.result_batches (exam_definition_id, grade_section_id, subject_id, status)
 select ed.id, ed.grade_section_id, sub.id, 'draft'
   from public.exam_definitions ed
@@ -163,7 +163,7 @@ select ('30000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
 on conflict do nothing;
 insert into public.role_grants (account_id, role_code, status, effective_from)
 select ('30000000-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
-       (array['guardian','student','content_editor','content_publisher','admissions_officer','admissions_approver','finance_officer','finance_approver','hr_reviewer','hr_approver','teacher','exam_reviewer','result_publisher','timetable_manager','support_officer','auditor','system_administrator'])[n],
+       (array['guardian','student','content_editor','content_publisher','admissions_officer','admissions_approver','finance_officer','finance_approver','hr_reviewer','hr_approver','result_entry_officer','exam_reviewer','result_publisher','timetable_manager','support_officer','auditor','system_administrator'])[n],
        'active', now()
   from generate_series(1, 17) n
 on conflict do nothing;
@@ -194,7 +194,7 @@ select sm.id, rg.id, ay.id, gs.id, sub.id, 'active', now()
   from public.staff_members sm
   join public.people p on p.id = sm.person_id
   join public.user_accounts ua on ua.person_id = p.id and ua.id = '30000000-0000-4000-8000-000000000011'
-  join public.role_grants rg on rg.account_id = ua.id and rg.role_code = 'teacher' and rg.status = 'active'
+  join public.role_grants rg on rg.account_id = ua.id and rg.role_code = 'result_entry_officer' and rg.status = 'active'
   join public.academic_years ay on ay.label = '2026-27'
   join public.grade_sections gs on gs.academic_year_id = ay.id and gs.section_label = 'A'
   join public.grades g on g.id = gs.grade_id and g.code = '8'
@@ -249,7 +249,7 @@ select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
 do $$
 begin
   assert app.is_guardian() = true, 'guardian context resolves';
-  assert app.has_role('teacher') = false, 'guardian is not a teacher';
+  assert app.has_role('result_entry_officer') = false, 'guardian is not an entry officer';
   assert app.is_staff_aal2() = false, 'guardian is not staff even with aal2';
 
   assert (select count(*) from public.enrollments where status = 'active') = 2,
@@ -296,17 +296,19 @@ begin
     'reactivated link restores access';
 end $$;
 
--- 3c. Teacher Firdous: aal1 denied, aal2 accepted, exact class+subject scope.
+-- 3c. Result entry officer (Firdous): aal1 denied, aal2 accepted, exact
+-- class+subject scope via staff_scope_allowed. The legacy teacher role is
+-- non-assignable (000042); entry is central (000057).
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', false);
 select set_config('request.jwt.claims', '{"aal":"aal1"}', false);
 do $$
 begin
-  assert app.has_role('teacher') = true, 'teacher grant active';
+  assert app.has_role('result_entry_officer') = true, 'result entry officer grant active';
   assert app.is_staff_aal2() = false, 'aal1 is denied for staff data';
   assert (select count(*) from public.result_batches) = 0,
-    'aal1 teacher sees no batches';
+    'aal1 entry officer sees no batches';
   assert (select count(*) from public.invoices) = 0,
-    'aal1 teacher sees no finance rows';
+    'aal1 entry officer sees no finance rows';
 end $$;
 
 select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
@@ -314,13 +316,13 @@ do $$
 begin
   assert app.is_staff_aal2() = true, 'aal2 staff context resolves';
   assert (select count(*) from public.result_batches) = 1,
-    'teacher sees exactly own 8-A Mathematics batch';
+    'entry officer sees exactly own 8-A Mathematics batch (got ' || (select count(*) from public.result_batches) || ', scope=' || app.staff_scope_allowed(array['result_entry_officer'], (select academic_year_id from public.exam_definitions where term = 'midterm' limit 1), null, null) || ', has_role=' || app.has_role('result_entry_officer') || ')';
   assert (select count(*) from public.result_batches rb
             join public.grade_sections gs on gs.id = rb.grade_section_id
            where gs.section_label = 'C') = 0,
-    'teacher never sees out-of-scope 9-C batches';
+    'entry officer never sees out-of-scope 9-C batches';
   assert (select count(*) from public.invoices) = 0,
-    'pure teacher (aal2) is denied finance rows';
+    'pure entry officer (aal2) is denied finance rows';
 end $$;
 reset role;
 
@@ -329,7 +331,7 @@ reset role;
 set role authenticated;
 do $$
 declare
-  v_codes text[] := array['guardian','student','content_editor','content_publisher','admissions_officer','admissions_approver','finance_officer','finance_approver','hr_reviewer','hr_approver','teacher','exam_reviewer','result_publisher','timetable_manager','support_officer','auditor','system_administrator'];
+  v_codes text[] := array['guardian','student','content_editor','content_publisher','admissions_officer','admissions_approver','finance_officer','finance_approver','hr_reviewer','hr_approver','result_entry_officer','exam_reviewer','result_publisher','timetable_manager','support_officer','auditor','system_administrator'];
   v_positive int;
   v_finance int;
 begin
@@ -343,7 +345,7 @@ begin
       when 'admissions_officer', 'admissions_approver' then select count(*) into v_positive from public.admission_applications;
       when 'finance_officer', 'finance_approver' then select count(*) into v_positive from public.invoices;
       when 'hr_reviewer', 'hr_approver' then select count(*) into v_positive from public.job_applications;
-      when 'teacher', 'exam_reviewer', 'result_publisher' then select count(*) into v_positive from public.result_batches;
+      when 'result_entry_officer', 'exam_reviewer', 'result_publisher' then select count(*) into v_positive from public.result_batches;
       when 'timetable_manager' then select count(*) into v_positive from public.timetable_versions;
       when 'support_officer' then select count(*) into v_positive from public.support_requests;
       when 'auditor' then select count(*) into v_positive from public.reconciliation_runs;

@@ -310,28 +310,117 @@ begin
   v_ref := v_request ->> 'reference';
   assert v_ref is not null, 'stage7: export request created';
 
-  -- Completion is service/administrated and sets a 24h expiry.
-  perform app.data_export_mark_ready(v_ref, 2, null);
-  assert (select state from public.data_export_requests where reference = v_ref) = 'ready',
-    'stage7: export marked ready';
-  assert (select expires_at from public.data_export_requests where reference = v_ref) > now(),
-    'stage7: export has a future expiry';
+  -- Completion is service-only (000056) and requires a real document.
+  v_denied := false;
+  begin
+    perform app.data_export_mark_ready(v_ref, 2, null);
+  exception when others then v_denied := true; end;
+  assert v_denied, 'stage7: administrator cannot complete an export (service-only)';
+  assert (select state from public.data_export_requests where reference = v_ref) = 'requested',
+    'stage7: export state is unchanged after denied completion';
 
-  -- A closed request cannot be cancelled again.
+  -- A requested (not yet generated) export can still be cancelled by its
+  -- administrator; a ready/closed one cannot.
+  perform app.data_export_cancel(v_ref, 'Journey cancellation before generation.');
+  assert (select state from public.data_export_requests where reference = v_ref) = 'cancelled',
+    'stage7: requested export is cancellable before generation';
+
   v_denied := false;
   begin
     perform app.data_export_cancel(v_ref, 'Second cancel attempt.');
   exception when others then v_denied := true; end;
-  assert v_denied, 'stage7: cancelling a ready export is denied';
+  assert v_denied, 'stage7: cancelling a closed export is denied';
 end $$;
 reset role;
 
 -- ============================================================================
 -- Cross-stage: the masked legacy inventory runs and returns safe keys only.
 -- ============================================================================
+set role authenticated;
+select set_config('request.jwt.claim.sub', '90000000-0000-4000-8000-000000000002', false);
+select set_config('request.jwt.claims', '{"aal":"aal2","role":"authenticated","email":"verify.admin@example.in"}', false);
 do $$
 begin
   perform app.legacy_teacher_access_report();
 end $$;
+reset role;
+
+-- ============================================================================
+-- 000056 authorization repair — actor-matrix and profile-invariant proofs
+-- ============================================================================
+do $$
+declare
+  v_denied boolean;
+  v_guardian_id uuid;
+  v_rows int;
+begin
+  -- Guardian (claimant …003 now holds a guardian grant) cannot call the
+  -- previously unguarded reads. List-style functions filter to empty rather
+  -- than raising; command-style functions raise.
+  perform set_config('request.jwt.claim.sub', '90000000-0000-4000-8000-000000000003', false);
+  perform set_config('request.jwt.claims', '{"aal":"aal2","role":"authenticated","email":"verify.guardian@example.in"}', false);
+
+  select count(*) into v_rows from app.teaching_staff_list();
+  assert v_rows = 0, 'repair: guardian teaching-staff list is empty';
+
+  -- The masked legacy inventory is a set-returning filter: a guardian gets
+  -- zero rows (no grant references leak), not an error.
+  select count(*) into v_rows from app.legacy_teacher_access_report();
+  assert v_rows = 0, 'repair: guardian legacy-teacher inventory is empty';
+
+  -- The profile catalog is also a set-returning filter: a guardian gets an
+  -- empty catalog, not an error.
+  select jsonb_array_length(app.staff_profiles_list()) into v_rows;
+  assert v_rows = 0, 'repair: guardian profile catalog is empty';
+
+  -- AAL1 staff sessions get an empty profile catalog too.
+  perform set_config('request.jwt.claim.sub', '90000000-0000-4000-8000-000000000001', false);
+  perform set_config('request.jwt.claims', '{"aal":"aal1","role":"authenticated","email":"verify.principal@example.in"}', false);
+  select jsonb_array_length(app.staff_profiles_list()) into v_rows;
+  assert v_rows = 0, 'repair: aal1 profile catalog is empty';
+
+  -- Bundle-lock: an administrator cannot individually grant even an
+  -- in-bundle role to a profiled account.
+  perform set_config('request.jwt.claim.sub', '90000000-0000-4000-8000-000000000002', false);
+  perform set_config('request.jwt.claims', '{"aal":"aal2","role":"authenticated","email":"verify.admin@example.in"}', false);
+  v_denied := false;
+  begin
+    perform app.roles_grant('90000000-0000-4000-8000-000000000001', 'auditor', 'In-bundle individual grant attempt.');
+  exception when others then v_denied := true; end;
+  assert v_denied, 'repair: individual grant on a profiled account is denied even in-bundle';
+
+  -- Adoption: a legacy account (no profile marker) whose grants do NOT match
+  -- a bundle is rejected; an exact-match account adopts cleanly.
+  -- (The verify principal …001 already carries a profile; use the guardian
+  -- claimant account …003 which has only a guardian grant — no staff grants,
+  -- but also no staff_members row, so adoption must fail with staff-missing.)
+  v_denied := false;
+  begin
+    perform app.staff_profile_adopt('90000000-0000-4000-8000-000000000003', 'principal', 'Adoption attempt without staff record.');
+  exception when others then v_denied := true; end;
+  assert v_denied, 'repair: adoption without a staff member row is denied';
+
+  -- Last-administrator serialization: with only one active administrator
+  -- (…002 after the earlier demotion flow), suspending them is denied even
+  -- under the advisory lock.
+  v_denied := false;
+  begin
+    perform app.accounts_suspend('90000000-0000-4000-8000-000000000002', 'Last administrator suspension attempt.');
+  exception when others then v_denied := true; end;
+  assert v_denied, 'repair: suspending the last active administrator is denied';
+  assert (select status from public.user_accounts where id = '90000000-0000-4000-8000-000000000002') = 'active',
+    'repair: last administrator account is unchanged after denial';
+
+  -- context_staff_select rejects profile accounts server-side.
+  perform set_config('request.jwt.claim.sub', '90000000-0000-4000-8000-000000000001', false);
+  perform set_config('request.jwt.claims', '{"aal":"aal2","role":"authenticated","email":"verify.principal@example.in"}', false);
+  v_denied := false;
+  begin
+    perform app.context_staff_select(
+      (select rg.id from public.role_grants rg where rg.account_id = '90000000-0000-4000-8000-000000000001' and rg.status = 'active' limit 1));
+  exception when others then v_denied := true; end;
+  assert v_denied, 'repair: profile account cannot select a granular workspace server-side';
+end $$;
+reset role;
 
 select 'CONSOLIDATION SUITE PASSED' as result;

@@ -58,14 +58,21 @@ the two-profile migration and local gates pass.
 
 ### Migration ledger divergence
 
-- Remote Supabase has applied migrations `000001–000039`.
-- Local `000040` and `000041` are committed but not live.
-- Local `000042_staff_access_profiles.sql` is untracked and is being
-  redesigned for the two-profile (administrator/principal) model before any
-  apply. Do not treat the old three-profile version as authoritative.
-- No remote write, migration apply, account/grant cleanup, or Vercel deploy
-  is authorized by this phase. The two live remote teacher grants require a
-  masked dependency report and explicit owner confirmation before retirement.
+- Remote Supabase has applied migrations `000001–000050` and `000052–000055`
+  (ledger `000051` was repaired→reverted; the corrected function shipped as
+  `000052`). The consolidation migrations are live on staging.
+- **Phase 10 recovery is active.** The prior "staging verified" claim was
+  retracted: privileged test accounts used a committed fallback password,
+  journey residue accumulated, several new SECURITY DEFINER reads lack
+  internal actor checks, and the import/export pipelines are unwired.
+- All database corrections must be **forward migrations from `000056`**.
+  Never edit live migrations `000001–000055`.
+- No Vercel/production action. Teacher-grant retirement requires a fresh
+  masked inventory and explicit owner confirmation naming
+  `ROLE-2026-5CB9B7` and `ROLE-2026-846E6C`.
+- Remote scripts must guard on the exact project ref and an explicit
+  `FASS_STAGING_CONFIRMED=true` environment confirmation; no committed
+  fallback passwords are permitted anywhere.
 
 ### Consolidation rules
 
@@ -152,11 +159,13 @@ Never describe `VERIFIED` work as `RELEASED` without deployment evidence.
 `scripts/seed-test-accounts.mjs` creates profile-based synthetic staff
 accounts — one Administrator and one Principal, matching the two portal
 profiles — in the linked Supabase project (auth user → person → user_account →
-role_grant → staff_member). It is idempotent and safe to re-run; accounts are
-keyed by `test.<profile>@faizaam.example`. The shared password is printed by
-the script. First sign-in at `/sign-in/staff` still enrolls TOTP (plan.md §4).
-Legacy per-role accounts are DB-only denial fixtures, not portal personas.
-Never use these accounts in production or with real data.
+role_grants → staff_member). It is idempotent and safe to re-run; accounts are
+keyed by `test.<profile>@faizaam.example`. The shared password MUST come from
+the `TEST_ACCOUNT_PASSWORD` environment value — no committed fallback exists,
+and the script refuses empty/short values. First sign-in at `/sign-in/staff`
+still enrolls TOTP (plan.md §4). Legacy per-role accounts are DB-only denial
+fixtures, not portal personas. Never use these accounts in production or with
+real data.
 
 ## Local performance workflow
 

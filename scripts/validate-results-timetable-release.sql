@@ -36,7 +36,7 @@ on conflict (person_id) do nothing;
 insert into public.role_grants(account_id, role_code, status, effective_from)
 select v.account_id, v.role_code, 'active', now()
   from (values
-    ('10000000-0000-4000-8000-000000000020'::uuid, 'teacher'),
+    ('10000000-0000-4000-8000-000000000020'::uuid, 'result_entry_officer'),
     ('10000000-0000-4000-8000-000000000021'::uuid, 'exam_reviewer'),
     ('10000000-0000-4000-8000-000000000022'::uuid, 'result_publisher'),
     ('10000000-0000-4000-8000-000000000023'::uuid, 'timetable_manager'),
@@ -155,12 +155,12 @@ begin
   perform set_config('request.jwt.claims', '{"aal":"aal1"}', false);
   v_failed := false;
   begin perform app.results_entry_sheet_submit((v_sheet ->> 'sheetId')::uuid, (v_save ->> 'version')::int, 'slice4-aal1'); exception when others then v_failed := true; end;
-  assert v_failed, 'AAL1 teacher cannot submit';
+  assert v_failed, 'AAL1 entry officer cannot submit';
   perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
   perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000024', false);
   v_failed := false;
   begin perform app.results_entry_sheet_create(v_exam, v_section, v_subject, 'slice4-wrong-assignment'); exception when others then v_failed := true; end;
-  assert v_failed, 'teacher without exact assignment cannot create a sheet';
+  assert v_failed, 'officer without exact scope cannot create a sheet';
 
   perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000020', false);
   perform app.results_entry_sheet_submit((v_sheet ->> 'sheetId')::uuid, (v_save ->> 'version')::int, 'slice4-submit');

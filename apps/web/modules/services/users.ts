@@ -10,7 +10,7 @@
  * roles itself.
  */
 
-import { type RoleGrant, type StaffRole, STAFF_ROLES, type StaffProfileCode } from "@fass/contracts";
+import { type RoleGrant, type StaffRole, ASSIGNABLE_STAFF_ROLES, type StaffProfileCode } from "@fass/contracts";
 
 import { formatKolkata } from "@/modules/iot/domain";
 import { demoNowIso } from "@/modules/demo/clock";
@@ -49,8 +49,9 @@ export type UserRow = {
   grants: Array<{ id: string; ref: string; role: StaffRole; roleLabel: string; reason: string }>;
 };
 
-/** Canonical staff roles available for grant — sourced from the contracts. */
-export const GRANTABLE_ROLES: readonly StaffRole[] = STAFF_ROLES;
+/** Canonical staff roles available for grant — assignable roles only
+ * (legacy teacher/student are non-assignable and never offered). */
+export const GRANTABLE_ROLES: readonly StaffRole[] = ASSIGNABLE_STAFF_ROLES;
 
 export type StaffInvitationStatus = "pending" | "accepted" | "revoked" | "expired";
 

@@ -33,14 +33,22 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   let initialState;
   let initialNotifications;
   const quickSignIn = developmentAuthEnabled();
+  /* The middleware preserves the original canonical path AND query in
+     x-fass-pathname; sign-in/TOTP redirects must return the user to that
+     exact URL, not collapse it to /staff. */
+  const headerList = await headers();
+  const rawPathname = headerList.get("x-fass-pathname") ?? "/staff";
+  const { pathname, search } = splitPathname(rawPathname);
+  const returnTo = `${pathname}${search}`;
+
   if (dataAdapter() === "supabase") {
     const actor = await getServerActor();
-    if (actor === null) redirect(`/sign-in/staff?next=${encodeURIComponent("/staff")}`);
+    if (actor === null) redirect(`/sign-in/staff?next=${encodeURIComponent(returnTo)}`);
     if (!actor.roles.some((role) => !["guardian", "student"].includes(role))) {
-      if (quickSignIn) redirect(`/sign-in/staff?next=${encodeURIComponent("/staff")}&switch=staff`);
+      if (quickSignIn) redirect(`/sign-in/staff?next=${encodeURIComponent(returnTo)}&switch=staff`);
       redirect("/access-denied");
     }
-    if (actor.aal !== "aal2") redirect(`/sign-in/totp?next=${encodeURIComponent("/staff")}`);
+    if (actor.aal !== "aal2") redirect(`/sign-in/totp?next=${encodeURIComponent(returnTo)}`);
     try {
       const [serverContext, notifications] = await Promise.all([
         loadServerStaffContext(),
@@ -55,13 +63,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
 
   /* Canonical portal redirect: if the request came in on a non-canonical
      prefix (e.g. /staff/* or the wrong portal), redirect to the profile's
-     canonical prefix with the safe suffix AND query string preserved. The
-     middleware sets x-fass-pathname from the original URL (before rewrites),
-     so we see the user-facing path here. */
-  const headerList = await headers();
-  const rawPathname = headerList.get("x-fass-pathname") ?? "/staff";
-  const { pathname, search } = splitPathname(rawPathname);
-
+     canonical prefix with the safe suffix AND query string preserved. */
   if (initialState?.summary?.profileCode) {
     const expectedPrefix = portalPrefixForProfile(initialState.summary.profileCode);
     if (expectedPrefix !== null) {

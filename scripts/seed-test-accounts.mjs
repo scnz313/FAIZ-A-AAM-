@@ -36,6 +36,19 @@ if (!url || !secretKey) {
   process.exit(1);
 }
 
+/* Hard target guard: this script mutates a remote project. It must point at
+   the approved staging ref and the operator must have confirmed staging. */
+const PROJECT_REF = (url.match(/https:\/\/([a-z0-9]+)\.supabase\.co/) ?? [])[1];
+const APPROVED_STAGING_REF = "jxegiamjcawdywqyutdz";
+if (PROJECT_REF !== APPROVED_STAGING_REF || env.FASS_STAGING_CONFIRMED !== "true") {
+  console.error(
+    `Refusing to run: this script changes remote accounts.\n` +
+      `Expected project ${APPROVED_STAGING_REF} with FASS_STAGING_CONFIRMED=true ` +
+      `(got ${PROJECT_REF ?? "unknown"}, FASS_STAGING_CONFIRMED=${env.FASS_STAGING_CONFIRMED ?? "unset"}).`,
+  );
+  process.exit(1);
+}
+
 const admin = createClient(url, secretKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -43,12 +56,23 @@ const admin = createClient(url, secretKey, {
 /* --- test accounts ------------------------------------------------------ */
 
 /** Shared password for every test account (staff sign-in requires 8+ chars).
- * Set TEST_ACCOUNT_PASSWORD to override; the default is for synthetic
- * staging only and must never be used with real data. */
-const PASSWORD = process.env.TEST_ACCOUNT_PASSWORD || "FaizAam-Test-2026";
+ * There is NO committed fallback: the operator must supply
+ * TEST_ACCOUNT_PASSWORD (min 16 chars, not a known/default value). */
+const PASSWORD = process.env.TEST_ACCOUNT_PASSWORD || "";
+const FORBIDDEN_PASSWORDS = new Set([
+  "faizaam-test-2026",
+  "password",
+  "password1",
+  "test1234",
+  "faizaam",
+]);
 
-if (PASSWORD.length < 8) {
-  console.error("TEST_ACCOUNT_PASSWORD must be at least 8 characters.");
+if (PASSWORD.length < 16) {
+  console.error("TEST_ACCOUNT_PASSWORD must be set and at least 16 characters (no committed fallback).");
+  process.exit(1);
+}
+if (FORBIDDEN_PASSWORDS.has(PASSWORD.toLowerCase())) {
+  console.error("TEST_ACCOUNT_PASSWORD matches a known/default value — choose a secret random password.");
   process.exit(1);
 }
 
