@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { FamilyPortalContext } from "@fass/contracts";
@@ -15,6 +15,15 @@ import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 type FamilyContextStatus = "loading" | "ready" | "error";
 
+/**
+ * Shared dirty-form registry: child-scoped forms register a dirty check
+ * before a switch. If any form is dirty, the switch is blocked with a
+ * recoverable save/discard prompt.
+ */
+type DirtyFormEntry = { id: string; check: () => boolean };
+
+/** Monotonically increasing generation counter — child consumers use this
+ * as a remount key so every child-scoped component resets on switch. */
 export type FamilyContextValue = {
   status: FamilyContextStatus;
   errorMessage: string | null;
@@ -33,6 +42,12 @@ export type FamilyContextValue = {
   retry: () => void;
   /** Server-seeded document metadata for the active child; never a file URL. */
   documentMetadata: Array<{ ref: string; category: string; filename: string; processingState: string; mimeType: string; sizeBytes: number }>;
+  /** Monotonically increasing generation — remount key for child consumers. */
+  generation: number;
+  /** Register a dirty-form check; returns an unregister function. */
+  registerDirtyForm: (id: string, check: () => boolean) => () => void;
+  /** True when any registered form is dirty. */
+  isDirty: boolean;
 };
 
 export type FamilyContextInitialState = {
@@ -44,14 +59,6 @@ export type FamilyContextInitialState = {
 
 const FamilyContextContext = createContext<FamilyContextValue | null>(null);
 
-/**
- * Family portal context spine (I0/I1): loads the account's accessible
- * students and the persisted active-child selection through the relationship
- * service, and owns the switch behavior. A failed switch preserves the
- * previous selection and reports a recoverable error. The demo falls back to
- * the seeded guardian account when no sign-in session exists; the backend
- * phase replaces that fallback with server authorization.
- */
 export function FamilyContextProvider({
   children,
   initialState,
@@ -64,11 +71,14 @@ export function FamilyContextProvider({
   const [context, setContext] = useState<FamilyPortalContext | null>(initialState?.context ?? null);
   const [students, setStudents] = useState<AccessibleStudentContext[]>(initialState?.students ?? []);
   const [guardianName, setGuardianName] = useState<string | null>(initialState?.guardianName ?? null);
-  const [documentMetadata] = useState<FamilyContextValue["documentMetadata"]>(initialState?.documentMetadata ?? []);
+  const [documentMetadata, setDocumentMetadata] = useState<FamilyContextValue["documentMetadata"]>(initialState?.documentMetadata ?? []);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [generation, setGeneration] = useState(0);
+  const dirtyFormsRef = useRef<Map<string, () => boolean>>(new Map());
+  const [dirtyCount, setDirtyCount] = useState(0);
 
   useEffect(() => {
     if (initialState !== undefined && reloadKey === 0) return;
@@ -120,16 +130,42 @@ export function FamilyContextProvider({
     };
   }, [initialState, reloadKey]);
 
+  const registerDirtyForm = useCallback((id: string, check: () => boolean) => {
+    dirtyFormsRef.current.set(id, check);
+    setDirtyCount(dirtyFormsRef.current.size);
+    return () => {
+      dirtyFormsRef.current.delete(id);
+      setDirtyCount(dirtyFormsRef.current.size);
+    };
+  }, []);
+
+  const isDirty = useMemo(() => {
+    if (dirtyCount === 0) return false;
+    for (const check of dirtyFormsRef.current.values()) {
+      if (check()) return true;
+    }
+    return false;
+  }, [dirtyCount]);
+
   const switchStudent = useCallback(
     async (studentId: string) => {
       if (context === null || studentId === context.activeStudentId) return;
+      /* Dirty-form guard: block the switch if any registered form has
+         unsaved changes. The consumer shows a save/discard prompt. */
+      for (const check of dirtyFormsRef.current.values()) {
+        if (check()) {
+          setSwitchError("Unsaved changes — save or discard before switching children.");
+          return;
+        }
+      }
       setSwitching(true);
       setSwitchError(null);
-      /* Fail closed: clear the outgoing child's context immediately so no
-         stale sensitive rows remain visible while the switch resolves. The
-         previous authorized context is restored only if the switch fails. */
+      /* Fail closed: clear the outgoing child's context, document metadata,
+         and bump the generation so every child-scoped consumer remounts. */
       const previousContext = context;
       setContext(null);
+      setDocumentMetadata([]);
+      setGeneration((gen) => gen + 1);
       try {
         const next = await familyContextService.setActiveStudent(previousContext.accountId, studentId);
         setContext(next);
@@ -140,8 +176,10 @@ export function FamilyContextProvider({
           );
         }
       } catch (error) {
-        /* Keep the previous selection visible; the switch never half-applies. */
+        /* Restore the previous context and generation; the switch never
+           half-applies. */
         setContext(previousContext);
+        setGeneration((gen) => gen + 1);
         setSwitchError(
           error instanceof Error
             ? error.message
@@ -175,6 +213,9 @@ export function FamilyContextProvider({
       switchStudent,
       retry,
       documentMetadata,
+      generation,
+      registerDirtyForm,
+      isDirty,
     }),
     [
       status,
@@ -189,6 +230,9 @@ export function FamilyContextProvider({
       switchStudent,
       retry,
       documentMetadata,
+      generation,
+      registerDirtyForm,
+      isDirty,
     ],
   );
 

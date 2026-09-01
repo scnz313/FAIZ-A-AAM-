@@ -23,22 +23,25 @@ export function ResultsPageClient({ initialPublications = null }: { initialPubli
 function ResultsBody({ initialPublications }: { initialPublications?: Publication[] | null }) {
   const searchParams = useSearchParams();
   const requested = searchParams.get("term");
-  const { activeStudent } = useFamilyContext();
+  const { activeStudent, generation } = useFamilyContext();
   const [terms, setTerms] = useState<Term[] | null>(null);
   const [publications, setPublications] = useState<Publication[] | null>(initialPublications ?? null);
   const [snapshot, setSnapshot] = useState<StudentResultSnapshot | null | undefined>(undefined);
   const studentId = activeStudent?.student.ref ?? null;
   const academicYearId = activeStudent?.academicYear.id ?? null;
 
+  /* Publications reload on child switch (generation bump clears the stale
+     server-prop list and fetches the new child's publications). */
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([academicsService.getTerms(), initialPublications === null ? academicsService.getPublications() : Promise.resolve(initialPublications ?? [])]).then(([nextTerms, nextPublications]) => {
+    setPublications(null);
+    void Promise.all([academicsService.getTerms(), academicsService.getPublications()]).then(([nextTerms, nextPublications]) => {
       if (cancelled) return;
       setTerms(nextTerms);
       setPublications(nextPublications);
     }).catch(() => { if (!cancelled) { setTerms([]); setPublications([]); } });
     return () => { cancelled = true; };
-  }, [initialPublications]);
+  }, [generation]);
 
   useEffect(() => {
     if (studentId === null || academicYearId === null) return;

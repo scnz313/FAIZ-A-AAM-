@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ActiveChildLine } from "@/components/portal/ActiveChildLine";
 import { OverviewFinanceBand } from "@/components/portal/OverviewFinanceBand";
 import OverviewGreeting from "@/components/portal/OverviewGreeting";
+import { ChildOverviewRows } from "@/components/portal/ChildOverviewRows";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { FINANCE_DEMO_NOTE } from "@/modules/services/finance";
 import { contentService } from "@/modules/services/content";
@@ -49,6 +50,8 @@ export default async function PortalOverviewPage() {
           bigLine: styles.bigLine,
         }}
       />
+
+      <ChildOverviewRows />
 
       <section aria-labelledby="attention-title">
         <p className="section-label" id="attention-title">
