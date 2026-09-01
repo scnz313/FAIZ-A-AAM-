@@ -151,6 +151,14 @@ export type Database = {
         }
         Returns: string
       }
+      admissions_withdraw: {
+        Args: {
+          p_application_id: string
+          p_expected_version?: number
+          p_idempotency_key?: string
+        }
+        Returns: Json
+      }
       applicant_register: {
         Args: {
           p_auth_user_id: string
@@ -208,6 +216,7 @@ export type Database = {
         }
       }
       auth_claim_email: { Args: never; Returns: string }
+      auth_claim_phone: { Args: never; Returns: string }
       auth_rate_limit_consume: {
         Args: {
           p_action: string
@@ -334,6 +343,95 @@ export type Database = {
       context_staff_select: {
         Args: { p_expected_version?: number; p_role_grant_id: string }
         Returns: Json
+      }
+      data_export_cancel: {
+        Args: { p_reason: string; p_request_reference: string }
+        Returns: Json
+      }
+      data_export_list: { Args: never; Returns: Json[] }
+      data_export_mark_failed: {
+        Args: { p_error: string; p_request_reference: string }
+        Returns: Json
+      }
+      data_export_mark_ready: {
+        Args: {
+          p_document_id: string
+          p_request_reference: string
+          p_row_count: number
+        }
+        Returns: Json
+      }
+      data_export_request: {
+        Args: {
+          p_columns: Json
+          p_domain: string
+          p_filters: Json
+          p_format: string
+          p_purpose: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      data_import_cancel: {
+        Args: {
+          p_batch_id: string
+          p_expected_version: number
+          p_reason: string
+        }
+        Returns: Json
+      }
+      data_import_commit: {
+        Args: {
+          p_batch_id: string
+          p_confirmed_create_count: number
+          p_confirmed_update_count: number
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      data_import_create_batch: {
+        Args: {
+          p_academic_year_id: string
+          p_authority_confirmation: boolean
+          p_privacy_confirmation: boolean
+          p_source_document_id: string
+          p_source_system: string
+        }
+        Returns: Json
+      }
+      data_import_list_batches: { Args: never; Returns: Json[] }
+      data_import_list_issues: {
+        Args: { p_batch_id: string; p_severity?: string }
+        Returns: Json[]
+      }
+      data_import_preview: { Args: { p_batch_id: string }; Returns: Json }
+      data_import_record_issue: {
+        Args: {
+          p_batch_id: string
+          p_code: string
+          p_field: string
+          p_message: string
+          p_resolution_hint?: string
+          p_row_id: string
+          p_row_number: number
+          p_severity: string
+        }
+        Returns: string
+      }
+      data_import_report: { Args: { p_batch_id: string }; Returns: Json }
+      data_import_set_state: {
+        Args: {
+          p_batch_id: string
+          p_expected_version: number
+          p_new_state: string
+        }
+        Returns: Json
+      }
+      data_import_store_rows: {
+        Args: { p_batch_id: string; p_rows: Json }
+        Returns: number
       }
       document_actor_allowed: {
         Args: { p_owner_domain: string; p_owner_record_id: string }
@@ -618,6 +716,50 @@ export type Database = {
         }
         Returns: Json
       }
+      guardian_campaign_create: {
+        Args: {
+          p_academic_year_id: string
+          p_delivery_channel: string
+          p_label: string
+        }
+        Returns: Json
+      }
+      guardian_claim_accept: {
+        Args: {
+          p_claim_reference: string
+          p_family_name: string
+          p_given_name: string
+        }
+        Returns: Json
+      }
+      guardian_claim_create: {
+        Args: {
+          p_campaign_id?: string
+          p_channel: string
+          p_expires_at: string
+          p_guardian_contact_id: string
+          p_guardian_id: string
+          p_reason?: string
+        }
+        Returns: Json
+      }
+      guardian_claim_list: { Args: never; Returns: Json[] }
+      guardian_claim_mark_dispatched: {
+        Args: {
+          p_claim_reference: string
+          p_provider_ref?: string
+          p_provider_subject: string
+        }
+        Returns: Json
+      }
+      guardian_claim_revoke: {
+        Args: { p_claim_reference: string; p_reason: string }
+        Returns: Json
+      }
+      guardian_contact_change_request: {
+        Args: { p_new_contact: string; p_reason: string }
+        Returns: Json
+      }
       guardian_has_capability: {
         Args: { p_capability: string; p_student_id: string }
         Returns: boolean
@@ -718,6 +860,15 @@ export type Database = {
         Args: { p_application_id: string; p_expected_version?: number }
         Returns: undefined
       }
+      legacy_teacher_access_report: { Args: never; Returns: Json[] }
+      legacy_teacher_access_retire: {
+        Args: {
+          p_account_id: string
+          p_expected_grant_version: number
+          p_reason: string
+        }
+        Returns: Json
+      }
       links_approve: {
         Args: { p_expected_version: number; p_link_id: string }
         Returns: undefined
@@ -776,6 +927,10 @@ export type Database = {
       notifications_mark_read: {
         Args: { p_expected_version?: number; p_notification_id: string }
         Returns: Json
+      }
+      profile_role_codes: {
+        Args: { p_profile_code: string }
+        Returns: string[]
       }
       project_notification_event: {
         Args: { p_event_id: string }
@@ -1068,6 +1223,17 @@ export type Database = {
         }
         Returns: string
       }
+      staff_invites_create_profile: {
+        Args: {
+          p_contact: string
+          p_display_name: string
+          p_expires_at: string
+          p_profile_code?: string
+          p_reason?: string
+          p_title?: string
+        }
+        Returns: Json
+      }
       staff_invites_create_record: {
         Args: {
           p_academic_year_ids?: string[]
@@ -1085,6 +1251,16 @@ export type Database = {
         Args: { p_invitation_reference: string; p_reason: string }
         Returns: undefined
       }
+      staff_profile_change: {
+        Args: {
+          p_account_id: string
+          p_expected_version: number
+          p_profile_code: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      staff_profiles_list: { Args: never; Returns: Json }
       staff_scope_allowed: {
         Args: {
           p_academic_year_id?: string
@@ -1175,9 +1351,41 @@ export type Database = {
         Args: { p_grade_section_id: string }
         Returns: boolean
       }
+      teaching_assignment_create: {
+        Args: {
+          p_academic_year_id: string
+          p_effective_from?: string
+          p_grade_section_id: string
+          p_reason?: string
+          p_staff_member_id: string
+          p_subject_id: string
+        }
+        Returns: Json
+      }
+      teaching_assignment_end: {
+        Args: {
+          p_assignment_id: string
+          p_expected_version: number
+          p_reason: string
+        }
+        Returns: Json
+      }
+      teaching_staff_create: {
+        Args: { p_display_name: string; p_reason: string; p_title: string }
+        Returns: Json
+      }
+      teaching_staff_list: { Args: never; Returns: Json[] }
       timetable_publish_version: {
         Args: { p_note?: string; p_version_id: string }
         Returns: string
+      }
+      timetable_revoke_override: {
+        Args: {
+          p_expected_version: number
+          p_override_id: string
+          p_reason: string
+        }
+        Returns: Json
       }
       timetable_save_draft: {
         Args: {
@@ -1337,6 +1545,7 @@ export type Database = {
           intended_staff_profile_code: string | null
           intended_staff_profile_version: number | null
           intended_subject_ids: string[]
+          intended_title: string | null
           invitation_hash: string
           provider_dispatched_at: string | null
           provider_invitation_ref: string | null
@@ -1364,6 +1573,7 @@ export type Database = {
           intended_staff_profile_code?: string | null
           intended_staff_profile_version?: number | null
           intended_subject_ids?: string[]
+          intended_title?: string | null
           invitation_hash: string
           provider_dispatched_at?: string | null
           provider_invitation_ref?: string | null
@@ -1391,6 +1601,7 @@ export type Database = {
           intended_staff_profile_code?: string | null
           intended_staff_profile_version?: number | null
           intended_subject_ids?: string[]
+          intended_title?: string | null
           invitation_hash?: string
           provider_dispatched_at?: string | null
           provider_invitation_ref?: string | null
@@ -1415,6 +1626,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_accounts"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_invitations_intended_staff_profile_code_fkey"
+            columns: ["intended_staff_profile_code"]
+            isOneToOne: false
+            referencedRelation: "staff_access_profiles"
+            referencedColumns: ["code"]
           },
         ]
       }
@@ -1797,6 +2015,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      admission_idempotency_records: {
+        Row: {
+          created_at: string
+          id: string
+          idempotency_key: string
+          request_hash: string
+          result: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          request_hash: string
+          result: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          request_hash?: string
+          result?: Json
+        }
+        Relationships: []
       }
       admission_identity_evidence: {
         Row: {
@@ -2412,6 +2654,356 @@ export type Database = {
           },
         ]
       }
+      data_export_events: {
+        Row: {
+          actor_account_id: string | null
+          created_at: string
+          detail: string | null
+          event_type: string
+          id: string
+          request_id: string
+        }
+        Insert: {
+          actor_account_id?: string | null
+          created_at?: string
+          detail?: string | null
+          event_type: string
+          id?: string
+          request_id: string
+        }
+        Update: {
+          actor_account_id?: string | null
+          created_at?: string
+          detail?: string | null
+          event_type?: string
+          id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_export_events_actor_account_id_fkey"
+            columns: ["actor_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_export_events_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "data_export_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_export_requests: {
+        Row: {
+          columns: Json
+          completed_at: string | null
+          created_at: string
+          document_id: string | null
+          domain: string
+          expires_at: string | null
+          filters: Json
+          format: string
+          id: string
+          purpose: string
+          reason: string
+          reference: string
+          requested_by_account_id: string
+          row_count: number | null
+          state: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          columns?: Json
+          completed_at?: string | null
+          created_at?: string
+          document_id?: string | null
+          domain: string
+          expires_at?: string | null
+          filters?: Json
+          format?: string
+          id?: string
+          purpose: string
+          reason: string
+          reference?: string
+          requested_by_account_id: string
+          row_count?: number | null
+          state?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          columns?: Json
+          completed_at?: string | null
+          created_at?: string
+          document_id?: string | null
+          domain?: string
+          expires_at?: string | null
+          filters?: Json
+          format?: string
+          id?: string
+          purpose?: string
+          reason?: string
+          reference?: string
+          requested_by_account_id?: string
+          row_count?: number | null
+          state?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_export_requests_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_export_requests_requested_by_account_id_fkey"
+            columns: ["requested_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_import_batches: {
+        Row: {
+          academic_year_id: string
+          authority_confirmation: boolean
+          cancel_reason: string | null
+          committed_at: string | null
+          created_at: string
+          created_by_account_id: string
+          error_count: number
+          id: string
+          privacy_confirmation: boolean
+          reference: string
+          row_count: number
+          source_document_id: string | null
+          source_system: string
+          state: string
+          updated_at: string
+          version: number
+          warning_count: number
+        }
+        Insert: {
+          academic_year_id: string
+          authority_confirmation?: boolean
+          cancel_reason?: string | null
+          committed_at?: string | null
+          created_at?: string
+          created_by_account_id: string
+          error_count?: number
+          id?: string
+          privacy_confirmation?: boolean
+          reference?: string
+          row_count?: number
+          source_document_id?: string | null
+          source_system: string
+          state?: string
+          updated_at?: string
+          version?: number
+          warning_count?: number
+        }
+        Update: {
+          academic_year_id?: string
+          authority_confirmation?: boolean
+          cancel_reason?: string | null
+          committed_at?: string | null
+          created_at?: string
+          created_by_account_id?: string
+          error_count?: number
+          id?: string
+          privacy_confirmation?: boolean
+          reference?: string
+          row_count?: number
+          source_document_id?: string | null
+          source_system?: string
+          state?: string
+          updated_at?: string
+          version?: number
+          warning_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_import_batches_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_import_batches_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_import_batches_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_import_issues: {
+        Row: {
+          batch_id: string
+          code: string
+          created_at: string
+          field: string | null
+          id: string
+          message: string
+          resolution_hint: string | null
+          resolved_at: string | null
+          row_id: string | null
+          row_number: number | null
+          severity: string
+        }
+        Insert: {
+          batch_id: string
+          code: string
+          created_at?: string
+          field?: string | null
+          id?: string
+          message: string
+          resolution_hint?: string | null
+          resolved_at?: string | null
+          row_id?: string | null
+          row_number?: number | null
+          severity: string
+        }
+        Update: {
+          batch_id?: string
+          code?: string
+          created_at?: string
+          field?: string | null
+          id?: string
+          message?: string
+          resolution_hint?: string | null
+          resolved_at?: string | null
+          row_id?: string | null
+          row_number?: number | null
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_import_issues_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_import_issues_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_rows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_import_mappings: {
+        Row: {
+          column_mappings: Json
+          created_at: string
+          created_by_account_id: string | null
+          entity: string
+          id: string
+          reference: string
+          source_system: string
+          source_version: string
+          version: number
+        }
+        Insert: {
+          column_mappings?: Json
+          created_at?: string
+          created_by_account_id?: string | null
+          entity: string
+          id?: string
+          reference?: string
+          source_system: string
+          source_version: string
+          version?: number
+        }
+        Update: {
+          column_mappings?: Json
+          created_at?: string
+          created_by_account_id?: string | null
+          entity?: string
+          id?: string
+          reference?: string
+          source_system?: string
+          source_version?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_import_mappings_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_import_rows: {
+        Row: {
+          batch_id: string
+          committed_at: string | null
+          committed_record_id: string | null
+          created_at: string
+          entity: string
+          id: string
+          normalized: Json
+          outcome: string | null
+          row_number: number
+          source_key: string
+          status: string
+        }
+        Insert: {
+          batch_id: string
+          committed_at?: string | null
+          committed_record_id?: string | null
+          created_at?: string
+          entity: string
+          id?: string
+          normalized?: Json
+          outcome?: string | null
+          row_number: number
+          source_key: string
+          status?: string
+        }
+        Update: {
+          batch_id?: string
+          committed_at?: string | null
+          committed_record_id?: string | null
+          created_at?: string
+          entity?: string
+          id?: string
+          normalized?: Json
+          outcome?: string | null
+          row_number?: number
+          source_key?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_import_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_generation_records: {
         Row: {
           attempts: number
@@ -2906,6 +3498,9 @@ export type Database = {
           created_at: string
           grade_section_id: string
           id: string
+          publication_note: string | null
+          published_at: string | null
+          published_by_account_id: string | null
           reference: string
           status: string
           version: number
@@ -2914,6 +3509,9 @@ export type Database = {
           created_at?: string
           grade_section_id: string
           id?: string
+          publication_note?: string | null
+          published_at?: string | null
+          published_by_account_id?: string | null
           reference?: string
           status?: string
           version?: number
@@ -2922,6 +3520,9 @@ export type Database = {
           created_at?: string
           grade_section_id?: string
           id?: string
+          publication_note?: string | null
+          published_at?: string | null
+          published_by_account_id?: string | null
           reference?: string
           status?: string
           version?: number
@@ -2934,7 +3535,41 @@ export type Database = {
             referencedRelation: "grade_sections"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "exam_schedule_versions_published_by_account_id_fkey"
+            columns: ["published_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      external_record_keys: {
+        Row: {
+          created_at: string
+          entity: string
+          id: string
+          record_id: string
+          source_key: string
+          source_system: string
+        }
+        Insert: {
+          created_at?: string
+          entity: string
+          id?: string
+          record_id: string
+          source_key: string
+          source_system: string
+        }
+        Update: {
+          created_at?: string
+          entity?: string
+          id?: string
+          record_id?: string
+          source_key?: string
+          source_system?: string
+        }
+        Relationships: []
       }
       feature_flags: {
         Row: {
@@ -3250,6 +3885,328 @@ export type Database = {
         }
         Relationships: []
       }
+      guardian_campaigns: {
+        Row: {
+          academic_year_id: string | null
+          created_at: string
+          created_by_account_id: string
+          delivery_channel: string
+          eligible_count: number
+          id: string
+          label: string
+          missing_contact_count: number
+          reference: string
+          shared_contact_count: number
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          academic_year_id?: string | null
+          created_at?: string
+          created_by_account_id: string
+          delivery_channel?: string
+          eligible_count?: number
+          id?: string
+          label: string
+          missing_contact_count?: number
+          reference?: string
+          shared_contact_count?: number
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          academic_year_id?: string | null
+          created_at?: string
+          created_by_account_id?: string
+          delivery_channel?: string
+          eligible_count?: number
+          id?: string
+          label?: string
+          missing_contact_count?: number
+          reference?: string
+          shared_contact_count?: number
+          state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_campaigns_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_campaigns_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardian_claim_deliveries: {
+        Row: {
+          attempts: number
+          channel: string
+          claim_id: string
+          created_at: string
+          id: string
+          last_attempt_at: string | null
+          last_error: string | null
+          state: string
+        }
+        Insert: {
+          attempts?: number
+          channel: string
+          claim_id: string
+          created_at?: string
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          state?: string
+        }
+        Update: {
+          attempts?: number
+          channel?: string
+          claim_id?: string
+          created_at?: string
+          id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_claim_deliveries_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "guardian_claim_invitations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardian_claim_invitations: {
+        Row: {
+          campaign_id: string | null
+          channel: string
+          claimed_at: string | null
+          consent_version: number
+          created_at: string
+          created_by_account_id: string
+          expires_at: string
+          guardian_contact_id: string
+          guardian_id: string
+          id: string
+          provider_subject: string | null
+          reference: string
+          secret_hash: string
+          status: string
+          updated_at: string
+          use_count: number
+        }
+        Insert: {
+          campaign_id?: string | null
+          channel: string
+          claimed_at?: string | null
+          consent_version?: number
+          created_at?: string
+          created_by_account_id: string
+          expires_at: string
+          guardian_contact_id: string
+          guardian_id: string
+          id?: string
+          provider_subject?: string | null
+          reference?: string
+          secret_hash: string
+          status?: string
+          updated_at?: string
+          use_count?: number
+        }
+        Update: {
+          campaign_id?: string | null
+          channel?: string
+          claimed_at?: string | null
+          consent_version?: number
+          created_at?: string
+          created_by_account_id?: string
+          expires_at?: string
+          guardian_contact_id?: string
+          guardian_id?: string
+          id?: string
+          provider_subject?: string | null
+          reference?: string
+          secret_hash?: string
+          status?: string
+          updated_at?: string
+          use_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_claim_invitations_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "guardian_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_claim_invitations_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_claim_invitations_guardian_contact_id_fkey"
+            columns: ["guardian_contact_id"]
+            isOneToOne: false
+            referencedRelation: "guardian_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_claim_invitations_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardian_claim_links: {
+        Row: {
+          claim_id: string
+          link_id: string
+        }
+        Insert: {
+          claim_id: string
+          link_id: string
+        }
+        Update: {
+          claim_id?: string
+          link_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_claim_links_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "guardian_claim_invitations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_claim_links_link_id_fkey"
+            columns: ["link_id"]
+            isOneToOne: false
+            referencedRelation: "guardian_student_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardian_contact_changes: {
+        Row: {
+          account_id: string
+          decided_at: string | null
+          decided_by_account_id: string | null
+          guardian_contact_id: string
+          id: string
+          pending_value: string
+          requested_at: string
+          review_reason: string | null
+          state: string
+        }
+        Insert: {
+          account_id: string
+          decided_at?: string | null
+          decided_by_account_id?: string | null
+          guardian_contact_id: string
+          id?: string
+          pending_value: string
+          requested_at?: string
+          review_reason?: string | null
+          state?: string
+        }
+        Update: {
+          account_id?: string
+          decided_at?: string | null
+          decided_by_account_id?: string | null
+          guardian_contact_id?: string
+          id?: string
+          pending_value?: string
+          requested_at?: string
+          review_reason?: string | null
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_contact_changes_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_contact_changes_decided_by_account_id_fkey"
+            columns: ["decided_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_contact_changes_guardian_contact_id_fkey"
+            columns: ["guardian_contact_id"]
+            isOneToOne: false
+            referencedRelation: "guardian_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardian_contacts: {
+        Row: {
+          channel: string
+          created_at: string
+          guardian_id: string
+          id: string
+          shared_contact_flag: boolean
+          state: string
+          updated_at: string
+          value: string
+          verified_at: string | null
+          version: number
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          guardian_id: string
+          id?: string
+          shared_contact_flag?: boolean
+          state?: string
+          updated_at?: string
+          value: string
+          verified_at?: string | null
+          version?: number
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          guardian_id?: string
+          id?: string
+          shared_contact_flag?: boolean
+          state?: string
+          updated_at?: string
+          value?: string
+          verified_at?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_contacts_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guardian_link_capabilities: {
         Row: {
           capability: string
@@ -3283,6 +4240,8 @@ export type Database = {
           effective_to: string | null
           guardian_id: string
           id: string
+          import_batch_id: string | null
+          import_row_id: string | null
           is_billing_contact: boolean
           is_emergency_contact: boolean
           reference: string
@@ -3304,6 +4263,8 @@ export type Database = {
           effective_to?: string | null
           guardian_id: string
           id?: string
+          import_batch_id?: string | null
+          import_row_id?: string | null
           is_billing_contact?: boolean
           is_emergency_contact?: boolean
           reference?: string
@@ -3325,6 +4286,8 @@ export type Database = {
           effective_to?: string | null
           guardian_id?: string
           id?: string
+          import_batch_id?: string | null
+          import_row_id?: string | null
           is_billing_contact?: boolean
           is_emergency_contact?: boolean
           reference?: string
@@ -3350,6 +4313,20 @@ export type Database = {
             columns: ["guardian_id"]
             isOneToOne: false
             referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_student_links_import_batch_id_fkey"
+            columns: ["import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_student_links_import_row_id_fkey"
+            columns: ["import_row_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_rows"
             referencedColumns: ["id"]
           },
           {
@@ -6278,9 +7255,8 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
-          /** Forward declaration for migration 000042 (staff access profiles). */
-          is_assignable: boolean
           is_active: boolean
+          is_assignable: boolean
           label: string
         }
         Insert: {
@@ -6288,8 +7264,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
-          is_assignable?: boolean
           is_active?: boolean
+          is_assignable?: boolean
           label: string
         }
         Update: {
@@ -6297,8 +7273,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
-          is_assignable?: boolean
           is_active?: boolean
+          is_assignable?: boolean
           label?: string
         }
         Relationships: []
@@ -6607,7 +7583,22 @@ export type Database = {
           role_code?: string
           sort_order?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "staff_access_profile_roles_profile_code_fkey"
+            columns: ["profile_code"]
+            isOneToOne: false
+            referencedRelation: "staff_access_profiles"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "staff_access_profile_roles_role_code_fkey"
+            columns: ["role_code"]
+            isOneToOne: false
+            referencedRelation: "role_definitions"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       staff_access_profiles: {
         Row: {
@@ -6736,7 +7727,22 @@ export type Database = {
           invitation_id?: string
           role_code?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "staff_invitation_roles_invitation_id_fkey"
+            columns: ["invitation_id"]
+            isOneToOne: false
+            referencedRelation: "account_invitations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_invitation_roles_role_code_fkey"
+            columns: ["role_code"]
+            isOneToOne: false
+            referencedRelation: "role_definitions"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       staff_members: {
         Row: {
@@ -6745,7 +7751,7 @@ export type Database = {
           created_at: string
           employment_status: string
           id: string
-          person_id: string
+          person_id: string | null
           reference: string
           title: string | null
           updated_at: string
@@ -6756,7 +7762,7 @@ export type Database = {
           created_at?: string
           employment_status?: string
           id?: string
-          person_id: string
+          person_id?: string | null
           reference?: string
           title?: string | null
           updated_at?: string
@@ -6767,12 +7773,19 @@ export type Database = {
           created_at?: string
           employment_status?: string
           id?: string
-          person_id?: string
+          person_id?: string | null
           reference?: string
           title?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "staff_members_access_profile_code_fkey"
+            columns: ["access_profile_code"]
+            isOneToOne: false
+            referencedRelation: "staff_access_profiles"
+            referencedColumns: ["code"]
+          },
           {
             foreignKeyName: "staff_members_person_id_fkey"
             columns: ["person_id"]
@@ -7194,9 +8207,113 @@ export type Database = {
           },
         ]
       }
+      teaching_assignments: {
+        Row: {
+          academic_year_id: string
+          created_at: string
+          created_by_account_id: string | null
+          created_reason: string
+          effective_from: string
+          effective_to: string | null
+          grade_section_id: string
+          id: string
+          provenance: string
+          reference: string
+          source_ref: string | null
+          staff_member_id: string
+          status: string
+          subject_id: string
+          updated_at: string
+          updated_by_account_id: string | null
+          version: number
+        }
+        Insert: {
+          academic_year_id: string
+          created_at?: string
+          created_by_account_id?: string | null
+          created_reason?: string
+          effective_from?: string
+          effective_to?: string | null
+          grade_section_id: string
+          id?: string
+          provenance?: string
+          reference?: string
+          source_ref?: string | null
+          staff_member_id: string
+          status?: string
+          subject_id: string
+          updated_at?: string
+          updated_by_account_id?: string | null
+          version?: number
+        }
+        Update: {
+          academic_year_id?: string
+          created_at?: string
+          created_by_account_id?: string | null
+          created_reason?: string
+          effective_from?: string
+          effective_to?: string | null
+          grade_section_id?: string
+          id?: string
+          provenance?: string
+          reference?: string
+          source_ref?: string | null
+          staff_member_id?: string
+          status?: string
+          subject_id?: string
+          updated_at?: string
+          updated_by_account_id?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teaching_assignments_academic_year_id_fkey"
+            columns: ["academic_year_id"]
+            isOneToOne: false
+            referencedRelation: "academic_years"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teaching_assignments_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teaching_assignments_grade_section_id_fkey"
+            columns: ["grade_section_id"]
+            isOneToOne: false
+            referencedRelation: "grade_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teaching_assignments_staff_member_id_fkey"
+            columns: ["staff_member_id"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teaching_assignments_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teaching_assignments_updated_by_account_id_fkey"
+            columns: ["updated_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       timetable_overrides: {
         Row: {
           created_at: string
+          created_by_account_id: string | null
           day_of_week: number
           grade_section_id: string
           id: string
@@ -7205,12 +8322,19 @@ export type Database = {
           override_date: string
           period_number: number
           reference: string
+          revocation_reason: string | null
+          revoked_at: string | null
+          revoked_by_account_id: string | null
           room_id: string | null
           subject_id: string | null
           substitute_teacher_assignment_id: string | null
+          teaching_assignment_id: string | null
+          updated_at: string
+          version: number
         }
         Insert: {
           created_at?: string
+          created_by_account_id?: string | null
           day_of_week: number
           grade_section_id: string
           id?: string
@@ -7219,12 +8343,19 @@ export type Database = {
           override_date: string
           period_number: number
           reference?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by_account_id?: string | null
           room_id?: string | null
           subject_id?: string | null
           substitute_teacher_assignment_id?: string | null
+          teaching_assignment_id?: string | null
+          updated_at?: string
+          version?: number
         }
         Update: {
           created_at?: string
+          created_by_account_id?: string | null
           day_of_week?: number
           grade_section_id?: string
           id?: string
@@ -7233,16 +8364,36 @@ export type Database = {
           override_date?: string
           period_number?: number
           reference?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by_account_id?: string | null
           room_id?: string | null
           subject_id?: string | null
           substitute_teacher_assignment_id?: string | null
+          teaching_assignment_id?: string | null
+          updated_at?: string
+          version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "timetable_overrides_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "timetable_overrides_grade_section_id_fkey"
             columns: ["grade_section_id"]
             isOneToOne: false
             referencedRelation: "grade_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timetable_overrides_revoked_by_account_id_fkey"
+            columns: ["revoked_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
             referencedColumns: ["id"]
           },
           {
@@ -7266,6 +8417,13 @@ export type Database = {
             referencedRelation: "staff_assignments"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "timetable_overrides_teaching_assignment_id_fkey"
+            columns: ["teaching_assignment_id"]
+            isOneToOne: false
+            referencedRelation: "teaching_assignments"
+            referencedColumns: ["id"]
+          },
         ]
       }
       timetable_periods: {
@@ -7279,6 +8437,7 @@ export type Database = {
           starts_at: string
           subject_id: string | null
           teacher_assignment_id: string | null
+          teaching_assignment_id: string | null
           timetable_version_id: string
         }
         Insert: {
@@ -7291,6 +8450,7 @@ export type Database = {
           starts_at: string
           subject_id?: string | null
           teacher_assignment_id?: string | null
+          teaching_assignment_id?: string | null
           timetable_version_id: string
         }
         Update: {
@@ -7303,6 +8463,7 @@ export type Database = {
           starts_at?: string
           subject_id?: string | null
           teacher_assignment_id?: string | null
+          teaching_assignment_id?: string | null
           timetable_version_id?: string
         }
         Relationships: [
@@ -7325,6 +8486,13 @@ export type Database = {
             columns: ["teacher_assignment_id"]
             isOneToOne: false
             referencedRelation: "staff_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timetable_periods_teaching_assignment_id_fkey"
+            columns: ["teaching_assignment_id"]
+            isOneToOne: false
+            referencedRelation: "teaching_assignments"
             referencedColumns: ["id"]
           },
           {

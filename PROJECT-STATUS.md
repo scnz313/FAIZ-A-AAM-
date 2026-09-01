@@ -1,8 +1,21 @@
 # Project Status — Faiz Aam School Platform
 
 Last updated: 31 August 2026
-Current phase: three-portal consolidation (Administrator/Principal/Guardian) — Phases R0–P8 locally `VERIFIED` through migration `000046`; Phase 9 staging activation requires explicit approval
-Release state: not deployed; staging backend exists historically, production authorization/deployment does not
+Current phase: three-portal consolidation (Administrator/Principal/Guardian) — Phases R0–P8 `VERIFIED` locally; **Phase 9 staging activation applied and verified** on the linked project (ledger `000001–000054`, one repair); legacy teacher-grant retirement and real-SMS dispatch remain owner-gated
+Release state: staging backend migrated and journey-verified; production authorization/deployment does not exist
+
+## Phase 9 staging evidence (31 August 2026)
+
+Applied to linked project `jxegiamjcawdywqyutdz` (FAIZ E AAM, eu-west-1) after explicit owner authorization:
+
+- **Migration ledger**: remote was exactly `000001–000039`; dry-run reviewed the exact `000040–000047` order; applied once; ledger now aligned local↔remote through `000054`. `000045b` was renamed `000047` (CLI filename pattern). `000051` was repaired→reverted per the CLI procedure after an in-place edit; the corrected function shipped as `000052`.
+- **Hardening migrations shipped during advisor review**: `000048`/`000049` (18→0 unindexed FKs on consolidation tables; anon EXECUTE revoked on staff-facing helpers — anon SECURITY DEFINER findings 5→3, only intentionally-public functions remain), `000050` (service-role EXECUTE for the provider boundary), `000052` (claim-dispatch authorization order + opaque-secret-key recognition), `000054` (service-worker audit/outbox allowance with explicit `service_worker` actor label).
+- **Auth config**: `mfa_allow_low_aal=false` blocks FIRST-TIME TOTP enrollment (chicken-and-egg) — `BLOCKED` on a dashboard setting the API cannot change; owner must enable enrollment at AAL1 in Dashboard → Authentication → MFA. Leaked-password protection (HIBP) is `BLOCKED` on plan tier (HTTP 402).
+- **Linked types regenerated** from the live database: all consolidation tables present, phantom `staff_invitation_assignments` gone, `role_definitions.is_assignable` present; typecheck green.
+- **Advisor disposition**: `rls_enabled_no_policy` (11) — intentional deny-by-default infrastructure/profile tables read through SECURITY DEFINER commands; `authenticated_security_definer_function_executable` (193) — the app command surface enforces authorization inside each function (established pattern 000009–000054); performance findings on pre-existing tables — backlog.
+- **Masked legacy teacher inventory (read-only)**: 2 active grants (`ROLE-2026-5CB9B7`, `ROLE-2026-846E6C`), neither account holds a guardian grant or other staff grants, 1 legacy assignment, 0 timetable/override references. Retirement is low-impact and remains gated on separate owner confirmation (`scripts/legacy-teacher-inventory.mjs`; retirement command `app.legacy_teacher_access_retire` is NOT invoked).
+- **Real-session journeys (`scripts/staging-journeys.mjs`): 13/13 PASS** — profile test accounts seeded; AAL1 staff sessions leak nothing (empty projections); guardian claim end-to-end with a real GoTrue session: claim bound to provider subject, acceptance creates exactly one account + one Guardian grant, exact approved link activated, contact delivery-verified, reuse denied.
+- **Local gates re-run after staging work**: typecheck ✓ · lint ✓ · 513 web + 73 contract tests ✓ · build (84 pages) ✓ · scratch validator 8/8 suites through `000054` ✓.
 
 ## Current state
 
@@ -21,13 +34,13 @@ The demo adapter remains the default runtime. No remote Supabase, Storage, Resen
 
 | Area | Demo UI | Database/RPC | Application cutover | Live verification |
 |---|---|---|---|---|
-| Identity, invitations, contexts, staff profiles | `VERIFIED` | `VERIFIED` locally through `000042` | `VERIFIED` locally | `NOT STARTED` for current staging credentials |
-| Teaching records, results entry, timetable | `VERIFIED` | `VERIFIED` locally through `000043` | `VERIFIED` locally | `NOT STARTED` |
-| School-data imports and provenance | `VERIFIED` | `VERIFIED` locally through `000044` | `VERIFIED` locally (CSV; XLSX blocked) | `NOT STARTED` |
-| Guardian claims and enrollment binding | `VERIFIED` | `VERIFIED` locally through `000045`/`000045b` | `VERIFIED` locally (real SMS/email `BLOCKED`) | `NOT STARTED` |
-| Protected exports | `VERIFIED` | `VERIFIED` locally through `000046` | `VERIFIED` locally (CSV; XLSX blocked) | `NOT STARTED` |
-| Admissions, careers, enrollment, uploads | `VERIFIED` | `VERIFIED` locally through `000041` | `VERIFIED` locally; provider calls use fakes | `NOT STARTED` |
-| Storage, PDF, Resend, outbox, cron, health | Demo/fake contracts `VERIFIED` | `VERIFIED` locally through `000030` | Provider-ready; credentials/configuration `BLOCKED` | `NOT STARTED` |
+| Identity, invitations, contexts, staff profiles | `VERIFIED` | `VERIFIED` through `000042` (live) | `VERIFIED` locally | Journeys `VERIFIED` at AAL1 gate; AAL2 enrollment `BLOCKED` (dashboard setting) |
+| Teaching records, results entry, timetable | `VERIFIED` | `VERIFIED` through `000043` (live) | `VERIFIED` locally | `NOT STARTED` (needs AAL2 sessions) |
+| School-data imports and provenance | `VERIFIED` | `VERIFIED` through `000044` (live) | `VERIFIED` locally (CSV; XLSX blocked) | `NOT STARTED` |
+| Guardian claims and enrollment binding | `VERIFIED` | `VERIFIED` through `000045`/`000047` (live) | `VERIFIED` locally | Claim journey `VERIFIED` (email path); real SMS `BLOCKED` (TRAI/DLT) |
+| Protected exports | `VERIFIED` | `VERIFIED` through `000046` (live) | `VERIFIED` locally (CSV; XLSX blocked) | `NOT STARTED` |
+| Admissions, careers, enrollment, uploads | `VERIFIED` | `VERIFIED` through `000041` (live) | `VERIFIED` locally; provider calls use fakes | `NOT STARTED` |
+| Storage, PDF, Resend, outbox, cron, health | Demo/fake contracts `VERIFIED` | `VERIFIED` through `000030` (live) | Provider-ready; credentials/configuration `BLOCKED` | `NOT STARTED` |
 | Vercel and production | N/A | N/A | Readiness config only | `NOT STARTED` |
 
 ## Source-control and rollback baseline
