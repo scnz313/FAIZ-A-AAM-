@@ -157,9 +157,11 @@ type SupabaseTimetablePeriod = {
   ends_at: string;
   subject_id: string | null;
   teacher_assignment_id: string | null;
+  teaching_assignment_id: string | null;
   room_id: string | null;
   kind: string;
   subjects?: { name: string } | null;
+  teaching_assignments?: { staff_members?: { people?: { display_name: string } | null } | null } | null;
   staff_assignments?: { staff_members?: { people?: { display_name: string } | null } | null } | null;
   rooms?: { label: string } | null;
 };
@@ -190,6 +192,7 @@ type SupabaseTimetableOverride = {
   subject_id: string | null;
   room_id: string | null;
   substitute_teacher_assignment_id: string | null;
+  substitute_teaching_assignment_id: string | null;
   note: string | null;
   created_at: string;
   created_by_account_id?: string | null;
@@ -200,6 +203,7 @@ type SupabaseTimetableOverride = {
   revocation_reason: string | null;
   subjects?: { name: string } | null;
   rooms?: { label: string } | null;
+  teaching_assignments?: { reference?: string; staff_members?: { people?: { display_name: string } | null } | null } | null;
   staff_assignments?: { reference?: string; staff_members?: { people?: { display_name: string } | null } | null } | null;
 };
 
@@ -284,7 +288,11 @@ function mapSupabasePeriod(period: SupabaseTimetablePeriod): Period {
   return {
     time: shortTime(period.starts_at),
     subject: period.subjects?.name ?? period.subject_id ?? "Scheduled class",
-    teacher: period.staff_assignments?.staff_members?.people?.display_name ?? period.teacher_assignment_id ?? "Assigned teacher",
+    teacher: period.teaching_assignments?.staff_members?.people?.display_name
+      ?? period.staff_assignments?.staff_members?.people?.display_name
+      ?? period.teaching_assignment_id
+      ?? period.teacher_assignment_id
+      ?? "Assigned teacher",
     room: period.rooms?.label ?? period.room_id ?? "Assigned room",
     kind,
     periodNumber: period.period_number,
@@ -374,7 +382,9 @@ function mapSupabaseOverride(
     periodNumber: row.period_number,
     kind,
     teacher: kind === "substitute"
-      ? row.staff_assignments?.staff_members?.people?.display_name ?? assignment?.teacherName
+      ? row.teaching_assignments?.staff_members?.people?.display_name
+        ?? row.staff_assignments?.staff_members?.people?.display_name
+        ?? assignment?.teacherName
       : undefined,
     subject: kind === "substitute" ? row.subjects?.name ?? subject?.name : undefined,
     room: kind === "room" ? row.rooms?.label ?? room?.label : undefined,

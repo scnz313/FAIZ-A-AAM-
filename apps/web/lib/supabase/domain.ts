@@ -1101,7 +1101,7 @@ export function schoolConfigRead(
         .select("id, academic_year_id, day_of_week, period_number, starts_at, ends_at")
         .order("day_of_week")
         .order("period_number"),
-      supabase.from("staff_assignments").select("id, reference, grade_section_id, subject_id, staff_members(people(display_name))").eq("status", "active"),
+      supabase.from("teaching_assignments").select("id, reference, grade_section_id, subject_id, staff_members(people(display_name))").eq("status", "active"),
       supabase.from("rooms").select("id, code, label").order("code"),
       supabase.from("settings_versions").select("version, status, policy").order("version", { ascending: false }).limit(1),
     ]);
@@ -1528,6 +1528,7 @@ export type TimetableOverrideProjection = {
   subject_id: string | null;
   room_id: string | null;
   substitute_teacher_assignment_id: string | null;
+  substitute_teaching_assignment_id: string | null;
   note: string | null;
   created_at: string;
   created_by_account_id?: string | null;
@@ -1538,6 +1539,10 @@ export type TimetableOverrideProjection = {
   revocation_reason: string | null;
   subjects?: { name: string } | null;
   rooms?: { label: string } | null;
+  teaching_assignments?: {
+    reference?: string;
+    staff_members?: { people?: { display_name: string } | null } | null;
+  } | null;
   staff_assignments?: {
     reference?: string;
     staff_members?: { people?: { display_name: string } | null } | null;
@@ -1570,7 +1575,7 @@ export function timetableListVersions(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
       .from("timetable_versions")
-      .select("id, reference, grade_section_id, status, version, revision, effective_from, effective_to, created_at, updated_at, timetable_periods(id, day_of_week, period_number, starts_at, ends_at, subject_id, teacher_assignment_id, room_id, kind, subjects(name), staff_assignments(staff_members(people(display_name))), rooms(label)), timetable_publications(reference, published_at, note)");
+      .select("id, reference, grade_section_id, status, version, revision, effective_from, effective_to, created_at, updated_at, timetable_periods(id, day_of_week, period_number, starts_at, ends_at, subject_id, teacher_assignment_id, teaching_assignment_id, room_id, kind, subjects(name), teaching_assignments(staff_members(people(display_name))), staff_assignments(staff_members(people(display_name))), rooms(label)), timetable_publications(reference, published_at, note)");
     if (error !== null) throw mapRpcError(error);
     return data;
   });
@@ -1580,7 +1585,7 @@ export function timetableGetEffective(supabase: SupabaseClient<Database>, gradeS
   return result(async () => {
     const { data, error } = await supabase
       .from("timetable_versions")
-      .select("id, reference, grade_section_id, status, version, revision, effective_from, effective_to, created_at, updated_at, timetable_periods(id, day_of_week, period_number, starts_at, ends_at, subject_id, teacher_assignment_id, room_id, kind, subjects(name), staff_assignments(staff_members(people(display_name))), rooms(label)), timetable_publications(reference, published_at, note)")
+      .select("id, reference, grade_section_id, status, version, revision, effective_from, effective_to, created_at, updated_at, timetable_periods(id, day_of_week, period_number, starts_at, ends_at, subject_id, teacher_assignment_id, teaching_assignment_id, room_id, kind, subjects(name), teaching_assignments(staff_members(people(display_name))), staff_assignments(staff_members(people(display_name))), rooms(label)), timetable_publications(reference, published_at, note)")
       .eq("grade_section_id", gradeSectionId)
       .eq("status", "published")
       .order("version", { ascending: false })
@@ -1598,7 +1603,7 @@ export function timetableListOverrides(supabase: SupabaseClient<Database>, grade
   return result(async () => {
     const { data, error } = await supabase
       .from("timetable_overrides")
-      .select("id, reference, grade_section_id, override_date, day_of_week, period_number, kind, subject_id, room_id, substitute_teacher_assignment_id, note, created_at, created_by_account_id, updated_at, version, revoked_at, revoked_by_account_id, revocation_reason, subjects(name), rooms(label), staff_assignments(reference, staff_members(people(display_name)))")
+      .select("id, reference, grade_section_id, override_date, day_of_week, period_number, kind, subject_id, room_id, substitute_teacher_assignment_id, substitute_teaching_assignment_id, note, created_at, created_by_account_id, updated_at, version, revoked_at, revoked_by_account_id, revocation_reason, subjects(name), rooms(label), teaching_assignments(reference, staff_members(people(display_name))), staff_assignments(reference, staff_members(people(display_name)))")
       .eq("grade_section_id", gradeSectionId)
       .order("override_date", { ascending: true })
       .order("period_number", { ascending: true })
