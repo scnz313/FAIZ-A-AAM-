@@ -103,6 +103,31 @@ export default function DataExportsWorkspace() {
     }
   }
 
+  async function handleDownload(reference: string) {
+    setBusy(true);
+    try {
+      const result = await adapterCall<{ artifactKey: string; documentRef: string; bucket: string; objectKey: string; expiresAt: string }>(
+        "dataExports.signedDownload",
+        { requestReference: reference },
+      );
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "The download could not be created.");
+      // Open the signed download URL in a new tab
+      const { createSupabaseBrowserClient } = await import("@/lib/supabase/client");
+      const client = createSupabaseBrowserClient();
+      const { data: signed, error: signError } = await client.storage
+        .from(result.value.bucket)
+        .createSignedUrl(result.value.objectKey, 60);
+      if (signError !== null || signed === null) {
+        throw new Error("The signed download URL could not be created.");
+      }
+      window.open(signed.signedUrl, "_blank");
+    } catch (error) {
+      setErrors({ form: error instanceof Error ? error.message : "The download failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
@@ -176,6 +201,7 @@ export default function DataExportsWorkspace() {
                   <th scope="col">State</th>
                   <th scope="col" className="num">Rows</th>
                   <th scope="col">Expires</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,6 +216,11 @@ export default function DataExportsWorkspace() {
                     </td>
                     <td className="num">{row.rowCount ?? "—"}</td>
                     <td>{row.expiresAt !== null ? new Date(row.expiresAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
+                    <td>
+                      {row.state === "ready" && supabaseMode ? (
+                        <Button variant="quiet" onClick={() => void handleDownload(row.reference)}>Download</Button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>

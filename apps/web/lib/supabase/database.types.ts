@@ -349,6 +349,18 @@ export type Database = {
         Returns: Json
       }
       data_export_list: { Args: never; Returns: Json[] }
+      data_export_list_paginated: {
+        Args: { p_cursor?: string; p_limit?: number }
+        Returns: Json
+      }
+      data_export_create_signed_download: {
+        Args: { p_request_reference: string; p_account_id?: string }
+        Returns: Json
+      }
+      data_export_set_artifact_key: {
+        Args: { p_request_reference: string }
+        Returns: Json
+      }
       data_export_mark_failed: {
         Args: { p_error: string; p_request_reference: string }
         Returns: Json
@@ -803,6 +815,9 @@ export type Database = {
         Args: { p_capability: string; p_student_id: string }
         Returns: boolean
       }
+      data_health_check: { Args: never; Returns: Json }
+      data_health_snapshot: { Args: never; Returns: Json }
+      health_readiness: { Args: never; Returns: Json }
       guardian_links_request: {
         Args: { p_relationship_label: string; p_student_id: string }
         Returns: Json
@@ -2737,6 +2752,7 @@ export type Database = {
       }
       data_export_requests: {
         Row: {
+          artifact_key: string | null
           columns: Json
           completed_at: string | null
           created_at: string
@@ -2756,6 +2772,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          artifact_key?: string | null
           columns?: Json
           completed_at?: string | null
           created_at?: string
@@ -2775,6 +2792,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          artifact_key?: string | null
           columns?: Json
           completed_at?: string | null
           created_at?: string
@@ -2804,6 +2822,133 @@ export type Database = {
           {
             foreignKeyName: "data_export_requests_requested_by_account_id_fkey"
             columns: ["requested_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_export_catalogs: {
+        Row: {
+          id: string
+          reference: string
+          domain: string
+          display_name: string
+          description: string
+          available_columns: Json
+          required_filters: Json
+          optional_filters: Json
+          max_rows: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          reference?: string
+          domain: string
+          display_name: string
+          description?: string
+          available_columns: Json
+          required_filters?: Json
+          optional_filters?: Json
+          max_rows?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          reference?: string
+          domain?: string
+          display_name?: string
+          description?: string
+          available_columns?: Json
+          required_filters?: Json
+          optional_filters?: Json
+          max_rows?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      data_health_snapshots: {
+        Row: {
+          id: string
+          reference: string
+          snapshot_at: string
+          checks: Json
+          overall_status: string
+          created_by_account_id: string | null
+        }
+        Insert: {
+          id?: string
+          reference?: string
+          snapshot_at?: string
+          checks: Json
+          overall_status: string
+          created_by_account_id?: string | null
+        }
+        Update: {
+          id?: string
+          reference?: string
+          snapshot_at?: string
+          checks?: Json
+          overall_status?: string
+          created_by_account_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_health_snapshots_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recoverable_error_log: {
+        Row: {
+          id: string
+          reference: string
+          error_code: string
+          error_message: string
+          recoverable_action: string
+          context: Json | null
+          account_id: string | null
+          route: string | null
+          created_at: string
+          resolved_at: string | null
+        }
+        Insert: {
+          id?: string
+          reference?: string
+          error_code: string
+          error_message: string
+          recoverable_action: string
+          context?: Json | null
+          account_id?: string | null
+          route?: string | null
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: string
+          reference?: string
+          error_code?: string
+          error_message?: string
+          recoverable_action?: string
+          context?: Json | null
+          account_id?: string | null
+          route?: string | null
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recoverable_error_log_account_id_fkey"
+            columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "user_accounts"
             referencedColumns: ["id"]

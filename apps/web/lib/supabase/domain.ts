@@ -2468,6 +2468,73 @@ export function dataExportCancel(
   });
 }
 
+export function dataExportListCatalog(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("data_export_catalogs")
+      .select("*")
+      .eq("is_active", true)
+      .order("domain", { ascending: true });
+    if (error !== null) throw mapRpcError(error);
+    return data ?? [];
+  });
+}
+
+export function dataExportListPaginated(
+  supabase: SupabaseClient<Database>,
+  input: { cursor?: string | null; limit?: number },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_export_list_paginated", {
+      p_cursor: input.cursor ?? null,
+      p_limit: input.limit ?? 20,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "export list paginated");
+  });
+}
+
+export function dataExportCreateSignedDownload(
+  supabase: SupabaseClient<Database>,
+  input: { requestReference: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_export_create_signed_download", {
+      p_request_reference: input.requestReference,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "export signed download");
+  });
+}
+
+export function dataHealthCheck(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_health_check", {});
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "data health check");
+  });
+}
+
+export function dataHealthSnapshot(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_health_snapshot", {});
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "data health snapshot");
+  });
+}
+
+export function dataHealthListSnapshots(supabase: SupabaseClient<Database>, limit?: number) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("data_health_snapshots")
+      .select("*")
+      .order("snapshot_at", { ascending: false })
+      .limit(limit ?? 10);
+    if (error !== null) throw mapRpcError(error);
+    return data ?? [];
+  });
+}
+
 export function applicantRegister(
   supabase: SupabaseClient<Database>,
   input: { authUserId: string; contact: string; givenName: string; familyName: string; purpose?: "student_admission" | "job_application" },
