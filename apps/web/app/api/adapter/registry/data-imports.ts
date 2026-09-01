@@ -6,7 +6,12 @@ import {
   dataImportCreateBatch,
   dataImportListBatches,
   dataImportListIssues,
+  dataImportListMappingTemplates,
+  dataImportListResolutions,
   dataImportPreview,
+  dataImportRecordMapping,
+  dataImportRecordScan,
+  dataImportResolveIssue,
   dataImportSetState,
   dataImportStoreRows,
 } from "@/lib/supabase/domain";
@@ -39,5 +44,25 @@ export const dataImportModule: AdapterModule = {
       confirmedUpdateCount: z.number().int().nonnegative(),
     }), ({ supabase }, payload) => dataImportCommit(supabase, payload)),
     operation("dataImports.cancel", batchTarget.extend({ expectedVersion: z.number().int().positive(), reason: z.string().min(3) }), ({ supabase }, payload) => dataImportCancel(supabase, payload)),
+    operation("dataImports.recordScan", batchTarget.extend({
+      rowCount: z.number().int().nonnegative(),
+      columnCount: z.number().int().nonnegative(),
+      headers: z.array(z.string()),
+      encoding: z.string().min(1),
+      error: z.string().nullable().optional(),
+    }), ({ supabase }, payload) => dataImportRecordScan(supabase, payload)),
+    operation("dataImports.recordMapping", batchTarget.extend({
+      mappingTemplateId: uuid.nullable().optional(),
+      columnMappings: jsonObject.nullable().optional(),
+    }), ({ supabase }, payload) => dataImportRecordMapping(supabase, payload)),
+    operation("dataImports.listMappingTemplates", z.object({ entity: z.string().optional() }), ({ supabase }, payload) => dataImportListMappingTemplates(supabase, payload.entity)),
+    operation("dataImports.listResolutions", batchTarget, ({ supabase }, payload) => dataImportListResolutions(supabase, payload.batchId)),
+    operation("dataImports.resolveIssue", batchTarget.extend({
+      rowId: uuid,
+      issueId: uuid,
+      resolution: z.enum(["accept", "reject", "modify", "skip"]),
+      resolvedValue: jsonObject.nullable().optional(),
+      note: z.string().nullable().optional(),
+    }), ({ supabase }, payload) => dataImportResolveIssue(supabase, payload)),
   ],
 };

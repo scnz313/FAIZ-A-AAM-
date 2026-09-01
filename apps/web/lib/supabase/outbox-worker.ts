@@ -53,6 +53,7 @@ import {
 import { callAppRpc } from "@/lib/supabase/rpc";
 import { PdfTransientError, generateReceiptPdf, generateReportCardPdf, generatedObjectKey, type GeneratedPdf } from "@/lib/pdf/adapter";
 import { generateCsv } from "@/lib/exports/csv-generator";
+import { parseCsv } from "@/lib/imports/csv-parser";
 import { SupabaseStorageProvider } from "@/lib/documents/providers";
 import { createConfiguredDocumentScanner, detectContentType, type DocumentScanner, type StorageProvider } from "@/modules/services/document-providers";
 
@@ -75,6 +76,79 @@ export type OutboxEventRow = {
  * private generated document, and marks the request ready with the
  * artifact document ID. Failures are transient (retryable) or permanent.
  */
+async function dispatchDataImportParse(
+  admin: SupabaseClient<Database>,
+  event: OutboxEventRow,
+): Promise<DispatchOutcome> {
+  const batchRef = event.target_reference;
+
+  // 1. Fetch the batch and its source document
+  const { data: batch, error: batchError } = await admin
+    .from("data_import_batches")
+    .select("id, reference, state, source_document_id")
+    .eq("reference", batchRef)
+    .maybeSingle();
+  if (batchError !== null || batch === null) {
+    return { kind: "permanent", error: `import batch ${batchRef} not found` };
+  }
+  if (batch.state !== "scanning") {
+    return { kind: "delivered", providerIds: [`import:${batchRef}:already-processed`] };
+  }
+  if (batch.source_document_id === null) {
+    return { kind: "permanent", error: `import batch ${batchRef} has no source document` };
+  }
+
+  // 2. Download the source document bytes from Storage
+  const { data: doc, error: docError } = await admin
+    .from("documents")
+    .select("storage_bucket, object_key, safe_filename, mime_type, size_bytes")
+    .eq("id", batch.source_document_id)
+    .maybeSingle();
+  if (docError !== null || doc === null) {
+    return { kind: "permanent", error: `source document for batch ${batchRef} not found` };
+  }
+
+  try {
+    const storage = new SupabaseStorageProvider(admin);
+    const stat = await storage.stat({
+      bucket: doc.storage_bucket,
+      objectKey: doc.object_key,
+    });
+    const bytes = stat.bytes;
+
+    // 3. Parse the CSV server-side with bounded limits
+    const parsed = parseCsv(bytes);
+
+    // 4. Record scan results
+    const { error: scanError } = await callAppRpc<Record<string, unknown>>(
+      admin, "data_import_record_scan", {
+        p_batch_id: batch.id,
+        p_row_count: parsed.rows.length,
+        p_column_count: parsed.headers.length,
+        p_headers: JSON.stringify(parsed.headers),
+        p_encoding: "utf-8",
+      },
+    );
+    if (scanError !== null) {
+      return { kind: "transient", error: scanError.message };
+    }
+
+    return { kind: "delivered", providerIds: [`import:${batchRef}:${parsed.rows.length}rows`] };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown import parse error";
+    // Record the scan error so the UI can show it
+    await callAppRpc<Record<string, unknown>>(admin, "data_import_record_scan", {
+      p_batch_id: batch.id,
+      p_row_count: 0,
+      p_column_count: 0,
+      p_headers: JSON.stringify([]),
+      p_encoding: "utf-8",
+      p_error: message,
+    });
+    return { kind: "permanent", error: message };
+  }
+}
+
 async function dispatchDataExportGenerate(
   admin: SupabaseClient<Database>,
   event: OutboxEventRow,
@@ -908,6 +982,9 @@ async function dispatchEvent(
   }
   if (event.kind === "data.export.generate" || event.kind === "data_export_generate") {
     return dispatchDataExportGenerate(admin, event);
+  }
+  if (event.kind === "data_import_parse" || event.kind === "data.import.parse") {
+    return dispatchDataImportParse(admin, event);
   }
   const isEmailEvent = event.kind === "email.deliver" || event.kind.startsWith("security.") || event.event_key.startsWith("email.");
   if (!isEmailEvent) {

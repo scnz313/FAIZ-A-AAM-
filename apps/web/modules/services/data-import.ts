@@ -43,6 +43,27 @@ export type ImportIssueRow = {
   resolvedAtIso: string | null;
 };
 
+export type MappingTemplateRow = {
+  id: string;
+  reference: string;
+  name: string;
+  entity: "students" | "guardians" | "guardian_student_relationships" | "enrollments" | "teaching_assignments";
+  columnMappings: Record<string, unknown>;
+  version: number;
+  isActive: boolean;
+};
+
+export type ImportResolutionRow = {
+  id: string;
+  batchId: string;
+  rowId: string;
+  issueId: string;
+  resolution: "accept" | "reject" | "modify" | "skip";
+  resolvedValue: Record<string, unknown> | null;
+  resolvedAtIso: string;
+  note: string | null;
+};
+
 export type ParsedSourceRow = {
   rowNumber: number;
   entity: "students" | "guardians" | "guardian_student_relationships" | "enrollments" | "teaching_assignments";
@@ -93,6 +114,34 @@ export interface DataImportService {
     confirmedUpdateCount: number;
   }): Promise<DataImportReport>;
   cancel(input: { batchId: string; expectedVersion: number; reason: string }): Promise<ImportBatchRow>;
+  /** Record scan results (row/column counts, headers, encoding). */
+  recordScan(input: {
+    batchId: string;
+    rowCount: number;
+    columnCount: number;
+    headers: string[];
+    encoding: string;
+    error?: string | null;
+  }): Promise<{ state: string; version: number }>;
+  /** Record column mapping (from template or explicit). */
+  recordMapping(input: {
+    batchId: string;
+    mappingTemplateId?: string | null;
+    columnMappings?: Record<string, unknown> | null;
+  }): Promise<{ state: string; version: number }>;
+  /** List active mapping templates. */
+  listMappingTemplates(entity?: string): Promise<MappingTemplateRow[]>;
+  /** List resolutions for a batch. */
+  listResolutions(batchId: string): Promise<ImportResolutionRow[]>;
+  /** Resolve an issue (accept/reject/modify/skip). */
+  resolveIssue(input: {
+    batchId: string;
+    rowId: string;
+    issueId: string;
+    resolution: "accept" | "reject" | "modify" | "skip";
+    resolvedValue?: Record<string, unknown> | null;
+    note?: string | null;
+  }): Promise<ImportResolutionRow>;
 }
 
 export const dataImportService: DataImportService = {
@@ -255,5 +304,71 @@ export const dataImportService: DataImportService = {
     saveStore(store);
     const { rows: _rows, issues: _issues, ...row } = batch;
     return clone(row);
+  },
+
+  async recordScan(input) {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<{ state: string; version: number }>("dataImports.recordScan", input);
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "The scan could not be recorded.");
+      return result.value;
+    }
+    const store = loadStore();
+    const batch = store.batches.find((candidate) => candidate.batchId === input.batchId);
+    if (batch === undefined) throw new Error("Import batch not found.");
+    batch.state = input.error ? "uploaded" : "mapping";
+    batch.version += 1;
+    saveStore(store);
+    return { state: batch.state, version: batch.version };
+  },
+
+  async recordMapping(input) {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<{ state: string; version: number }>("dataImports.recordMapping", input);
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "The mapping could not be recorded.");
+      return result.value;
+    }
+    const store = loadStore();
+    const batch = store.batches.find((candidate) => candidate.batchId === input.batchId);
+    if (batch === undefined) throw new Error("Import batch not found.");
+    batch.state = "validating";
+    batch.version += 1;
+    saveStore(store);
+    return { state: batch.state, version: batch.version };
+  },
+
+  async listMappingTemplates(entity) {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<MappingTemplateRow[]>("dataImports.listMappingTemplates", { entity });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Mapping templates are unavailable.");
+      return result.value;
+    }
+    return [];
+  },
+
+  async listResolutions(batchId) {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<ImportResolutionRow[]>("dataImports.listResolutions", { batchId });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Resolutions are unavailable.");
+      return result.value;
+    }
+    return [];
+  },
+
+  async resolveIssue(input) {
+    if (clientAdapterMode() === "supabase") {
+      const result = await adapterCall<ImportResolutionRow>("dataImports.resolveIssue", input);
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "The issue could not be resolved.");
+      return result.value;
+    }
+    return {
+      id: `resolution-${Date.now()}`,
+      batchId: input.batchId,
+      rowId: input.rowId,
+      issueId: input.issueId,
+      resolution: input.resolution,
+      resolvedValue: input.resolvedValue ?? null,
+      resolvedAtIso: new Date().toISOString(),
+      note: input.note ?? null,
+    };
   },
 };

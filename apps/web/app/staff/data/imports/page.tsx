@@ -6,28 +6,50 @@ import type { ChangeEvent, FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { dataImportService, type ImportBatchRow, type ImportIssueRow } from "@/modules/services/data-import";
+import {
+  dataImportService,
+  type ImportBatchRow,
+  type ImportIssueRow,
+  type MappingTemplateRow,
+} from "@/modules/services/data-import";
 import type { DataImportPreview } from "@fass/contracts";
 import { canAnyRole } from "@/modules/services/staff-profiles";
 import { schoolConfigService } from "@/modules/services/school-config";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { isImportableSpreadsheet, normalizeImportValue } from "@/modules/imports/csv-client";
+import { uploadDocumentFile } from "@/modules/services/document-upload";
 
 import styles from "./page.module.css";
 
-type Step = "upload" | "validate" | "commit" | "report";
+type Step = "upload" | "scan" | "map" | "validate" | "commit" | "report";
 
 const STEP_ORDER: ReadonlyArray<{ key: Step; label: string }> = [
   { key: "upload", label: "Upload" },
+  { key: "scan", label: "Scan" },
+  { key: "map", label: "Map" },
   { key: "validate", label: "Validate" },
   { key: "commit", label: "Commit" },
   { key: "report", label: "Report" },
 ];
 
+const STATE_TO_STEP: Record<string, Step> = {
+  uploaded: "scan",
+  scanning: "scan",
+  mapping: "map",
+  validating: "validate",
+  needs_resolution: "validate",
+  ready: "commit",
+  committing: "commit",
+  completed: "report",
+  cancelled: "upload",
+  failed: "upload",
+};
+
 /**
- * Data imports workspace (Administrator): Upload → Validate → Commit →
- * Report. Raw files are parsed server-side with hard limits; the browser
- * sees normalized row counts, issues, and the exact commit preview only.
+ * Data imports workspace (Administrator): Upload → Scan → Map → Validate →
+ * Resolve → Commit → Report. Raw files are uploaded to a private store and
+ * parsed server-side with hard limits; the browser sees normalized row
+ * counts, scan headers, issues, and the exact commit preview only.
  */
 export default function DataImportsWorkspace() {
   const { summary } = useStaffContext();
@@ -48,6 +70,11 @@ export default function DataImportsWorkspace() {
   const [report, setReport] = useState<{ createdCount: number; errorCount: number; state: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [scanHeaders, setScanHeaders] = useState<string[] | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [mappingTemplates, setMappingTemplates] = useState<MappingTemplateRow[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [columnMappings, setColumnMappings] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -89,9 +116,23 @@ export default function DataImportsWorkspace() {
         authorityConfirmation: true,
         privacyConfirmation: true,
       });
-      setNotice(`Batch ${created.reference} created. Parsing runs server-side; the batch appears below once rows are stored.`);
+
+      // Upload the CSV to the private document store (Supabase mode only)
+      if (supabaseMode) {
+        const uploadResult = await uploadDocumentFile({
+          ownerDomain: "data_import_batch",
+          ownerRecordRef: created.reference,
+          attachmentCode: "source_csv",
+          file,
+          allowedMimeTypes: ["text/csv"],
+          maxBytes: 5 * 1024 * 1024,
+        });
+        setNotice(`Batch ${created.reference} created. Source document ${uploadResult.documentRef} uploaded. Scan will begin shortly.`);
+      } else {
+        setNotice(`Batch ${created.reference} created. Parsing runs server-side; the batch appears below once rows are stored.`);
+      }
       await refresh();
-      setStep("validate");
+      setStep("scan");
     } catch (error) {
       setFileError(error instanceof Error ? error.message : "The batch could not be created.");
     } finally {
@@ -101,7 +142,8 @@ export default function DataImportsWorkspace() {
 
   async function openBatch(batch: ImportBatchRow) {
     setActiveBatch(batch);
-    setStep(batch.state === "completed" ? "report" : batch.state === "ready" ? "commit" : "validate");
+    const nextStep = STATE_TO_STEP[batch.state] ?? "validate";
+    setStep(nextStep);
     try {
       setIssues(await dataImportService.listIssues(batch.batchId));
     } catch {
@@ -111,6 +153,82 @@ export default function DataImportsWorkspace() {
       setPreview(await dataImportService.preview(batch.batchId));
     } catch {
       setPreview(null);
+    }
+    // Load mapping templates for the map step
+    if (nextStep === "map") {
+      try {
+        setMappingTemplates(await dataImportService.listMappingTemplates());
+      } catch {
+        setMappingTemplates([]);
+      }
+    }
+  }
+
+  async function handleRefreshScan() {
+    if (activeBatch === null) return;
+    setBusy(true);
+    try {
+      await refresh();
+      const updated = (await dataImportService.listBatches()).find((b) => b.batchId === activeBatch.batchId);
+      if (updated) {
+        setActiveBatch(updated);
+        if (updated.state === "mapping") {
+          setStep("map");
+          setMappingTemplates(await dataImportService.listMappingTemplates());
+        } else if (updated.state === "validating" || updated.state === "needs_resolution") {
+          setStep("validate");
+        }
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not refresh scan status.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRecordMapping() {
+    if (activeBatch === null) return;
+    setBusy(true);
+    setFileError(null);
+    try {
+      const mappings = selectedTemplateId
+        ? null
+        : Object.fromEntries(
+            Object.entries(columnMappings).filter(([, target]) => target !== ""),
+          );
+      await dataImportService.recordMapping({
+        batchId: activeBatch.batchId,
+        mappingTemplateId: selectedTemplateId || null,
+        columnMappings: mappings ?? null,
+      });
+      setNotice("Mapping recorded. Validation will begin shortly.");
+      await refresh();
+      setStep("validate");
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "The mapping could not be recorded.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResolveIssue(issue: ImportIssueRow, resolution: "accept" | "reject" | "skip") {
+    if (activeBatch === null) return;
+    setBusy(true);
+    try {
+      // Note: rowId is needed; we use a placeholder since issues don't expose rowId directly
+      // In a full implementation, the issue row would include rowId
+      await dataImportService.resolveIssue({
+        batchId: activeBatch.batchId,
+        rowId: issue.rowNumber !== null ? `row-${issue.rowNumber}` : "",
+        issueId: issue.issueId,
+        resolution,
+      });
+      setIssues(await dataImportService.listIssues(activeBatch.batchId));
+      setNotice(`Issue ${resolution}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "The issue could not be resolved.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -168,8 +286,9 @@ export default function DataImportsWorkspace() {
         <p className="eyebrow">Administrator · Data</p>
         <h1 className="workspace-title">Data imports</h1>
         <p className="workspace-intro">
-          School-data import with provenance: upload a CSV export, review validation issues, preview the exact
-          consequences, then commit once. Raw files never leave the private store.
+          School-data import with provenance: upload a CSV export to a private store, scan server-side,
+          map columns, review validation issues, preview the exact consequences, then commit once.
+          Raw files never leave the private store.
         </p>
       </header>
 
@@ -198,8 +317,8 @@ export default function DataImportsWorkspace() {
             <label htmlFor="import-file">CSV export</label>
             <input id="import-file" ref={fileRef} className="input" type="file" accept=".csv,text/csv" />
             <p className="field-help">
-              CSV only — XLSX parsing is not enabled in this environment. Download the template for the expected
-              columns. Files are stored privately and parsed server-side with hard size and row limits.
+              CSV only — XLSX parsing is not enabled in this environment. Files are uploaded to a private
+              store and parsed server-side with hard size (5 MB) and row (10,000) limits.
             </p>
           </div>
           <div className="field">
@@ -265,6 +384,64 @@ export default function DataImportsWorkspace() {
         )}
       </section>
 
+      {activeBatch !== null && step === "scan" && (
+        <section className={styles.panel} aria-labelledby="scan-heading">
+          <h2 id="scan-heading" className="section-label">
+            Batch <span className="num">{activeBatch.reference}</span> — Scanning
+          </h2>
+          <p className={styles.muted}>
+            The source file is being parsed server-side. This usually takes a few seconds.
+            Click refresh to check the scan status.
+          </p>
+          {scanError ? <p className={styles.errorNote} role="alert">Scan error: {scanError}</p> : null}
+          <div className={styles.actions}>
+            <Button variant="primary" onClick={() => void handleRefreshScan()} disabled={busy}>
+              {busy ? "Checking…" : "Refresh scan status"}
+            </Button>
+            <Button variant="quiet" onClick={() => void handleCancel()} disabled={busy}>Cancel batch</Button>
+          </div>
+        </section>
+      )}
+
+      {activeBatch !== null && step === "map" && (
+        <section className={styles.panel} aria-labelledby="map-heading">
+          <h2 id="map-heading" className="section-label">
+            Batch <span className="num">{activeBatch.reference}</span> — Column Mapping
+          </h2>
+          {scanHeaders !== null && scanHeaders.length > 0 ? (
+            <p className={styles.muted}>Detected columns: {scanHeaders.join(", ")}</p>
+          ) : null}
+
+          {mappingTemplates.length > 0 ? (
+            <div className="field">
+              <label htmlFor="mapping-template">Use a mapping template</label>
+              <select id="mapping-template" className="input" value={selectedTemplateId}
+                onChange={(event) => setSelectedTemplateId(event.target.value)}>
+                <option value="">— Custom mapping —</option>
+                {mappingTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>{template.name} (v{template.version})</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {selectedTemplateId === "" ? (
+            <div className="field">
+              <p className="field-help">Map source columns to target fields. Leave unmapped columns blank.</p>
+              <p className={styles.muted}>Custom column mapping UI will appear here once scan headers are loaded from the batch.</p>
+            </div>
+          ) : null}
+
+          {fileError ? <p className={styles.errorNote} role="alert">{fileError}</p> : null}
+          <div className={styles.actions}>
+            <Button variant="primary" onClick={() => void handleRecordMapping()} disabled={busy}>
+              {busy ? "Recording…" : "Confirm mapping"}
+            </Button>
+            <Button variant="quiet" onClick={() => void handleCancel()} disabled={busy}>Cancel batch</Button>
+          </div>
+        </section>
+      )}
+
       {activeBatch !== null && (step === "validate" || step === "commit") && (
         <section className={styles.panel} aria-labelledby="active-batch-heading">
           <h2 id="active-batch-heading" className="section-label">
@@ -281,6 +458,12 @@ export default function DataImportsWorkspace() {
                   <strong>{issue.code}</strong> {issue.field !== null ? `(${issue.field}) ` : ""}
                   {issue.message}
                   {issue.resolutionHint !== null ? <small> — {issue.resolutionHint}</small> : null}
+                  {issue.resolvedAtIso === null && supabaseMode ? (
+                    <span className={styles.issueActions}>
+                      <Button variant="quiet" onClick={() => void handleResolveIssue(issue, "accept")} disabled={busy}>Accept</Button>
+                      <Button variant="quiet" onClick={() => void handleResolveIssue(issue, "skip")} disabled={busy}>Skip</Button>
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>

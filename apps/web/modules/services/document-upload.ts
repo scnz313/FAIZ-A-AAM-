@@ -4,7 +4,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { normalizeDocumentProcessingState, type DocumentProcessingState } from "@/modules/services/documents";
 
 export type DocumentUploadInput = {
-  ownerDomain: "admission_application" | "job_application" | "student";
+  ownerDomain: "admission_application" | "job_application" | "student" | "data_import_batch";
   ownerRecordRef: string;
   attachmentCode: string;
   file: File;

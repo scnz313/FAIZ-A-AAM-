@@ -109,6 +109,24 @@ reset role;
 -- ============================================================================
 -- STAGE 4 — data imports
 -- ============================================================================
+-- A private source document is required before scanning (000062). Inserted as
+-- the superuser because the documents RLS write policy is owner-domain scoped
+-- and 'data_import_batch' documents are service-managed.
+do $$
+declare v_doc_id uuid;
+begin
+  insert into public.documents
+    (owner_domain, owner_record_id, category, object_key, safe_filename,
+     mime_type, size_bytes, scan_status, visibility, uploaded_by_account_id)
+  values
+    ('data_import_batch', gen_random_uuid(), 'import_source',
+     'imports/verify-sis/' || gen_random_uuid()::text || '/students.csv',
+     'students.csv', 'text/csv', 1024, 'clean', 'private',
+     '90000000-0000-4000-8000-000000000002')
+  returning id into v_doc_id;
+  perform set_config('fass.verify_doc_id', v_doc_id::text, false);
+end $$;
+
 set role authenticated;
 select set_config('request.jwt.claim.sub', '90000000-0000-4000-8000-000000000002', false);
 select set_config('request.jwt.claims', '{"aal":"aal2","role":"authenticated","email":"verify.admin@example.in"}', false);
@@ -121,9 +139,12 @@ declare
   v_report jsonb;
   v_denied boolean;
   v_year uuid;
+  v_doc_id uuid;
 begin
   select id into v_year from public.academic_years where status = 'current' limit 1;
   if v_year is null then return; end if;
+
+  v_doc_id := current_setting('fass.verify_doc_id', true)::uuid;
 
   -- Confirmations are mandatory.
   v_denied := false;
@@ -132,7 +153,7 @@ begin
   exception when others then v_denied := true; end;
   assert v_denied, 'stage4: missing authority confirmation is denied';
 
-  v_batch := app.data_import_create_batch(v_year, 'Verify SIS', null, true, true);
+  v_batch := app.data_import_create_batch(v_year, 'Verify SIS', v_doc_id, true, true);
   v_batch_id := (v_batch ->> 'batchId')::uuid;
   v_version := (v_batch ->> 'version')::int;
   assert v_batch_id is not null, 'stage4: batch created';

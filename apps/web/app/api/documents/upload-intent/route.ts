@@ -12,10 +12,11 @@ const MIME_EXTENSIONS: Record<string, string> = {
   "application/pdf": "pdf",
   "image/jpeg": "jpg",
   "image/png": "png",
+  "text/csv": "csv",
 };
 
 type UploadInput = {
-  ownerDomain: "admission_application" | "job_application" | "student";
+  ownerDomain: "admission_application" | "job_application" | "student" | "data_import_batch";
   ownerRecordRef?: string;
   attachmentCode: string;
   filename: string;
@@ -84,6 +85,13 @@ async function resolveOwnerId(
     const { data } = await query.maybeSingle();
     return data?.id ?? null;
   }
+  if (input.ownerDomain === "data_import_batch") {
+    // Import batches are staff-managed; resolve by reference and verify the
+    // actor has staff access (the RPC layer enforces AAL2 + users.manage).
+    if (!ref) return null;
+    const { data: batch } = await client.from("data_import_batches").select("id").eq("reference", ref).maybeSingle();
+    return batch?.id ?? null;
+  }
   let query = client.from("students").select("id");
   if (ref) query = query.eq("reference", ref);
   else return null;
@@ -107,7 +115,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<UploadInput>;
     if (
-      (body.ownerDomain !== "admission_application" && body.ownerDomain !== "job_application" && body.ownerDomain !== "student") ||
+      (body.ownerDomain !== "admission_application" && body.ownerDomain !== "job_application" && body.ownerDomain !== "student" && body.ownerDomain !== "data_import_batch") ||
       typeof body.ownerRecordRef !== "string" ||
       typeof body.attachmentCode !== "string" || typeof body.filename !== "string" ||
       typeof body.mimeType !== "string" || typeof body.sizeBytes !== "number"

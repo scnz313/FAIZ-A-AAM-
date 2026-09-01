@@ -2319,6 +2319,104 @@ export function dataImportListIssues(
   });
 }
 
+export function dataImportRecordScan(
+  supabase: SupabaseClient<Database>,
+  input: {
+    batchId: string;
+    rowCount: number;
+    columnCount: number;
+    headers: string[];
+    encoding: string;
+    error?: string | null;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_record_scan", {
+      p_batch_id: input.batchId,
+      p_row_count: input.rowCount,
+      p_column_count: input.columnCount,
+      p_headers: input.headers,
+      p_encoding: input.encoding,
+      p_error: input.error ?? null,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import scan");
+  });
+}
+
+export function dataImportRecordMapping(
+  supabase: SupabaseClient<Database>,
+  input: {
+    batchId: string;
+    mappingTemplateId?: string | null;
+    columnMappings?: Record<string, unknown> | null;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_record_mapping", {
+      p_batch_id: input.batchId,
+      p_mapping_template_id: input.mappingTemplateId ?? null,
+      p_column_mappings: input.columnMappings ?? null,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import mapping");
+  });
+}
+
+export function dataImportListMappingTemplates(supabase: SupabaseClient<Database>, entity?: string) {
+  return result(async () => {
+    let query = supabase.from("data_import_mapping_templates").select("*").eq("is_active", true);
+    if (entity !== undefined) query = query.eq("entity", entity);
+    const { data, error } = await query.order("created_at", { ascending: false });
+    if (error !== null) throw mapRpcError(error);
+    return data ?? [];
+  });
+}
+
+export function dataImportListResolutions(supabase: SupabaseClient<Database>, batchId: string) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("data_import_resolutions")
+      .select("*")
+      .eq("batch_id", batchId)
+      .order("resolved_at", { ascending: true });
+    if (error !== null) throw mapRpcError(error);
+    return data ?? [];
+  });
+}
+
+export function dataImportResolveIssue(
+  supabase: SupabaseClient<Database>,
+  input: {
+    batchId: string;
+    rowId: string;
+    issueId: string;
+    resolution: "accept" | "reject" | "modify" | "skip";
+    resolvedValue?: Record<string, unknown> | null;
+    note?: string | null;
+  },
+) {
+  return result(async () => {
+    const { data: account } = await supabase.auth.getUser();
+    if (account.user === null) throw new Error("Not authenticated.");
+    const { data, error } = await supabase
+      .from("data_import_resolutions")
+      .insert({
+        batch_id: input.batchId,
+        row_id: input.rowId,
+        issue_id: input.issueId,
+        resolution: input.resolution,
+        resolved_value: (input.resolvedValue ?? null) as unknown as Json,
+        note: input.note ?? null,
+        resolved_by_account_id: account.user.id,
+      })
+      .select("*")
+      .single();
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Protected data exports (migration 000046)                            */
 /* ------------------------------------------------------------------ */

@@ -407,6 +407,25 @@ export type Database = {
         Returns: Json[]
       }
       data_import_preview: { Args: { p_batch_id: string }; Returns: Json }
+      data_import_record_mapping: {
+        Args: {
+          p_batch_id: string
+          p_column_mappings?: Json
+          p_mapping_template_id?: string
+        }
+        Returns: Json
+      }
+      data_import_record_scan: {
+        Args: {
+          p_batch_id: string
+          p_column_count: number
+          p_encoding: string
+          p_error?: string
+          p_headers: Json
+          p_row_count: number
+        }
+        Returns: Json
+      }
       data_import_record_issue: {
         Args: {
           p_batch_id: string
@@ -2776,14 +2795,23 @@ export type Database = {
           academic_year_id: string
           authority_confirmation: boolean
           cancel_reason: string | null
+          commit_result: Json | null
           committed_at: string | null
           created_at: string
           created_by_account_id: string
           error_count: number
           id: string
+          idempotency_key: string | null
           privacy_confirmation: boolean
+          preview_computed_at: string | null
+          preview_digest: string | null
           reference: string
           row_count: number
+          scan_column_count: number | null
+          scan_detected_encoding: string | null
+          scan_error: string | null
+          scan_headers: Json | null
+          scan_row_count: number | null
           source_document_id: string | null
           source_system: string
           state: string
@@ -2795,14 +2823,23 @@ export type Database = {
           academic_year_id: string
           authority_confirmation?: boolean
           cancel_reason?: string | null
+          commit_result?: Json | null
           committed_at?: string | null
           created_at?: string
           created_by_account_id: string
           error_count?: number
           id?: string
+          idempotency_key?: string | null
           privacy_confirmation?: boolean
+          preview_computed_at?: string | null
+          preview_digest?: string | null
           reference?: string
           row_count?: number
+          scan_column_count?: number | null
+          scan_detected_encoding?: string | null
+          scan_error?: string | null
+          scan_headers?: Json | null
+          scan_row_count?: number | null
           source_document_id?: string | null
           source_system: string
           state?: string
@@ -2814,14 +2851,23 @@ export type Database = {
           academic_year_id?: string
           authority_confirmation?: boolean
           cancel_reason?: string | null
+          commit_result?: Json | null
           committed_at?: string | null
           created_at?: string
           created_by_account_id?: string
           error_count?: number
           id?: string
+          idempotency_key?: string | null
           privacy_confirmation?: boolean
+          preview_computed_at?: string | null
+          preview_digest?: string | null
           reference?: string
           row_count?: number
+          scan_column_count?: number | null
+          scan_detected_encoding?: string | null
+          scan_error?: string | null
+          scan_headers?: Json | null
+          scan_row_count?: number | null
           source_document_id?: string | null
           source_system?: string
           state?: string
@@ -2948,6 +2994,118 @@ export type Database = {
           {
             foreignKeyName: "data_import_mappings_created_by_account_id_fkey"
             columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_import_mapping_templates: {
+        Row: {
+          column_mappings: Json
+          created_at: string
+          created_by_account_id: string
+          entity: string
+          id: string
+          is_active: boolean
+          name: string
+          reference: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          column_mappings: Json
+          created_at?: string
+          created_by_account_id: string
+          entity: string
+          id?: string
+          is_active?: boolean
+          name: string
+          reference?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          column_mappings?: Json
+          created_at?: string
+          created_by_account_id?: string
+          entity?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          reference?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_import_mapping_templates_created_by_account_id_fkey"
+            columns: ["created_by_account_id"]
+            isOneToOne: false
+            referencedRelation: "user_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_import_resolutions: {
+        Row: {
+          batch_id: string
+          id: string
+          issue_id: string
+          note: string | null
+          resolution: string
+          resolved_at: string
+          resolved_by_account_id: string
+          resolved_value: Json | null
+          row_id: string
+        }
+        Insert: {
+          batch_id: string
+          id?: string
+          issue_id: string
+          note?: string | null
+          resolution: string
+          resolved_at?: string
+          resolved_by_account_id: string
+          resolved_value?: Json | null
+          row_id: string
+        }
+        Update: {
+          batch_id?: string
+          id?: string
+          issue_id?: string
+          note?: string | null
+          resolution?: string
+          resolved_at?: string
+          resolved_by_account_id?: string
+          resolved_value?: Json | null
+          row_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_import_resolutions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_import_resolutions_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_import_resolutions_issue_id_fkey"
+            columns: ["issue_id"]
+            isOneToOne: false
+            referencedRelation: "data_import_issues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_import_resolutions_resolved_by_account_id_fkey"
+            columns: ["resolved_by_account_id"]
             isOneToOne: false
             referencedRelation: "user_accounts"
             referencedColumns: ["id"]
