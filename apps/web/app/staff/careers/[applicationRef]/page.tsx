@@ -4,7 +4,8 @@ import Link from "next/link";
 import { JobReview } from "@/components/staff/JobReview";
 import { careersService } from "@/modules/services/careers";
 import { dataAdapter } from "@/lib/supabase/env";
-import { loadServerJobByRef, loadServerVacancies } from "@/lib/supabase/server-loaders";
+import { loadServerJobByRef, loadServerVacancies, loadServerProfileCode } from "@/lib/supabase/server-loaders";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 
 import styles from "./page.module.css";
 
@@ -19,14 +20,17 @@ export default async function ApplicationReviewPage({
 }) {
   const { applicationRef } = await params;
   const serverMode = dataAdapter() === "supabase";
-  const initial = serverMode ? await loadServerJobByRef(applicationRef) : await careersService.getApplication(applicationRef);
+  const [initial, profileCode] = await Promise.all([
+    serverMode ? loadServerJobByRef(applicationRef) : careersService.getApplication(applicationRef),
+    loadServerProfileCode(),
+  ]);
 
   if (!initial) {
     return (
       <div className={styles.page}>
         <header className={`workspace-header ${styles.header}`}>
           <p className={styles.backLink}>
-            <Link prefetch={false} className="link-arrow" href="/staff/careers">
+            <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/careers")}>
               ← Careers
             </Link>
           </p>

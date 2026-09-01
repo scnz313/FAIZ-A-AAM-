@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { formatKolkata } from "@/modules/iot/domain";
 import { canAnyRole } from "@/modules/services/staff-profiles";
 import type { StaffQueueRecord } from "@/modules/services/admissions";
@@ -37,6 +38,7 @@ const JOB_TONE: Record<JobApplicationStatus, StatusTone> = {
     only for roles whose workspace can act on them (I4). */
 export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRecord[]; jobs: JobApplicationRecord[] }) {
   const { summary } = useStaffContext();
+  const profileCode = summary?.profileCode ?? null;
   /* Aggregate authorization: profile accounts check every active grant. */
   const roles = summary?.profileCode === null
     ? (summary?.role ? [summary.role] : [])
@@ -64,7 +66,7 @@ export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRe
         <ul className={styles.list}>
           {visibleAdmissions.map((row) => (
             <li key={row.ref} className={styles.row}>
-              <Link prefetch={false} className={styles.rowLink} href={`/staff/admissions/${row.ref}`}>
+              <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/admissions/${row.ref}`)}>
                 <span className={styles.rowMain}>
                   <strong className="num">{row.ref}</strong>
                   <span>{row.studentName}</span>
@@ -75,7 +77,7 @@ export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRe
             </li>
           ))}
         </ul>
-        <Link prefetch={false} className="link-arrow" href="/staff/admissions">
+        <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/admissions")}>
           View all applications →
         </Link>
       </section>
@@ -92,7 +94,7 @@ export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRe
         <ul className={styles.list}>
           {visibleJobs.map((row) => (
             <li key={row.ref} className={styles.row}>
-              <Link prefetch={false} className={styles.rowLink} href={`/staff/careers/${row.ref}`}>
+              <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/careers/${row.ref}`)}>
                 <span className={styles.rowMain}>
                   <strong className="num">{row.ref}</strong>
                   <span>{row.name}</span>
@@ -104,7 +106,7 @@ export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRe
           ))}
         </ul>
         <p className={styles.asOf}>{jobs[0]?.submittedAtIso ? `submitted ${formatKolkata(jobs[0].submittedAtIso, { format: "day" })} onwards` : "No career applications in this scope."}</p>
-        <Link prefetch={false} className="link-arrow" href="/staff/careers">
+        <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/careers")}>
           View all applications →
         </Link>
       </section>

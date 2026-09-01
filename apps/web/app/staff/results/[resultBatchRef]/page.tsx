@@ -7,7 +7,8 @@ import { ACADEMICS_DEMO_NOTE } from "@/modules/academics/demo";
 import { formatKolkata } from "@/modules/iot/domain";
 import { academicsService, ENTRY_BATCH_STATUS_META } from "@/modules/services/academics";
 import { dataAdapter } from "@/lib/supabase/env";
-import { loadServerResultBatch, loadServerResultVersions } from "@/lib/supabase/server-loaders";
+import { loadServerProfileCode, loadServerResultBatch, loadServerResultVersions } from "@/lib/supabase/server-loaders";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 
 import styles from "./page.module.css";
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = { title: "Result batch · Staff" };
 
 export default async function ResultBatchPage({ params }: { params: Promise<{ resultBatchRef: string }> }) {
   const { resultBatchRef } = await params;
+  const profileCode = await loadServerProfileCode();
   const batch = dataAdapter() === "supabase"
     ? await loadServerResultBatch(resultBatchRef)
     : await academicsService.getBatch(resultBatchRef);
@@ -23,7 +25,7 @@ export default async function ResultBatchPage({ params }: { params: Promise<{ re
     : await academicsService.listVersions(resultBatchRef);
 
   if (batch === null) {
-    return <div className={styles.page}><Link prefetch={false} className="link-arrow" href="/staff/results">← Results</Link><h1 className="workspace-title">Batch not found</h1><p className="workspace-intro">No result entry sheet carries the reference <span className="num">{resultBatchRef}</span>.</p></div>;
+    return <div className={styles.page}><Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/results")}>← Results</Link><h1 className="workspace-title">Batch not found</h1><p className="workspace-intro">No result entry sheet carries the reference <span className="num">{resultBatchRef}</span>.</p></div>;
   }
   if (batch === undefined) return <p className={styles.loading}>Result entry sheet unavailable.</p>;
   const status = ENTRY_BATCH_STATUS_META[batch.status];
@@ -31,11 +33,11 @@ export default async function ResultBatchPage({ params }: { params: Promise<{ re
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
-        <p className={styles.backLink}><Link prefetch={false} className="link-arrow" href="/staff/results">← Results</Link></p>
+        <p className={styles.backLink}><Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/results")}>← Results</Link></p>
         <p className="eyebrow">Staff · Results</p>
         <h1 className="workspace-title">{batch.exam} · {batch.className}</h1>
         <p className={`workspace-intro ${styles.meta}`}><span className="num">{batch.ref}</span> · {entered}/{batch.rows.length} marks entered · v{batch.version}</p>
-        <div className={styles.badgeRow}><StatusBadge tone={status.tone}>{status.label}</StatusBadge><Button variant="quiet" href={`/staff/results/${batch.ref}/entry`}>Open entry workspace →</Button></div>
+        <div className={styles.badgeRow}><StatusBadge tone={status.tone}>{status.label}</StatusBadge><Button variant="quiet" href={canonicalStaffUrl(profileCode, `/results/${batch.ref}/entry`)}>Open entry workspace →</Button></div>
       </header>
       <section aria-labelledby="version-history-heading">
         <p className="section-label" id="version-history-heading">Version history</p>

@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import type { StaffProfileCode } from "@fass/contracts";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { assignmentsCoverBatch, teacherAssignmentScope } from "@/components/staff/MarksEntry";
-import type { AssignmentScope } from "@/components/staff/MarksEntry";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { formatKolkata } from "@/modules/iot/domain";
 import { canAnyRole } from "@/modules/services/staff-profiles";
 import { academicsService, ENTRY_BATCH_STATUS_META } from "@/modules/services/academics";
@@ -46,36 +46,15 @@ export function ResultsBatches({ batches: initial }: { batches?: EntryBatch[] | 
   const [withdrawalReason, setWithdrawalReason] = useState("");
   const [returningRef, setReturningRef] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState("");
-  /* Teacher entry scope (class + subject); null while resolving. Non-teacher
-     roles ignore it. */
-  const [assignmentScope, setAssignmentScope] = useState<AssignmentScope[] | null>(null);
   const { summary } = useStaffContext();
+  const profileCode = summary?.profileCode ?? null;
   const canEnter = canAnyRole(summary?.roles ?? [], "results.enter");
   /* Maker/checker split: moderation/approval belongs to exam reviewers
      (results.approve), publication and correction to result publishers
      (results.publish). Return-with-reason is part of moderation so a
-     reviewer can send a sheet back without entering the teacher workspace. */
+     reviewer can send a sheet back to the entry officer. */
   const canApprove = canAnyRole(summary?.roles ?? [], "results.approve");
   const canPublish = canAnyRole(summary?.roles ?? [], "results.publish");
-
-  useEffect(() => {
-    if (summary === null || summary.role !== "teacher") {
-      setAssignmentScope([]);
-      return;
-    }
-    let cancelled = false;
-    void teacherAssignmentScope(summary.accountId)
-      .then((scope) => {
-        if (!cancelled) setAssignmentScope(scope);
-      })
-      .catch(() => {
-        if (!cancelled) setAssignmentScope([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- summary is intentionally sampled once per identity/workspace change
-  }, [summary?.accountId, summary?.role]);
 
   useEffect(() => {
     if (supabaseMode && initial !== undefined) {
@@ -228,11 +207,7 @@ export function ResultsBatches({ batches: initial }: { batches?: EntryBatch[] | 
                   canEnter={canEnter}
                   canApprove={canApprove}
                   canPublish={canPublish}
-                  entryVisible={
-                    summary?.role === "teacher"
-                      ? assignmentScope !== null && assignmentsCoverBatch(assignmentScope, batch.className, batch.subject)
-                      : true
-                  }
+                  profileCode={profileCode}
                   onCorrectionReasonChange={setCorrectionReason}
                   onApprove={approve}
                   onPublish={publish}
@@ -291,7 +266,7 @@ function BatchRow({
   canEnter,
   canApprove,
   canPublish,
-  entryVisible,
+  profileCode,
   onCorrectionReasonChange,
   onApprove,
   onPublish,
@@ -318,8 +293,7 @@ function BatchRow({
   canEnter: boolean;
   canApprove: boolean;
   canPublish: boolean;
-  /** Teacher rows: false hides "Open entry" for batches outside class+subject scope. */
-  entryVisible: boolean;
+  profileCode: StaffProfileCode | null;
   onCorrectionReasonChange: (reason: string) => void;
   onApprove: (ref: string) => void;
   onPublish: (ref: string) => void;
@@ -347,7 +321,7 @@ function BatchRow({
     <>
       <tr>
         <td>
-          <Link prefetch={false} className={styles.rowLink} href={`/staff/results/${batch.ref}`}>
+          <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/results/${batch.ref}`)}>
             <strong className="num">{batch.ref}</strong>
           </Link>
         </td>
@@ -363,8 +337,8 @@ function BatchRow({
         <td className="num">{batch.publishedAtIso ? formatKolkata(batch.publishedAtIso, { format: "day" }) : "—"}</td>
         <td>
           <div className={styles.actions}>
-            {canEnter && entryVisible ? (
-              <Button variant="quiet" href={`/staff/results/${batch.ref}/entry`}>
+            {canEnter ? (
+              <Button variant="quiet" href={canonicalStaffUrl(profileCode, `/results/${batch.ref}/entry`)}>
                 Open entry
               </Button>
             ) : null}
@@ -484,7 +458,7 @@ function BatchRow({
                 type="text"
                 value={returnReason}
                 onChange={(event) => onReturnReasonChange(event.target.value)}
-                placeholder="Why is the sheet back with the teacher? This reason is recorded on the batch."
+                placeholder="Why is the sheet back with the entry officer? This reason is recorded on the batch."
                 aria-required="true"
               />
               <div className={styles.actions}>

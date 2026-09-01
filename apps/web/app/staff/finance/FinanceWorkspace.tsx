@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import { FeeLedgerTable } from "@/components/staff/FeeLedgerTable";
 import { FinanceActions } from "@/components/staff/FinanceActions";
+import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { formatINR } from "@/modules/services/finance";
 import { formatKolkata } from "@/modules/iot/domain";
 import { financeService, type InvoiceView, type Receipt } from "@/modules/services/finance";
@@ -30,6 +32,8 @@ export function FinanceWorkspace({
   initialReconciliation?: FinanceReconciliationProjectionRow[];
   mode?: "demo" | "supabase";
 }) {
+  const { summary } = useStaffContext();
+  const profileCode = summary?.profileCode ?? null;
   const [views, setViews] = useState<InvoiceView[]>(initialViews);
   const [receipts, setReceipts] = useState<Receipt[]>(initialReceipts);
   const [reconciliation] = useState<FinanceReconciliationProjectionRow[]>(initialReconciliation ?? []);
@@ -74,12 +78,12 @@ export function FinanceWorkspace({
     {
       label: "Invoices due soon",
       count: unpaidCount,
-      href: "/staff/finance/invoices",
+      href: canonicalStaffUrl(profileCode, "/finance/invoices"),
     },
     {
       label: "Payments to reconcile",
       count: recentReceipts,
-      href: "/staff/finance/payments",
+      href: canonicalStaffUrl(profileCode, "/finance/payments"),
     },
   ];
 
@@ -133,7 +137,7 @@ export function FinanceWorkspace({
             </li>
           ))}
           <li>
-            <Link prefetch={false} className={styles.queueRow} href="/staff/finance/reconciliation">
+            <Link prefetch={false} className={styles.queueRow} href={canonicalStaffUrl(profileCode, "/finance/reconciliation")}>
               <p className={styles.queueCopy}>
                 Reconciliation run — {reconciliation[0]?.run_at ? <strong className="num">last {formatKolkata(reconciliation[0].run_at, { format: "day" })}</strong> : <strong>not run</strong>}
               </p>

@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { formatKolkata } from "@/modules/iot/domain";
 import type { ApplicationStatus } from "@/modules/admissions/demo";
 import { admissionsService, type ApplicationRecord } from "@/modules/services/admissions";
@@ -373,6 +374,7 @@ export function ApplicationReview({
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const { summary } = useStaffContext();
+  const profileCode = summary?.profileCode ?? null;
   const actorAccountId = summary?.accountId;
   const canReview = canAnyRole(summary?.roles ?? [], "admissions.review");
   const canApprove = canAnyRole(summary?.roles ?? [], "admissions.approve");
@@ -527,7 +529,7 @@ export function ApplicationReview({
             <h2 className="section-label">Application not found</h2>
             <p className={styles.note}>No application carries the reference {applicationRef}. It may have been removed, or the link is incorrect.</p>
             <div className={styles.actions}>
-              <Link prefetch={false} className="button button--quiet" href="/staff/admissions">
+              <Link prefetch={false} className="button button--quiet" href={canonicalStaffUrl(profileCode, "/admissions")}>
                 Back to all applications →
               </Link>
             </div>

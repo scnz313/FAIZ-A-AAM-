@@ -1,9 +1,19 @@
 #!/usr/bin/env node
-/* Static guard for the C2.5 protected-path contract.
+/* Static guard for the protected-path contract (Phase 11 strengthened).
  *
- * This is intentionally conservative: demo-only modules and tests are valid
- * places for fixtures/session storage, while protected route/components must
- * prove their adapter branch and keep private data on the server boundary.
+ * Checks:
+ * 1. No operational browser storage in protected paths.
+ * 2. No session persistence without an adapter branch.
+ * 3. No protected fixture/demo imports (presentation-only formatters allowed).
+ * 4. Server Components must not invoke the client adapter.
+ * 5. No unused server loaders.
+ * 6. No hardcoded `/staff/` URLs in application-facing components (must use
+ *    canonicalStaffUrl). The `/staff` tree is the internal rewrite target only.
+ * 7. No Teacher/Student login personas in protected code (they are non-login
+ *    school records).
+ * 8. No caught adapter failures rendered as empty success (return [] or null
+ *    in a catch block silently masks provider errors).
+ * 9. No browser-exposed internal import operations (storeRows etc.).
  */
 const fs = require("node:fs");
 const path = require("node:path");
@@ -16,6 +26,20 @@ const protectedRoots = [
   path.join(root, "components", "staff"),
 ];
 const violations = [];
+
+/* Files exempt from the hardcoded /staff/ URL check:
+   - portal-routes.ts (defines the helper)
+   - staff layout (the rewrite target)
+   - StaffRouteGuard (handles all three prefixes)
+   - test files (explicitly test legacy paths) */
+const staffUrlExempt = /(?:portal-routes|staff\/layout|StaffRouteGuard|isLegacyStaffPath|staffSubPathForPathname)/i;
+
+/* Files exempt from the Teacher persona check:
+   - demo/fixture/test files (may reference teacher for historical context)
+   - staff-profiles.ts (documents that teachers are non-login)
+   - staff-authorization.ts (may reference legacy teacher for denial logic)
+   - comments are not code */
+const teacherPersonaExempt = /(?:^|[/\\])(?:demo|fixtures|test|spec)(?:[/\\]|$)|staff-profiles|staff-authorization|relationships\/demo|audit\.ts/i;
 
 function filesUnder(dir) {
   const result = [];
@@ -69,6 +93,53 @@ function scanProtected(file) {
       .every((name) => /^(?:type\s+)?(?:format[A-Z]|[A-Z0-9_]+_DEMO_NOTE|INVOICE_STATUS_META|STATUS_TONE|demoTodayLabel)$/.test(name));
     if (!presentationOnly) violations.push(`${label}: protected fixture/demo import (${specifier})`);
   }
+
+  /* Check 6: No hardcoded /staff/ URLs in application-facing components.
+   * The /staff tree is the internal rewrite target only; application URLs
+   * must use canonicalStaffUrl(profileCode, subPath). */
+  if (!staffUrlExempt.test(file)) {
+    const hardcodedStaffUrls = source.match(/href\s*=\s*["'`]?\/staff\//g);
+    if (hardcodedStaffUrls) {
+      violations.push(`${label}: hardcoded /staff/ URL — use canonicalStaffUrl(profileCode, subPath) instead (${hardcodedStaffUrls.length} occurrence(s))`);
+    }
+    /* Also check string literals assigned to href via template expressions */
+    const templateStaffUrls = source.match(/href\s*=\s*\{`\/staff\//g);
+    if (templateStaffUrls) {
+      violations.push(`${label}: hardcoded /staff/ template URL — use canonicalStaffUrl(profileCode, subPath) instead (${templateStaffUrls.length} occurrence(s))`);
+    }
+  }
+
+  /* Check 7: No Teacher/Student login personas in protected code.
+   * Teachers and students are non-login school records. Any code that
+   * treats them as login roles is a regression. */
+  if (!teacherPersonaExempt.test(file)) {
+    /* Look for teacher/student as a login role, not as a school record */
+    if (/\bteacher(?:Role|Login|Persona|Account|Session|Workspace|Identity)\b/i.test(source)) {
+      violations.push(`${label}: Teacher login persona reference — teachers are non-login school records`);
+    }
+    if (/\bstudent(?:Login|Persona|Account|Session|Workspace|Identity)\b/i.test(source)) {
+      violations.push(`${label}: Student login persona reference — students are non-login school records`);
+    }
+  }
+
+  /* Check 8: No caught adapter failures rendered as empty success.
+   * Patterns like `catch { return [] }` or `catch { return null }` silently
+   * mask provider errors. Protected screens must show recoverable errors. */
+  const emptyCatchPattern = /catch\s*(?:\([^)]*\))?\s*\{\s*return\s+(?:\[\]|null|undefined)\s*;?\s*\}/g;
+  const emptyCatches = source.match(emptyCatchPattern);
+  if (emptyCatches) {
+    violations.push(`${label}: caught adapter failure returns empty success — use recoverable error instead (${emptyCatches.length} occurrence(s))`);
+  }
+
+  /* Check 9: No browser-exposed internal import operations.
+   * The browser adapter must not expose storeRows or similar internal
+   * import operations — imports go through the server pipeline. */
+  if (/storeRows|dataImports\.storeRows/.test(source) && !isTest(file) && !/demo|fixture/i.test(file)) {
+    /* Only flag if it's in the adapter or service layer, not in tests */
+    if (/(?:adapter|services\/data-import)/i.test(file)) {
+      violations.push(`${label}: browser-exposed internal import operation (storeRows) — imports must go through the server pipeline`);
+    }
+  }
 }
 
 for (const dir of protectedRoots) for (const file of filesUnder(dir)) scanProtected(file);
@@ -85,7 +156,7 @@ for (const file of filesUnder(path.join(root, "app"))) {
 }
 
 /* Detect an imported server loader that is never invoked. This catches the
- * common “loader wired in the import only” regression without treating a
+ * common "loader wired in the import only" regression without treating a
  * deliberately exported loader as an error before a route consumes it. */
 const appSources = filesUnder(path.join(root, "app"))
   .filter((file) => !isDemoOnly(file, fs.readFileSync(file, "utf8")))

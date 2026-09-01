@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { DashboardQueues } from "@/components/staff/DashboardQueues";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { canAnyRole } from "@/modules/services/staff-profiles";
 import { admissionsService, type StaffQueueRecord } from "@/modules/services/admissions";
 import { careersService, type JobApplicationRecord } from "@/modules/services/careers";
@@ -25,6 +26,7 @@ import styles from "./StaffHomeWorkspace.module.css";
  */
 export function StaffHomeWorkspace() {
   const { status, summary } = useStaffContext();
+  const profileCode = summary?.profileCode ?? null;
   const supabaseMode = clientAdapterMode() === "supabase";
   const ready = status === "ready" && summary !== null;
   /* Aggregate authorization: profile accounts check every active grant;
@@ -135,7 +137,7 @@ export function StaffHomeWorkspace() {
                 <span className="num">{queueCounts.offers}</span> offers outstanding
               </li>
             </ul>
-            <Link prefetch={false} className="link-arrow" href="/staff/admissions">
+            <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/admissions")}>
               Review the queue →
             </Link>
           </div>
@@ -158,7 +160,7 @@ export function StaffHomeWorkspace() {
                 <span className="num">{queueCounts.invoiceTotal}</span> invoices in ledger
               </li>
             </ul>
-            <Link prefetch={false} className="link-arrow" href="/staff/finance">
+            <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/finance")}>
               Open the ledger →
             </Link>
           </div>
@@ -181,7 +183,7 @@ export function StaffHomeWorkspace() {
                 <span className="num">{queueCounts.supportResolved}</span> resolved
               </li>
             </ul>
-            <Link prefetch={false} className="link-arrow" href="/staff/support">
+            <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/support")}>
               Open the support inbox →
             </Link>
           </div>
@@ -205,7 +207,7 @@ export function StaffHomeWorkspace() {
           ) : null}
           <div className={styles.quickLinks}>
             {showResults ? (
-              <Link prefetch={false} className="tile-link" href="/staff/results">
+              <Link prefetch={false} className="tile-link" href={canonicalStaffUrl(profileCode, "/results")}>
                 <span className="tile-link__num">01</span>
                 <span className="tile-link__title">Review results</span>
                 <span className="tile-link__line">Moderation queue for Term 2 batches.</span>
@@ -213,7 +215,7 @@ export function StaffHomeWorkspace() {
               </Link>
             ) : null}
             {showTimetables ? (
-              <Link prefetch={false} className="tile-link" href="/staff/timetables">
+              <Link prefetch={false} className="tile-link" href={canonicalStaffUrl(profileCode, "/timetables")}>
                 <span className="tile-link__num">02</span>
                 <span className="tile-link__title">Manage timetables</span>
                 <span className="tile-link__line">Versions, overrides, and date sheets.</span>
@@ -221,7 +223,7 @@ export function StaffHomeWorkspace() {
               </Link>
             ) : null}
             {showContent ? (
-              <Link prefetch={false} className="tile-link" href="/staff/notices">
+              <Link prefetch={false} className="tile-link" href={canonicalStaffUrl(profileCode, "/notices")}>
                 <span className="tile-link__num">03</span>
                 <span className="tile-link__title">Publish notices</span>
                 <span className="tile-link__line">Draft, schedule, and publish notices.</span>
@@ -248,7 +250,7 @@ export function StaffHomeWorkspace() {
           </div>
           <div className={styles.quickLinks}>
             {showUsers ? (
-              <Link prefetch={false} className="tile-link" href="/staff/users">
+              <Link prefetch={false} className="tile-link" href={canonicalStaffUrl(profileCode, "/users")}>
                 <span className="tile-link__num">01</span>
                 <span className="tile-link__title">Manage users</span>
                 <span className="tile-link__line">
@@ -259,7 +261,7 @@ export function StaffHomeWorkspace() {
               </Link>
             ) : null}
             {showLinks ? (
-              <Link prefetch={false} className="tile-link" href="/staff/link-requests">
+              <Link prefetch={false} className="tile-link" href={canonicalStaffUrl(profileCode, "/link-requests")}>
                 <span className="tile-link__num">02</span>
                 <span className="tile-link__title">Link requests</span>
                 <span className="tile-link__line">
@@ -270,7 +272,7 @@ export function StaffHomeWorkspace() {
               </Link>
             ) : null}
             {showSettings ? (
-              <Link prefetch={false} className="tile-link" href="/staff/settings">
+              <Link prefetch={false} className="tile-link" href={canonicalStaffUrl(profileCode, "/settings")}>
                 <span className="tile-link__num">03</span>
                 <span className="tile-link__title">Settings</span>
                 <span className="tile-link__line">Academic year, admission window, fee and result policy.</span>
@@ -278,7 +280,7 @@ export function StaffHomeWorkspace() {
               </Link>
             ) : null}
             {showAudit ? (
-              <Link prefetch={false} className="tile-link" href="/staff/audit">
+              <Link prefetch={false} className="tile-link" href={canonicalStaffUrl(profileCode, "/audit")}>
                 <span className="tile-link__num">04</span>
                 <span className="tile-link__title">Audit trail</span>
                 <span className="tile-link__line">Read-only evidence of every meaningful action.</span>

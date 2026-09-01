@@ -138,7 +138,7 @@ export const demoAuditEvents: readonly AuditEvent[] = [
     action: "Application reviewed",
     target: "APP-2026-0112",
     outcome: "Denied",
-    reason: "Teacher attempted to review an HR application — denied by role policy.",
+    reason: "Non-HR staff attempted to review an HR application — denied by role policy.",
   },
   {
     id: "ev-14",

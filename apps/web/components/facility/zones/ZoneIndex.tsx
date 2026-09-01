@@ -1,8 +1,9 @@
 import Link from "next/link";
 
-import type { MetricType, Zone } from "@fass/contracts";
+import type { MetricType, Zone, StaffProfileCode } from "@fass/contracts";
 import { ZONE_KIND_LABELS } from "@fass/contracts";
 import { floorLabel, formatMetricValue, zoneStatus, zoneStatusLabel, type ZoneStatus } from "@/modules/iot/domain";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 import styles from "./ZoneIndex.module.css";
@@ -11,6 +12,11 @@ export type ZoneIndexRow = {
   zone: Zone;
   readings: Partial<Record<MetricType, number>>;
   deviceCount: number;
+};
+
+export type ZoneIndexProps = {
+  rows: ZoneIndexRow[];
+  profileCode: StaffProfileCode | null;
 };
 
 /** Reading columns shown in the index, in display order. */
@@ -23,7 +29,7 @@ function statusTone(status: ZoneStatus): "good" | "watch" | "alert" {
 }
 
 /** Full table of zones with current readings; each row links to its zone detail. */
-export function ZoneIndex({ rows }: { rows: ZoneIndexRow[] }) {
+export function ZoneIndex({ rows, profileCode }: ZoneIndexProps) {
   if (rows.length === 0) {
     return <p className={styles.empty}>No zones are registered yet. Zones appear here once sensors are added.</p>;
   }
@@ -51,7 +57,7 @@ export function ZoneIndex({ rows }: { rows: ZoneIndexRow[] }) {
             return (
               <tr key={row.zone.id} className={styles.rowLink}>
                 <th scope="row">
-                  <Link prefetch={false} href={`/staff/facility/zones/${row.zone.id}`}>{row.zone.name}</Link>
+                  <Link prefetch={false} href={canonicalStaffUrl(profileCode, `/facility/zones/${row.zone.id}`)}>{row.zone.name}</Link>
                 </th>
                 <td>{ZONE_KIND_LABELS[row.zone.kind]}</td>
                 <td>

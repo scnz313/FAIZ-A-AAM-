@@ -6,6 +6,7 @@ import Link from "next/link";
 import Button from "@/components/ui/Button";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
 import { canAnyRole } from "@/modules/services/staff-profiles";
@@ -549,6 +550,7 @@ export function JobReview({
      to it — the grants are enforced by this UI projection and, later, by
      the backend adapter. */
   const { summary } = useStaffContext();
+  const profileCode = summary?.profileCode ?? null;
   const canReview = canAnyRole(summary?.roles ?? [], "careers.review");
   const canApprove = canAnyRole(summary?.roles ?? [], "careers.approve");
 
@@ -556,7 +558,7 @@ export function JobReview({
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
         <p className={styles.backLink}>
-          <Link prefetch={false} className="link-arrow" href="/staff/careers">
+          <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/careers")}>
             ← Careers
           </Link>
         </p>

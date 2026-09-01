@@ -1,12 +1,14 @@
 import Link from "next/link";
 
-import type { Alert, AlertSeverity } from "@fass/contracts";
+import type { Alert, AlertSeverity, StaffProfileCode } from "@fass/contracts";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 
 import styles from "./AlertStrip.module.css";
 
 type AlertStripProps = {
   /** Alerts from the facility; open critical/warning alerts are surfaced here. */
   alerts: Alert[];
+  profileCode: StaffProfileCode | null;
 };
 
 function severityRank(severity: AlertSeverity): number {
@@ -20,7 +22,7 @@ function severityRank(severity: AlertSeverity): number {
  * there is nothing to act on. Server-rendered and static between loads, so
  * it is not a live region.
  */
-export function AlertStrip({ alerts }: AlertStripProps) {
+export function AlertStrip({ alerts, profileCode }: AlertStripProps) {
   const open = alerts.filter(
     (alert) => alert.status === "open" && (alert.severity === "critical" || alert.severity === "warning"),
   );
@@ -45,7 +47,7 @@ export function AlertStrip({ alerts }: AlertStripProps) {
         <strong className="num">{open.length}</strong> open {unit} — {titles}
         {remainder}
       </p>
-      <Link prefetch={false} className="link-arrow" href="/staff/facility/alerts">
+      <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/facility/alerts")}>
         Review alerts →
       </Link>
     </div>

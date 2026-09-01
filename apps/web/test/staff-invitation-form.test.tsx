@@ -81,7 +81,7 @@ describe("StaffInvitationForm", () => {
       if (String(input).includes("staff-invite-accept")) {
         return new Response(JSON.stringify({ ok: true, value: { accountId: "acct-1", staffMemberId: "staff-1", grantRef: "ROLE-1" } }), { status: 200 });
       }
-      return new Response(JSON.stringify({ ok: true, value: [{ id: "acct-1", status: "active", verified_contact: "new@example.test", people: { display_name: "New Teacher" }, staff_members: [], role_grants: [{ id: "grant-1", reference: "ROLE-1", role_code: "teacher", status: "active", version: 1, effective_from: "2026-01-01T00:00:00Z", effective_to: null }] }] }), { status: 200 });
+      return new Response(JSON.stringify({ ok: true, value: [{ id: "acct-1", status: "active", verified_contact: "new@example.test", people: { display_name: "New Teacher" }, staff_members: [], role_grants: [{ id: "grant-1", reference: "ROLE-1", role_code: "result_entry_officer", status: "active", version: 1, effective_from: "2026-01-01T00:00:00Z", effective_to: null }] }] }), { status: 200 });
     });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();

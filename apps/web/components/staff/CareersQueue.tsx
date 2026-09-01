@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
+import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { formatKolkata } from "@/modules/iot/domain";
 import {
   applicationReviewer,
@@ -44,6 +46,8 @@ const FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
  * loader/service; this component never imports fixture records.
  */
 export function CareersQueue({ initial, vacancyTitles, demoMode }: { initial: JobApplicationRecord[]; vacancyTitles: Record<string, string>; demoMode: boolean }) {
+  const { summary } = useStaffContext();
+  const profileCode = summary?.profileCode ?? null;
   const [records, setRecords] = useState<JobApplicationRecord[]>(initial);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [refreshing, setRefreshing] = useState(demoMode);
@@ -106,7 +110,7 @@ export function CareersQueue({ initial, vacancyTitles, demoMode }: { initial: Jo
             {visible.map((record) => (
               <tr key={record.ref} className={styles.queueRow}>
                 <td>
-                  <Link prefetch={false} className={styles.rowLink} href={`/staff/careers/${record.ref}`}>
+                  <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/careers/${record.ref}`)}>
                     <strong className="num">{record.ref}</strong>
                   </Link>
                 </td>

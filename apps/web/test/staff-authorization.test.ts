@@ -75,19 +75,12 @@ describe("canonical role → action matrix (Phase 1 maker/checker splits)", () =
     expect(canRole("hr_approver", "careers.review")).toBe(false);
 
     /* Result entry officer (Principal profile) enters marks — never
-       approval or publication. The legacy teacher role is retained for
-       history only and is not granted to new accounts. */
+       approval or publication. Teachers are non-login school records and
+       hold no login role. */
     expect(canRole("result_entry_officer", "results.view")).toBe(true);
     expect(canRole("result_entry_officer", "results.enter")).toBe(true);
     expect(canRole("result_entry_officer", "results.publish")).toBe(false);
     expect(canRole("result_entry_officer", "results.approve")).toBe(false);
-    expect(canRole("teacher", "results.view")).toBe(true);
-    expect(canRole("teacher", "results.enter")).toBe(true);
-    expect(canRole("teacher", "timetable.view")).toBe(true);
-    expect(canRole("teacher", "results.publish")).toBe(false);
-    expect(canRole("teacher", "results.approve")).toBe(false);
-    expect(canRole("teacher", "finance.view")).toBe(false);
-    expect(canRole("teacher", "links.verify")).toBe(false);
 
     /* Results: reviewer moderates, publisher releases. */
     expect(canRole("exam_reviewer", "results.view")).toBe(true);

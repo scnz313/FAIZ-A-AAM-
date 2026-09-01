@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
+import { useStaffContext } from "@/components/staff/StaffContextProvider";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { formatKolkata } from "@/modules/iot/domain";
 import type { ApplicationStatus } from "@/modules/admissions/demo";
 import { admissionsService, type StaffQueueRecord } from "@/modules/services/admissions";
@@ -44,6 +46,8 @@ const FILTERS: ReadonlyArray<{ key: "all" | ApplicationStatus; label: string }> 
  * in the same session) show here with their real status.
  */
 export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
+  const { summary } = useStaffContext();
+  const profileCode = summary?.profileCode ?? null;
   const supabaseMode = clientAdapterMode() === "supabase";
   const [filter, setFilter] = useState<"all" | ApplicationStatus>("all");
   const [liveRows, setLiveRows] = useState<StaffQueueRecord[]>(rows);
@@ -149,7 +153,7 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
             {visible.map((row) => (
               <tr key={row.ref} className={row.flagged ? styles.flaggedRow : undefined}>
                 <td>
-                  <Link prefetch={false} className={styles.rowLink} href={`/staff/admissions/${row.ref}`}>
+                  <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/admissions/${row.ref}`)}>
                     <strong className="num">{row.ref}</strong>
                   </Link>
                 </td>

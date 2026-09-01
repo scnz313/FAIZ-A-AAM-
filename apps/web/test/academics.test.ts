@@ -13,8 +13,9 @@ import { auditService, AUDIT_SESSION_KEY_EXPORT } from "@/modules/services/audit
 import { clearOutboxSession, listOutboxEvents } from "@/modules/services/outbox";
 import { sessionKey, sessionRemove } from "@/modules/services/session";
 import { RELATIONSHIPS_SESSION_KEY } from "@/modules/services/family-context";
-import { assignmentsCoverBatch, teacherAssignmentScope } from "@/components/staff/MarksEntry";
+import { assignmentsCoverBatch } from "@/components/staff/MarksEntry";
 import type { AssignmentScope } from "@/components/staff/MarksEntry";
+import { staffContextService } from "@/modules/services/staff-context";
 import type { EntryBatch, MarksRow } from "@/modules/services/academics";
 
 const SESSION_KEY = sessionKey("academics");
@@ -370,11 +371,15 @@ describe("teacher scope (class + subject)", () => {
     expect(assignmentsCoverBatch([], "8-A", "Mathematics")).toBe(false);
   });
 
-  it("resolves active assignments for a result_entry_officer and applies class+subject scope", async () => {
+  it("resolves no active assignment sections for a result_entry_officer (non-login teacher records)", async () => {
     /* Teaching assignments now have roleGrantId: null (non-login teacher
        records), so no staff workspace resolves active assignment sections. */
-    const scope = await teacherAssignmentScope(RESULT_ENTRY_ACCOUNT_ID);
-    expect(scope).toEqual([]);
+    await expect(staffContextService.getActiveAssignmentSections(RESULT_ENTRY_ACCOUNT_ID)).resolves.toEqual([]);
+    const assignments = await staffContextService.getActiveAssignments(RESULT_ENTRY_ACCOUNT_ID);
+    const scope: AssignmentScope[] = assignments.map((assignment) => ({
+      gradeSection: null,
+      subjectName: assignment.subjectName,
+    }));
     expect(assignmentsCoverBatch(scope, "8-A", "Mathematics")).toBe(false);
     expect(assignmentsCoverBatch(scope, "8-A", "General Science")).toBe(false);
     expect(assignmentsCoverBatch(scope, "6-A", "Mathematics")).toBe(false);

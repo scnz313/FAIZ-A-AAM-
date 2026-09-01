@@ -6,11 +6,14 @@ import { redirect } from "next/navigation";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { serverAdapterOperation } from "@/lib/supabase/adapter-server";
+import { dataAdapter } from "@/lib/supabase/env";
 import { getServerActor } from "@/lib/auth/actor";
 import { isStaffPath } from "@/lib/auth/portal-routes";
 import { admissionPublicConfiguration, contentListPublic, financeListAllAttempts, financeListMyInvoices, financeListMyReceipts, financeListReconciliationProjection, jobsListPublishedVacancies, resolveFamilyContext, resolveStaffContext, type FinanceAttemptProjectionRow, type FinanceReconciliationProjectionRow } from "@/lib/supabase/domain";
 import type { ServerFamilyContextResponse } from "@/modules/services/family-context";
 import type { ServerStaffContextResponse } from "@/modules/services/staff-context";
+import { mapServerStaffContext } from "@/modules/services/staff-context";
+import type { StaffProfileCode } from "@fass/contracts";
 import {
   mapServerInvoiceView,
   mapServerReceipt,
@@ -70,6 +73,21 @@ export const loadServerStaffContext = cache(async (): Promise<ServerStaffContext
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Staff context could not be loaded.");
   return result.value as unknown as ServerStaffContextResponse;
 });
+
+/**
+ * Resolve the active staff access-profile code for a Server Component. Returns
+ * null outside Supabase mode or when the context is unavailable so callers can
+ * fall back to the legacy `/staff` prefix via `canonicalStaffUrl(null, …)`.
+ */
+export async function loadServerProfileCode(): Promise<StaffProfileCode | null> {
+  if (dataAdapter() !== "supabase") return null;
+  try {
+    const serverContext = await loadServerStaffContext();
+    return mapServerStaffContext(serverContext).summary.profileCode;
+  } catch {
+    return null;
+  }
+}
 
 export const loadServerInvoices = cache(async (studentId?: string): Promise<InvoiceView[]> => {
   await requireServerActor();

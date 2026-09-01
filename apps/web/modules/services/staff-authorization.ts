@@ -64,10 +64,9 @@ const ROLE_ACTIONS: Record<string, ReadonlySet<StaffAction>> = {
   hr_reviewer: new Set(["home.view", "careers.view", "careers.review", "documents.view"]),
   hr_approver: new Set(["home.view", "careers.view", "careers.approve", "documents.view"]),
   /* Results: result_entry_officer enters/import marks (Principal), reviewer
-     moderates, publisher releases. The legacy teacher role is retained for
-     history only and is not granted to new accounts. */
+     moderates, publisher releases. Teachers are non-login school records and
+     hold no login role or workspace. */
   result_entry_officer: new Set(["home.view", "results.view", "results.enter", "documents.view"]),
-  teacher: new Set(["home.view", "results.view", "results.enter", "timetable.view"]),
   exam_reviewer: new Set(["home.view", "results.view", "results.approve", "documents.view"]),
   result_publisher: new Set(["home.view", "results.view", "results.publish", "documents.view"]),
   /* Timetable: manager creates, validates, publishes, overrides. */
@@ -135,8 +134,8 @@ export type DemoStaffIdentity = {
  * - Aisha Lone — Administrator (account management + final approvals).
  * - Rania Mir — Principal (daily operations + result entry).
  * Legacy multi-role personas remain available for negative-scope tests but
- * are not shown in the primary picker. The teacher persona is removed from
- * the primary picker; teachers are non-login school records.
+ * are not shown in the primary picker. Teachers are non-login school records
+ * and have no login persona, workspace, or role in the picker.
  */
 export const DEMO_STAFF_IDENTITIES: ReadonlyArray<DemoStaffIdentity> = [
   {

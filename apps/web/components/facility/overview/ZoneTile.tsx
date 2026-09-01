@@ -1,8 +1,9 @@
 import Link from "next/link";
 
-import type { MetricType, Zone } from "@fass/contracts";
+import type { MetricType, Zone, StaffProfileCode } from "@fass/contracts";
 import { METRIC_META, ZONE_KIND_LABELS } from "@fass/contracts";
 import { bandForMetric, floorLabel, zoneStatus, zoneStatusLabel, type ZoneStatus } from "@/modules/iot/domain";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { ChinarMark } from "@/components/ui/ChinarMark";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -15,6 +16,11 @@ export type ZoneTileData = {
   spark: { metric: MetricType; data: number[] } | null;
 };
 
+export type ZoneTileProps = {
+  data: ZoneTileData;
+  profileCode: StaffProfileCode | null;
+};
+
 /** Metrics shown as rows on the tile, in display order. */
 const ROW_METRICS = ["temp_c", "co2_ppm", "pm25_ugm3", "humidity_pct"] as const satisfies readonly MetricType[];
 
@@ -25,13 +31,13 @@ function statusTone(status: ZoneStatus): "good" | "watch" | "alert" {
 }
 
 /** Bordered tile for one zone; the whole tile is the link to the zone detail. */
-export function ZoneTile({ data }: { data: ZoneTileData }) {
+export function ZoneTile({ data, profileCode }: ZoneTileProps) {
   const { zone, readings, spark } = data;
   const status = zoneStatus(readings);
   const sparkMeta = spark ? METRIC_META[spark.metric] : null;
 
   return (
-    <Link prefetch={false} href={`/staff/facility/zones/${zone.id}`} className={styles.tile}>
+    <Link prefetch={false} href={canonicalStaffUrl(profileCode, `/facility/zones/${zone.id}`)} className={styles.tile}>
       <ChinarMark size={12} tone="ink" className={styles.mark} />
       <h3 className={styles.name}>{zone.name}</h3>
       <p className={`kicker ${styles.kind}`}>{ZONE_KIND_LABELS[zone.kind]}</p>

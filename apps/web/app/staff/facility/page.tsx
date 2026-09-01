@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import type { MetricType } from "@fass/contracts";
 import { getAlerts, getOverview, getZoneHistory, getZones } from "@/lib/iot/api";
+import { loadServerProfileCode } from "@/lib/supabase/server-loaders";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { zoneStatus, type ZoneStatus } from "@/modules/iot/domain";
 import { AlertStrip } from "@/components/facility/overview/AlertStrip";
 import { HeadlineBand } from "@/components/facility/overview/HeadlineBand";
@@ -31,7 +33,7 @@ function countBreakdown(items: { status: ZoneStatus }[]): { comfortable: number;
 }
 
 export default async function FacilityOverviewPage() {
-  const [overview, zonesData, alerts] = await Promise.all([getOverview(), getZones(), getAlerts()]);
+  const [overview, zonesData, alerts, profileCode] = await Promise.all([getOverview(), getZones(), getAlerts(), loadServerProfileCode()]);
   const { zones, current: currentByZone } = zonesData;
 
   const ranked = zones
@@ -69,7 +71,7 @@ export default async function FacilityOverviewPage() {
         </p>
       </header>
 
-      <AlertStrip alerts={alerts} />
+      <AlertStrip alerts={alerts} profileCode={profileCode} />
 
       <HeadlineBand
         outdoor={overview.outdoor}
@@ -79,14 +81,14 @@ export default async function FacilityOverviewPage() {
         takenAt={overview.takenAt}
       />
 
-      <ZoneGrid tiles={tiles} />
+      <ZoneGrid tiles={tiles} profileCode={profileCode} />
 
       <p className={styles.readingLine}>
         <span>
           Comfort and air-quality bands follow the school&apos;s thermal policy and CPCB guidance; readings are
           sampled demo data.
         </span>
-        <Link prefetch={false} className="link-arrow" href="/staff/facility/history">
+        <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/facility/history")}>
           Review the full history →
         </Link>
       </p>

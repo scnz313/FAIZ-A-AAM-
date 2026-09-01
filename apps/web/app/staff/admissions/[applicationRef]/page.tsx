@@ -4,7 +4,8 @@ import Link from "next/link";
 import { ApplicationReview } from "@/components/staff/ApplicationReview";
 import { admissionsService } from "@/modules/services/admissions";
 import { dataAdapter } from "@/lib/supabase/env";
-import { loadServerAdmissionByRef } from "@/lib/supabase/server-loaders";
+import { loadServerAdmissionByRef, loadServerProfileCode } from "@/lib/supabase/server-loaders";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 
 import styles from "./page.module.css";
 
@@ -16,13 +17,16 @@ export default async function StaffApplicationReviewPage({ params }: { params: P
   const { applicationRef } = await params;
   const supabaseMode = dataAdapter() === "supabase";
 
-  const initial = supabaseMode ? await loadServerAdmissionByRef(applicationRef) : await admissionsService.getApplication(applicationRef);
+  const [initial, profileCode] = await Promise.all([
+    supabaseMode ? loadServerAdmissionByRef(applicationRef) : admissionsService.getApplication(applicationRef),
+    loadServerProfileCode(),
+  ]);
   const reviewer = initial?.reviewer ?? initial?.reviewedByAccountId ?? "—";
 
   if (!initial) {
     return (
       <div className={styles.page}>
-        <Link prefetch={false} className="link-arrow" href="/staff/admissions">
+        <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/admissions")}>
           ← Admissions
         </Link>
         <header className={`workspace-header ${styles.header}`}>
@@ -39,7 +43,7 @@ export default async function StaffApplicationReviewPage({ params }: { params: P
 
   return (
     <div className={styles.page}>
-      <Link prefetch={false} className="link-arrow" href="/staff/admissions">
+      <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/admissions")}>
         ← Admissions
       </Link>
       <header className={`workspace-header ${styles.header}`}>

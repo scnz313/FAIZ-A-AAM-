@@ -17,18 +17,20 @@ import styles from "./page.module.css";
 type ReceiptState =
   | { status: "loading" }
   | { status: "found"; receipt: Receipt; invoice: Invoice }
-  | { status: "missing" };
+  | { status: "missing" }
+  | { status: "error"; message: string };
 
 type ReceiptData = { receipt: Receipt; invoice: Invoice };
 
-async function loadReceiptData(receiptRef: string): Promise<ReceiptData | null> {
+async function loadReceiptData(receiptRef: string): Promise<ReceiptData | { error: string } | null> {
   try {
     const receipt = await financeService.getReceipt(receiptRef);
     if (!receipt) return null;
     const view = await financeService.getInvoice(receipt.invoiceRef);
     return view ? { receipt, invoice: view.invoice } : null;
-  } catch {
-    return null;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unable to load receipt. Please try again.";
+    return { error: message };
   }
 }
 
@@ -66,10 +68,16 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
     void loadReceiptData(receiptRef)
       .then((data) => {
         if (cancelled) return;
-        setState(data ? { status: "found", ...data } : { status: "missing" });
+        if (data && "error" in data) {
+          setState({ status: "error", message: data.error });
+        } else if (data) {
+          setState({ status: "found", receipt: data.receipt, invoice: data.invoice });
+        } else {
+          setState({ status: "missing" });
+        }
       })
       .catch(() => {
-        if (cancelled) return;
+        if (!cancelled) return;
       });
     return () => {
       cancelled = true;
@@ -99,8 +107,11 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
     setRetrying(true);
     setNotice("Retrying receipt lookup…");
     const data = await loadReceiptData(receiptRef);
-    if (data) {
-      setState({ status: "found", ...data });
+    if (data && "error" in data) {
+      setState({ status: "error", message: data.error });
+      setNotice("Receipt lookup failed — retry");
+    } else if (data) {
+      setState({ status: "found", receipt: data.receipt, invoice: data.invoice });
       setNotice(`Receipt ${receiptRef} is available.`);
     } else {
       setState({ status: "missing" });
@@ -112,6 +123,26 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
   function printReceipt(): void {
     setNotice("Print dialog opened for the demo receipt. The browser can save this view as a PDF.");
     window.print();
+  }
+
+  if (state.status === "error") {
+    return (
+      <div className={styles.notFound}>
+        <p className="eyebrow">Portal · Receipt</p>
+        <h1 className={styles.title}>Receipt temporarily unavailable</h1>
+        <p className={styles.notFoundText} role="alert">
+          {state.message}
+        </p>
+        <div className={styles.recoveryActions}>
+          <Button variant="quiet" onClick={() => void retryReceipt()} disabled={retrying}>
+            {retrying ? "Retrying…" : "Retry"}
+          </Button>
+          <Link prefetch={false} className="link-arrow" href="/portal/fees">
+            ← Back to fees
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (state.status === "loading") {

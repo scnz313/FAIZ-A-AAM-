@@ -7,8 +7,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { formatKolkata } from "@/modules/iot/domain";
 import { assignmentsCoverClass } from "@/modules/services/staff-authorization";
-import { staffContextService } from "@/modules/services/staff-context";
 import { canAnyRole } from "@/modules/services/staff-profiles";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { academicsService, ENTRY_BATCH_STATUS_META, gradeForPercentage } from "@/modules/services/academics";
 import type { AcademicError, BatchVersion, EntryBatch, MarksRow } from "@/modules/services/academics";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
@@ -58,23 +58,6 @@ export function assignmentsCoverBatch(
   );
 }
 
-/**
- * Resolve a teacher's active assignments into the class+subject shape the
- * scope check needs. Both lists derive from the same active-assignment
- * ordering in the staff-context service; grade labels come from the service,
- * never from a fixture import.
- */
-export async function teacherAssignmentScope(accountId: string): Promise<AssignmentScope[]> {
-  const [assignments, sections] = await Promise.all([
-    staffContextService.getActiveAssignments(accountId),
-    staffContextService.getActiveAssignmentSections(accountId),
-  ]);
-  return assignments.map((assignment, index) => ({
-    gradeSection: sections[index] ?? null,
-    subjectName: assignment.subjectName,
-  }));
-}
-
 type MarksEntryProps = {
   batchRef: string;
   initialBatch: EntryBatch;
@@ -115,30 +98,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
      results.enter scope below. */
   const canApprove = canAnyRole(summary?.roles ?? [], "results.approve");
   const canPublish = canAnyRole(summary?.roles ?? [], "results.publish");
-  /* Assignment scope: only the legacy teacher role is scoped by teaching
-     assignments. The Principal's result_entry_officer enters centrally with
-     no assignment dependency (three-portal consolidation, Phase 3). */
-  const [assignmentOk, setAssignmentOk] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    if (summary === null || summary.role !== "teacher") {
-      setAssignmentOk(true);
-      return;
-    }
-    let cancelled = false;
-    void teacherAssignmentScope(summary.accountId)
-      .then((scope) => {
-        if (cancelled) return;
-        setAssignmentOk(assignmentsCoverBatch(scope, initialBatch.className, initialBatch.subject));
-      })
-      .catch(() => {
-        if (cancelled) return;
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- summary is intentionally sampled once per identity/workspace change
-  }, [summary?.accountId, summary?.role, initialBatch.className, initialBatch.subject]);
+  const profileCode = summary?.profileCode ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -314,33 +274,6 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     return <p className={styles.loading}>Loading marks entry workspace…</p>;
   }
 
-  /* Teacher assignment scope (I4): the route guard admits teacher roles;
-     here the batch's class must be covered by the teacher's assignments. */
-  if (assignmentOk === false) {
-    return (
-      <div className={styles.workspace} role="alert">
-        <header className={`workspace-header ${styles.header}`}>
-          <p className="eyebrow">Staff · Results · Marks entry</p>
-          <h1 className="workspace-title">Outside your assignments</h1>
-          <p className={`workspace-intro ${styles.meta}`}>
-            <span className="num">{batch.ref}</span> · {batch.exam} · {batch.className}
-          </p>
-        </header>
-        <div className={styles.returnedPanel}>
-          <p className={styles.returnedReason}>
-            This batch is not in your assigned classes or subjects — marks entry is scoped to the classes and subjects
-            on your teaching assignment. If this is wrong, the school office must update the assignment.
-          </p>
-          <p className={styles.returnedHint}>
-            <Link prefetch={false} className="link-arrow" href="/staff/results">
-              Back to the batch queue →
-            </Link>
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const meta = ENTRY_BATCH_STATUS_META[batch.status];
   const editable = batch.status === "draft" || batch.status === "returned";
   const awaitingModeration = batch.status === "submitted" || batch.status === "moderation";
@@ -351,7 +284,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     <div className={styles.workspace}>
       <header className={`workspace-header ${styles.header}`}>
         <p className={styles.backLink}>
-          <Link prefetch={false} className="link-arrow" href={`/staff/results/${batch.ref}`}>
+          <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, `/results/${batch.ref}`)}>
             ← {batch.exam} · {batch.className}
           </Link>
         </p>

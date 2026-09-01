@@ -153,8 +153,9 @@ export const demoRoleGrants: RoleGrant[] = [
     effectiveToIso: null,
   },
   /* The teacher role grant (formerly 0302) is removed: Firdous Ahmad is a
-     non-login teacher school record. Teaching assignments are retained for
-     timetable/subject attribution but no longer reference a role grant. */
+     fully non-login teacher school record. Teaching assignments are retained
+     for timetable/subject attribution but no teacher holds a login role or
+     workspace. */
   {
     id: "00000000-0000-4000-8000-000000000303",
     ref: "ROLE-2026-0303",
