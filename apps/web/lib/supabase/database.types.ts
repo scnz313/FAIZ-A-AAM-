@@ -751,6 +751,18 @@ export type Database = {
         }
         Returns: Json
       }
+      guardian_claim_accept_by_token: {
+        Args: {
+          p_token: string
+          p_family_name: string
+          p_given_name: string
+        }
+        Returns: Json
+      }
+      guardian_claim_verify_token: {
+        Args: { p_token: string }
+        Returns: Json
+      }
       guardian_claim_create: {
         Args: {
           p_campaign_id?: string
@@ -777,6 +789,14 @@ export type Database = {
       }
       guardian_contact_change_request: {
         Args: { p_new_contact: string; p_reason: string }
+        Returns: Json
+      }
+      guardian_contact_change_approve: {
+        Args: { p_change_reference: string; p_approval_note?: string }
+        Returns: Json
+      }
+      guardian_switch_active_child: {
+        Args: { p_guardian_id: string; p_student_id: string }
         Returns: Json
       }
       guardian_has_capability: {
@@ -4160,6 +4180,7 @@ export type Database = {
           reference: string
           secret_hash: string
           status: string
+          token_hash: string | null
           updated_at: string
           use_count: number
         }
@@ -4178,6 +4199,7 @@ export type Database = {
           reference?: string
           secret_hash: string
           status?: string
+          token_hash?: string | null
           updated_at?: string
           use_count?: number
         }
@@ -4196,6 +4218,7 @@ export type Database = {
           reference?: string
           secret_hash?: string
           status?: string
+          token_hash?: string | null
           updated_at?: string
           use_count?: number
         }
@@ -4384,6 +4407,42 @@ export type Database = {
             columns: ["link_id"]
             isOneToOne: false
             referencedRelation: "guardian_student_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardian_preferences: {
+        Row: {
+          guardian_id: string
+          active_student_id: string | null
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          guardian_id: string
+          active_student_id?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          guardian_id?: string
+          active_student_id?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_preferences_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: true
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_preferences_active_student_id_fkey"
+            columns: ["active_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
         ]

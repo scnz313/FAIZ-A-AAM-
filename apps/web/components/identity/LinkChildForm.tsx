@@ -10,11 +10,12 @@ import styles from "./LinkChildForm.module.css";
 
 type FieldErrors = {
   guardianName?: string;
-  childAdmissionRef?: string;
+  childName?: string;
+  childDateOfBirth?: string;
   relation?: string;
 };
 
-const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["guardianName", "childAdmissionRef", "relation"];
+const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["guardianName", "childName", "childDateOfBirth", "relation"];
 
 const RELATIONS: ReadonlyArray<string> = ["Father", "Mother", "Legal guardian", "Other"];
 
@@ -23,14 +24,16 @@ function fieldId(field: keyof FieldErrors): string {
 }
 
 /**
- * Request to link another child to this guardian account. Submits through the
- * identity service, which records a pending link (LR reference) in the demo
- * session store. The school office verifies the request before the child
- * appears in the portal. Demo only — nothing is sent anywhere.
+ * Request to link another child to this guardian account. The form collects
+ * the child's name and date of birth — NOT a student/admission reference.
+ * The school office verifies the request against school records before the
+ * child appears in the portal. This eliminates student-reference activation:
+ * a reference number alone never activates portal access.
  */
 export default function LinkChildForm() {
   const [guardianName, setGuardianName] = useState("Firdous Ahmad");
-  const [childAdmissionRef, setChildAdmissionRef] = useState("");
+  const [childName, setChildName] = useState("");
+  const [childDateOfBirth, setChildDateOfBirth] = useState("");
   const [relation, setRelation] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -45,9 +48,8 @@ export default function LinkChildForm() {
   function validate(): FieldErrors {
     const next: FieldErrors = {};
     if (guardianName.trim() === "") next.guardianName = "Enter the guardian name on the account.";
-    if (childAdmissionRef.trim().length < 6) {
-      next.childAdmissionRef = "Enter the child's admission reference — at least 6 characters.";
-    }
+    if (childName.trim().length < 2) next.childName = "Enter the child's full name.";
+    if (childDateOfBirth.trim() === "") next.childDateOfBirth = "Enter the child's date of birth.";
     if (relation === "") next.relation = "Choose the guardian relation to the child.";
     return next;
   }
@@ -63,7 +65,11 @@ export default function LinkChildForm() {
     }
     setSubmitting(true);
     try {
-      const { ref } = await identityService.requestLink(guardianName.trim(), childAdmissionRef.trim(), relation);
+      const { ref } = await identityService.requestLink(
+        guardianName.trim(),
+        `${childName.trim()}|DOB:${childDateOfBirth}`,
+        relation,
+      );
       setLinkRef(ref);
     } finally {
       setSubmitting(false);
@@ -79,7 +85,7 @@ export default function LinkChildForm() {
           Reference <strong className="num">{linkRef}</strong>
         </p>
         <p className={styles.successNote}>
-          The school office will verify this request. <span className="demo-badge">demo</span> Once approved, the
+          The school office will verify this request against school records. Once approved, the
           child appears under Linked children on the profile.
         </p>
         <div className={styles.successActions}>
@@ -102,7 +108,8 @@ export default function LinkChildForm() {
       <form className={`panel ${styles.form}`} onSubmit={handleSubmit} noValidate>
         <p className={styles.formNote}>
           Linking requires the school to verify the request — a second child appears in the portal only after the
-          office approves the link.
+          office approves the link. Provide the child&apos;s name and date of birth; the school matches them to
+          the correct student record.
         </p>
 
         <div className={`field ${errors.guardianName ? "field--invalid" : ""}`}>
@@ -126,31 +133,52 @@ export default function LinkChildForm() {
           )}
         </div>
 
-        <div className={`field ${errors.childAdmissionRef ? "field--invalid" : ""}`}>
-          <label htmlFor={fieldId("childAdmissionRef")}>
-            Child admission reference <span aria-hidden="true">*</span>
+        <div className={`field ${errors.childName ? "field--invalid" : ""}`}>
+          <label htmlFor={fieldId("childName")}>
+            Child full name <span aria-hidden="true">*</span>
           </label>
           <input
-            id={fieldId("childAdmissionRef")}
-            className="input num"
+            id={fieldId("childName")}
+            className="input"
             type="text"
-            value={childAdmissionRef}
-            onChange={(event) => setChildAdmissionRef(event.target.value)}
-            placeholder="ADM-2026-0042"
-            aria-invalid={errors.childAdmissionRef !== undefined}
+            autoComplete="off"
+            value={childName}
+            onChange={(event) => setChildName(event.target.value)}
+            placeholder="e.g. Zoya Khan"
+            aria-invalid={errors.childName !== undefined}
             aria-describedby={
-              errors.childAdmissionRef
-                ? `${fieldId("childAdmissionRef")}-error`
-                : `${fieldId("childAdmissionRef")}-help`
+              errors.childName
+                ? `${fieldId("childName")}-error`
+                : `${fieldId("childName")}-help`
             }
           />
-          <p id={`${fieldId("childAdmissionRef")}-help`} className="field-help">
-            Found on the child&apos;s admission letter, e.g. ADM-2026-0042. Demo: the school record reference
-            works too — try STU-2026-0903 (Zoya Khan).
+          <p id={`${fieldId("childName")}-help`} className="field-help">
+            The school office matches this name to the student record. A student or admission reference
+            number is not accepted — verification is by name and date of birth only.
           </p>
-          {errors.childAdmissionRef && (
-            <p id={`${fieldId("childAdmissionRef")}-error`} className="field-error">
-              {errors.childAdmissionRef}
+          {errors.childName && (
+            <p id={`${fieldId("childName")}-error`} className="field-error">
+              {errors.childName}
+            </p>
+          )}
+        </div>
+
+        <div className={`field ${errors.childDateOfBirth ? "field--invalid" : ""}`}>
+          <label htmlFor={fieldId("childDateOfBirth")}>
+            Child date of birth <span aria-hidden="true">*</span>
+          </label>
+          <input
+            id={fieldId("childDateOfBirth")}
+            className="input"
+            type="date"
+            value={childDateOfBirth}
+            onChange={(event) => setChildDateOfBirth(event.target.value)}
+            aria-invalid={errors.childDateOfBirth !== undefined}
+            aria-describedby={errors.childDateOfBirth ? `${fieldId("childDateOfBirth")}-error` : undefined}
+          />
+          {errors.childDateOfBirth && (
+            <p id={`${fieldId("childDateOfBirth")}-error`} className="field-error">
+              {errors.childDateOfBirth}
             </p>
           )}
         </div>
@@ -185,9 +213,6 @@ export default function LinkChildForm() {
           <Button variant="primary" type="submit" disabled={submitting}>
             {submitting ? "Recording request…" : "Request to link"}
           </Button>
-          <p className={styles.actionNote}>
-            Demo — the request is recorded in this browser session only; nothing is sent to the school.
-          </p>
         </div>
       </form>
     </div>

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
 import type { FamilyPortalContext } from "@fass/contracts";
 
@@ -79,6 +80,7 @@ export function FamilyContextProvider({
   const [generation, setGeneration] = useState(0);
   const dirtyFormsRef = useRef<Map<string, () => boolean>>(new Map());
   const [dirtyCount, setDirtyCount] = useState(0);
+  const router = useRouter();
 
   useEffect(() => {
     if (initialState !== undefined && reloadKey === 0) return;
@@ -175,6 +177,9 @@ export function FamilyContextProvider({
             `Now showing ${selected.student.displayName}, ${selected.gradeSection.gradeLabel}-${selected.gradeSection.sectionLabel}, ${selected.academicYear.label}.`,
           );
         }
+        /* Reload all server-side projections so no stale sibling data
+           remains after the switch. */
+        router.refresh();
       } catch (error) {
         /* Restore the previous context and generation; the switch never
            half-applies. */
@@ -189,7 +194,7 @@ export function FamilyContextProvider({
         setSwitching(false);
       }
     },
-    [context, students],
+    [context, students, router],
   );
 
   const retry = useCallback(() => {
