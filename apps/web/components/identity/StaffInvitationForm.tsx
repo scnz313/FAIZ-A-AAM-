@@ -79,8 +79,9 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
         <p>
           {demo
             ? "The local demo materialized the account records without contacting an identity provider."
-            : "The verified invitation email matched the school record and the account was linked."} {" "}
-          The <strong>{result.userRow.role}</strong> workspace is ready. Complete two-step verification before opening staff records.
+            : "The verified invitation email matched the school record and the account was linked."}{" "}
+          The <strong>{result.userRow.profileLabel ?? result.userRow.role}</strong> workspace is ready. Complete
+          two-step verification before opening staff records.
         </p>
         <dl className={styles.references}>
           <div>

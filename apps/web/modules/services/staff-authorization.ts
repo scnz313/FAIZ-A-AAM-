@@ -63,14 +63,19 @@ const ROLE_ACTIONS: Record<string, ReadonlySet<StaffAction>> = {
   /* Careers: reviewer scores, approver advances/rejects/offers. */
   hr_reviewer: new Set(["home.view", "careers.view", "careers.review", "documents.view"]),
   hr_approver: new Set(["home.view", "careers.view", "careers.approve", "documents.view"]),
-  /* Results: teacher enters assigned marks, reviewer moderates, publisher releases. */
+  /* Results: result_entry_officer enters/import marks (Principal), reviewer
+     moderates, publisher releases. The legacy teacher role is retained for
+     history only and is not granted to new accounts. */
+  result_entry_officer: new Set(["home.view", "results.view", "results.enter", "documents.view"]),
   teacher: new Set(["home.view", "results.view", "results.enter", "timetable.view"]),
   exam_reviewer: new Set(["home.view", "results.view", "results.approve", "documents.view"]),
   result_publisher: new Set(["home.view", "results.view", "results.publish", "documents.view"]),
   /* Timetable: manager creates, validates, publishes, overrides. */
   timetable_manager: new Set(["home.view", "timetable.view", "timetable.manage"]),
-  /* Support: officer responds and reviews guardian links. */
-  support_officer: new Set(["home.view", "support.view", "support.respond", "links.verify", "facility.view"]),
+  /* Support: officer responds. Guardian-link activation/restriction/revocation
+     is an Administrator-only decision; support_officer no longer carries
+     links.verify. */
+  support_officer: new Set(["home.view", "support.view", "support.respond", "facility.view"]),
   /* Auditor: read-only audit and owning-record document evidence permitted by database policy. */
   auditor: new Set(["home.view", "audit.view", "documents.view"]),
   /* System administrator: configuration and access grants ONLY. */
@@ -125,38 +130,29 @@ export type DemoStaffIdentity = {
 
 /**
  * The fictional staff accounts the demo shell can switch between, standing
- * in for staff sign-in. Each account exercises a different role set:
- * - Sana Wani — finance operations, result publication, admissions review, exam review.
- * - Firdous Ahmad — teacher (also a guardian; the multi-role person).
- * - Aisha Lone — content drafting/publishing, support, audit, system administration.
- * - Naseer Lone — independent content publisher (maker/checker separation).
- * - Rania Mir — approval workspaces (admissions/finance/HR) and timetable management.
+ * in for staff sign-in. Two persistent personas map to the canonical
+ * access profiles:
+ * - Aisha Lone — Administrator (account management + final approvals).
+ * - Rania Mir — Principal (daily operations + result entry).
+ * Legacy multi-role personas remain available for negative-scope tests but
+ * are not shown in the primary picker. The teacher persona is removed from
+ * the primary picker; teachers are non-login school records.
  */
 export const DEMO_STAFF_IDENTITIES: ReadonlyArray<DemoStaffIdentity> = [
   {
-    accountId: "00000000-0000-4000-8000-000000000203",
-    displayName: "Sana Wani",
-    summaryLabel: "Finance · Results · Admissions",
-  },
-  {
-    accountId: "00000000-0000-4000-8000-000000000201",
-    displayName: "Firdous Ahmad",
-    summaryLabel: "Teacher (Class 8-A Mathematics)",
-  },
-  {
     accountId: "00000000-0000-4000-8000-000000000204",
     displayName: "Aisha Lone",
-    summaryLabel: "Content · Support · Audit · Admin",
-  },
-  {
-    accountId: "00000000-0000-4000-8000-000000000206",
-    displayName: "Naseer Lone",
-    summaryLabel: "Content publisher",
+    summaryLabel: "Administrator",
   },
   {
     accountId: "00000000-0000-4000-8000-000000000205",
     displayName: "Rania Mir",
-    summaryLabel: "Approvals · Timetables",
+    summaryLabel: "Principal",
+  },
+  {
+    accountId: "00000000-0000-4000-8000-000000000203",
+    displayName: "Sana Wani",
+    summaryLabel: "Legacy multi-role (tests)",
   },
 ];
 

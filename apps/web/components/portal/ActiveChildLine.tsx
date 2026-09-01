@@ -11,7 +11,7 @@ import styles from "./ActiveChildLine.module.css";
  * reload and shows a recoverable message when the context cannot load.
  */
 export function ActiveChildLine() {
-  const { status, activeStudent, errorMessage, retry, switching } = useFamilyContext();
+  const { status, activeStudent, students, errorMessage, retry, switching } = useFamilyContext();
 
   if (status === "error") {
     return (
@@ -36,7 +36,7 @@ export function ActiveChildLine() {
 
   return (
     <p className={styles.line} role="status" aria-live="polite">
-      <span className={styles.label}>Linked student</span>
+      <span className={styles.label}>Your children ({students.length})</span>
       <strong>{activeStudent.student.displayName}</strong>
       <span>· {gradeSectionLabel(activeStudent.gradeSection)}</span>
       <span>· {activeStudent.academicYear.label}</span>

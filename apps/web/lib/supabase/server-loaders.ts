@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { serverAdapterOperation } from "@/lib/supabase/adapter-server";
 import { getServerActor } from "@/lib/auth/actor";
+import { isStaffPath } from "@/lib/auth/portal-routes";
 import { admissionPublicConfiguration, contentListPublic, financeListAllAttempts, financeListMyInvoices, financeListMyReceipts, financeListReconciliationProjection, jobsListPublishedVacancies, resolveFamilyContext, resolveStaffContext, type FinanceAttemptProjectionRow, type FinanceReconciliationProjectionRow } from "@/lib/supabase/domain";
 import type { ServerFamilyContextResponse } from "@/modules/services/family-context";
 import type { ServerStaffContextResponse } from "@/modules/services/staff-context";
@@ -16,15 +17,17 @@ import {
   type ServerInvoiceRow,
   type ServerReceiptRow,
 } from "@/modules/services/finance-server-map";
-import type { InvoiceView, Receipt } from "@/modules/services/finance";
+import type { InvoiceView } from "@/modules/services/finance";
 import type { Vacancy } from "@/modules/content/demo";
 import { mapServerContentRow, type ContentNotice, type ServerContentRow } from "@/modules/services/content";
 import { mapServerJob, type JobApplicationRecord, type ServerJobRow } from "@/modules/services/careers";
 import { mapServerApplication, type ApplicationRecord, type ServerAdmissionRow } from "@/modules/services/admissions";
+import { mapServerResultBatch, type EntryBatch, type SupabaseResultRow } from "@/modules/services/academics";
 import { mapServerSupportRow, type Grievance, type ServerSupportRow } from "@/modules/services/support";
 import type { AdmissionConfiguration, AdmissionWindow, AdmissionDocumentRequirement, SchoolGrade } from "@/modules/services/school-config";
 import type { AcademicYear } from "@fass/contracts";
 import type { NotificationItem } from "@/modules/notifications/demo";
+import { mapServerAuditEvent, type AuditEvent, type ServerAuditEventRow } from "@/modules/services/audit";
 import { notificationHref, notificationKind, type ServerNotificationRow } from "@/modules/services/notifications";
 
 async function financeClient() {
@@ -32,14 +35,15 @@ async function financeClient() {
 }
 
 async function requireServerActor() {
-  const pathname = (await headers()).get("x-fass-pathname") ?? "/";
+  const rawPathname = (await headers()).get("x-fass-pathname") ?? "/";
+  const pathname = rawPathname.split("?")[0] ?? "/";
   const actor = await getServerActor();
   if (actor === null) {
-    const signInPath = pathname.startsWith("/staff") ? "/sign-in/staff" : "/sign-in";
-    redirect(`${signInPath}?next=${encodeURIComponent(pathname)}`);
+    const signInPath = isStaffPath(pathname) ? "/sign-in/staff" : "/sign-in";
+    redirect(`${signInPath}?next=${encodeURIComponent(rawPathname)}`);
   }
-  if (pathname.startsWith("/staff") && actor.aal !== "aal2") {
-    redirect(`/sign-in/totp?next=${encodeURIComponent(pathname)}`);
+  if (isStaffPath(pathname) && actor.aal !== "aal2") {
+    redirect(`/sign-in/totp?next=${encodeURIComponent(rawPathname)}`);
   }
   return actor;
 }
@@ -159,13 +163,6 @@ export async function loadServerPublicAdmissionConfiguration(): Promise<Admissio
   };
 }
 
-export async function loadServerReceipts(): Promise<Receipt[]> {
-  await requireServerActor();
-  const result = await financeListMyReceipts(await financeClient());
-  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Receipts could not be loaded.");
-  return (result.value as unknown as ServerReceiptRow[]).map(mapServerReceipt);
-}
-
 export async function loadServerPaymentAttempts(): Promise<FinanceAttemptProjectionRow[]> {
   await requireServerActor();
   const result = await financeListAllAttempts(await financeClient());
@@ -183,16 +180,16 @@ export async function loadServerReconciliationProjection(): Promise<FinanceRecon
 /** Results/timetable/remaining-domain loaders keep protected Server
  * Components on the server adapter boundary; they never issue an
  * unauthenticated relative fetch or seed client fixtures in Supabase mode. */
-export async function loadServerResultsBatches(): Promise<unknown[]> {
-  const result = await serverAdapterOperation<unknown[]>("results.listBatches");
+export async function loadServerResultsBatches(): Promise<EntryBatch[]> {
+  const result = await serverAdapterOperation<SupabaseResultRow[]>("results.listBatches");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Results could not be loaded.");
-  return result.value;
+  return result.value.map(mapServerResultBatch);
 }
 
-export async function loadServerResultBatch(batchId: string): Promise<unknown> {
-  const result = await serverAdapterOperation<unknown>("results.getBatch", { batchRef: batchId });
+export async function loadServerResultBatch(batchRef: string): Promise<EntryBatch | null> {
+  const result = await serverAdapterOperation<SupabaseResultRow | null>("results.getBatch", { batchRef });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Result batch could not be loaded.");
-  return result.value;
+  return result.value === null ? null : mapServerResultBatch(result.value);
 }
 
 export async function loadServerResultVersions(batchRef: string): Promise<unknown[]> {
@@ -202,13 +199,13 @@ export async function loadServerResultVersions(batchRef: string): Promise<unknow
 }
 
 export async function loadServerResultPublications(studentId?: string): Promise<unknown[]> {
-  const result = await serverAdapterOperation<unknown[]>("results.listReleases", studentId ? { studentRef: studentId } : {});
+  const result = await serverAdapterOperation<unknown[]>("results.listReleases", studentId ? { studentId } : {});
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Published results could not be loaded.");
   return result.value;
 }
 
 export async function loadServerTimetable(gradeSectionId: string): Promise<unknown | null> {
-  const result = await serverAdapterOperation<unknown | null>("timetable.effective", { gradeSectionRef: gradeSectionId });
+  const result = await serverAdapterOperation<unknown | null>("timetable.effective", { gradeSectionId });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Timetable could not be loaded.");
   return result.value;
 }
@@ -275,10 +272,10 @@ export async function loadServerNotifications(): Promise<NotificationItem[]> {
   return result.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: notificationKind(item), text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null, href: notificationHref(item) }));
 }
 
-export async function loadServerAudit(): Promise<unknown[]> {
-  const result = await serverAdapterOperation<unknown[]>("audit.list", { limit: 100 });
+export async function loadServerAudit(): Promise<AuditEvent[]> {
+  const result = await serverAdapterOperation<ServerAuditEventRow[]>("audit.list", { limit: 100 });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Audit could not be loaded.");
-  return result.value;
+  return result.value.map(mapServerAuditEvent);
 }
 
 export type ServerDocumentProjection = { ref: string; ownerReference?: string; category: string; filename: string; processingState: string; mimeType: string; sizeBytes: number };

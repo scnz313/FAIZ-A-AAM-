@@ -110,7 +110,7 @@ const PERIOD_TIMES = [
   ["14:15", "15:00"],
 ] as const;
 
-const DEMO_SUBJECTS: SchoolSubject[] = [
+export const DEMO_SUBJECTS: SchoolSubject[] = [
   { id: "00000000-0000-4000-8000-000000000801", code: "MAT", name: "Mathematics" },
   { id: "00000000-0000-4000-8000-000000000802", code: "SCI", name: "General Science" },
 ];

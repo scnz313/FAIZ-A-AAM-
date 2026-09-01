@@ -40,8 +40,10 @@ describe("usersService.listUsers", () => {
     expect(aisha).toBeDefined();
     expect(aisha?.name).toBe("Aisha Lone");
     expect(aisha?.status).toBe("Active");
-    /* Aisha holds: content_editor, content_publisher, support_officer, auditor, system_administrator */
-    expect(aisha?.grants.length).toBeGreaterThanOrEqual(5);
+    /* Aisha holds the Administrator profile roles: system_administrator,
+       content_publisher, admissions_approver, finance_approver, hr_approver,
+       exam_reviewer, result_publisher, auditor. */
+    expect(aisha?.grants.length).toBeGreaterThanOrEqual(8);
     const adminGrant = aisha?.grants.find((g) => g.role === "system_administrator");
     expect(adminGrant).toBeDefined();
     expect(adminGrant?.roleLabel).toBe("System administrator");
@@ -61,8 +63,8 @@ describe("usersService.inviteUser", () => {
     const result = await usersService.inviteUser({
       name: "Test Person",
       email: "test.person@faizaam.example",
-      role: "teacher",
-      reason: "New teacher for Class 7.",
+      profileCode: "principal",
+      reason: "New principal for the school office.",
     });
 
     expect(result.accountRef).toBe("");
@@ -72,6 +74,7 @@ describe("usersService.inviteUser", () => {
     expect(result.userRow.status).toBe("Invited");
     expect(result.userRow.accountId).toBe("");
     expect(result.userRow.grants).toHaveLength(0);
+    expect(result.userRow.profileLabel).toBe("Principal");
     expect(window.sessionStorage.getItem(STAFF_INVITATIONS_SESSION_KEY)).not.toContain(result.oneTimeRef);
   });
 
@@ -79,14 +82,14 @@ describe("usersService.inviteUser", () => {
     const result = await usersService.inviteUser({
       name: "Another Staff",
       email: "another@faizaam.example",
-      role: "finance_officer",
-      reason: "Finance team expansion.",
+      profileCode: "administrator",
+      reason: "Office team expansion.",
     });
 
     const users = await usersService.listUsers();
     const found = users.find((u) => u.invitationRef === result.invitationRef);
     expect(found).toBeDefined();
-    expect(found?.role).toContain("Finance officer");
+    expect(found?.role).toContain("Administrator");
     expect(found?.accountId).toBe("");
   });
 
@@ -94,7 +97,7 @@ describe("usersService.inviteUser", () => {
     await usersService.inviteUser({
       name: "Audited Person",
       email: "audited@faizaam.example",
-      role: "auditor",
+      profileCode: "principal",
       reason: "Audit access grant.",
     });
 
@@ -103,26 +106,29 @@ describe("usersService.inviteUser", () => {
 });
 
 describe("usersService.acceptInvitation", () => {
-  it("materializes one account, staff member, and role grant transactionally", async () => {
+  it("materializes one account, staff member, and profile grants transactionally", async () => {
     const invitation = await usersService.inviteUser({
-      name: "Invited Teacher",
-      email: "invited.teacher@faizaam.example",
-      role: "teacher",
-      reason: "Class 8 staffing.",
+      name: "Invited Principal",
+      email: "invited.principal@faizaam.example",
+      profileCode: "principal",
+      reason: "Principal appointment.",
     });
 
     const accepted = await usersService.acceptInvitation({
       invitationRef: invitation.invitationRef,
       oneTimeRef: invitation.oneTimeRef,
       givenName: "Invited",
-      familyName: "Teacher",
+      familyName: "Principal",
     });
 
     expect(accepted.accountRef).toMatch(/^ACC-/);
     expect(accepted.staffMemberId).toMatch(/^00000000-0000-4000-8000-/);
     expect(accepted.grantRef).toMatch(/^ROLE-/);
     expect(accepted.userRow.status).toBe("Active");
-    expect(accepted.userRow.grants.map((grant) => grant.role)).toEqual(["teacher"]);
+    expect(accepted.userRow.profileLabel).toBe("Principal");
+    /* The principal profile expands to seven internal roles. */
+    expect(accepted.userRow.grants.length).toBe(7);
+    expect(accepted.userRow.grants.some((grant) => grant.role === "result_entry_officer")).toBe(true);
     expect((await usersService.listUsers()).some((user) => user.invitationRef === invitation.invitationRef)).toBe(false);
   });
 
@@ -130,7 +136,7 @@ describe("usersService.acceptInvitation", () => {
     const invitation = await usersService.inviteUser({
       name: "Reuse Test",
       email: "reuse@faizaam.example",
-      role: "auditor",
+      profileCode: "principal",
       reason: "Audit support.",
     });
     await expect(
@@ -161,7 +167,9 @@ describe("usersService.acceptInvitation", () => {
 
 describe("usersService.grantRole", () => {
   it("adds a new active role grant to an existing account", async () => {
-    /* Firdous Ahmad (201) is a teacher — grant him an additional role. */
+    /* Firdous Ahmad (201) is a non-login teacher record — grant him an
+       additional staff role to verify grantRole works on accounts with
+       a staff member even when they start with no staff grants. */
     const FIRDOUS_ACCOUNT_ID = "00000000-0000-4000-8000-000000000201";
     const result = await usersService.grantRole({
       accountId: FIRDOUS_ACCOUNT_ID,
@@ -170,7 +178,6 @@ describe("usersService.grantRole", () => {
     });
 
     expect(result.grants.some((g) => g.role === "exam_reviewer")).toBe(true);
-    expect(result.grants.some((g) => g.role === "teacher")).toBe(true);
   });
 
   it("rejects a duplicate active grant for the same role", async () => {
@@ -207,7 +214,7 @@ describe("usersService.revokeRole", () => {
     });
 
     expect(after.grants.some((g) => g.role === "system_administrator")).toBe(false);
-    expect(after.grants.some((g) => g.role === "content_editor")).toBe(true);
+    expect(after.grants.some((g) => g.role === "content_publisher")).toBe(true);
   });
 
   it("rejects revoking an already-revoked grant", async () => {

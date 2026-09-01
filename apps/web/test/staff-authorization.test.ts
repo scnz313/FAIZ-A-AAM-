@@ -20,13 +20,11 @@ const PINNED = new Date("2026-08-10T05:00:00.000Z");
 const IDENTITY_SESSION_KEY = sessionKey("identity");
 
 const SANA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000203";
-const FIRDOUS_ACCOUNT_ID = "00000000-0000-4000-8000-000000000201";
 const AISHA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000204";
 const RANIA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
 const ADMISSIONS_GRANT_ID = "00000000-0000-4000-8000-000000000306";
 const SYSTEM_ADMIN_GRANT_ID = "00000000-0000-4000-8000-000000000310";
 const EXAM_REVIEWER_GRANT_ID = "00000000-0000-4000-8000-000000000315";
-const ADMISSIONS_APPROVER_GRANT_ID = "00000000-0000-4000-8000-000000000311";
 
 beforeEach(() => {
   window.sessionStorage.clear();
@@ -76,8 +74,13 @@ describe("canonical role → action matrix (Phase 1 maker/checker splits)", () =
     expect(canRole("hr_approver", "careers.approve")).toBe(true);
     expect(canRole("hr_approver", "careers.review")).toBe(false);
 
-    /* Teacher: entry for assigned classes only — never publication, and
-       links.verify was REMOVED from the teacher grant. */
+    /* Result entry officer (Principal profile) enters marks — never
+       approval or publication. The legacy teacher role is retained for
+       history only and is not granted to new accounts. */
+    expect(canRole("result_entry_officer", "results.view")).toBe(true);
+    expect(canRole("result_entry_officer", "results.enter")).toBe(true);
+    expect(canRole("result_entry_officer", "results.publish")).toBe(false);
+    expect(canRole("result_entry_officer", "results.approve")).toBe(false);
     expect(canRole("teacher", "results.view")).toBe(true);
     expect(canRole("teacher", "results.enter")).toBe(true);
     expect(canRole("teacher", "timetable.view")).toBe(true);
@@ -100,10 +103,11 @@ describe("canonical role → action matrix (Phase 1 maker/checker splits)", () =
     expect(canRole("timetable_manager", "timetable.view")).toBe(true);
     expect(canRole("timetable_manager", "timetable.manage")).toBe(true);
 
-    /* Support officer responds and is one of only two roles with links.verify. */
+    /* Support officer responds but no longer carries links.verify —
+       guardian-link activation/restriction/revocation is Administrator-only. */
     expect(canRole("support_officer", "support.view")).toBe(true);
     expect(canRole("support_officer", "support.respond")).toBe(true);
-    expect(canRole("support_officer", "links.verify")).toBe(true);
+    expect(canRole("support_officer", "links.verify")).toBe(false);
 
     /* Auditor is read-only. */
     expect(canRole("auditor", "audit.view")).toBe(true);
@@ -138,22 +142,30 @@ describe("canonical role → action matrix (Phase 1 maker/checker splits)", () =
     expect(await can(SANA_ACCOUNT_ID, "results.approve")).toBe(true);
     expect(await can(SANA_ACCOUNT_ID, "results.publish")).toBe(false);
 
-    expect(await can(FIRDOUS_ACCOUNT_ID, "results.enter")).toBe(true);
-    expect(await can(FIRDOUS_ACCOUNT_ID, "results.publish")).toBe(false);
-    expect(await can(FIRDOUS_ACCOUNT_ID, "finance.view")).toBe(false);
-    /* Aisha's default workspace is content editor — users.manage requires the
-       system-administrator workspace, proving active-workspace scoping. */
+    /* Rania's result_entry_officer workspace can enter marks but not
+       publish or view finance — proving active-workspace scoping. */
+    await staffContextService.setActiveWorkspace(RANIA_ACCOUNT_ID, "00000000-0000-4000-8000-000000000323");
+    expect(await can(RANIA_ACCOUNT_ID, "results.enter")).toBe(true);
+    expect(await can(RANIA_ACCOUNT_ID, "results.publish")).toBe(false);
+    expect(await can(RANIA_ACCOUNT_ID, "finance.view")).toBe(false);
+    /* Aisha's default workspace is content_publisher — users.manage requires
+       the system-administrator workspace, proving active-workspace scoping. */
     expect(await can(AISHA_ACCOUNT_ID, "users.manage")).toBe(false);
-    expect(await can(AISHA_ACCOUNT_ID, "content.draft")).toBe(true);
-    expect(await can(AISHA_ACCOUNT_ID, "content.publish")).toBe(false);
+    expect(await can(AISHA_ACCOUNT_ID, "content.publish")).toBe(true);
+    expect(await can(AISHA_ACCOUNT_ID, "content.draft")).toBe(false);
     await staffContextService.setActiveWorkspace(AISHA_ACCOUNT_ID, SYSTEM_ADMIN_GRANT_ID);
     expect(await can(AISHA_ACCOUNT_ID, "users.manage")).toBe(true);
 
-    /* Rania's default workspace is admissions approver. */
-    expect(await can(RANIA_ACCOUNT_ID, "admissions.approve")).toBe(true);
-    expect(await can(RANIA_ACCOUNT_ID, "admissions.review")).toBe(false);
-    await staffContextService.setActiveWorkspace(RANIA_ACCOUNT_ID, ADMISSIONS_APPROVER_GRANT_ID);
-    expect(await can(RANIA_ACCOUNT_ID, "admissions.approve")).toBe(true);
+    /* Rania's default Principal workspace is content_editor — she can draft
+       but not publish. Switching to admissions_officer grants review but
+       not approval. */
+    await staffContextService.setActiveWorkspace(RANIA_ACCOUNT_ID, "00000000-0000-4000-8000-000000000307");
+    expect(await can(RANIA_ACCOUNT_ID, "content.draft")).toBe(true);
+    expect(await can(RANIA_ACCOUNT_ID, "content.publish")).toBe(false);
+    expect(await can(RANIA_ACCOUNT_ID, "admissions.approve")).toBe(false);
+    await staffContextService.setActiveWorkspace(RANIA_ACCOUNT_ID, "00000000-0000-4000-8000-000000000318");
+    expect(await can(RANIA_ACCOUNT_ID, "admissions.review")).toBe(true);
+    expect(await can(RANIA_ACCOUNT_ID, "admissions.approve")).toBe(false);
   });
 
   it("lists only the granted workspaces that can perform an action", async () => {
@@ -193,9 +205,10 @@ describe("teacher assignment class matching", () => {
     expect(assignmentsCoverClass([], "8-A")).toBe(false);
   });
 
-  it("resolves the teacher's assignment sections through the staff service", async () => {
-    const sections = await staffContextService.getActiveAssignmentSections(FIRDOUS_ACCOUNT_ID);
-    expect(sections).toEqual([{ gradeLabel: "Class 8", sectionLabel: "A" }]);
+  it("resolves assignment sections through the staff service", async () => {
+    /* Teaching assignments now have roleGrantId: null (non-login teacher
+       records), so no staff workspace resolves active assignment sections. */
+    await expect(staffContextService.getActiveAssignmentSections(RANIA_ACCOUNT_ID)).resolves.toEqual([]);
     await expect(staffContextService.getActiveAssignmentSections(SANA_ACCOUNT_ID)).resolves.toEqual([]);
   });
 });

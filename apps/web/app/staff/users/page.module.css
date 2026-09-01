@@ -67,6 +67,110 @@
   padding: 18px 0 20px;
 }
 
+/* Profile picker cards */
+.profileGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.profileCard {
+  background: var(--chalk, #fffdf8);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.profileCard strong {
+  font-family: var(--serif);
+  font-size: 16px;
+}
+
+.profileCard span {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.profileCard small {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  text-transform: lowercase;
+}
+
+.profileCardActive {
+  border-color: var(--saffron, #b96832);
+  box-shadow: 0 0 0 1px var(--saffron, #b96832);
+}
+
+/* Assignment builder */
+.assignmentBlock {
+  border-top: 1px dashed var(--line-strong);
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.assignmentHint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.noAssignments {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.assignmentRows {
+  display: grid;
+  gap: 10px;
+}
+
+.assignmentRow {
+  align-items: end;
+  background: var(--paper, #f4efe5);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.8fr) auto;
+  padding: 12px;
+}
+
+.assignmentSummary {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  margin-top: 4px;
+  text-transform: none;
+}
+
+@media (max-width: 1000px) {
+  .profileGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .assignmentRow {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .assignmentRow {
+    grid-template-columns: 1fr;
+  }
+}
+
 .inviteFields {
   display: grid;
   gap: 14px;

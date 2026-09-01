@@ -135,6 +135,12 @@ export function StaffContextProvider({
   const switchWorkspace = useCallback(
     async (roleGrantId: string) => {
       if (summary === null || roleGrantId === undefined) return;
+      /* Profile accounts hold the exact profile bundle — granular workspace
+         switching is a legacy-account-only compatibility path. */
+      if (summary.profileCode !== null) {
+        setSwitchError("Workspace switching is not available for access-profile accounts.");
+        return;
+      }
       if (workspaces.some((workspace) => workspace.id === roleGrantId && workspace.role === summary.role)) return;
       setSwitching(true);
       setSwitchError(null);

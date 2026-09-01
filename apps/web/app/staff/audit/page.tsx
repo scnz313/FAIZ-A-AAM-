@@ -9,7 +9,7 @@ export default async function AuditPage() {
   /* Safe events only — actor/action/target/outcome, no secrets — read
      through the audit service; the explorer renders and filters them. */
   const supabaseMode = dataAdapter() === "supabase";
-  const events = supabaseMode ? await loadServerAudit() as Awaited<ReturnType<typeof auditService.listEvents>> : await auditService.listEvents();
+  const events = supabaseMode ? await loadServerAudit() : await auditService.listEvents();
 
   return (
     <div className={styles.page}>

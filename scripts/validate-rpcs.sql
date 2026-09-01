@@ -458,7 +458,9 @@ declare
   v_invite_ref text;
   v_acceptance jsonb;
 begin
-  -- Links: the pending link for the converted child; approve as support staff.
+  -- Links: the pending link for the converted child. Guardian-link activation
+  -- is Administrator-only (three-portal consolidation): the teacher is denied
+  -- and the support officer is denied; the system administrator approves.
   v_denied := false;
   begin
     perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', false);
@@ -467,11 +469,19 @@ begin
     v_denied := true;
   end;
   assert v_denied, 'teacher cannot approve links';
-  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', false);
+  v_denied := false;
+  begin
+    perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', false);
+    perform app.links_approve(current_setting('fass.link_id', true)::uuid, 1);
+  exception when others then
+    v_denied := true;
+  end;
+  assert v_denied, 'support officer cannot approve links (Administrator-only)';
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000004', false);
   perform app.links_approve(current_setting('fass.link_id', true)::uuid, 1);
   assert (select status from public.guardian_student_links
            where id = current_setting('fass.link_id', true)::uuid) = 'active',
-    'link approved by support staff';
+    'link approved by the system administrator';
 
   -- Support: requester replies to their own thread; staff add private notes;
   -- requester cannot add private notes.

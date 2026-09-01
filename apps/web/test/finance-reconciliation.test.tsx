@@ -20,6 +20,7 @@ vi.mock("@/components/staff/StaffContextProvider", () => ({
   useStaffContext: () => ({
     summary: {
       role: "finance_officer",
+      roles: ["finance_officer"],
       displayName: "Fictional Finance Officer",
     },
   }),

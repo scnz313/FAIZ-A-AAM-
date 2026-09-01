@@ -8,7 +8,7 @@ import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 import {
   applicationReviewer,
@@ -549,8 +549,8 @@ export function JobReview({
      to it — the grants are enforced by this UI projection and, later, by
      the backend adapter. */
   const { summary } = useStaffContext();
-  const canReview = canRole(summary?.role ?? "", "careers.review");
-  const canApprove = canRole(summary?.role ?? "", "careers.approve");
+  const canReview = canAnyRole(summary?.roles ?? [], "careers.review");
+  const canApprove = canAnyRole(summary?.roles ?? [], "careers.approve");
 
   return (
     <div className={styles.page}>

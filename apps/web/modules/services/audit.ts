@@ -51,6 +51,28 @@ export type AuditEvent = {
   reason?: string;
 };
 
+export type ServerAuditEventRow = {
+  reference: string;
+  actor_label: string;
+  action: string;
+  target_reference: string;
+  outcome: AuditOutcome;
+  reason: string | null;
+  created_at: string;
+};
+
+export function mapServerAuditEvent(event: ServerAuditEventRow): AuditEvent {
+  return {
+    id: event.reference,
+    timestampIso: event.created_at,
+    actor: event.actor_label,
+    action: event.action as AuditAction,
+    target: event.target_reference,
+    outcome: event.outcome,
+    reason: event.reason ?? undefined,
+  };
+}
+
 /** Fictional audit trail — real events arrive with the backend. */
 export const demoAuditEvents: readonly AuditEvent[] = [
   { id: "ev-01", timestampIso: "2026-08-03T02:42:00Z", actor: "A. Lone", action: "Login", target: "—", outcome: "Success" },
@@ -157,9 +179,9 @@ export const AUDIT_SESSION_KEY_EXPORT = AUDIT_SESSION_KEY;
 export const auditService: AuditService = {
   async listEvents() {
     if (clientAdapterMode() === "supabase") {
-      const response = await adapterCall<Array<{ reference: string; actor_label: string; action: string; target_reference: string; outcome: AuditOutcome; reason: string | null; created_at: string }>>("audit.list", { limit: 100 });
+      const response = await adapterCall<ServerAuditEventRow[]>("audit.list", { limit: 100 });
       if (!response.ok) throw new Error(response.errors[0]?.message ?? "Audit events are unavailable.");
-      return response.value.map((event) => ({ id: event.reference, timestampIso: event.created_at, actor: event.actor_label, action: event.action as AuditAction, target: event.target_reference, outcome: event.outcome, reason: event.reason ?? undefined }));
+      return response.value.map(mapServerAuditEvent);
     }
     const sessionEvents = loadSessionEvents();
     return [...sessionEvents, ...demoAuditEvents]

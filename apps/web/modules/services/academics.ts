@@ -250,7 +250,7 @@ async function respond<T>(compute: () => T): Promise<T> {
   return compute();
 }
 
-type SupabaseResultRow = {
+export type SupabaseResultRow = {
   id: string;
   reference: string;
   status: string;
@@ -274,7 +274,7 @@ function supabaseBatchStatus(status: string): EntryBatchStatus {
   return status as EntryBatchStatus;
 }
 
-function mapSupabaseBatch(row: SupabaseResultRow): EntryBatch {
+export function mapServerResultBatch(row: SupabaseResultRow): EntryBatch {
   if (Array.isArray(row.components) && Array.isArray(row.roster)) {
     const components: ResultEntryComponent[] = row.components.map((component, index) => ({
       id: component.id,
@@ -514,7 +514,7 @@ async function listBatches(): Promise<EntryBatch[]> {
   if (clientAdapterMode() === "supabase") {
     const response = await adapterCall<SupabaseResultRow[]>("results.listBatches", {});
     if (!response.ok) return [];
-    return response.value.map(mapSupabaseBatch);
+    return response.value.map(mapServerResultBatch);
   }
   return respond(() => Object.values(loadSession().batches).map(publicBatch));
 }
@@ -526,7 +526,7 @@ async function getBatch(ref: string): Promise<EntryBatch | null> {
     const found = listed.value.find((candidate) => candidate.reference === ref || candidate.id === ref);
     if (!found) return null;
     const detail = await adapterCall<SupabaseResultRow>("results.getBatch", { batchRef: found.reference });
-    return detail.ok ? mapSupabaseBatch(detail.value) : mapSupabaseBatch(found);
+    return detail.ok ? mapServerResultBatch(detail.value) : mapServerResultBatch(found);
   }
   return respond(() => {
     const batch = loadSession().batches[ref];

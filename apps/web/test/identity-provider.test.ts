@@ -27,7 +27,8 @@ describe("server auth provider boundary", () => {
   it("allows missing/same Origin and rejects cross-origin auth POSTs", () => {
     expect(isSameOrigin("https://school.test/api/auth/recovery", null)).toBe(true);
     expect(isSameOrigin("https://school.test/api/auth/recovery", "https://school.test")).toBe(true);
-    expect(isSameOrigin("https://school.test/api/auth/recovery", "https://evil.test")).toBe(false);
+    expect(isSameOrigin("http://localhost:3000/api/auth/recovery", "http://127.0.0.1:3000", "127.0.0.1:3000")).toBe(true);
+    expect(isSameOrigin("https://school.test/api/auth/recovery", "https://evil.test", "school.test")).toBe(false);
     expect(isSameOrigin("https://school.test/api/auth/recovery", "not an origin")).toBe(false);
   });
 

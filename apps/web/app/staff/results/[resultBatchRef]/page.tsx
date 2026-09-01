@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Result batch · Staff" };
 export default async function ResultBatchPage({ params }: { params: Promise<{ resultBatchRef: string }> }) {
   const { resultBatchRef } = await params;
   const batch = dataAdapter() === "supabase"
-    ? await loadServerResultBatch(resultBatchRef) as Awaited<ReturnType<typeof academicsService.getBatch>>
+    ? await loadServerResultBatch(resultBatchRef)
     : await academicsService.getBatch(resultBatchRef);
   const versions = dataAdapter() === "supabase"
     ? await loadServerResultVersions(resultBatchRef) as Awaited<ReturnType<typeof academicsService.listVersions>>

@@ -8,7 +8,7 @@ import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { assignmentsCoverBatch, teacherAssignmentScope } from "@/components/staff/MarksEntry";
 import type { AssignmentScope } from "@/components/staff/MarksEntry";
 import { formatKolkata } from "@/modules/iot/domain";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { academicsService, ENTRY_BATCH_STATUS_META } from "@/modules/services/academics";
 import type { EntryBatch, EntryBatchStatus } from "@/modules/services/academics";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
@@ -50,13 +50,13 @@ export function ResultsBatches({ batches: initial }: { batches?: EntryBatch[] | 
      roles ignore it. */
   const [assignmentScope, setAssignmentScope] = useState<AssignmentScope[] | null>(null);
   const { summary } = useStaffContext();
-  const canEnter = canRole(summary?.role ?? "", "results.enter");
+  const canEnter = canAnyRole(summary?.roles ?? [], "results.enter");
   /* Maker/checker split: moderation/approval belongs to exam reviewers
      (results.approve), publication and correction to result publishers
      (results.publish). Return-with-reason is part of moderation so a
      reviewer can send a sheet back without entering the teacher workspace. */
-  const canApprove = canRole(summary?.role ?? "", "results.approve");
-  const canPublish = canRole(summary?.role ?? "", "results.publish");
+  const canApprove = canAnyRole(summary?.roles ?? [], "results.approve");
+  const canPublish = canAnyRole(summary?.roles ?? [], "results.publish");
 
   useEffect(() => {
     if (summary === null || summary.role !== "teacher") {

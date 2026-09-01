@@ -23,7 +23,7 @@ type Phase = "checking" | "enroll" | "challenge" | "error";
 
 const CODE_PATTERN = /^\d{6}$/;
 
-export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" }) {
+export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "demo" | "supabase"; totpRequired?: boolean }) {
   const router = useRouter();
   const demoMode = adapter !== "supabase";
   const [safeNext, setSafeNext] = useState("/staff");
@@ -42,8 +42,36 @@ export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" })
     setSafeNext(safeAuthRedirect(new URLSearchParams(window.location.search).get("next"), "/staff"));
   }, []);
 
+  /* Dev auto-elevation: when TOTP is not required, call the server endpoint
+     that programmatically enrolls+verifies a TOTP factor, then redirect. */
   useEffect(() => {
-    if (demoMode) return;
+    if (demoMode || totpRequired) return;
+    let cancelled = false;
+    async function autoElevate() {
+      try {
+        const res = await fetch("/api/auth/mfa/dev-elevate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        if (cancelled) return;
+        if (!res.ok) throw new Error("elevation failed");
+        window.location.assign(safeNext);
+      } catch {
+        if (!cancelled) {
+          setFatal("Dev MFA elevation failed — restart sign-in and try again.");
+          setPhase("error");
+        }
+      }
+    }
+    void autoElevate();
+    return () => {
+      cancelled = true;
+    };
+  }, [demoMode, totpRequired, safeNext]);
+
+  useEffect(() => {
+    if (demoMode || !totpRequired) return;
     let cancelled = false;
     async function start() {
       const supabase = createSupabaseBrowserClient();
@@ -81,7 +109,7 @@ export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" })
     return () => {
       cancelled = true;
     };
-  }, [demoMode]);
+  }, [demoMode, totpRequired]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -132,7 +160,7 @@ export default function TotpForm({ adapter }: { adapter?: "demo" | "supabase" })
   }
 
   if (phase === "checking") {
-    return <p className="field-help">Checking your authenticator setup…</p>;
+    return <p className="field-help">{totpRequired ? "Checking your authenticator setup…" : "Preparing your local staff session…"}</p>;
   }
 
   if (phase === "error") {

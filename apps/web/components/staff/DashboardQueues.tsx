@@ -3,7 +3,7 @@ import Link from "next/link";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { formatKolkata } from "@/modules/iot/domain";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import type { StaffQueueRecord } from "@/modules/services/admissions";
 import type { JobApplicationRecord, JobApplicationStatus } from "@/modules/services/careers";
 
@@ -37,9 +37,12 @@ const JOB_TONE: Record<JobApplicationStatus, StatusTone> = {
     only for roles whose workspace can act on them (I4). */
 export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRecord[]; jobs: JobApplicationRecord[] }) {
   const { summary } = useStaffContext();
-  const role = summary?.role ?? "";
-  const showAdmissions = canRole(role, "admissions.view");
-  const showCareers = canRole(role, "careers.view");
+  /* Aggregate authorization: profile accounts check every active grant. */
+  const roles = summary?.profileCode === null
+    ? (summary?.role ? [summary.role] : [])
+    : (summary?.roles ?? []);
+  const showAdmissions = canAnyRole(roles, "admissions.view");
+  const showCareers = canAnyRole(roles, "careers.view");
   if (!showAdmissions && !showCareers) return null;
   const visibleAdmissions = admissions.slice(0, 4);
   const visibleJobs = jobs.slice(0, 4);

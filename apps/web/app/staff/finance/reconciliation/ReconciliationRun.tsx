@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { formatINR } from "@/modules/services/finance";
 import { financeService, type ReconciliationRun } from "@/modules/services/finance";
 
@@ -36,7 +36,7 @@ export function ReconciliationRun({
 }: ReconciliationRunProps) {
   const router = useRouter();
   const { summary } = useStaffContext();
-  const canOperate = canRole(summary?.role ?? "", "finance.operate");
+  const canOperate = canAnyRole(summary?.roles ?? [], "finance.operate");
   const actor = summary?.displayName ?? "Finance office";
   const [state, setState] = useState<RunState>("idle");
   const [error, setError] = useState<string | null>(null);

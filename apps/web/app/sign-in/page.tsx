@@ -2,16 +2,17 @@ import type { Metadata } from "next";
 
 import { PublicFooter } from "@/components/layouts/PublicFooter";
 import { PublicHeader } from "@/components/layouts/PublicHeader";
+import DevelopmentAccountSwitcher from "@/components/identity/DevelopmentAccountSwitcher";
 import SignInForm from "@/components/identity/SignInForm";
 import PageIntro from "@/components/public/PageIntro";
-import { dataAdapter } from "@/lib/supabase/env";
+import { dataAdapter, developmentAuthEnabled, totpRequired } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Sign in",
   description:
-    "Sign in to the Faiz Aam family portal. Guardian and student accounts, once verified by the school. Email OTP when the Supabase adapter is active; UI demo otherwise.",
+    "Sign in to the Faiz Aam guardian portal. Guardian accounts, once verified by the school. Email OTP when the Supabase adapter is active; UI demo otherwise.",
 };
 
 /**
@@ -31,6 +32,8 @@ export default async function SignInPage({
   const params = await searchParams;
   const adapter = dataAdapter();
   const supabaseLive = adapter === "supabase";
+  const quickSignIn = developmentAuthEnabled();
+  const mfaRequired = totpRequired();
   const authLinkExpired = params.error === "auth";
   const passwordReset = params.reset === "complete";
   return (
@@ -39,7 +42,9 @@ export default async function SignInPage({
       <main id="main" tabIndex={-1} className={styles.main}>
         {supabaseLive ? (
           <p className={`alert-strip alert-strip--notice ${styles.alertStrip}`}>
-            Email-OTP sign-in is live for this environment — codes are sent by the school.
+            {quickSignIn
+              ? "Local development — real Supabase data with one-click test accounts; email verification remains on for production."
+              : "Email-OTP sign-in is live for this environment — codes are sent by the school."}
           </p>
         ) : (
           <p className={`alert-strip alert-strip--warning ${styles.alertStrip}`}>
@@ -61,11 +66,16 @@ export default async function SignInPage({
           <PageIntro
             eyebrow="Family portal"
             title="Sign in"
-            deck="Guardian and student accounts, once verified by the school."
+            deck={quickSignIn ? "Choose a local test account to open real Supabase-backed data." : "Guardian accounts, once verified by the school."}
           />
           <section className={styles.section} aria-label="Sign in">
             <div className={`panel ${styles.card}`}>
-              <SignInForm adapter={adapter} />
+              {quickSignIn ? <DevelopmentAccountSwitcher audience="family" /> : null}
+              <SignInForm
+                adapter={adapter}
+                totpRequired={mfaRequired}
+                developmentPasswordAuth={quickSignIn}
+              />
             </div>
             {supabaseLive ? null : (
               <p className={styles.demoNote}>

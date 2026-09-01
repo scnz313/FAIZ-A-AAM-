@@ -1,0 +1,95 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.header {
+  margin-bottom: 0.25rem;
+}
+
+.stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--hairline, #ddd6c8);
+  border-radius: 8px;
+  background: var(--chalk, #fffdf8);
+  list-style: none;
+}
+
+.stepper li {
+  color: var(--ink-60, #6b7280);
+}
+
+.stepActive {
+  color: var(--ink, #0b1c2a);
+  font-weight: 600;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--hairline, #ddd6c8);
+  border-radius: 8px;
+  background: var(--chalk, #fffdf8);
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.table {
+  width: 100%;
+}
+
+.issueList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.issueError {
+  color: var(--alert, #b42318);
+}
+
+.issueWarning {
+  color: var(--saffron, #b96832);
+}
+
+.previewList {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.commitBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-top: 1px solid var(--hairline, #ddd6c8);
+  padding-top: 1rem;
+}
+
+.muted {
+  color: var(--ink-60, #6b7280);
+}
+
+.loading {
+  color: var(--ink-60, #6b7280);
+}
+
+.errorNote {
+  color: var(--alert, #b42318);
+}
+
+.liveNote {
+  color: var(--willow, #536d57);
+}

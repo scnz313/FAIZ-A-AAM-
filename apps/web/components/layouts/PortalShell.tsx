@@ -48,7 +48,15 @@ const FOCUSABLE_SELECTOR = [
  * sidebar becomes a keyboard-operable drawer opened from the topbar Menu
  * button.
  */
-export function PortalShell({ children, initialNotifications }: { children: ReactNode; initialNotifications?: NotificationItem[] }) {
+export function PortalShell({
+  children,
+  initialNotifications,
+  developmentAuth = false,
+}: {
+  children: ReactNode;
+  initialNotifications?: NotificationItem[];
+  developmentAuth?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { status, context, students, activeStudent, guardianName, switching, switchError, switchStudent, retry, announcement, errorMessage } =
@@ -182,7 +190,7 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
             <span className={`urdu ${styles.urdu}`} dir="rtl" lang="ur">
               فیض عام
             </span>
-            <small>Parent portal</small>
+            <small>Guardian portal</small>
           </span>
         </Link>
 
@@ -266,6 +274,11 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
           <Link className="support-link" href="/portal/support" prefetch={false}>
             Support &amp; grievances
           </Link>
+          {developmentAuth ? (
+            <Link className="support-link" href="/sign-in" prefetch={false}>
+              Switch local account
+            </Link>
+          ) : null}
         </div>
       </aside>
 
@@ -290,7 +303,7 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
             >
               Menu
             </button>
-            <p className="eyebrow">Parent portal</p>
+            <p className="eyebrow">Guardian portal</p>
             <div className="topbar-actions">
               <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoGuardianNotifications())} accountId={context?.accountId ?? undefined} />
               {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
@@ -301,7 +314,7 @@ export function PortalShell({ children, initialNotifications }: { children: Reac
           </div>
 
           <div className={`folio ${styles.folio}`}>
-            <span>FAIZ AAM SECONDARY SCHOOL · PARENT PORTAL</span>
+            <span>FAIZ AAM SECONDARY SCHOOL · GUARDIAN PORTAL</span>
             <span className={styles.folioDate}>{supabaseMode ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()) : demoTodayLabel()}</span>
           </div>
 

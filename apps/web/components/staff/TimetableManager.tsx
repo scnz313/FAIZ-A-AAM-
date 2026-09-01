@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { ExamSlot, Period } from "@/modules/academics/demo";
 import Button from "@/components/ui/Button";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import {
   dateForTimetableWeekday,
   deriveEditedKeys,
@@ -76,7 +76,7 @@ function assignmentText(periods: Record<string, Period[]>, day: string, time: st
  */
 export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamSlot> }) {
   const { summary } = useStaffContext();
-  const canManage = canRole(summary?.role ?? "", "timetable.manage");
+  const canManage = canAnyRole(summary?.roles ?? [], "timetable.manage");
   const live = clientAdapterMode() === "supabase";
   const initialClass = live ? "" : (TIMETABLE_KNOWN_CLASSES[0] ?? TIMETABLE_CLASS);
   const [selectedClass, setSelectedClass] = useState<string>(initialClass);

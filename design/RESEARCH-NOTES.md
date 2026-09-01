@@ -45,3 +45,18 @@ No gateway has been selected. The product design is provider-neutral and assumes
 - **Web research:** checked current first-party CBSE, RBI/NPCI, W3C, MEITY, OWASP, Razorpay, and Cashfree sources.
 - **UI rendering:** produced inspectable HTML/CSS interface mockups and browser-rendered design images. The current direction does not depend on school photography.
 - Other connected tools were not invoked when they added no evidence or design value; connectors should not receive school/student data merely because they are installed.
+
+## Three-portal consolidation research (31 August 2026)
+
+Sources checked for the three-portal consolidation (guardian mobile-OTP onboarding, result entry split, and import/export work):
+
+- [Supabase phone login (OTP)](https://supabase.com/docs/guides/auth/phone-login) — primary guardian invitation/sign-in channel.
+- [Supabase email OTP / passwordless](https://supabase.com/docs/guides/auth/auth-email-passwordless) — email fallback when mobile delivery is unavailable.
+- [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) — OTP issue/verify, rate limiting, and session controls for the invite-and-claim flow.
+- [OWASP CSV Injection](https://owasp.org/www-community/attacks/CSV_Injection) — required hardening for guardian/student import previews and staff exports.
+- [TRAI advice to senders](https://www.trai.gov.in/advice-to-senders) — sender ID/DLT registration prerequisites for transactional SMS in India.
+
+Notes:
+
+- DPDP child/guardian consent material must be rechecked with school counsel before guardian onboarding ships; the DPDP sources in this file predate the consolidation and were not re-fetched for it.
+- SMS remains blocked until TRAI/DLT sender registration and provider approval are complete; guardian invitations use the email OTP fallback until then.

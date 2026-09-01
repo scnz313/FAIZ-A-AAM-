@@ -16,7 +16,7 @@ import {
   type ContentResult,
   type NoticeCategory,
 } from "@/modules/services/content";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 
 import styles from "./NoticePublisher.module.css";
 
@@ -104,8 +104,8 @@ type NoticePublisherProps = {
 export function NoticePublisher({ notices }: NoticePublisherProps) {
   const [records, setRecords] = useState<ContentNotice[]>(() => notices.map((notice) => ({ ...notice, body: [...notice.body] })));
   const { summary } = useStaffContext();
-  const canPublish = canRole(summary?.role ?? "", "content.publish");
-  const canDraft = canRole(summary?.role ?? "", "content.draft");
+  const canPublish = canAnyRole(summary?.roles ?? [], "content.publish");
+  const canDraft = canAnyRole(summary?.roles ?? [], "content.draft");
   const actor: ContentActor | null = summary
     ? { accountId: summary.accountId, displayName: summary.displayName, role: summary.role }
     : null;

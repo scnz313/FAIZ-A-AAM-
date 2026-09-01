@@ -71,9 +71,18 @@ describe("provider and operations route contracts", () => {
 
   it("protected Server Components dispatch adapter operations in process", () => {
     const loaders = source("lib/supabase/server-loaders.ts");
+    const portalTimetable = source("app/portal/timetable/page.tsx");
     const adapter = source("lib/supabase/adapter-server.ts");
     expect(loaders).toContain("serverAdapterOperation");
     expect(loaders).not.toContain("serverAdapterCall");
+    expect(loaders).toContain('"results.listReleases", studentId ? { studentId } : {}');
+    expect(loaders).toContain('"timetable.effective", { gradeSectionId }');
+    expect(loaders).toContain("result.value.map(mapServerResultBatch)");
+    expect(loaders).toContain("result.value.map(mapServerAuditEvent)");
+    expect(loaders).not.toContain("studentRef: studentId");
+    expect(loaders).not.toContain("gradeSectionRef: gradeSectionId");
+    expect(portalTimetable).toContain("loadServerTimetable(active.gradeSection.id)");
+    expect(portalTimetable).not.toContain("classKeyForGradeSection");
     expect(adapter).toContain("parsed.operation.handle");
     expect(adapter).toContain("resolveAdapterReferences");
   });
@@ -95,6 +104,15 @@ describe("provider and operations route contracts", () => {
     expect(config).toContain('NODE_ENV === "development" ? ".next-dev" : ".next"');
     expect(config).toContain("qualities: [80]");
     expect(packageJson).toContain('"dev": "next dev --turbopack"');
+  });
+
+  it("keeps development quick sign-in unavailable outside next dev", () => {
+    const env = source("lib/supabase/env.ts");
+    const route = source("app/api/auth/dev-sign-in/route.ts");
+    expect(env).toContain('process.env.NODE_ENV !== "development"');
+    expect(route).toContain("developmentAuthEnabled()");
+    expect(route).toContain("status: 404");
+    expect(route).not.toContain("NEXT_PUBLIC_FASS_DEV_TEST_PASSWORD");
   });
 
   it("does not duplicate authoritative staff projections after hydration", () => {

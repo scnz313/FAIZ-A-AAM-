@@ -8,7 +8,7 @@ import { statusForServiceResult, withCorrelation } from "@/app/api/adapter/regis
 export async function POST(request: NextRequest) {
   const correlationRef = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
   const headers = { "Cache-Control": "no-store", "X-Correlation-Id": correlationRef };
-  if (!isSameOrigin(request.url, request.headers.get("origin"))) {
+  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"))) {
     return NextResponse.json({ ok: false, errors: [{ code: "forbidden", message: "Cross-origin requests are not accepted.", field: null }], correlationRef }, { status: 403, headers });
   }
   if (dataAdapter() !== "supabase") {

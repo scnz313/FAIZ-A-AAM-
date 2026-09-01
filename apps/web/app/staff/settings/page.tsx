@@ -6,7 +6,7 @@ import type { FormEvent, ReactNode } from "react";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { formatKolkata } from "@/modules/iot/domain";
 import { settingsService, type PolicyPendingKey, type SettingsView } from "@/modules/services/settings";
 import {
@@ -83,7 +83,7 @@ function ToggleRow({ id, checked, onChange, disabled = false, help, children }: 
 
 export default function SettingsPage() {
   const { summary } = useStaffContext();
-  const canManage = canRole(summary?.role ?? "", "settings.manage");
+  const canManage = canAnyRole(summary?.roles ?? [], "settings.manage");
   const supabaseMode = clientAdapterMode() === "supabase";
   const [view, setView] = useState<SettingsView | null>(null);
   const [gradingScheme, setGradingScheme] = useState("Letter grades (A1–E2)");

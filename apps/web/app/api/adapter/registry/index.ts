@@ -6,6 +6,8 @@ import type { Database } from "@/lib/supabase/database.types";
 import { parseOperation } from "./common";
 import { academicsModule } from "./academics";
 import { admissionsModule } from "./admissions";
+import { dataExportModule } from "./data-exports";
+import { dataImportModule } from "./data-imports";
 import { financeModule } from "./finance";
 import { identityModule } from "./identity";
 import { operationsModule } from "./operations";
@@ -17,6 +19,8 @@ export const adapterModules: readonly AdapterModule[] = [
   academicsModule,
   operationsModule,
   identityModule,
+  dataImportModule,
+  dataExportModule,
 ];
 
 const operationIndex = new Map<string, AdapterOperation>();
@@ -268,6 +272,19 @@ export async function resolveAdapterReferences(
       break;
     case "notifications.markRead":
       /* Notification rows intentionally expose no public reference. */
+      break;
+    case "staffInvites.create":
+    case "staff.profileChange":
+      if (Array.isArray(payload.assignments)) {
+        payload.assignments = await Promise.all((payload.assignments as unknown[]).map(async (assignment) => {
+          if (typeof assignment !== "object" || assignment === null) return assignment;
+          const next = { ...(assignment as Record<string, unknown>) };
+          if (typeof next.academicYearId !== "string" && typeof next.academicYearRef === "string") next.academicYearId = await resolveReference(supabase, "academic_years", next.academicYearRef);
+          if (typeof next.gradeSectionId !== "string" && typeof next.gradeSectionRef === "string") next.gradeSectionId = await resolveReference(supabase, "grade_sections", next.gradeSectionRef);
+          if (typeof next.subjectId !== "string" && typeof next.subjectRef === "string") next.subjectId = await resolveReference(supabase, "subjects", next.subjectRef);
+          return next;
+        }));
+      }
       break;
     case "users.revokeRole":
       await resolveField(supabase, payload, "grantId", "grantRef", "role_grants");

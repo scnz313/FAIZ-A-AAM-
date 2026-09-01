@@ -10,7 +10,7 @@
  * roles itself.
  */
 
-import { type RoleGrant, type StaffRole, STAFF_ROLES } from "@fass/contracts";
+import { type RoleGrant, type StaffRole, STAFF_ROLES, type StaffProfileCode } from "@fass/contracts";
 
 import { formatKolkata } from "@/modules/iot/domain";
 import { demoNowIso } from "@/modules/demo/clock";
@@ -19,6 +19,8 @@ import {
   saveRelationshipStore,
   type RelationshipDemoStore,
 } from "@/modules/services/family-context";
+import { DEMO_SUBJECTS } from "@/modules/services/school-config";
+import { profileLabel as accessProfileLabel, rolesForProfile } from "@/modules/services/staff-profiles";
 import { roleLabel } from "@/modules/services/staff-context";
 import { auditService } from "@/modules/services/audit";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
@@ -33,6 +35,12 @@ export type UserRow = {
   name: string;
   /** Display role label; an account with several grants lists them all. */
   role: string;
+  /** Access profile code when the account was provisioned through one. */
+  profileCode?: StaffProfileCode | null;
+  /** Display profile label derived from profileCode. */
+  profileLabel?: string | null;
+  /** Optimistic profile marker version for profile-change confirmation. */
+  profileVersion?: number | null;
   email: string;
   status: UserStatus;
   lastActiveLabel: string;
@@ -51,7 +59,11 @@ export type StaffInvitationRecord = {
   oneTimeHash: string;
   contact: string;
   displayName: string;
-  role: StaffRole;
+  /** Legacy single-role invitations remain supported. */
+  role?: StaffRole;
+  /** Profile-based invitation code (new flow). */
+  profileCode?: StaffProfileCode | null;
+  title?: string;
   reason: string;
   expiresAtIso: string;
   status: StaffInvitationStatus;
@@ -96,7 +108,14 @@ type ServerUserRow = {
   mfa_status?: string | null;
   mfa_verified_at?: string | null;
   people: { display_name: string | null } | null;
-  staff_members: Array<{ id: string; reference: string; title: string | null; employment_status: string }> | null;
+  staff_members: Array<{
+    id: string;
+    reference: string;
+    title: string | null;
+    employment_status: string;
+    access_profile_code?: string | null;
+    access_profile_version?: number | null;
+  }> | null;
   role_grants: Array<{
     id: string;
     reference: string;
@@ -107,7 +126,16 @@ type ServerUserRow = {
     effective_to: string | null;
     reason?: string | null;
   }> | null;
-  account_invitations?: Array<{ reference: string; contact: string; status: string; expires_at: string; provider_state: string; role_code?: string; reason?: string | null }> | null;
+  account_invitations?: Array<{
+    reference: string;
+    contact: string;
+    status: string;
+    expires_at: string;
+    provider_state: string;
+    role_code?: string;
+    reason?: string | null;
+    profile_code?: string | null;
+  }> | null;
 };
 
 function isServerMode(): boolean {
@@ -135,12 +163,19 @@ function mapServerUser(row: ServerUserRow): UserRow {
       : invited
         ? "Not applicable until acceptance"
         : "Not recorded";
+  const member = row.staff_members?.[0] ?? null;
+  const profileCode = (member?.access_profile_code ?? invitation?.profile_code ?? null) as StaffProfileCode | null;
   return {
     key: invited ? `invitation-${invitation?.reference ?? name}` : `account-${row.id}`,
     accountId: invited ? "" : row.id,
     invitationRef: invitation?.reference,
     name,
-    role: active.length > 0 ? active.map((grant) => roleLabel(grant.role_code as StaffRole)).join(" · ") : invitation?.role_code ? roleLabel(invitation.role_code as StaffRole) : "No active roles",
+    role: profileCode !== null && accessProfileLabel(profileCode) !== null
+      ? accessProfileLabel(profileCode)!
+      : active.length > 0 ? active.map((grant) => roleLabel(grant.role_code as StaffRole)).join(" · ") : invitation?.role_code ? roleLabel(invitation.role_code as StaffRole) : "No active roles",
+    profileCode,
+    profileLabel: accessProfileLabel(profileCode),
+    profileVersion: member?.access_profile_version ?? null,
     email: row.verified_contact ?? invitation?.contact ?? "",
     status,
     lastActiveLabel: "—",
@@ -213,13 +248,20 @@ function deriveStoreUsers(store: RelationshipDemoStore): UserRow[] {
       account.status === "suspended" ? "Suspended" :
       account.status === "invited" ? "Invited" : "Active";
 
+    const profileCodeValue = (staff.accessProfileCode ?? null) as StaffProfileCode | null;
+
     rows.push({
       key: `account-${account.id}`,
       accountId: account.id,
       name,
-      role: activeGrants.length > 0
-        ? activeGrants.map((grant) => roleLabel(grant.role)).join(" · ")
-        : "No active roles",
+      role: profileCodeValue !== null && accessProfileLabel(profileCodeValue) !== null
+        ? accessProfileLabel(profileCodeValue)!
+        : activeGrants.length > 0
+          ? activeGrants.map((grant) => roleLabel(grant.role)).join(" · ")
+          : "No active roles",
+      profileCode: profileCodeValue,
+      profileLabel: accessProfileLabel(profileCodeValue),
+      profileVersion: staff.accessProfileVersion ?? null,
       email,
       status,
       lastActiveLabel: status === "Invited" ? "—" : GRAPH_LAST_ACTIVE,
@@ -239,12 +281,15 @@ function deriveStoreUsers(store: RelationshipDemoStore): UserRow[] {
 }
 
 function invitationRow(invitation: StaffInvitationRecord): UserRow {
+  const profileLabelValue = accessProfileLabel(invitation.profileCode ?? null);
   return {
     key: `invitation-${invitation.invitationRef}`,
     accountId: invitation.accountId ?? "",
     invitationRef: invitation.invitationRef,
     name: invitation.displayName,
-    role: roleLabel(invitation.role),
+    role: profileLabelValue ?? (invitation.role ? roleLabel(invitation.role) : "Staff workspace"),
+    profileCode: invitation.profileCode ?? null,
+    profileLabel: profileLabelValue,
     email: invitation.contact,
     status: invitation.status === "expired" ? "Expired" : "Invited",
     lastActiveLabel: "—",
@@ -286,10 +331,36 @@ export interface InviteAcceptanceResult {
 }
 
 export interface UsersService {
-  /** Staff accounts with their active role grants. */
+  /** Staff accounts with their active role grants and profile markers. */
   listUsers(): Promise<UserRow[]>;
-  /** Invite a new staff member — creates a person, account, staff member, and initial role grant. */
-  inviteUser(input: { name: string; email: string; role: StaffRole; reason: string }): Promise<InviteResult>;
+  /** Invite a new staff member by access profile (Administrator or Principal). */
+  inviteUser(input: {
+    name: string;
+    email: string;
+    /** Legacy single-role invitations remain supported. */
+    role?: StaffRole;
+    profileCode?: StaffProfileCode;
+    title?: string;
+    reason: string;
+  }): Promise<InviteResult>;
+  /** Change an existing account's access profile (Administrator only). */
+  changeProfile(input: {
+    accountId: string;
+    profileCode: StaffProfileCode;
+    reason: string;
+    expectedVersion: number;
+  }): Promise<UserRow>;
+  /** Add an exact teaching assignment to a teacher account. */
+  createAssignment(input: {
+    staffMemberId: string;
+    roleGrantId: string;
+    academicYearId: string;
+    gradeSectionId: string;
+    subjectId: string;
+    effectiveFrom?: string | null;
+  }): Promise<{ assignmentRef: string }>;
+  /** End a teaching assignment with reason (history preserved). */
+  endAssignment(input: { assignmentId: string; reason: string; expectedVersion: number }): Promise<UserRow>;
   /** Grant an additional role to an existing account. */
   grantRole(input: { accountId: string; role: StaffRole; reason: string }): Promise<UserRow>;
   /** Revoke a role grant — appends to history, does not delete. */
@@ -327,23 +398,37 @@ function findUserRow(store: RelationshipDemoStore, accountId: string): UserRow {
   return row;
 }
 
+/** Map a legacy role onto the profile that contains it, if any. */
+function profileForRole(role: StaffRole | undefined): StaffProfileCode | null {
+  if (role === undefined) return null;
+  for (const profile of ["administrator", "principal"] as const) {
+    if (rolesForProfile(profile).includes(role)) return profile;
+  }
+  return null;
+}
+
 export const usersService: UsersService = {
   async listUsers() {
     if (isServerMode()) return serverListUsers();
     return clone(listDemoUsers());
   },
 
-  async inviteUser({ name, email, role, reason }) {
+  async inviteUser({ name, email, role, profileCode, title, reason }) {
+    /* Legacy role-based invitations map onto the containing profile. */
+    const resolvedProfile = profileCode ?? profileForRole(role);
+    if (resolvedProfile === null) throw new Error("A staff access profile or legacy role is required.");
+    const profileLabelValue = accessProfileLabel(resolvedProfile) ?? "Staff workspace";
     if (isServerMode()) {
-      /* The live staff invitation stores the intended role/scope and
+      /* The live staff invitation stores the intended profile/scope and
          materializes the account only when the invitee accepts it. */
       const expires = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
       const result = await adapterCall<{ invitationRef: string; status: "pending"; expiresAt: string }>("staffInvites.create", {
         contact: email.trim(),
         expiresAt: expires,
         displayName: name.trim(),
-        roleCode: role,
-        reason: reason.trim() || `Invited as ${roleLabel(role)}.`,
+        title: title ?? profileLabelValue,
+        profileCode: resolvedProfile,
+        reason: reason.trim() || `Invited as ${profileLabelValue}.`,
       });
       if (!result.ok) throw new Error(result.errors[0]?.message ?? "Invitation could not be created.");
       /* A placeholder row keeps the caller's contract: the invited person
@@ -352,7 +437,9 @@ export const usersService: UsersService = {
         key: `invite-${email.trim().toLowerCase()}`,
         accountId: "",
         name: name.trim(),
-        role: roleLabel(role),
+        role: profileLabelValue,
+        profileCode: resolvedProfile,
+        profileLabel: profileLabelValue,
         email: email.trim(),
         status: "Invited",
         lastActiveLabel: "—",
@@ -368,10 +455,10 @@ export const usersService: UsersService = {
     }
     const contact = email.trim().toLowerCase();
     const displayName = name.trim();
-    const cleanReason = reason.trim() || `Invited as ${roleLabel(role)}.`;
+    const cleanReason = reason.trim() || `Invited as ${profileLabelValue}.`;
     const invitations = loadStaffInvitations();
     const existing = invitations.find(
-      (invitation) => invitation.status === "pending" && invitation.contact === contact && invitation.role === role,
+      (invitation) => invitation.status === "pending" && invitation.contact === contact && invitation.profileCode === resolvedProfile,
     );
     if (existing !== undefined) {
       return {
@@ -390,6 +477,8 @@ export const usersService: UsersService = {
       contact,
       displayName,
       role,
+      profileCode: resolvedProfile,
+      title,
       reason: cleanReason,
       expiresAtIso: new Date(new Date(demoNowIso()).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       status: "pending",
@@ -426,20 +515,42 @@ export const usersService: UsersService = {
           familyName: familyName.trim(),
         }),
       });
-      const result = (await response.json().catch(() => null)) as { ok?: boolean; value?: { accountId: string; staffMemberId: string; grantRef: string; roleCode?: string }; errors?: Array<{ message?: string }> } | null;
+      const result = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        value?: {
+          accountId: string;
+          staffMemberId: string;
+          grantRef: string;
+          roleCode?: string;
+          profileCode?: string | null;
+          roles?: Array<string>;
+          grants?: Array<{ roleCode: string; grantRef: string }>;
+        };
+        errors?: Array<{ message?: string }>;
+      } | null;
       if (!response.ok || result?.ok !== true || result.value === undefined) {
         throw new Error(result?.errors?.[0]?.message ?? "Invitation acceptance failed.");
       }
+      const profileCodeValue = (result.value.profileCode ?? null) as StaffProfileCode | null;
+      const grantedRoles = result.value.grants ?? (result.value.roleCode ? [{ roleCode: result.value.roleCode, grantRef: result.value.grantRef }] : []);
       const userRow: UserRow = {
         key: `account-${result.value.accountId}`,
         accountId: result.value.accountId,
         name: `${givenName.trim()} ${familyName.trim()}`,
-        role: result.value.roleCode ? roleLabel(result.value.roleCode as StaffRole) : "Staff workspace",
+        role: profileCodeValue ? accessProfileLabel(profileCodeValue) ?? "Staff workspace" : grantedRoles[0] ? roleLabel(grantedRoles[0].roleCode as StaffRole) : "Staff workspace",
+        profileCode: profileCodeValue,
+        profileLabel: accessProfileLabel(profileCodeValue),
         email: "Verified invitation contact",
         status: "Active",
         lastActiveLabel: "—",
         twoFa: "Pending setup",
-        grants: result.value.roleCode ? [{ id: "", ref: result.value.grantRef, role: result.value.roleCode as StaffRole, roleLabel: roleLabel(result.value.roleCode as StaffRole), reason: "Invitation acceptance" }] : [],
+        grants: grantedRoles.map((grant) => ({
+          id: "",
+          ref: grant.grantRef,
+          role: grant.roleCode as StaffRole,
+          roleLabel: roleLabel(grant.roleCode as StaffRole),
+          reason: "Invitation acceptance",
+        })),
       };
       return {
         accountRef: result.value.accountId,
@@ -477,7 +588,6 @@ export const usersService: UsersService = {
     const personId = nextId("person", store.accountCounter);
     const accountId = nextId("account", store.accountCounter);
     const staffId = nextId("staff", store.staffCounter);
-    const grantId = nextId("grant", store.grantCounter);
     const person = {
       id: personId,
       ref: nextRef("PER", store.accountCounter),
@@ -493,32 +603,40 @@ export const usersService: UsersService = {
       status: "active" as const,
       verifiedAtIso: nowIso,
     };
+    const profileRoles = invitation.profileCode ? rolesForProfile(invitation.profileCode) : (invitation.role ? [invitation.role] : []);
+    if (profileRoles.length === 0) throw new Error("That invitation has no intended role.");
     const staff = {
       id: staffId,
       ref: nextRef("STF", store.staffCounter),
       personId,
       status: "active" as const,
-      title: roleLabel(invitation.role),
+      title: invitation.title ?? (invitation.profileCode ? accessProfileLabel(invitation.profileCode) ?? "Staff member" : roleLabel(invitation.role!)),
+      accessProfileCode: invitation.profileCode ?? null,
+      accessProfileVersion: invitation.profileCode ? 1 : null,
     };
-    const grant: RoleGrant = {
-      id: grantId,
-      ref: nextRef("ROLE", store.grantCounter),
-      accountId,
-      role: invitation.role,
-      status: "active",
-      grantedByPersonId: null,
-      reason: invitation.reason,
-      scope: { academicYearIds: [], gradeSectionIds: [], subjectIds: [] },
-      effectiveFromIso: nowIso,
-      effectiveToIso: null,
-    };
+    const createdGrants: RoleGrant[] = [];
+    for (const role of profileRoles) {
+      const grant: RoleGrant = {
+        id: nextId("grant", store.grantCounter),
+        ref: nextRef("ROLE", store.grantCounter),
+        accountId,
+        role: role as StaffRole,
+        status: "active",
+        grantedByPersonId: null,
+        reason: invitation.reason,
+        scope: { academicYearIds: [], gradeSectionIds: [], subjectIds: [] },
+        effectiveFromIso: nowIso,
+        effectiveToIso: null,
+      };
+      store.grantCounter += 1;
+      createdGrants.push(grant);
+      store.roleGrants.push(grant);
+    }
     store.people.push(person);
     store.userAccounts.push(account);
     store.staffMembers.push(staff);
-    store.roleGrants.push(grant);
     store.accountCounter += 1;
     store.staffCounter += 1;
-    store.grantCounter += 1;
     invitation.status = "accepted";
     invitation.accountId = accountId;
     invitation.acceptedAtIso = nowIso;
@@ -536,7 +654,7 @@ export const usersService: UsersService = {
     return {
       accountRef: account.ref,
       staffMemberId: staff.id,
-      grantRef: grant.ref,
+      grantRef: createdGrants[0]?.ref ?? "",
       userRow: clone(findUserRow(store, accountId)),
     };
   },
@@ -597,6 +715,176 @@ export const usersService: UsersService = {
       reason: reason.trim() || `Grant ${grant.ref}.`,
     });
 
+    return clone(userRow);
+  },
+
+  async changeProfile({ accountId, profileCode, reason, expectedVersion }) {
+    if (isServerMode()) {
+      const result = await adapterCall<unknown>("staff.profileChange", {
+        accountId,
+        profileCode,
+        reason: reason.trim(),
+        expectedVersion,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Profile change failed.");
+      const after = await serverListUsers();
+      const updated = after.find((candidate) => candidate.accountId === accountId);
+      if (updated === undefined) throw new Error("Account not found after profile change.");
+      return updated;
+    }
+    const store = loadRelationshipStore();
+    const account = store.userAccounts.find((candidate) => candidate.id === accountId);
+    if (account === undefined) throw new Error("Account not found.");
+    const staff = store.staffMembers.find((candidate) => candidate.personId === account.personId);
+    if (staff === undefined) throw new Error("Staff member not found for this account.");
+    /* Legacy fixture staff without a profile marker: adopt the baseline so the
+       first profile change is version-checked from 1, matching the SQL
+       adoption path in migration 000042. */
+    if (staff.accessProfileCode == null && (staff.accessProfileVersion == null || staff.accessProfileVersion < 1)) {
+      staff.accessProfileVersion = 1;
+    }
+    const currentVersion = staff.accessProfileVersion ?? 0;
+    if (currentVersion !== expectedVersion) throw new Error("Profile version mismatch — refresh and review before changing.");
+
+    const targetRoles = rolesForProfile(profileCode);
+    /* Revoke grants outside the new profile; end their assignments. */
+    const nowIso = demoNowIso();
+    for (const grant of store.roleGrants) {
+      if (grant.accountId === accountId && grant.status === "active" && !targetRoles.includes(grant.role as StaffRole)) {
+        grant.status = "revoked";
+        grant.effectiveToIso = nowIso;
+        for (const assignment of store.staffAssignments) {
+          if (assignment.roleGrantId === grant.id && assignment.status !== "ended") {
+            assignment.status = "ended";
+            assignment.effectiveToIso = nowIso;
+          }
+        }
+      }
+    }
+    /* Grant missing profile roles. */
+    for (const role of targetRoles) {
+      const existing = store.roleGrants.find(
+        (grant) => grant.accountId === accountId && grant.role === role && grant.status === "active",
+      );
+      if (existing === undefined) {
+        store.roleGrants.push({
+          id: nextId("grant", store.grantCounter),
+          ref: nextRef("ROLE", store.grantCounter),
+          accountId,
+          role: role as StaffRole,
+          status: "active",
+          grantedByPersonId: null,
+          reason: reason.trim(),
+          scope: { academicYearIds: [], gradeSectionIds: [], subjectIds: [] },
+          effectiveFromIso: nowIso,
+          effectiveToIso: null,
+        });
+        store.grantCounter += 1;
+      }
+    }
+    staff.accessProfileCode = profileCode;
+    staff.accessProfileVersion = currentVersion + 1;
+    saveRelationshipStore(store);
+
+    const userRow = findUserRow(store, accountId);
+    await auditService.record({
+      actor: "System administrator",
+      action: "Setting changed",
+      target: `Changed ${userRow.name} profile to ${accessProfileLabel(profileCode)}`,
+      outcome: "Success",
+      reason: reason.trim(),
+    });
+    return clone(userRow);
+  },
+
+  async createAssignment({ staffMemberId, roleGrantId, academicYearId, gradeSectionId, subjectId, effectiveFrom }) {
+    if (isServerMode()) {
+      const result = await adapterCall<{ assignmentRef: string }>("assignments.create", {
+        staffMemberId,
+        roleGrantId,
+        academicYearId,
+        gradeSectionId,
+        subjectId,
+        effectiveFrom: effectiveFrom ?? null,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Assignment could not be created.");
+      return { assignmentRef: result.value.assignmentRef };
+    }
+    const store = loadRelationshipStore();
+    const nowIso = demoNowIso();
+    const duplicate = store.staffAssignments.find(
+      (assignment) =>
+        assignment.staffMemberId === staffMemberId &&
+        assignment.roleGrantId === roleGrantId &&
+        assignment.academicYearId === academicYearId &&
+        assignment.gradeSectionId === gradeSectionId &&
+        assignment.subjectId === subjectId &&
+        assignment.status !== "ended",
+    );
+    if (duplicate !== undefined) throw new Error("That exact assignment already exists.");
+    const subject = DEMO_SUBJECTS.find((candidate) => candidate.id === subjectId);
+    const assignment = {
+      id: nextId("assignment", store.grantCounter),
+      ref: nextRef("ASN", store.grantCounter),
+      staffMemberId,
+      roleGrantId,
+      academicYearId,
+      gradeSectionId,
+      subjectId,
+      subjectRef: subject?.code ?? "",
+      subjectName: subject?.name ?? "Assigned subject",
+      status: "active" as const,
+      effectiveFromIso: effectiveFrom ?? nowIso,
+      effectiveToIso: null,
+    };
+    store.grantCounter += 1;
+    store.staffAssignments.push(assignment);
+    saveRelationshipStore(store);
+    await auditService.record({
+      actor: "System administrator",
+      action: "Setting changed",
+      target: `Added assignment ${assignment.ref}`,
+      outcome: "Success",
+      reason: "Teaching assignment added.",
+    });
+    return { assignmentRef: assignment.ref };
+  },
+
+  async endAssignment({ assignmentId, reason, expectedVersion }) {
+    if (isServerMode()) {
+      const result = await adapterCall<unknown>("assignments.end", {
+        assignmentId,
+        reason: reason.trim(),
+        expectedVersion,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Assignment could not be ended.");
+      /* Teaching assignments are non-login records managed by the Principal's
+         teaching-assignment workspace; the users service returns the refreshed
+         directory without assignment projection. */
+      const after = await serverListUsers();
+      const owner = after.find((row) => row.accountId !== "");
+      if (owner === undefined) throw new Error("Account not found after ending the assignment.");
+      return owner;
+    }
+    const store = loadRelationshipStore();
+    const assignment = store.staffAssignments.find((candidate) => candidate.id === assignmentId);
+    if (assignment === undefined) throw new Error("Assignment not found.");
+    if (assignment.status === "ended") throw new Error("This assignment is already ended.");
+    assignment.status = "ended";
+    assignment.effectiveToIso = demoNowIso();
+    saveRelationshipStore(store);
+    const account = store.userAccounts.find((candidate) =>
+      store.staffMembers.some((staff) => staff.id === assignment.staffMemberId && staff.personId === candidate.personId),
+    );
+    if (account === undefined) throw new Error("Account not found for this assignment.");
+    const userRow = findUserRow(store, account.id);
+    await auditService.record({
+      actor: "System administrator",
+      action: "Setting changed",
+      target: `Ended assignment ${assignment.ref} for ${userRow.name}`,
+      outcome: "Success",
+      reason: reason.trim(),
+    });
     return clone(userRow);
   },
 

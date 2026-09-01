@@ -7,15 +7,14 @@ import Link from "next/link";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
 import {
-  GRANTABLE_ROLES,
   usersService,
   type InviteResult,
   type UserRow,
   type UserStatus,
 } from "@/modules/services/users";
-import type { StaffRole } from "@fass/contracts";
+import { canAnyRole, listProfileSummaries } from "@/modules/services/staff-profiles";
+import type { StaffProfileCode } from "@fass/contracts";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./page.module.css";
@@ -30,16 +29,17 @@ const STATUS_TONE: Record<UserStatus, "good" | "watch" | "alert"> = {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type InviteErrors = { name?: string; email?: string; reason?: string };
-type GrantErrors = { role?: string; reason?: string };
+type ChangeErrors = { reason?: string };
 
 export default function UsersPage() {
   const { summary } = useStaffContext();
-  const canManage = canRole(summary?.role ?? "", "users.manage");
+  const canManage = canAnyRole(summary?.roles ?? [], "users.manage");
   const supabaseMode = clientAdapterMode() === "supabase";
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState<StaffRole>("teacher");
+  const [inviteProfile, setInviteProfile] = useState<StaffProfileCode>("principal");
+  const [inviteTitle, setInviteTitle] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteReason, setInviteReason] = useState("");
   const [inviteErrors, setInviteErrors] = useState<InviteErrors>({});
@@ -48,17 +48,20 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [grantRole, setGrantRole] = useState<StaffRole>("teacher");
-  const [grantReason, setGrantReason] = useState("");
-  const [grantErrors, setGrantErrors] = useState<GrantErrors>({});
-  const [grantingForId, setGrantingForId] = useState<string | null>(null);
   const [revokingGrantId, setRevokingGrantId] = useState<string | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
   const [revokeError, setRevokeError] = useState(false);
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
   const [suspendError, setSuspendError] = useState(false);
+  /* Profile change panel state. */
+  const [changingId, setChangingId] = useState<string | null>(null);
+  const [changeProfile, setChangeProfile] = useState<StaffProfileCode>("principal");
+  const [changeReason, setChangeReason] = useState("");
+  const [changeErrors, setChangeErrors] = useState<ChangeErrors>({});
   const seq = useRef(0);
+
+  const profiles = listProfileSummaries();
 
   const refresh = useCallback(async (): Promise<void> => {
     const list = await usersService.listUsers();
@@ -93,6 +96,7 @@ export default function UsersPage() {
     setInviteName("");
     setInviteEmail("");
     setInviteReason("");
+    setInviteTitle("");
     setInviteErrors({});
   }
 
@@ -107,7 +111,7 @@ export default function UsersPage() {
       next.email = "Enter a valid email address.";
     }
     setInviteErrors(next);
-    if (Object.values(next).some((v) => v !== undefined)) return;
+    if (Object.values(next).some((value) => value !== undefined)) return;
 
     setBusy(true);
     setError(null);
@@ -115,7 +119,8 @@ export default function UsersPage() {
       const result = await usersService.inviteUser({
         name: inviteName.trim(),
         email: inviteEmail.trim().toLowerCase(),
-        role: inviteRole,
+        profileCode: inviteProfile,
+        title: inviteTitle.trim() || undefined,
         reason: inviteReason.trim(),
       });
       setInviteResult(result);
@@ -123,33 +128,11 @@ export default function UsersPage() {
       setInviteName("");
       setInviteEmail("");
       setInviteReason("");
+      setInviteTitle("");
       announce(`Invitation sent to ${inviteEmail.trim().toLowerCase()} — the signed invitation path is ready.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invitation failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleGrantRole(accountId: string) {
-    const next: GrantErrors = {
-      reason: grantReason.trim() ? undefined : "A reason is required for the audit trail.",
-    };
-    setGrantErrors(next);
-    if (next.reason !== undefined) return;
-
-    setBusy(true);
-    setError(null);
-    try {
-      await usersService.grantRole({ accountId, role: grantRole, reason: grantReason.trim() });
-      setGrantingForId(null);
-      setGrantReason("");
-      setGrantErrors({});
-      announce(`Role granted (demo) — changes are audited.`);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Grant failed.");
     } finally {
       setBusy(false);
     }
@@ -168,7 +151,7 @@ export default function UsersPage() {
       await usersService.revokeRole({ grantId, reason: cleanReason });
       setRevokingGrantId(null);
       setRevokeReason("");
-      announce(`Role revoked (demo) — access ends immediately.`);
+      announce(`Role revoked — access ends immediately.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Revoke failed.");
@@ -190,7 +173,7 @@ export default function UsersPage() {
       await usersService.suspendAccount({ accountId, reason: cleanReason });
       setSuspendingId(null);
       setSuspendReason("");
-      announce(`Account suspended (demo) — all access revoked.`);
+      announce(`Account suspended — all access revoked.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Suspend failed.");
@@ -204,7 +187,7 @@ export default function UsersPage() {
     setError(null);
     try {
       await usersService.reactivateAccount({ accountId });
-      announce(`Account reactivated (demo).`);
+      announce(`Account reactivated.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reactivation failed.");
@@ -213,17 +196,49 @@ export default function UsersPage() {
     }
   }
 
+  async function handleChangeProfile(accountId: string) {
+    const next: ChangeErrors = {
+      reason: changeReason.trim() ? undefined : "A reason is required for the audit trail.",
+    };
+    setChangeErrors(next);
+    if (Object.values(next).some((value) => value !== undefined)) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      const target = rows?.find((row) => row.accountId === accountId);
+      await usersService.changeProfile({
+        accountId,
+        profileCode: changeProfile,
+        reason: changeReason.trim(),
+        expectedVersion: target?.profileVersion ?? 1,
+      });
+      setChangingId(null);
+      setChangeReason("");
+      setChangeErrors({});
+      announce(`Profile changed — the account now uses ${changeProfile}.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Profile change failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  void seq;
+
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Users</p>
-        <h1 className="workspace-title">Users</h1>
-        <p className="workspace-intro">Staff accounts, role grants, and access management.</p>
+        <p className="eyebrow">Staff · Access</p>
+        <h1 className="workspace-title">Staff access</h1>
+        <p className="workspace-intro">Invite staff by access profile and manage internal grants.</p>
       </header>
 
       <p className={styles.legend}>
-        Roles are additive — an account may hold several. Sensitive actions (refunds, result corrections) still
-        require the specific functional role even for administrators.
+        Two access profiles cover the school: Administrator manages accounts, configuration, and final approvals;
+        Principal handles daily operations, result entry, and drafting. Teachers are non-login school records managed
+        in the timetable workspace. Internal permission details remain visible to the school office.
       </p>
 
       {error && (
@@ -242,27 +257,33 @@ export default function UsersPage() {
               Dismiss
             </Button>
           </div>
-            <p className={styles.inviteResultCopy}>
-              <strong>{inviteResult.userRow.name}</strong> has been invited as{" "}
-              <strong>{inviteResult.userRow.role}</strong>. {supabaseMode
-                ? "Supabase Auth has sent a signed invitation to the verified contact."
-                : "Share this one-time reference with the invitee — it is shown only once:"}
-            </p>
+          <p className={styles.inviteResultCopy}>
+            <strong>{inviteResult.userRow.name}</strong> has been invited as{" "}
+            <strong>{inviteResult.userRow.role}</strong>.{" "}
+            {supabaseMode
+              ? "Supabase Auth has sent a signed invitation to the verified contact."
+              : "Share this one-time reference with the invitee — it is shown only once:"}
+          </p>
           {inviteResult.invitationRef ? (
             <p className={styles.inviteResultCopy}>
               Invitation reference: <span className="num">{inviteResult.invitationRef}</span>
             </p>
           ) : null}
           {inviteResult.oneTimeRef ? (
-            <p className={styles.oneTimeRef}><span className="num">{inviteResult.oneTimeRef}</span></p>
+            <p className={styles.oneTimeRef}>
+              <span className="num">{inviteResult.oneTimeRef}</span>
+            </p>
           ) : null}
           <p className={styles.inviteResultNote}>
             The invitee completes setup at{" "}
             {inviteResult.invitationRef ? (
-              <Link prefetch={false} href={`/sign-in/invite?invitation=${encodeURIComponent(inviteResult.invitationRef)}`}>the invitation page</Link>
+              <Link prefetch={false} href={`/sign-in/invite?invitation=${encodeURIComponent(inviteResult.invitationRef)}`}>
+                the invitation page
+              </Link>
             ) : (
               "the invitation link"
-            )}. The account is <em>Invited</em> until acceptance.
+            )}
+            . The account is <em>Invited</em> until acceptance.
           </p>
         </section>
       )}
@@ -283,12 +304,34 @@ export default function UsersPage() {
 
         <div className={styles.inviteRow}>
           <Button variant="primary" onClick={() => { setInviteOpen(true); setInviteErrors({}); }} disabled={!canManage}>
-            Invite user
+            Invite staff
           </Button>
         </div>
 
         {inviteOpen && (
           <form className={styles.inviteForm} onSubmit={handleInvite} noValidate>
+            <div className={styles.profileGrid} role="radiogroup" aria-label="Access profile">
+              {profiles.map((profile) => (
+                <button
+                  key={profile.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={inviteProfile === profile.code}
+                  className={`${styles.profileCard}${inviteProfile === profile.code ? ` ${styles.profileCardActive}` : ""}`}
+                  onClick={() => {
+                    setInviteProfile(profile.code);
+                    clearInviteError("reason");
+                  }}
+                >
+                  <strong>{profile.label}</strong>
+                  <span>{profile.description}</span>
+                  <small>
+                    {profile.roles.map((role) => role.replace(/_/g, " ")).join(" · ")}
+                  </small>
+                </button>
+              ))}
+            </div>
+
             <div className={styles.inviteFields}>
               <div className={`field ${inviteErrors.name ? "field--invalid" : ""}`}>
                 <label htmlFor="invite-name">Name</label>
@@ -311,21 +354,6 @@ export default function UsersPage() {
                   </p>
                 )}
               </div>
-              <div className="field">
-                <label htmlFor="invite-role">Role</label>
-                <select
-                  id="invite-role"
-                  className="select"
-                  value={inviteRole}
-                  onChange={(event) => setInviteRole(event.target.value as StaffRole)}
-                >
-                  {GRANTABLE_ROLES.map((item) => (
-                    <option key={item} value={item}>
-                      {item.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                    </option>
-                  ))}
-                </select>
-              </div>
               <div className={`field ${inviteErrors.email ? "field--invalid" : ""}`}>
                 <label htmlFor="invite-email">Email</label>
                 <input
@@ -347,7 +375,19 @@ export default function UsersPage() {
                   </p>
                 )}
               </div>
+              <div className="field">
+                <label htmlFor="invite-title">Job title</label>
+                <input
+                  id="invite-title"
+                  className="input"
+                  type="text"
+                  value={inviteTitle}
+                  onChange={(event) => setInviteTitle(event.target.value)}
+                  placeholder="e.g. School administrator"
+                />
+              </div>
             </div>
+
             <div className={`field ${inviteErrors.reason ? "field--invalid" : ""}`}>
               <label htmlFor="invite-reason">Reason (recorded in audit trail)</label>
               <input
@@ -392,11 +432,11 @@ export default function UsersPage() {
             </div>
           ) : (
             <table className={`table ${styles.table}`}>
-              <caption className="sr-only">Staff accounts with role, status, last activity and 2FA</caption>
+              <caption className="sr-only">Staff accounts with profile, title, email, status and MFA</caption>
               <thead>
                 <tr>
                   <th scope="col">Name</th>
-                  <th scope="col">Role</th>
+                  <th scope="col">Profile</th>
                   <th scope="col">Email</th>
                   <th scope="col">Status</th>
                   <th scope="col" className="num">Last active</th>
@@ -411,24 +451,7 @@ export default function UsersPage() {
                     row={row}
                     expanded={expandedId === row.key}
                     onToggle={() => setExpandedId(expandedId === row.key ? null : row.key)}
-                    granting={grantingForId === row.accountId}
-                    onGrantOpen={() => {
-                      setGrantingForId(row.accountId);
-                      setGrantReason("");
-                      setGrantErrors({});
-                    }}
-                    onGrantCancel={() => {
-                      setGrantingForId(null);
-                      setGrantReason("");
-                      setGrantErrors({});
-                    }}
-                    grantRole={grantRole}
-                    onGrantRoleChange={setGrantRole}
-                    grantReason={grantReason}
-                    onGrantReasonChange={setGrantReason}
-                    grantErrors={grantErrors}
-                    onGrant={() => void handleGrantRole(row.accountId)}
-                    busy={busy}
+                    canManage={canManage}
                     revokingGrantId={revokingGrantId}
                     onRevokeOpen={(grantId) => {
                       setRevokingGrantId(grantId);
@@ -460,7 +483,26 @@ export default function UsersPage() {
                     suspendError={suspendError}
                     onSuspendConfirm={() => void handleSuspend(row.accountId)}
                     onReactivate={() => void handleReactivate(row.accountId)}
-                    canManage={canManage}
+                    busy={busy}
+                    changing={changingId === row.accountId}
+                    onChangeOpen={() => {
+                      setChangingId(row.accountId);
+                      setChangeProfile(row.profileCode === "administrator" || row.profileCode === "principal" ? row.profileCode : "principal");
+                      setChangeReason("");
+                      setChangeErrors({});
+                    }}
+                    onChangeCancel={() => {
+                      setChangingId(null);
+                      setChangeReason("");
+                      setChangeErrors({});
+                    }}
+                    changeProfile={changeProfile}
+                    onChangeProfile={setChangeProfile}
+                    changeReason={changeReason}
+                    onChangeReason={setChangeReason}
+                    changeErrors={changeErrors}
+                    onChangeConfirm={() => void handleChangeProfile(row.accountId)}
+                    profiles={profiles}
                   />
                 ))}
               </tbody>
@@ -469,10 +511,14 @@ export default function UsersPage() {
         </div>
       </section>
 
-      <p className={styles.note}>Privileged roles require MFA once authentication is live.</p>
+      <p className={styles.note}>
+        Privileged roles require MFA once authentication is live. Accounts are individual and attributable — one person,
+        one login, exact scope. Profile codes never authorize requests by themselves; active grants, assignments, and
+        server checks remain authoritative.
+      </p>
       {!supabaseMode ? (
         <p className="demo-note">
-          <span className="demo-badge">Demo data</span> All people, roles and emails are fictional. Changes persist in
+          <span className="demo-badge">Demo data</span> All people, profiles and emails are fictional. Changes persist in
           this browser session only.
         </p>
       ) : null}
@@ -481,23 +527,14 @@ export default function UsersPage() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Expandable user row with grant/revoke/suspend/reactivate controls  */
+/* Expandable user row with profile management                         */
 /* ------------------------------------------------------------------ */
 
 function UserRowItem({
   row,
   expanded,
   onToggle,
-  granting,
-  onGrantOpen,
-  onGrantCancel,
-  grantRole,
-  onGrantRoleChange,
-  grantReason,
-  onGrantReasonChange,
-  grantErrors,
-  onGrant,
-  busy,
+  canManage,
   revokingGrantId,
   onRevokeOpen,
   onRevokeCancel,
@@ -513,21 +550,22 @@ function UserRowItem({
   suspendError,
   onSuspendConfirm,
   onReactivate,
-  canManage,
+  busy,
+  changing,
+  onChangeOpen,
+  onChangeCancel,
+  changeProfile,
+  onChangeProfile,
+  changeReason,
+  onChangeReason,
+  changeErrors,
+  onChangeConfirm,
+  profiles,
 }: {
   row: UserRow;
   expanded: boolean;
   onToggle: () => void;
-  granting: boolean;
-  onGrantOpen: () => void;
-  onGrantCancel: () => void;
-  grantRole: StaffRole;
-  onGrantRoleChange: (role: StaffRole) => void;
-  grantReason: string;
-  onGrantReasonChange: (reason: string) => void;
-  grantErrors: GrantErrors;
-  onGrant: () => void;
-  busy: boolean;
+  canManage: boolean;
   revokingGrantId: string | null;
   onRevokeOpen: (grantId: string) => void;
   onRevokeCancel: () => void;
@@ -543,14 +581,25 @@ function UserRowItem({
   suspendError: boolean;
   onSuspendConfirm: () => void;
   onReactivate: () => void;
-  canManage: boolean;
+  busy: boolean;
+  changing: boolean;
+  onChangeOpen: () => void;
+  onChangeCancel: () => void;
+  changeProfile: StaffProfileCode;
+  onChangeProfile: (profile: StaffProfileCode) => void;
+  changeReason: string;
+  onChangeReason: (reason: string) => void;
+  changeErrors: ChangeErrors;
+  onChangeConfirm: () => void;
+  profiles: ReturnType<typeof listProfileSummaries>;
 }) {
   const awaitingAcceptance = row.accountId === "";
+  const profileBadge = row.profileLabel ?? (row.profileCode ? row.profileCode : "Legacy access — review required");
   return (
     <>
       <tr>
         <td className={styles.name}>{row.name}</td>
-        <td className={styles.role}>{row.role}</td>
+        <td className={styles.role}>{profileBadge}</td>
         <td className={styles.email}>{row.email}</td>
         <td>
           <StatusBadge tone={STATUS_TONE[row.status]}>{row.status}</StatusBadge>
@@ -574,7 +623,15 @@ function UserRowItem({
         <tr>
           <td colSpan={7} className={styles.detailCell}>
             <div className={styles.detailPanel}>
-              <h3 className={styles.detailHeading}>Role grants</h3>
+              <h3 className={styles.detailHeading}>Access profile</h3>
+              <p className={styles.noGrants}>
+                {profileBadge}
+                {row.profileCode === null || row.profileCode === undefined ? (
+                  <span> — this account predates access profiles; review its internal grants below.</span>
+                ) : null}
+              </p>
+
+              <h3 className={styles.detailHeading}>Internal role grants</h3>
               {row.grants.length === 0 ? (
                 <p className={styles.noGrants}>No active role grants.</p>
               ) : (
@@ -597,7 +654,6 @@ function UserRowItem({
                               value={revokeReason}
                               onChange={(event) => {
                                 onRevokeReasonChange(event.target.value);
-                                if (event.target.value.trim() !== "") onRevokeCancel();
                               }}
                               aria-required="true"
                               aria-invalid={revokeError}
@@ -629,7 +685,8 @@ function UserRowItem({
                           type="button"
                           className="button button--quiet button--small"
                           onClick={() => onRevokeOpen(grant.id)}
-                          disabled={busy || row.status === "Suspended"}
+                          disabled={busy || row.status === "Suspended" || row.profileCode !== null}
+                          title={row.profileCode !== null ? "Use Change profile to adjust profile access" : undefined}
                         >
                           Revoke
                         </button>
@@ -639,56 +696,56 @@ function UserRowItem({
                 </ul>
               )}
 
-              {granting ? (
+              {changing ? (
                 <div className={styles.grantForm}>
-                  <div className={styles.grantFormFields}>
-                    <div className="field">
-                      <label htmlFor={`grant-role-${row.accountId}`}>Role</label>
-                      <select
-                        id={`grant-role-${row.accountId}`}
-                        className="select"
-                        value={grantRole}
-                        onChange={(event) => onGrantRoleChange(event.target.value as StaffRole)}
-                      >
-                        {GRANTABLE_ROLES.map((item) => (
-                          <option key={item} value={item}>
-                            {item.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className={`field ${grantErrors.reason ? "field--invalid" : ""}`}>
-                      <label htmlFor={`grant-reason-${row.accountId}`}>Reason (required)</label>
-                      <input
-                        id={`grant-reason-${row.accountId}`}
-                        className="input"
-                        type="text"
-                        value={grantReason}
-                        onChange={(event) => onGrantReasonChange(event.target.value)}
-                        placeholder="Why is this role being granted?"
-                        aria-invalid={grantErrors.reason !== undefined}
-                        aria-describedby={grantErrors.reason ? `grant-reason-error-${row.accountId}` : undefined}
-                      />
-                      {grantErrors.reason && (
-                        <p className="field-error" id={`grant-reason-error-${row.accountId}`}>
-                          {grantErrors.reason}
-                        </p>
-                      )}
-                    </div>
+                  <div className="field">
+                    <label htmlFor={`change-profile-${row.accountId}`}>New access profile</label>
+                    <select
+                      id={`change-profile-${row.accountId}`}
+                      className="select"
+                      value={changeProfile}
+                      onChange={(event) => {
+                        onChangeProfile(event.target.value as StaffProfileCode);
+                      }}
+                    >
+                      {profiles.map((profile) => (
+                        <option key={profile.code} value={profile.code}>
+                          {profile.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className={`field ${changeErrors.reason ? "field--invalid" : ""}`}>
+                    <label htmlFor={`change-reason-${row.accountId}`}>Reason (required)</label>
+                    <input
+                      id={`change-reason-${row.accountId}`}
+                      className="input"
+                      type="text"
+                      value={changeReason}
+                      onChange={(event) => onChangeReason(event.target.value)}
+                      placeholder="Why is this profile changing?"
+                      aria-invalid={changeErrors.reason !== undefined}
+                      aria-describedby={changeErrors.reason ? `change-reason-error-${row.accountId}` : undefined}
+                    />
+                    {changeErrors.reason && (
+                      <p className="field-error" id={`change-reason-error-${row.accountId}`}>
+                        {changeErrors.reason}
+                      </p>
+                    )}
                   </div>
                   <div className={styles.grantFormActions}>
                     <button
                       type="button"
                       className="button button--primary button--small"
-                      onClick={onGrant}
+                      onClick={onChangeConfirm}
                       disabled={busy}
                     >
-                      {busy ? "Granting…" : "Grant role"}
+                      {busy ? "Changing…" : "Change profile"}
                     </button>
                     <button
                       type="button"
                       className="button button--quiet button--small"
-                      onClick={onGrantCancel}
+                      onClick={onChangeCancel}
                       disabled={busy}
                     >
                       Cancel
@@ -700,10 +757,10 @@ function UserRowItem({
                   <button
                     type="button"
                     className="button button--quiet button--small"
-                    onClick={onGrantOpen}
+                    onClick={onChangeOpen}
                     disabled={busy}
                   >
-                    Grant additional role
+                    Change profile
                   </button>
                 )
               )}
@@ -729,7 +786,6 @@ function UserRowItem({
                         value={suspendReason}
                         onChange={(event) => {
                           onSuspendReasonChange(event.target.value);
-                          if (event.target.value.trim() !== "") onSuspendCancel();
                         }}
                         aria-required="true"
                         aria-invalid={suspendError}

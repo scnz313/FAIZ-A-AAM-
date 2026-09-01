@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getServerActor } from "@/lib/auth/actor";
+import { isSameOrigin } from "@/lib/auth/same-origin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
@@ -95,7 +96,7 @@ async function resolveOwnerId(
 export async function POST(request: Request) {
   const correlationId = crypto.randomUUID();
   const origin = request.headers.get("origin");
-  if (origin !== new URL(request.url).origin) return NextResponse.json({ error: "Cross-origin requests are not accepted." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  if (origin === null || !isSameOrigin(request.url, origin, request.headers.get("host"))) return NextResponse.json({ error: "Cross-origin requests are not accepted." }, { status: 403, headers: { "Cache-Control": "no-store" } });
   if (dataAdapter() !== "supabase") {
     return NextResponse.json({ error: "document uploads are not active in demo mode" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }

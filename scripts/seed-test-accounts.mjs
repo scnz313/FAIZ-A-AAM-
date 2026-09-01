@@ -42,30 +42,60 @@ const admin = createClient(url, secretKey, {
 
 /* --- test accounts ------------------------------------------------------ */
 
-/** Shared password for every test account (staff sign-in requires 8+ chars). */
-const PASSWORD = "FaizAam-Test-2026";
+/** Shared password for every test account (staff sign-in requires 8+ chars).
+ * Set TEST_ACCOUNT_PASSWORD to override; the default is for synthetic
+ * staging only and must never be used with real data. */
+const PASSWORD = process.env.TEST_ACCOUNT_PASSWORD || "FaizAam-Test-2026";
 
-/** One account per staff role (packages/contracts/src/relationships.ts). */
-const ACCOUNTS = [
-  ["content_editor", "Content", "Editor", "Test content editor"],
-  ["content_publisher", "Cara", "Publisher", "Test content publisher"],
-  ["admissions_officer", "Aam", "Officer", "Test admissions officer"],
-  ["admissions_approver", "Aam", "Approver", "Test admissions approver"],
-  ["finance_officer", "Faisal", "Officer", "Test finance officer"],
-  ["finance_approver", "Faisal", "Approver", "Test finance approver"],
-  ["teacher", "Tariq", "Teacher", "Test teacher"],
-  ["exam_reviewer", "Eshaal", "Reviewer", "Test exam reviewer"],
-  ["result_publisher", "Rashid", "Publisher", "Test result publisher"],
-  ["timetable_manager", "Tahir", "Manager", "Test timetable manager"],
-  ["hr_reviewer", "Hina", "Reviewer", "Test HR reviewer"],
-  ["hr_approver", "Haroon", "Approver", "Test HR approver"],
-  ["support_officer", "Sana", "Officer", "Test support officer"],
-  ["auditor", "Ayesha", "Auditor", "Test auditor"],
-  ["system_administrator", "Sami", "Admin", "Test system administrator"],
+if (PASSWORD.length < 8) {
+  console.error("TEST_ACCOUNT_PASSWORD must be at least 8 characters.");
+  process.exit(1);
+}
+
+/**
+ * Profile-based synthetic staff accounts (three-portal consolidation): one
+ * Administrator and one Principal, each holding the exact profile bundle of
+ * role grants. Legacy per-role accounts are DB-only denial fixtures for
+ * authorization tests, not portal personas.
+ */
+const PROFILE_ACCOUNTS = [
+  {
+    profile: "administrator",
+    email: "test.administrator@faizaam.example",
+    givenName: "Aam",
+    familyName: "Admin",
+    title: "Administrator",
+    roles: [
+      "system_administrator",
+      "content_publisher",
+      "admissions_approver",
+      "finance_approver",
+      "hr_approver",
+      "exam_reviewer",
+      "result_publisher",
+      "auditor",
+    ],
+  },
+  {
+    profile: "principal",
+    email: "test.principal@faizaam.example",
+    givenName: "Aam",
+    familyName: "Principal",
+    title: "Principal",
+    roles: [
+      "content_editor",
+      "admissions_officer",
+      "finance_officer",
+      "hr_reviewer",
+      "result_entry_officer",
+      "timetable_manager",
+      "support_officer",
+    ],
+  },
 ];
 
-function emailFor(role) {
-  return `test.${role}@faizaam.example`;
+function emailFor(profile) {
+  return `test.${profile}@faizaam.example`;
 }
 
 /* --- helpers ------------------------------------------------------------ */
@@ -94,10 +124,10 @@ let created = 0;
 let skipped = 0;
 const failures = [];
 
-for (const [role, givenName, familyName, title] of ACCOUNTS) {
-  const email = emailFor(role);
+for (const { profile, givenName, familyName, title, roles } of PROFILE_ACCOUNTS) {
+  const email = emailFor(profile);
   const displayName = `${givenName} ${familyName}`;
-  const label = `${role.padEnd(22)} ${email}`;
+  const label = `${profile.padEnd(16)} ${email}`;
 
   try {
     // 1. Auth user — reuse if it already exists.
@@ -143,32 +173,41 @@ for (const [role, givenName, familyName, title] of ACCOUNTS) {
     });
     if (accountError) throw accountError;
 
-    // 4. Role grant (active, effective now).
-    const { error: grantError } = await admin.from("role_grants").insert({
-      account_id: authUser.id,
-      role_code: role,
-      status: "active",
-      effective_from: new Date().toISOString(),
-      reason: "Fictional test account (synthetic seed)",
-    });
-    if (grantError) throw grantError;
+    // 4. Exact profile role bundle (active, effective now).
+    for (const role of roles) {
+      const { error: grantError } = await admin.from("role_grants").insert({
+        account_id: authUser.id,
+        role_code: role,
+        status: "active",
+        effective_from: new Date().toISOString(),
+        reason: `Fictional test account (${profile} profile, synthetic seed)`,
+      });
+      if (grantError) throw grantError;
+    }
 
-    // 5. Staff member (so the account is a directory-listed staff identity).
+    // 5. Staff member with the profile marker (directory-listed identity).
     const { error: memberError } = await admin
       .from("staff_members")
-      .insert({ person_id: person.id, employment_status: "active", title });
+      .insert({
+        person_id: person.id,
+        employment_status: "active",
+        title,
+        access_profile_code: profile,
+        access_profile_version: 1,
+      });
     if (memberError) throw memberError;
 
     console.log(`  ✓ ${label}  (created)`);
     created += 1;
   } catch (error) {
     console.error(`  ✗ ${label}  ${error.message}`);
-    failures.push({ role, email, message: error.message });
+    failures.push({ profile, email, message: error.message });
   }
 }
 
 console.log(`\nDone: ${created} created, ${skipped} already existed, ${failures.length} failed.`);
-console.log(`\nTest staff sign-in — ${PASSWORD}`);
+console.log("\nTest staff sign-in (Administrator/Principal profiles):");
+for (const { profile } of PROFILE_ACCOUNTS) console.log(`  ${emailFor(profile)}`);
 console.log("  /sign-in/staff  ·  first login enrolls TOTP (plan.md §4)\n");
 
 if (failures.length > 0) process.exitCode = 1;

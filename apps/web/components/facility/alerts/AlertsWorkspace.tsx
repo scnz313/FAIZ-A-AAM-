@@ -7,7 +7,7 @@ import type { Alert, AlertSeverity, AlertStatus, Zone } from "@fass/contracts";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { acknowledgeAlert, getAlerts, resolveAlert } from "@/lib/iot/api";
 import { ALERT_SEVERITY_LABELS, ALERT_STATUS_LABELS, formatKolkata } from "@/modules/iot/domain";
 import styles from "./AlertsWorkspace.module.css";
@@ -67,7 +67,7 @@ type AlertsWorkspaceProps = {
 
 export function AlertsWorkspace({ zones, initialAlerts }: AlertsWorkspaceProps) {
   const { summary } = useStaffContext();
-  const canManage = canRole(summary?.role ?? "", "facility.manage");
+  const canManage = canAnyRole(summary?.roles ?? [], "facility.manage");
   const [alerts, setAlerts] = useState<Alert[] | null>(initialAlerts);
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");

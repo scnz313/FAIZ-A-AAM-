@@ -30,12 +30,14 @@ import {
   familyContextService,
   RELATIONSHIPS_SESSION_KEY,
 } from "@/modules/services/family-context";
+import { staffContextService } from "@/modules/services/staff-context";
 import type { EntryBatch } from "@/modules/services/academics";
 
 const SESSION_KEY = sessionKey("academics");
 const PINNED = "2026-08-10T05:00:00.000Z";
-/** Firdous Ahmad — the demo teacher (Class 8-A · Mathematics, active). */
-const TEACHER_ACCOUNT_ID = "00000000-0000-4000-8000-000000000201";
+/** Rania Mir — Principal profile with result_entry_officer (marks entry). */
+const RESULT_ENTRY_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
+const RESULT_ENTRY_GRANT_ID = "00000000-0000-4000-8000-000000000323";
 
 /* Stable IDs from the relationships fixture. */
 const AARIF_ID = "00000000-0000-4000-8000-000000000901";
@@ -66,9 +68,12 @@ const STAFF_INITIAL_STATE: StaffContextInitialState = {
     personId: "00000000-0000-4000-8000-000000000003",
     displayName: "Sana Wani",
     title: "Exam reviewer",
+    profileCode: null,
+    profileLabel: null,
     activeRoleGrantId: "00000000-0000-4000-8000-000000000303",
     role: "exam_reviewer",
     roleLabel: "Exam reviewer",
+    roles: ["exam_reviewer"],
     academicYearLabel: "2026–27",
     assignmentLabel: null,
     grantedWorkspaceCount: 1,
@@ -249,11 +254,13 @@ describe("server-hydrated results components", () => {
   });
 });
 
-describe("MarksEntry teacher scope (class + subject)", () => {
-  it("denies a teacher entry when the batch class matches but the subject does not", async () => {
-    sessionSet(STAFF_SESSION_KEYS.identity, TEACHER_ACCOUNT_ID);
-    /* Synthetic batch: the real fixture RB-2026-0138 is 8-A · Mathematics,
-       which IS assigned — the subject swap must flip the scope decision. */
+describe("MarksEntry result_entry_officer scope (class + subject)", () => {
+  it("allows result_entry_officer entry even when the batch subject does not match any assignment", async () => {
+    sessionSet(STAFF_SESSION_KEYS.identity, RESULT_ENTRY_ACCOUNT_ID);
+    await staffContextService.setActiveWorkspace(RESULT_ENTRY_ACCOUNT_ID, RESULT_ENTRY_GRANT_ID);
+    /* Synthetic batch: the real fixture RB-2026-0138 is 8-A · Mathematics.
+       The result_entry_officer role is not scoped by teaching assignments,
+       so entry is allowed even with a subject swap. */
     const outOfSubjectScope: EntryBatch = {
       ref: "RB-2026-0138",
       exam: "Term 1",
@@ -270,12 +277,13 @@ describe("MarksEntry teacher scope (class + subject)", () => {
       </StaffContextProvider>,
     );
 
-    await waitFor(() => expect(screen.getByText("Outside your assignments")).toBeTruthy(), { timeout: 5_000 });
-    expect(screen.getByText(/not in your assigned classes or subjects/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("Marks entry")).toBeTruthy(), { timeout: 5_000 });
+    expect(screen.queryByText("Outside your assignments")).toBeNull();
   });
 
-  it("opens the workspace for a teacher when class and subject are both assigned", async () => {
-    sessionSet(STAFF_SESSION_KEYS.identity, TEACHER_ACCOUNT_ID);
+  it("opens the workspace for result_entry_officer when class and subject are both assigned", async () => {
+    sessionSet(STAFF_SESSION_KEYS.identity, RESULT_ENTRY_ACCOUNT_ID);
+    await staffContextService.setActiveWorkspace(RESULT_ENTRY_ACCOUNT_ID, RESULT_ENTRY_GRANT_ID);
     const batch = await academicsService.getBatch("RB-2026-0138");
     expect(batch).not.toBeNull();
     render(

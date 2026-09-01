@@ -10,51 +10,64 @@ import { Crest } from "@/components/ui/Crest";
 import { demoTodayLabel } from "@/modules/demo/clock";
 import { identityService } from "@/modules/services/identity";
 import { roleLabel } from "@/modules/services/staff-context";
-import { canRole, type StaffAction } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
+import { type StaffAction } from "@/modules/services/staff-authorization";
 import { demoStaffNotifications } from "@/modules/notifications/demo";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 import type { NotificationItem } from "@/modules/notifications/demo";
+import { canonicalStaffUrl, portalPrefixForProfile, staffSubPathForPathname } from "@/lib/auth/portal-routes";
 
 import { NotificationBell } from "./NotificationBell";
 import styles from "./StaffShell.module.css";
 
-type NavLink = { href: string; label: string; exact?: boolean; action: StaffAction };
+type NavLink = { subPath: string; label: string; exact?: boolean; action: StaffAction };
 type NavGroup = { label: string; links: ReadonlyArray<NavLink> };
 
 const NAV_GROUPS: ReadonlyArray<NavGroup> = [
   {
     label: "Main",
     links: [
-      { href: "/staff", label: "Home", exact: true, action: "home.view" },
-      { href: "/staff/admissions", label: "Admissions", action: "admissions.view" },
-      { href: "/staff/careers", label: "Careers", action: "careers.view" },
-      { href: "/staff/finance", label: "Finance", action: "finance.view" },
-      { href: "/staff/results", label: "Results", action: "results.view" },
-      { href: "/staff/timetables", label: "Timetables", action: "timetable.view" },
-      { href: "/staff/documents", label: "Documents", action: "documents.view" },
+      { subPath: "", label: "Home", exact: true, action: "home.view" },
+      { subPath: "/admissions", label: "Admissions", action: "admissions.view" },
+      { subPath: "/careers", label: "Careers", action: "careers.view" },
+      { subPath: "/finance", label: "Finance", action: "finance.view" },
+      { subPath: "/results", label: "Results", action: "results.view" },
+      { subPath: "/timetables", label: "Timetables", action: "timetable.view" },
+      { subPath: "/academics/teachers", label: "Teaching staff", action: "timetable.manage" },
+      { subPath: "/documents", label: "Documents", action: "documents.view" },
     ],
   },
   {
     label: "Publishing",
     links: [
-      { href: "/staff/notices", label: "Notices", action: "content.view" },
-      { href: "/staff/content", label: "Content", action: "content.view" },
+      { subPath: "/notices", label: "Notices", action: "content.view" },
+      { subPath: "/content", label: "Content", action: "content.view" },
     ],
   },
   {
     label: "Administration",
     links: [
-      { href: "/staff/users", label: "Users", action: "users.manage" },
-      { href: "/staff/link-requests", label: "Link requests", action: "links.verify" },
-      { href: "/staff/audit", label: "Audit", action: "audit.view" },
-      { href: "/staff/settings", label: "Settings", action: "settings.manage" },
-      { href: "/staff/support", label: "Support", action: "support.view" },
+      { subPath: "/users", label: "Users", action: "users.manage" },
+      { subPath: "/data/imports", label: "Data imports", action: "users.manage" },
+      { subPath: "/data/exports", label: "Data exports", action: "users.manage" },
+      { subPath: "/link-requests", label: "Link requests", action: "links.verify" },
+      { subPath: "/audit", label: "Audit", action: "audit.view" },
+      { subPath: "/settings", label: "Settings", action: "settings.manage" },
+      { subPath: "/support", label: "Support", action: "support.view" },
     ],
   },
 ];
 
-const isActive = (pathname: string, link: NavLink) =>
-  link.exact ? pathname === link.href : pathname.startsWith(link.href);
+function isActive(pathname: string, link: NavLink, profileCode: ReturnType<typeof portalPrefixForProfile>): boolean {
+  const currentSubPath = staffSubPathForPathname(pathname);
+  if (link.exact) return currentSubPath === link.subPath;
+  if (link.subPath === "") return false;
+  return currentSubPath.startsWith(link.subPath);
+}
+
+function resolveHref(link: NavLink, profileCode: ReturnType<typeof portalPrefixForProfile>): string {
+  return canonicalStaffUrl(profileCode ?? null, link.subPath);
+}
 
 /* Below this width the sidebar becomes an off-canvas drawer. */
 const DRAWER_BREAKPOINT = "(max-width: 1000px)";
@@ -77,7 +90,15 @@ const FOCUSABLE_SELECTOR = [
  * Below 1000px the sidebar becomes a keyboard-operable drawer opened from
  * the topbar Menu button.
  */
-export function StaffShell({ children, initialNotifications }: { children: ReactNode; initialNotifications?: NotificationItem[] }) {
+export function StaffShell({
+  children,
+  initialNotifications,
+  developmentAuth = false,
+}: {
+  children: ReactNode;
+  initialNotifications?: NotificationItem[];
+  developmentAuth?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const {
@@ -95,6 +116,10 @@ export function StaffShell({ children, initialNotifications }: { children: React
     announcement,
   } = useStaffContext();
   const activeRole = summary?.role ?? "";
+  const navigationRoles = summary?.profileCode === null ? (activeRole ? [activeRole] : []) : summary?.roles ?? [];
+  const profileCode = summary?.profileCode ?? null;
+  const portalPrefix = portalPrefixForProfile(profileCode);
+  const homeHref = canonicalStaffUrl(profileCode, "");
   const [navOpen, setNavOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -218,47 +243,49 @@ export function StaffShell({ children, initialNotifications }: { children: React
         inert={mounted && isMobile && !navOpen}
         onClick={handleNavClick}
       >
-        <Link className="facility-brand" href="/staff" prefetch={false}>
+        <Link className="facility-brand" href={homeHref} prefetch={false}>
           <Crest size="sm" />
           <span className="facility-brand-copy">
             <strong>Faiz Aam</strong>
             <span className={`urdu ${styles.urdu}`} dir="rtl" lang="ur">
               فیض عام
             </span>
-            <small>Staff workspace</small>
+            <small>{portalPrefix === "/administrator" ? "Administrator" : portalPrefix === "/principal" ? "Principal" : "Staff workspace"}</small>
           </span>
         </Link>
 
-        <div className={styles.identitySwitcher}>
-          <label htmlFor="staff-identity">Demo identity</label>
-          <select
-            id="staff-identity"
-            className="select"
-            value={identityId ?? ""}
-            onChange={(event) => void switchIdentity(event.target.value)}
-            disabled={switching}
-            aria-describedby="staff-identity-note"
-          >
-            {demoIdentities.map((identity) => (
-              <option key={identity.accountId} value={identity.accountId}>
-                {identity.displayName} — {identity.summaryLabel}
-              </option>
-            ))}
-          </select>
-          <p id="staff-identity-note" className={styles.identityNote}>
-            Demo stand-in for staff sign-in — the backend issues real sessions.
-          </p>
-          {switchError ? (
-            <p className={styles.switcherError} role="alert">
-              {switchError}
+        {!supabaseMode ? (
+          <div className={styles.identitySwitcher}>
+            <label htmlFor="staff-identity">Demo identity</label>
+            <select
+              id="staff-identity"
+              className="select"
+              value={identityId ?? ""}
+              onChange={(event) => void switchIdentity(event.target.value)}
+              disabled={switching}
+              aria-describedby="staff-identity-note"
+            >
+              {demoIdentities.map((identity) => (
+                <option key={identity.accountId} value={identity.accountId}>
+                  {identity.displayName} — {identity.summaryLabel}
+                </option>
+              ))}
+            </select>
+            <p id="staff-identity-note" className={styles.identityNote}>
+              Demo stand-in for staff sign-in — the backend issues real sessions.
             </p>
-          ) : null}
-        </div>
+            {switchError ? (
+              <p className={styles.switcherError} role="alert">
+                {switchError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {status === "ready" && summary ? (
           <div className={styles.workspaceSwitcher}>
-            <label htmlFor="staff-workspace">Workspace</label>
-            {workspaces.length > 1 ? (
+            <label htmlFor="staff-workspace">Access profile</label>
+            {summary.profileCode === null && workspaces.length > 1 ? (
               <>
                 <select
                   id="staff-workspace"
@@ -282,7 +309,7 @@ export function StaffShell({ children, initialNotifications }: { children: React
               </>
             ) : (
               <p className={styles.workspaceNote}>
-                {summary.roleLabel}
+                {summary.profileLabel ?? summary.roleLabel}
                 {summary.assignmentLabel ? ` · ${summary.assignmentLabel}` : ""}
               </p>
             )}
@@ -305,18 +332,19 @@ export function StaffShell({ children, initialNotifications }: { children: React
         )}
 
         {NAV_GROUPS.map((group) => {
-          const visibleLinks = group.links.filter((link) => canRole(activeRole, link.action));
+          const visibleLinks = group.links.filter((link) => canAnyRole(navigationRoles, link.action));
           if (visibleLinks.length === 0) return null;
           return (
             <div className={styles.group} key={group.label}>
               <p className="section-label">{group.label}</p>
               <nav aria-label={`${group.label} navigation`}>
                 {visibleLinks.map((link) => {
-                  const active = isActive(pathname, link);
+                  const active = isActive(pathname, link, portalPrefix);
+                  const href = resolveHref(link, portalPrefix);
                   return (
                     <Link
-                      key={link.href}
-                      href={link.href}
+                      key={link.subPath}
+                      href={href}
                       prefetch={false}
                       className={active ? "active" : undefined}
                       aria-current={active ? "page" : undefined}
@@ -337,7 +365,7 @@ export function StaffShell({ children, initialNotifications }: { children: React
             </span>
             <span className="signed-in-copy">
               <strong>{status === "ready" && summary ? summary.displayName : "Staff member"}</strong>
-              <small>{status === "ready" && summary ? `${summary.roleLabel}${supabaseMode ? "" : " · demo session"}` : supabaseMode ? "Staff account" : "Demo session"}</small>
+              <small>{status === "ready" && summary ? `${summary.profileLabel ?? summary.roleLabel}${supabaseMode ? "" : " · demo session"}` : supabaseMode ? "Staff account" : "Demo session"}</small>
             </span>
             <button
               type="button"
@@ -350,6 +378,11 @@ export function StaffShell({ children, initialNotifications }: { children: React
             </button>
           </div>
           {signOutError ? <p className={styles.switcherError} role="alert">{signOutError}</p> : null}
+          {developmentAuth ? (
+            <Link className="support-link" href="/sign-in/staff" prefetch={false}>
+              Switch local staff account
+            </Link>
+          ) : null}
         </div>
       </aside>
 
@@ -375,7 +408,7 @@ export function StaffShell({ children, initialNotifications }: { children: React
             >
               Menu
             </button>
-            <p className="eyebrow">Staff workspace</p>
+            <p className="eyebrow">{portalPrefix === "/administrator" ? "Administrator workspace" : portalPrefix === "/principal" ? "Principal workspace" : "Staff workspace"}</p>
             <div className="topbar-actions">
               <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoStaffNotifications())} accountId={identityId ?? undefined} />
               {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
@@ -383,7 +416,7 @@ export function StaffShell({ children, initialNotifications }: { children: React
           </div>
 
           <div className={`folio ${styles.folio}`}>
-            <span>FAIZ AAM SECONDARY SCHOOL · STAFF WORKSPACE</span>
+            <span>FAIZ AAM SECONDARY SCHOOL · {portalPrefix === "/administrator" ? "ADMINISTRATOR" : portalPrefix === "/principal" ? "PRINCIPAL" : "STAFF"} WORKSPACE</span>
             <span className={styles.folioDate}>{supabaseMode ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()) : demoTodayLabel()}</span>
           </div>
 

@@ -45,31 +45,51 @@ If code disagrees with the blueprint, do not silently copy the inconsistency. Re
 - Do not add Redis, GraphQL, Kafka, a second backend, a mobile app, an LMS, transport tracking, attendance, payroll, or chat unless the blueprint is explicitly expanded.
 - Do not expose student results, documents, application data, or fee records through public search or predictable identifiers.
 
-## Active phase — C5 staging and provider activation
+## Active phase — three-portal consolidation (Administrator, Principal, Guardian)
 
-The frontend handoff and the local C0–C4/provider-ready implementation through
-migration `000030` are complete. The active work is the external C5 gate in
-`plan.md`; do not add features or redesign the UI while staging evidence is
-being established.
+The signed-in product is being consolidated into exactly three portal
+experiences: **Administrator** (`/administrator/*`), **Principal**
+(`/principal/*`), and **Guardian** (`/portal/*`). The Teacher portal and
+Student portal are removed; teachers remain non-login school records for
+timetable and subject attribution, and students remain school records linked
+to guardians. The previous C5 staging sequence is paused while this
+consolidation lands; do not resume C5 staging migrations or Vercel work until
+the two-profile migration and local gates pass.
 
-Before editing:
+### Migration ledger divergence
 
-1. Inspect `git status` and preserve unrelated dirty-worktree changes.
-2. Re-read the staging migration ledger before applying any migration `000016–000030`.
-3. Review and commit the dirty working set in coherent migration, facade, provider, UI, and documentation units.
-4. Preserve the demo adapter for design/tests, but prohibit demo-record fallback when Supabase mode is active.
-5. Configure one staging provider boundary at a time and run its fake contract plus real staging journey before marking it verified.
-6. Run advisors, generated-type diff, real-session authorization, backup/restore, browser, accessibility, and health gates in staging.
-7. Update `PROJECT-STATUS.md` only after current-environment evidence passes; local evidence never proves staging or release.
+- Remote Supabase has applied migrations `000001–000039`.
+- Local `000040` and `000041` are committed but not live.
+- Local `000042_staff_access_profiles.sql` is untracked and is being
+  redesigned for the two-profile (administrator/principal) model before any
+  apply. Do not treat the old three-profile version as authoritative.
+- No remote write, migration apply, account/grant cleanup, or Vercel deploy
+  is authorized by this phase. The two live remote teacher grants require a
+  masked dependency report and explicit owner confirmation before retirement.
+
+### Consolidation rules
+
+1. Preserve all dirty-worktree changes; do not reset or discard user work.
+2. A portal profile is a provisioning/routing concept only — server
+   authorization still evaluates active granular grants, AAL2, scope, and
+   maker/checker actor identity.
+3. One staff account has exactly one active portal profile
+   (`administrator` or `principal`). Internal grants are not user choices.
+4. Principals perform daily maker/operational work; Administrators manage
+   access/configuration and independently approve consequential work. No
+   account may approve its own originating work.
+5. Teachers are non-login school records. Add `teaching_assignments`
+   independent of `role_grants` so timetable/conflict logic works without
+   teacher credentials.
+6. Guardian onboarding is school-first: import students/guardians, then
+   invite via mobile OTP (email fallback) bound to the exact guardian and
+   approved link set. A student number, name, DOB, or phone alone never
+   activates access.
+7. Update `PROJECT-STATUS.md` only after current-environment evidence passes.
 8. Do not create production or deploy Vercel until staging is verified.
-9. Keep provider configuration and deployment changes reviewable; never combine unrelated existing changes.
-
-Execute C5 strictly in the `plan.md` order: C5.0 source checkpoint → C5.1
-ledger reconciliation → C5.2 staging migrations/types/advisors → C5.3 Auth →
-C5.4 Storage/PDF → C5.5 Resend/outbox/cron → C5.6 finance sandbox → C5.7
-global staging acceptance → C5.8 restore rehearsal → C5.9 Vercel preview →
-C5.10 production. If a stage fails, stop at that stage and record the evidence;
-later-stage success cannot compensate for an earlier failed gate.
+9. Run local gates (`npm run typecheck`, `npm run lint`, `npm test`,
+   `npm run build`, `sh scripts/validate-db-local.sh`) before any staging
+   activation.
 
 ### Supabase completion rules
 
@@ -129,11 +149,13 @@ Never describe `VERIFIED` work as `RELEASED` without deployment evidence.
 
 ## Test staff accounts (synthetic, staging only)
 
-`scripts/seed-test-accounts.mjs` creates one fictional test account per staff
-role in the linked Supabase project (auth user → person → user_account →
+`scripts/seed-test-accounts.mjs` creates profile-based synthetic staff
+accounts — one Administrator and one Principal, matching the two portal
+profiles — in the linked Supabase project (auth user → person → user_account →
 role_grant → staff_member). It is idempotent and safe to re-run; accounts are
-keyed by `test.<role>@faizaam.example`. The shared password is printed by the
-script. First sign-in at `/sign-in/staff` still enrolls TOTP (plan.md §4).
+keyed by `test.<profile>@faizaam.example`. The shared password is printed by
+the script. First sign-in at `/sign-in/staff` still enrolls TOTP (plan.md §4).
+Legacy per-role accounts are DB-only denial fixtures, not portal personas.
 Never use these accounts in production or with real data.
 
 ## Local performance workflow

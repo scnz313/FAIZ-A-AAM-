@@ -6,7 +6,7 @@ import type { FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { formatKolkata } from "@/modules/iot/domain";
 import { supportService } from "@/modules/services/support";
 import type { Grievance, GrievanceEvent, GrievanceStatus } from "@/modules/services/support";
@@ -64,7 +64,7 @@ function ResponseThread({ events }: { events: GrievanceEvent[] }) {
  */
 export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } = {}) {
   const { summary } = useStaffContext();
-  const canRespond = canRole(summary?.role ?? "", "support.respond");
+  const canRespond = canAnyRole(summary?.roles ?? [], "support.respond");
   const supabaseMode = clientAdapterMode() === "supabase";
   const [items, setItems] = useState<Grievance[]>(initialItems ?? []);
   const [loading, setLoading] = useState(initialItems === undefined);

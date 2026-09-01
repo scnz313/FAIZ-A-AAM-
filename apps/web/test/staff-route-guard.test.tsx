@@ -6,11 +6,11 @@ import { StaffContextProvider } from "@/components/staff/StaffContextProvider";
 import { StaffRouteGuard } from "@/components/staff/StaffRouteGuard";
 import { setDemoNow } from "@/modules/demo/clock";
 import { RELATIONSHIPS_SESSION_KEY } from "@/modules/services/family-context";
-import { sessionKey, sessionRemove } from "@/modules/services/session";
+import { sessionKey, sessionRemove, sessionSet } from "@/modules/services/session";
 
 const PINNED = new Date("2026-08-10T05:00:00.000Z");
 const IDENTITY_SESSION_KEY = sessionKey("identity");
-const ADMIN_GRANT_ID = "00000000-0000-4000-8000-000000000310";
+const STAFF_IDENTITY_KEY = sessionKey("staff-identity");
 const AISHA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000204";
 
 /* The route under test can change per case. */
@@ -27,6 +27,7 @@ function Probe() {
 beforeEach(() => {
   window.sessionStorage.clear();
   sessionRemove(IDENTITY_SESSION_KEY);
+  sessionRemove(STAFF_IDENTITY_KEY);
   sessionRemove(RELATIONSHIPS_SESSION_KEY);
   setDemoNow(PINNED);
   pathname.current = "/staff/users";
@@ -35,6 +36,7 @@ beforeEach(() => {
 afterEach(() => {
   window.sessionStorage.clear();
   sessionRemove(IDENTITY_SESSION_KEY);
+  sessionRemove(STAFF_IDENTITY_KEY);
   sessionRemove(RELATIONSHIPS_SESSION_KEY);
   setDemoNow(null);
 });
@@ -54,8 +56,8 @@ describe("StaffRouteGuard (fail closed)", () => {
     expect(screen.queryByTestId("protected-children")).toBeNull();
   });
 
-  it("renders protected children only once the active workspace is authorized", async () => {
-    pathname.current = "/staff/finance"; /* Sana's finance workspace is allowed */
+  it("renders protected children once the profile roles are authorized", async () => {
+    pathname.current = "/staff/finance"; /* Administrator profile includes finance.view */
     render(
       <StaffContextProvider>
         <StaffRouteGuard>
@@ -67,8 +69,11 @@ describe("StaffRouteGuard (fail closed)", () => {
     await waitFor(() => expect(screen.getByTestId("protected-children")).toBeTruthy());
   });
 
-  it("denies an authorized-workspace mismatch and offers a direct grant switch", async () => {
-    pathname.current = "/staff/users"; /* Sana has no users.manage workspace */
+  it("denies a route the profile cannot open", async () => {
+    /* The Administrator persona aggregates users.manage, so use the
+       Principal persona (Rania) to prove denial. */
+    sessionSet(STAFF_IDENTITY_KEY, "00000000-0000-4000-8000-000000000205");
+    pathname.current = "/staff/users"; /* Principal has no users.manage */
     render(
       <StaffContextProvider>
         <StaffRouteGuard>
@@ -77,28 +82,14 @@ describe("StaffRouteGuard (fail closed)", () => {
       </StaffContextProvider>,
     );
 
-    await waitFor(() => expect(screen.getByText("This workspace cannot open this area")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("This profile cannot open this area")).toBeTruthy());
     expect(screen.getByText(/No granted workspace on this account can perform this action/)).toBeTruthy();
     expect(screen.queryByTestId("protected-children")).toBeNull();
   });
 
-  it("opens the protected route after an identity + workspace switch to a granted role", async () => {
+  it("opens the protected route for the administrator persona without a workspace switch", async () => {
     pathname.current = "/staff/users";
-    const user = userEvent.setup();
-    const first = render(
-      <StaffContextProvider>
-        <StaffRouteGuard>
-          <Probe />
-        </StaffRouteGuard>
-      </StaffContextProvider>,
-    );
-
-    await waitFor(() => expect(screen.getByText("This workspace cannot open this area")).toBeTruthy());
-
-    /* Persist the Aisha identity, then mount the provider fresh (navigation). */
-    const session = await import("@/modules/services/session");
-    session.sessionSet(session.sessionKey("staff-identity"), AISHA_ACCOUNT_ID);
-    first.unmount();
+    sessionSet(STAFF_IDENTITY_KEY, AISHA_ACCOUNT_ID);
     render(
       <StaffContextProvider>
         <StaffRouteGuard>
@@ -107,13 +98,7 @@ describe("StaffRouteGuard (fail closed)", () => {
       </StaffContextProvider>,
     );
 
-    /* Aisha's default workspace (content editor) cannot manage users — the
-       guard offers her granted system-administrator workspace. */
-    await waitFor(
-      () => expect(screen.getByRole("button", { name: "Open as System administrator" })).toBeTruthy(),
-      { timeout: 5_000 },
-    );
-    await user.click(screen.getByRole("button", { name: "Open as System administrator" }));
-    await waitFor(() => expect(screen.getByTestId("protected-children")).toBeTruthy(), { timeout: 5_000 });
+    await waitFor(() => expect(screen.getByTestId("protected-children")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Open as/ })).toBeNull();
   });
 });

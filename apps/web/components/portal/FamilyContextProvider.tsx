@@ -125,8 +125,13 @@ export function FamilyContextProvider({
       if (context === null || studentId === context.activeStudentId) return;
       setSwitching(true);
       setSwitchError(null);
+      /* Fail closed: clear the outgoing child's context immediately so no
+         stale sensitive rows remain visible while the switch resolves. The
+         previous authorized context is restored only if the switch fails. */
+      const previousContext = context;
+      setContext(null);
       try {
-        const next = await familyContextService.setActiveStudent(context.accountId, studentId);
+        const next = await familyContextService.setActiveStudent(previousContext.accountId, studentId);
         setContext(next);
         const selected = students.find((item) => item.student.id === studentId);
         if (selected !== undefined) {
@@ -136,6 +141,7 @@ export function FamilyContextProvider({
         }
       } catch (error) {
         /* Keep the previous selection visible; the switch never half-applies. */
+        setContext(previousContext);
         setSwitchError(
           error instanceof Error
             ? error.message

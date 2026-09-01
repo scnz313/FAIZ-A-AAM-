@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { dataAdapter } from "@/lib/supabase/env";
+import { dataAdapter, developmentAuthEnabled, totpRequired } from "@/lib/supabase/env";
 import { settingsService } from "@/modules/services/settings";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -24,6 +24,26 @@ describe("Supabase adapter configuration", () => {
     vi.stubEnv("FASS_DATA_ADAPTER", "");
     vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "");
     expect(dataAdapter()).toBe("demo");
+  });
+
+  it("enables quick sign-in only for a Supabase next-dev runtime", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("FASS_DEV_AUTH_BYPASS", "true");
+    expect(developmentAuthEnabled()).toBe(true);
+
+    vi.stubEnv("NODE_ENV", "production");
+    expect(developmentAuthEnabled()).toBe(false);
+  });
+
+  it("always requires TOTP outside next dev", () => {
+    vi.stubEnv("FASS_TOTP_REQUIRED", "false");
+    vi.stubEnv("NODE_ENV", "development");
+    expect(totpRequired()).toBe(false);
+
+    vi.stubEnv("NODE_ENV", "production");
+    expect(totpRequired()).toBe(true);
   });
 
   it("does not silently serve demo settings in Supabase mode", async () => {

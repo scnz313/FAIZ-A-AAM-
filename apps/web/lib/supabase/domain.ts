@@ -1735,12 +1735,25 @@ export function resolveStaffContext(
     if (account === null) throw new DomainError("forbidden", "No account for this staff record");
 
     const nowIso = new Date().toISOString();
-    const [memberResult, preferenceResult, grantsResult, academicYearResult] = await Promise.all([
-      supabase
+    const memberPromise = (async () => {
+      const withProfile = await supabase
+        .from("staff_members")
+        .select("id, reference, employment_status, title, access_profile_code, access_profile_version")
+        .eq("person_id", personId)
+        .maybeSingle();
+      if (withProfile.error === null || !withProfile.error.message.includes("access_profile_code")) return withProfile;
+      const legacy = await supabase
         .from("staff_members")
         .select("id, reference, employment_status, title")
         .eq("person_id", personId)
-        .maybeSingle(),
+        .maybeSingle();
+      return {
+        data: legacy.data === null ? null : { ...legacy.data, access_profile_code: null, access_profile_version: null },
+        error: legacy.error,
+      };
+    })();
+    const [memberResult, preferenceResult, grantsResult, academicYearResult] = await Promise.all([
+      memberPromise,
       supabase
         .from("account_context_preferences")
         .select("active_role_grant_id")
@@ -1788,6 +1801,8 @@ export function resolveStaffContext(
       staffMemberId: member.id,
       staffRef: member.reference,
       title: member.title,
+      accessProfileCode: member.access_profile_code ?? null,
+      accessProfileVersion: member.access_profile_version ?? null,
       activeRoleGrantId: selectedGrant.id,
       activeRole: selectedGrant.role_code,
       grantedWorkspaceCount: grants?.length ?? 0,
@@ -1966,31 +1981,28 @@ export function staffInvitesAccept(
   });
 }
 
-/** Provider-backed invitation record. The new flow deliberately returns no
- * manual token; Auth's verified invitation email is the acceptance credential. */
-export function staffInvitesCreateRecord(
+/** Provider-backed profile invitation record. The new flow deliberately
+ * returns no manual token; Auth's verified invitation email is the acceptance
+ * credential. Role/scope arrays remain for the legacy compatibility RPC. */
+export function staffInvitesCreateProfileRecord(
   supabase: SupabaseClient<Database>,
   input: {
     contact: string;
     expiresAt: string;
     displayName: string;
-    roleCode: string;
+    title?: string;
+    profileCode: string;
     reason: string;
-    academicYearIds?: string[];
-    gradeSectionIds?: string[];
-    subjectIds?: string[];
   },
 ) {
   return result(async () => {
-    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "staff_invites_create_record", {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "staff_invites_create_profile", {
       p_contact: input.contact,
       p_expires_at: input.expiresAt,
       p_display_name: input.displayName,
-      p_role_code: input.roleCode,
+      p_title: input.title ?? null,
+      p_profile_code: input.profileCode,
       p_reason: input.reason,
-      p_academic_year_ids: input.academicYearIds ?? [],
-      p_grade_section_ids: input.gradeSectionIds ?? [],
-      p_subject_ids: input.subjectIds ?? [],
     });
     if (error !== null) throw mapRpcError(error);
     return requireRow(data, "staff invitation");
@@ -2038,6 +2050,318 @@ export function staffInvitesAcceptAuth(
     });
     if (error !== null) throw mapRpcError(error);
     return requireRow(data, "staff invitation acceptance");
+  });
+}
+
+export function staffProfilesList(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "staff_profiles_list", {});
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "staff profiles");
+  });
+}
+
+export function staffInvitesCreateProfile(
+  supabase: SupabaseClient<Database>,
+  input: {
+    contact: string;
+    expiresAt: string;
+    displayName: string;
+    title?: string;
+    profileCode: string;
+    reason: string;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "staff_invites_create_profile", {
+      p_contact: input.contact,
+      p_expires_at: input.expiresAt,
+      p_display_name: input.displayName,
+      p_title: input.title ?? null,
+      p_profile_code: input.profileCode,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "staff profile invitation");
+  });
+}
+
+export function staffProfileChange(
+  supabase: SupabaseClient<Database>,
+  input: {
+    accountId: string;
+    profileCode: string;
+    reason: string;
+    expectedVersion: number;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "staff_profile_change", {
+      p_account_id: input.accountId,
+      p_profile_code: input.profileCode,
+      p_reason: input.reason,
+      p_expected_version: input.expectedVersion,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "staff profile change");
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Teaching staff (non-login records, migration 000043)                 */
+/* ------------------------------------------------------------------ */
+
+export function teachingStaffCreate(
+  supabase: SupabaseClient<Database>,
+  input: { displayName: string; title: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "teaching_staff_create", {
+      p_display_name: input.displayName,
+      p_title: input.title,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "teaching staff record");
+  });
+}
+
+export function teachingAssignmentCreate(
+  supabase: SupabaseClient<Database>,
+  input: {
+    staffMemberId: string;
+    academicYearId: string;
+    gradeSectionId: string;
+    subjectId: string;
+    effectiveFrom?: string | null;
+    reason: string;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "teaching_assignment_create", {
+      p_staff_member_id: input.staffMemberId,
+      p_academic_year_id: input.academicYearId,
+      p_grade_section_id: input.gradeSectionId,
+      p_subject_id: input.subjectId,
+      p_effective_from: input.effectiveFrom ?? null,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "teaching assignment");
+  });
+}
+
+export function teachingAssignmentEnd(
+  supabase: SupabaseClient<Database>,
+  input: { assignmentId: string; reason: string; expectedVersion: number },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "teaching_assignment_end", {
+      p_assignment_id: input.assignmentId,
+      p_reason: input.reason,
+      p_expected_version: input.expectedVersion,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "teaching assignment end");
+  });
+}
+
+export function teachingStaffList(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "teaching_staff_list", {});
+    if (error !== null) throw mapRpcError(error);
+    return Array.isArray(data) ? (data as unknown as Record<string, unknown>[]) : [];
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* School-data imports (migration 000044)                               */
+/* ------------------------------------------------------------------ */
+
+export function dataImportCreateBatch(
+  supabase: SupabaseClient<Database>,
+  input: {
+    academicYearId: string;
+    sourceSystem: string;
+    sourceDocumentId?: string | null;
+    authorityConfirmation: true;
+    privacyConfirmation: true;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_create_batch", {
+      p_academic_year_id: input.academicYearId,
+      p_source_system: input.sourceSystem,
+      p_source_document_id: input.sourceDocumentId ?? null,
+      p_authority_confirmation: input.authorityConfirmation,
+      p_privacy_confirmation: input.privacyConfirmation,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import batch");
+  });
+}
+
+export function dataImportSetState(
+  supabase: SupabaseClient<Database>,
+  input: { batchId: string; newState: string; expectedVersion: number },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_set_state", {
+      p_batch_id: input.batchId,
+      p_new_state: input.newState,
+      p_expected_version: input.expectedVersion,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import batch state");
+  });
+}
+
+export function dataImportStoreRows(
+  supabase: SupabaseClient<Database>,
+  batchId: string,
+  rows: Array<Record<string, unknown>>,
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<number>(supabase, "data_import_store_rows", {
+      p_batch_id: batchId,
+      p_rows: rows,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return { count: Number(data ?? 0) };
+  });
+}
+
+export function dataImportPreview(supabase: SupabaseClient<Database>, batchId: string) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_preview", {
+      p_batch_id: batchId,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import preview");
+  });
+}
+
+export function dataImportCommit(
+  supabase: SupabaseClient<Database>,
+  input: {
+    batchId: string;
+    expectedVersion: number;
+    reason: string;
+    idempotencyKey: string;
+    confirmedCreateCount: number;
+    confirmedUpdateCount: number;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_commit", {
+      p_batch_id: input.batchId,
+      p_expected_version: input.expectedVersion,
+      p_reason: input.reason,
+      p_idempotency_key: input.idempotencyKey,
+      p_confirmed_create_count: input.confirmedCreateCount,
+      p_confirmed_update_count: input.confirmedUpdateCount,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import commit");
+  });
+}
+
+export function dataImportCancel(
+  supabase: SupabaseClient<Database>,
+  input: { batchId: string; expectedVersion: number; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_cancel", {
+      p_batch_id: input.batchId,
+      p_expected_version: input.expectedVersion,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import cancel");
+  });
+}
+
+export function dataImportReport(supabase: SupabaseClient<Database>, batchId: string) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_report", {
+      p_batch_id: batchId,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import report");
+  });
+}
+
+export function dataImportListBatches(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "data_import_list_batches", {});
+    if (error !== null) throw mapRpcError(error);
+    return Array.isArray(data) ? (data as unknown as Record<string, unknown>[]) : [];
+  });
+}
+
+export function dataImportListIssues(
+  supabase: SupabaseClient<Database>,
+  batchId: string,
+  severity?: "error" | "warning",
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "data_import_list_issues", {
+      p_batch_id: batchId,
+      p_severity: severity ?? null,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return Array.isArray(data) ? (data as unknown as Record<string, unknown>[]) : [];
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Protected data exports (migration 000046)                            */
+/* ------------------------------------------------------------------ */
+
+export function dataExportRequest(
+  supabase: SupabaseClient<Database>,
+  input: {
+    domain: string;
+    filters: Record<string, unknown>;
+    columns: string[];
+    format: string;
+    purpose: string;
+    reason: string;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_export_request", {
+      p_domain: input.domain,
+      p_filters: input.filters,
+      p_columns: input.columns,
+      p_format: input.format,
+      p_purpose: input.purpose,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "export request");
+  });
+}
+
+export function dataExportList(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "data_export_list", {});
+    if (error !== null) throw mapRpcError(error);
+    return Array.isArray(data) ? (data as unknown as Record<string, unknown>[]) : [];
+  });
+}
+
+export function dataExportCancel(
+  supabase: SupabaseClient<Database>,
+  input: { requestReference: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_export_cancel", {
+      p_request_reference: input.requestReference,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "export cancel");
   });
 }
 
@@ -2142,6 +2466,8 @@ export type AdminDirectoryRow = {
     reference: string;
     title: string;
     employment_status: string;
+    access_profile_code?: string | null;
+    access_profile_version?: number | null;
   }>;
   role_grants: Array<{
     reference: string;
@@ -2151,12 +2477,28 @@ export type AdminDirectoryRow = {
     effective_from: string;
     effective_to: string | null;
   }>;
+  assignments?: Array<{
+    id: string;
+    reference: string;
+    status: string;
+    version: number;
+    effective_from: string;
+    effective_to: string | null;
+    academic_year_id: string;
+    academic_year_label?: string;
+    grade_section_id: string;
+    grade_label?: string;
+    section_label?: string;
+    subject_id: string;
+    subject_name?: string;
+  }>;
   account_invitations?: Array<{
     reference: string;
     contact: string;
     status: string;
     expires_at: string;
     provider_state: string;
+    profile_code?: string | null;
   }>;
 };
 
@@ -2177,7 +2519,8 @@ export function usersListAdmin(supabase: SupabaseClient<Database>) {
         people: personName === null ? null : { display_name: personName },
         staff_members: Array.isArray(value.staff_members) ? value.staff_members as AdminDirectoryRow["staff_members"] : [],
         role_grants: Array.isArray(value.role_grants) ? value.role_grants as AdminDirectoryRow["role_grants"] : [],
-        account_invitations: Array.isArray(value.invitations) ? value.invitations as AdminDirectoryRow["account_invitations"] : [],
+        assignments: Array.isArray(value.assignments) ? value.assignments as AdminDirectoryRow["assignments"] : [],
+        account_invitations: Array.isArray(value.account_invitations) ? value.account_invitations as AdminDirectoryRow["account_invitations"] : [],
       } satisfies AdminDirectoryRow;
     });
   });

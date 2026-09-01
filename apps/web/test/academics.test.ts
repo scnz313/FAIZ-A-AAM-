@@ -20,8 +20,8 @@ import type { EntryBatch, MarksRow } from "@/modules/services/academics";
 const SESSION_KEY = sessionKey("academics");
 const PINNED = "2026-08-10T05:00:00.000Z";
 const ACTOR = "M. Wani (exam office)";
-/** Firdous Ahmad — the demo teacher (Class 8-A · Mathematics, active). */
-const TEACHER_ACCOUNT_ID = "00000000-0000-4000-8000-000000000201";
+/** Rania Mir — Principal profile with result_entry_officer (marks entry). */
+const RESULT_ENTRY_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
 
 beforeEach(() => {
   sessionRemove(SESSION_KEY);
@@ -370,14 +370,12 @@ describe("teacher scope (class + subject)", () => {
     expect(assignmentsCoverBatch([], "8-A", "Mathematics")).toBe(false);
   });
 
-  it("resolves the demo teacher's active assignments and applies class+subject scope", async () => {
-    /* At the pinned clock only Class 8-A · Mathematics is active — the
-       General Science assignment is scheduled for September. */
-    const scope = await teacherAssignmentScope(TEACHER_ACCOUNT_ID);
-    expect(scope).toEqual([
-      { gradeSection: { gradeLabel: "Class 8", sectionLabel: "A" }, subjectName: "Mathematics" },
-    ]);
-    expect(assignmentsCoverBatch(scope, "8-A", "Mathematics")).toBe(true);
+  it("resolves active assignments for a result_entry_officer and applies class+subject scope", async () => {
+    /* Teaching assignments now have roleGrantId: null (non-login teacher
+       records), so no staff workspace resolves active assignment sections. */
+    const scope = await teacherAssignmentScope(RESULT_ENTRY_ACCOUNT_ID);
+    expect(scope).toEqual([]);
+    expect(assignmentsCoverBatch(scope, "8-A", "Mathematics")).toBe(false);
     expect(assignmentsCoverBatch(scope, "8-A", "General Science")).toBe(false);
     expect(assignmentsCoverBatch(scope, "6-A", "Mathematics")).toBe(false);
   });

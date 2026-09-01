@@ -76,14 +76,14 @@ Keep these concepts separate:
 
 - **Person**: a human represented by minimum school-held identity data.
 - **User account**: credentials/session identity used to sign in. A person may have zero or one active account in the first release.
-- **Role grant**: what an account may do, such as guardian, teacher, finance officer, or result publisher.
+- **Role grant**: what an account may do, such as guardian, finance officer, result entry officer, or result publisher.
 - **Scope assignment**: which records that role may act on, such as Class 8-A Mathematics, the admissions queue, or one job panel.
 - **Guardian**: a person with one or more student relationships. Being a guardian is not the same as owning every student record with the same phone number.
-- **Student**: the permanent school record created only through approved enrollment/import.
-- **Staff member**: an employed/authorised school person. Teacher is a staff responsibility plus academic assignments, not a separate identity system.
+- **Student**: the permanent school record created only through approved enrollment/import. Students are records, never accounts; they never sign in.
+- **Staff member**: an employed/authorised school person. Teacher is a staff responsibility plus non-login teaching assignments, NOT an account: a teacher holds no user account and no role grant.
 - **Applicant identity**: a limited account or verified contact that owns student or job applications before any permanent student/staff record exists.
 
-One account may legitimately have several roles. For example, a teacher may also be a guardian. The UI must provide an explicit workspace switch and the server must evaluate the permissions of the selected workspace; it must never merge staff and family data into one unscoped page.
+One account may legitimately have several roles (for example, a staff member may also be a guardian). Portal profiles are provisioning presets: a profile account exposes its `profileCode` (administrator or principal) plus all active granular roles, and the server always evaluates those grants. The UI must keep family and staff data in separate, explicitly switched contexts; it must never merge staff and family data into one unscoped page.
 
 ### 3.2 Canonical relationship graph
 
@@ -92,7 +92,7 @@ erDiagram
     PERSON ||--o| USER_ACCOUNT : may_have
     USER_ACCOUNT ||--o{ ROLE_GRANT : receives
     STAFF_MEMBER ||--|| PERSON : is
-    STAFF_MEMBER ||--o{ STAFF_ASSIGNMENT : receives
+    STAFF_MEMBER ||--o{ TEACHING_ASSIGNMENT : receives
     GUARDIAN ||--|| PERSON : is
     GUARDIAN ||--o{ GUARDIAN_STUDENT_LINK : has
     STUDENT ||--o{ GUARDIAN_STUDENT_LINK : is_linked_by
@@ -105,9 +105,11 @@ erDiagram
     ENROLLMENT ||--o{ INVOICE : owns
     ENROLLMENT ||--o{ RESULT_PUBLICATION_ITEM : receives
     GRADE_SECTION ||--o{ TIMETABLE_VERSION : schedules
-    STAFF_ASSIGNMENT }o--|| GRADE_SECTION : scopes
-    STAFF_ASSIGNMENT }o--|| SUBJECT : scopes
+    TEACHING_ASSIGNMENT }o--|| GRADE_SECTION : scopes
+    TEACHING_ASSIGNMENT }o--|| SUBJECT : scopes
 ```
+
+`TEACHING_ASSIGNMENT` (staff member, academic year, section, subject) is independent of role grants: it attributes teaching responsibility for timetables and conflicts without any teacher account existing.
 
 ### 3.3 Relationship cardinality and lifecycle
 
@@ -139,16 +141,14 @@ Link activation, restriction, or removal must invalidate affected sessions or fo
 
 ### 3.5 Teacher and staff relationships
 
-A teacher needs all of the following:
+Teachers need NO user account and NO role grant. A teacher is a non-login school record consisting of:
 
-1. an active user account;
-2. an active teacher role grant;
-3. an active staff record;
-4. one or more assignments with academic year, class/section, subject, and effective dates.
+1. an active staff record;
+2. one or more `teaching_assignments` rows with academic year, class/section, subject, and effective dates.
 
-Marks entry requires the teacher role and the exact subject/class assignment. Timetable viewing may include the teacher’s own assignments. Result moderation/publication requires separate grants. Employment title alone never gives broad student access.
+Marks entry is not a teacher function: the Principal profile's `result_entry_officer` role enters/imports marks centrally, and an independent Administrator (exam_reviewer/result_publisher) moderates, approves, and publishes — no account approves its own originating work. Timetable attribution and conflict checks use teaching assignments, never credentials. Employment title alone never gives broad student access.
 
-Admissions, finance, HR, content, support, timetable, exam-review, audit, and system-administration permissions follow the same role-plus-scope principle. High-risk approval roles must remain distinct from ordinary data-entry roles where maker/checker policy applies.
+Admissions, finance, HR, content, support, timetable, exam-review, audit, and system-administration permissions follow the same role-plus-scope principle, provisioned through the two staff access profiles (`administrator`, `principal`). High-risk approval roles must remain distinct from ordinary data-entry roles where maker/checker policy applies: the Principal makes (drafts, reviews, enters, operates) and an independent Administrator approves/publishes/decides; no account approves its own originating work.
 
 ## 4. Stable identifiers and context
 
@@ -188,9 +188,9 @@ Rules:
 
 ### 4.3 Staff workspace context
 
-Staff context consists of account, active role/workspace, active assignments, academic year, and optional operational filters. Switching staff role changes navigation and allowed actions. Filters never expand server scope.
+Staff context consists of account, active portal profile, active grants, academic year, and optional operational filters. Profile accounts (administrator/principal) expose a `profileCode` plus all active granular roles; the profile routes navigation and landing surfaces while the server continues to evaluate every granular grant, AAL level, and record scope. Granular workspace switching is legacy-only, retained for pre-profile accounts. Filters never expand server scope.
 
-For teachers, default class/subject choices come only from active assignments. For central staff, queues default to the current cycle/year but allow authorised historical access.
+Teacher class/subject choices come only from non-login teaching assignments; teachers never sign in. For central staff, queues default to the current cycle/year but allow authorised historical access.
 
 ## 5. Domain ownership and synchronization
 
@@ -602,8 +602,8 @@ At minimum:
 - revoked link disappears and access ends immediately;
 - admission acceptance creates/opens exactly one admission invoice; verified payment makes enrollment ready; conversion creates one student/enrollment/link on retry;
 - family and finance staff see identical invoice balance and receipt after payment/refund;
-- teacher sees only assigned class/subject and cannot publish;
-- moderator return reason reaches teacher; publisher release reaches only eligible linked families;
+- result_entry_officer (Principal profile) enters/imports marks centrally; an independent Administrator checks/approves/publishes; no account approves its own originating work (the same independent Administrator may moderate AND publish a Principal-originated sheet, actor-level no-self-approval enforced);
+- moderator return reason reaches the result entry officer; publisher release reaches only eligible linked families;
 - correction publishes a new result version and earlier version remains auditable;
 - timetable conflict blocks publication; published version reaches matching enrollment and not another class;
 - job reviewer cannot access student/finance records; offer does not create staff access;

@@ -41,7 +41,7 @@ const EXAMS = [
   },
   {
     name: "Mid-term examinations",
-    body: "The mid-term examinations in September cover the first half of the year's syllabus. The date sheet is published in the parent portal under Timetable.",
+    body: "The mid-term examinations in September cover the first half of the year's syllabus. The date sheet is published in the guardian portal under Timetable.",
   },
   {
     name: "Final examinations",

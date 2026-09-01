@@ -24,8 +24,9 @@ const IDENTITY_SESSION_KEY = sessionKey("identity");
 
 const PINNED = new Date("2026-08-10T05:00:00.000Z");
 const AISHA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000204";
+const RANIA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
 const CONTENT_PUBLISHER_GRANT_ID = "00000000-0000-4000-8000-000000000316";
-/** A different editor so the maker/checker self-approval guard is satisfied. */
+/** A different editor (Rania, Principal) so the maker/checker self-approval guard is satisfied. */
 const OTHER_EDITOR_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
 
 /** Fictional notices exercising every workflow state the publisher and editor gates cover. */
@@ -114,7 +115,7 @@ function Probe() {
   return (
     <div>
       <p data-testid="role">{summary?.role ?? "none"}</p>
-      <button onClick={() => void switchIdentity(AISHA_ACCOUNT_ID)}>Switch identity to Aisha</button>
+      <button onClick={() => void switchIdentity(RANIA_ACCOUNT_ID)}>Switch identity to Rania</button>
       <button onClick={() => void switchWorkspace(CONTENT_PUBLISHER_GRANT_ID)}>Switch to publisher</button>
       <NoticePublisher notices={NOTICES} />
     </div>
@@ -126,8 +127,8 @@ function ContentPageProbe() {
   return (
     <div>
       <p data-testid="page-role">{summary?.role ?? "none"}</p>
-      <button onClick={() => void switchIdentity(AISHA_ACCOUNT_ID)}>Use content identity</button>
-      <button onClick={() => void switchWorkspace(CONTENT_PUBLISHER_GRANT_ID)}>Use publisher workspace</button>
+      <button onClick={() => void switchIdentity(AISHA_ACCOUNT_ID)}>Use publisher identity</button>
+      <button onClick={() => void switchIdentity(RANIA_ACCOUNT_ID)}>Use content identity</button>
       <ContentPage />
     </div>
   );
@@ -152,7 +153,7 @@ afterEach(() => {
 });
 
 describe("NoticePublisher role gating (content.draft vs content.publish)", () => {
-  it("shows draft controls for the content editor and hides publish controls", async () => {
+  it("shows publish controls for the Administrator persona and hides draft controls", async () => {
     const user = userEvent.setup();
     render(
       <StaffContextProvider>
@@ -160,9 +161,28 @@ describe("NoticePublisher role gating (content.draft vs content.publish)", () =>
       </StaffContextProvider>,
     );
 
-    /* Aisha's default workspace is content editor. */
-    await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("finance_officer"));
-    await user.click(screen.getByRole("button", { name: "Switch identity to Aisha" }));
+    /* Aisha's default workspace is content_publisher. */
+    await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("content_publisher"));
+
+    /* Publishers may publish, approve, and unpublish but never draft. */
+    expect(screen.getByRole("button", { name: "Publish now" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unpublish" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+    expect(screen.getByText("Approved audience")).toBeTruthy();
+    expect(screen.getAllByText("Family").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows draft controls for the Principal persona and hides publish controls", async () => {
+    const user = userEvent.setup();
+    render(
+      <StaffContextProvider>
+        <Probe />
+      </StaffContextProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("content_publisher"));
+    await user.click(screen.getByRole("button", { name: "Switch identity to Rania" }));
     await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("content_editor"));
 
     /* Editors may save drafts but never publish, approve or unpublish. */
@@ -170,29 +190,6 @@ describe("NoticePublisher role gating (content.draft vs content.publish)", () =>
     expect(screen.queryByRole("button", { name: "Publish now" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Unpublish" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
-  });
-
-  it("shows publish controls for the content publisher and hides draft controls", async () => {
-    const user = userEvent.setup();
-    render(
-      <StaffContextProvider>
-        <Probe />
-      </StaffContextProvider>,
-    );
-
-    await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("finance_officer"));
-    await user.click(screen.getByRole("button", { name: "Switch identity to Aisha" }));
-    await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("content_editor"));
-    await user.click(screen.getByRole("button", { name: "Switch to publisher" }));
-    await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("content_publisher"));
-
-    /* Publishers review and publish; drafting is an editor capability. */
-    expect(screen.getByRole("button", { name: "Publish now" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Unpublish" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
-    expect(screen.getByText("Approved audience")).toBeTruthy();
-    expect(screen.getAllByText("Family").length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -206,10 +203,8 @@ describe("staff content page maker/checker actions", () => {
       </StaffContextProvider>,
     );
 
-    await waitFor(() => expect(screen.getByTestId("page-role")).toHaveTextContent("finance_officer"));
-    await user.click(screen.getByRole("button", { name: "Use content identity" }));
-    await waitFor(() => expect(screen.getByTestId("page-role")).toHaveTextContent("content_editor"));
-    await user.click(screen.getByRole("button", { name: "Use publisher workspace" }));
+    /* Aisha's default workspace is content_publisher — she can approve and
+       publish the in-review page authored by Rania (the editor). */
     await waitFor(() => expect(screen.getByTestId("page-role")).toHaveTextContent("content_publisher"));
 
     const pageRow = screen.getByRole("link", { name: "School life" }).closest("tr");

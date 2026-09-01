@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { staffProfileCodeSchema } from "./staff-profile-code";
+
 /** Opaque internal identifiers are never used as display/search references. */
 export const opaqueIdSchema = z.string().uuid();
 export type OpaqueId = z.infer<typeof opaqueIdSchema>;
@@ -45,7 +47,7 @@ export const STAFF_ROLES = [
   "admissions_approver",
   "finance_officer",
   "finance_approver",
-  "teacher",
+  "result_entry_officer",
   "exam_reviewer",
   "result_publisher",
   "timetable_manager",
@@ -54,9 +56,45 @@ export const STAFF_ROLES = [
   "support_officer",
   "auditor",
   "system_administrator",
+  /* Legacy roles retained for history/audit. They are non-assignable: no new
+     grants or invitations may reference them. Teachers remain non-login
+     school records (see teaching_assignments); students are school records
+     linked to guardians and do not sign in. */
+  "teacher",
 ] as const;
 export const staffRoleSchema = z.enum(STAFF_ROLES);
 export type StaffRole = z.infer<typeof staffRoleSchema>;
+
+/**
+ * Roles that may be granted to new accounts/invitations. Legacy roles below
+ * are retained for history and audit but cannot be freshly assigned.
+ */
+export const ASSIGNABLE_STAFF_ROLES = STAFF_ROLES.filter(
+  (role) => role !== "teacher",
+) as readonly StaffRole[];
+export const assignableStaffRoleSchema = z.enum(
+  ASSIGNABLE_STAFF_ROLES as unknown as [StaffRole, ...StaffRole[]],
+);
+export type AssignableStaffRole = z.infer<typeof assignableStaffRoleSchema>;
+
+/**
+ * Role definitions that are legacy/non-assignable: no new grants or
+ * invitations may reference them. `teacher` — teachers are non-login school
+ * records (see teaching_assignments). `student` — students are school records
+ * linked to guardians and do not sign in. Both are retained for history/audit.
+ */
+export const LEGACY_NON_ASSIGNABLE_ROLES = ["teacher", "student"] as const;
+export type LegacyNonAssignableRole = (typeof LEGACY_NON_ASSIGNABLE_ROLES)[number];
+
+/** True when a role code is legacy/non-assignable (no new grants/invitations). */
+export function isLegacyStaffRole(role: string): boolean {
+  return role === "teacher";
+}
+
+/** True when a role code (staff or family scope) is non-assignable. */
+export function isNonAssignableRole(role: string): boolean {
+  return (LEGACY_NON_ASSIGNABLE_ROLES as readonly string[]).includes(role);
+}
 
 export const ROLE_NAMES = ["guardian", "student", ...STAFF_ROLES] as const;
 export const roleNameSchema = z.enum(ROLE_NAMES);
@@ -96,6 +134,8 @@ export const staffMemberSchema = z.object({
   personId: opaqueIdSchema,
   status: staffMemberStatusSchema,
   title: z.string().min(1),
+  accessProfileCode: staffProfileCodeSchema.nullable().optional(),
+  accessProfileVersion: z.number().int().nonnegative().nullable().optional(),
 });
 export type StaffMember = z.infer<typeof staffMemberSchema>;
 
@@ -107,7 +147,10 @@ export const staffAssignmentSchema = z.object({
   id: opaqueIdSchema,
   ref: publicReferenceSchema,
   staffMemberId: opaqueIdSchema,
-  roleGrantId: opaqueIdSchema,
+  /* roleGrantId is nullable: teaching assignments are now independent of
+     role grants because teachers are non-login school records. Legacy
+     assignments may still reference a historical grant. */
+  roleGrantId: opaqueIdSchema.nullable(),
   academicYearId: opaqueIdSchema,
   gradeSectionId: opaqueIdSchema,
   subjectId: opaqueIdSchema,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { getServerActor } from "@/lib/auth/actor";
+import { isSameOrigin } from "@/lib/auth/same-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { dataAdapter } from "@/lib/supabase/env";
 import {
@@ -43,8 +44,7 @@ export async function POST(request: NextRequest) {
     return responseFor(errorBody("unavailable", "The Supabase adapter is not active.", correlationRef, 503), 503, correlationRef);
   }
 
-  const origin = request.headers.get("origin");
-  if (origin !== null && origin !== new URL(request.url).origin) {
+  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"))) {
     return responseFor(errorBody("forbidden", "Cross-origin requests are not accepted.", correlationRef, 403), 403, correlationRef);
   }
 

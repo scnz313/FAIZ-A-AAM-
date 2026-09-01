@@ -45,7 +45,7 @@ export default async function PaymentsPage() {
   const views = supabaseMode ? await loadServerInvoices() : await financeService.listAllInvoices();
 
   // Verified ledger payments derived from the service views, so the register
-  // always agrees with the parent portal ledgers.
+  // always agrees with the guardian portal ledgers.
   const ledgerPayments: PaymentRow[] = views.flatMap((view) =>
     view.invoice.payments.map((payment) => ({
       ref: payment.ref,

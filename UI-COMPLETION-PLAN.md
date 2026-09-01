@@ -9,6 +9,8 @@ This document is the completed frontend integration reference. `PROJECT-BLUEPRIN
 
 > **Archived frontend handoff:** This file preserves the completed UI scope, route-level acceptance criteria, and demo-contract decisions. Historical implementation evidence belongs in `PROJECT-STATUS.md`; the active execution order is only `plan.md` C2–C5.
 
+> **Portal consolidation delta (31 August 2026):** This archived reference predates the three-portal consolidation. Staff routes are now canonically `/administrator/*` (Administrator) and `/principal/*` (Principal) over the shared `/staff/*` implementation namespace, and the Guardian portal is `/portal/*`. Teacher portal and Student portal references in this document are historical: teachers are non-login school records with teaching assignments, and students are school records linked to guardians.
+
 The frontend handoff gate is complete. Do not add visual features here unless the product blueprint changes; continue implementation from `plan.md` C0–C5.
 
 ## 1. Goal and phase boundary

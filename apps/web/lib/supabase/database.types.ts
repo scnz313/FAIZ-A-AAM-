@@ -1334,6 +1334,8 @@ export type Database = {
           intended_mfa_required: boolean
           intended_reason: string | null
           intended_role_code: string | null
+          intended_staff_profile_code: string | null
+          intended_staff_profile_version: number | null
           intended_subject_ids: string[]
           invitation_hash: string
           provider_dispatched_at: string | null
@@ -1359,6 +1361,8 @@ export type Database = {
           intended_mfa_required?: boolean
           intended_reason?: string | null
           intended_role_code?: string | null
+          intended_staff_profile_code?: string | null
+          intended_staff_profile_version?: number | null
           intended_subject_ids?: string[]
           invitation_hash: string
           provider_dispatched_at?: string | null
@@ -1384,6 +1388,8 @@ export type Database = {
           intended_mfa_required?: boolean
           intended_reason?: string | null
           intended_role_code?: string | null
+          intended_staff_profile_code?: string | null
+          intended_staff_profile_version?: number | null
           intended_subject_ids?: string[]
           invitation_hash?: string
           provider_dispatched_at?: string | null
@@ -6272,6 +6278,8 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          /** Forward declaration for migration 000042 (staff access profiles). */
+          is_assignable: boolean
           is_active: boolean
           label: string
         }
@@ -6280,6 +6288,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_assignable?: boolean
           is_active?: boolean
           label: string
         }
@@ -6288,6 +6297,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_assignable?: boolean
           is_active?: boolean
           label?: string
         }
@@ -6581,6 +6591,54 @@ export type Database = {
           },
         ]
       }
+      staff_access_profile_roles: {
+        Row: {
+          profile_code: string
+          role_code: string
+          sort_order: number
+        }
+        Insert: {
+          profile_code: string
+          role_code: string
+          sort_order?: number
+        }
+        Update: {
+          profile_code?: string
+          role_code?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      staff_access_profiles: {
+        Row: {
+          code: string
+          created_at: string
+          description: string
+          is_active: boolean
+          label: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description: string
+          is_active?: boolean
+          label: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string
+          is_active?: boolean
+          label?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       staff_assignments: {
         Row: {
           academic_year_id: string
@@ -6665,8 +6723,25 @@ export type Database = {
           },
         ]
       }
+      staff_invitation_roles: {
+        Row: {
+          invitation_id: string
+          role_code: string
+        }
+        Insert: {
+          invitation_id: string
+          role_code: string
+        }
+        Update: {
+          invitation_id?: string
+          role_code?: string
+        }
+        Relationships: []
+      }
       staff_members: {
         Row: {
+          access_profile_code: string | null
+          access_profile_version: number | null
           created_at: string
           employment_status: string
           id: string
@@ -6676,6 +6751,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          access_profile_code?: string | null
+          access_profile_version?: number | null
           created_at?: string
           employment_status?: string
           id?: string
@@ -6685,6 +6762,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          access_profile_code?: string | null
+          access_profile_version?: number | null
           created_at?: string
           employment_status?: string
           id?: string

@@ -41,7 +41,7 @@ export default function ProfilePage() {
             </div>
             <div className={styles.row}>
               <dt>Workspace</dt>
-              <dd>{supabaseMode ? "Guardian account" : "Parent portal · demo session"}</dd>
+              <dd>{supabaseMode ? "Guardian account" : "Guardian portal · demo session"}</dd>
             </div>
           </dl>
         </section>

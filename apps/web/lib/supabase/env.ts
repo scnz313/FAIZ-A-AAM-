@@ -86,6 +86,27 @@ export function requireCronSecretEnv(): { cronSecret: string } {
   return { cronSecret };
 }
 
+/** Whether TOTP/AAL2 is required for staff access. Production-like
+ *  runtimes always require it; only `next dev` may use auto-elevation. */
+export function totpRequired(): boolean {
+  if (process.env.NODE_ENV !== "development") return true;
+  const value = process.env.FASS_TOTP_REQUIRED?.trim().toLowerCase();
+  return value !== "false" && value !== "0" && value !== "off";
+}
+
+export function developmentAuthEnabled(): boolean {
+  if (process.env.NODE_ENV !== "development" || dataAdapter() !== "supabase") return false;
+  const value = process.env.FASS_DEV_AUTH_BYPASS?.trim().toLowerCase();
+  return value === "true" || value === "1" || value === "on";
+}
+
+export function requireDevelopmentTestPassword(): string {
+  if (!developmentAuthEnabled()) throw new Error("Development quick sign-in is disabled.");
+  const password = process.env.FASS_DEV_TEST_PASSWORD?.trim() ?? "";
+  if (password.length < 8) throw new Error("FASS_DEV_TEST_PASSWORD must contain at least 8 characters.");
+  return password;
+}
+
 /** Names-only readiness check for server startup/health checks. */
 export function providerEnvReadiness(): { ready: boolean; missing: string[] } {
   const required = dataAdapter() === "supabase"

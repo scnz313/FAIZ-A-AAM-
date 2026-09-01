@@ -10,8 +10,8 @@ The website is one coherent school service with four clearly separated entrances
 
 1. **Public school website** — trust, school story, academics, notices, events, disclosures, contact.
 2. **Admissions and careers centre** — new-student applications and vacancy-specific job applications.
-3. **Parent and student portal** — fees, receipts, results, timetables, documents, notices.
-4. **Staff operations** — admissions review, finance reconciliation, result publishing, timetable management, HR review, and content publishing.
+3. **Guardian portal** — fees, receipts, results, timetables, documents, notices.
+4. **Two staff operations portals (Administrator and Principal)** — admissions review, finance reconciliation, result entry/approval/publishing, timetable management, HR review, and content publishing — sharing one implementation shell (`/staff/*` under canonical `/administrator/*` and `/principal/*` routes).
 
 The homepage must not expose private school operations. It should establish the school, then route each visitor to the correct secure journey.
 
@@ -164,7 +164,7 @@ The homepage must not expose private school operations. It should establish the 
 
 ## 5. Portal component map
 
-### Parent/student shell
+### Guardian portal shell
 
 - Compact school identity and signed-in role
 - Linked-child switcher
@@ -293,15 +293,15 @@ When the selected child has no active enrollment for the current year, show a cl
 
 ### Staff context strip
 
-The staff shell shows:
+The staff shell is profile-led: the chrome names the active portal profile — Administrator or Principal — rather than offering a free role switch. It shows:
 
 - signed-in staff name;
-- active workspace/role;
+- active portal profile (Administrator or Principal) with its profile code;
 - active assignment or queue scope;
 - academic year where relevant;
-- a role switch only for genuinely granted roles.
+- a legacy granular workspace switch only for pre-profile accounts.
 
-Role switching changes navigation and data context together. A teacher/guardian sees an explicit “Family portal” versus “Staff workspace” switch; private family and staff information never share a single summary.
+Profile-led chrome changes navigation and data context together. A staff member who is also a guardian sees an explicit "Family portal" versus "Staff workspace" switch; private family and staff information never share a single summary.
 
 ### Context hierarchy
 

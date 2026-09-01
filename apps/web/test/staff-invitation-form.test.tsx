@@ -33,29 +33,30 @@ afterEach(() => {
 describe("StaffInvitationForm", () => {
   it("accepts a locally created invitation and exposes the materialized references", async () => {
     const invitation = await usersService.inviteUser({
-      name: "New Teacher",
-      email: "new.teacher@faizaam.example",
-      role: "teacher",
-      reason: "Class 8 staffing.",
+      name: "New Principal",
+      email: "new.principal@faizaam.example",
+      profileCode: "principal",
+      reason: "Principal appointment.",
     });
     const user = userEvent.setup();
     render(<StaffInvitationForm initialInvitationRef={invitation.invitationRef} />);
 
     await user.type(screen.getByLabelText(/one-time reference/i), invitation.oneTimeRef);
     await user.type(screen.getByLabelText(/given name/i), "New");
-    await user.type(screen.getByLabelText(/family name/i), "Teacher");
+    await user.type(screen.getByLabelText(/family name/i), "Principal");
     await user.click(screen.getByRole("button", { name: "Accept invitation" }));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Your staff account is ready." })).toBeTruthy());
-    expect(screen.getByText("Teacher", { exact: true })).toBeTruthy();
+    /* The form renders the profile label for the Principal profile. */
+    expect(screen.getByText(/Principal/)).toBeTruthy();
     expect(screen.getByText(/ACC-2026-/)).toBeTruthy();
   });
 
   it("shows a recoverable error for a reused reference", async () => {
     const invitation = await usersService.inviteUser({
-      name: "Reuse Teacher",
-      email: "reuse.teacher@faizaam.example",
-      role: "teacher",
+      name: "Reuse Principal",
+      email: "reuse.principal@faizaam.example",
+      profileCode: "principal",
       reason: "Replacement coverage.",
     });
     await usersService.acceptInvitation({

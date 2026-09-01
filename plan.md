@@ -23,6 +23,52 @@ Current environment findings:
 
 ## Current execution checkpoint — C0–C5
 
+## Active execution — three-portal consolidation (R0–P9)
+
+The C5 staging sequence is **PAUSED** until the three-portal consolidation
+lands and the local gates pass. The active execution order is:
+
+- **R0 — repair/rebaseline.** Reconcile the canonical documents with the
+  three-portal contracts (Administrator `/administrator/*`, Principal
+  `/principal/*`, Guardian `/portal/*`), the two-profile migration redesign
+  (`000042`), and the verified remote ledger facts.
+  *Exit gate:* documentation rebaselined and the current tree reviewed.
+- **Phase 3 — teaching records + result entry.** Add `teaching_assignments`
+  (staff member, year, section, subject) independent of role grants; central
+  result entry by the Principal profile's `result_entry_officer` with
+  independent Administrator approval/publication and no self-approval.
+  *Exit gate:* teaching assignments and central result entry pass local RLS/RPC
+  and facade contract tests.
+- **Phase 4 — imports.** School-first student/guardian import with audited
+  batches and CSV-injection-safe handling.
+  *Exit gate:* import round-trip, denial, and idempotency tests pass locally.
+- **Phase 5 — guardian claims.** School-first invitations via mobile OTP
+  (email fallback) bound to the exact guardian and approved link set; a student
+  number, name, DOB, or phone alone never activates access.
+  *Exit gate:* invitation binding, wrong-contact denial, and revocation tests
+  pass locally.
+- **Phase 6 — guardian portal.** Consolidate `/portal/*` on the imported
+  guardian/link model.
+  *Exit gate:* guardian journeys (including denial and revocation) pass
+  locally.
+- **Phase 7 — exports.** Scoped, audited exports with CSV-injection guards.
+  *Exit gate:* export scope/denial/idempotency tests pass locally.
+- **Phase 8 — full local gate.** Typecheck, lint, tests, build, scratch
+  database suites, and the `000039` upgrade harness all green from the current
+  checkout.
+  *Exit gate:* every local gate passes on a clean run, including the upgrade
+  harness.
+- **Phase 9 — staging only after explicit approval.** Project
+  classification/region/backup confirmed, dry-run first, reviewed commits only;
+  produce a masked teacher-grant dependency inventory before any teacher-grant
+  retirement; no Vercel/production work in this phase.
+  *Exit gate:* explicit owner approval recorded, dry-run reviewed, and staging
+  evidence collected — never a direct jump to production.
+
+Each phase has a hard exit gate; no phase starts before the previous gate is
+recorded as passed. The historical C0–C5 checkpoint text below is retained
+unchanged for reference.
+
 ### C0 — verified locally
 
 - Entry: the existing dirty frontend/backend working set is preserved and no new UI scope is introduced.

@@ -8,7 +8,7 @@ import {
   applicantRegister,
   staffInvitesAcceptAuth,
   staffInvitesAttachProvider,
-  staffInvitesCreateRecord,
+  staffInvitesCreateProfileRecord,
   staffInvitesMarkProviderFailed,
 } from "@/lib/supabase/domain";
 import { authProvider } from "@/lib/auth/provider";
@@ -27,16 +27,7 @@ function safeFailure<T>(message: string, retryable = false): ServiceResult<T> {
   };
 }
 
-/** Allow same-origin browser requests while keeping non-browser/test clients
- * usable when they omit Origin entirely. */
-export function isSameOrigin(requestUrl: string, originHeader: string | null): boolean {
-  if (originHeader === null || originHeader.trim() === "") return true;
-  try {
-    return new URL(originHeader).origin === new URL(requestUrl).origin;
-  } catch {
-    return false;
-  }
-}
+export { isSameOrigin } from "@/lib/auth/same-origin";
 
 export async function consumeAuthRateLimit(input: {
   subject: string;
@@ -127,14 +118,12 @@ export async function dispatchStaffInvitation(
     contact: string;
     expiresAt: string;
     displayName: string;
-    roleCode: string;
+    title?: string;
+    profileCode: string;
     reason: string;
-    academicYearIds?: string[];
-    gradeSectionIds?: string[];
-    subjectIds?: string[];
   },
 ): Promise<ServiceResult<{ invitationRef: string; status: "pending"; expiresAt: string }>> {
-  const record = await staffInvitesCreateRecord(client, input);
+  const record = await staffInvitesCreateProfileRecord(client, input);
   if (!record.ok) return record as ServiceResult<{ invitationRef: string; status: "pending"; expiresAt: string }>;
   const invitationRef = String(record.value.invitationRef ?? "");
   const provider = authProvider();

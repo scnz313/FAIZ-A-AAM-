@@ -1,0 +1,47 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.header {
+  margin-bottom: 0.25rem;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 36rem;
+  padding: 1.25rem;
+  border: 1px solid var(--hairline, #ddd6c8);
+  border-radius: 8px;
+  background: var(--chalk, #fffdf8);
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.table {
+  width: 100%;
+}
+
+.loading {
+  color: var(--ink-60, #6b7280);
+}
+
+.errorNote {
+  color: var(--alert, #b42318);
+}
+
+.liveNote {
+  color: var(--willow, #536d57);
+}
+
+.note {
+  color: var(--ink-60, #6b7280);
+  font-size: 0.875rem;
+  max-width: 60rem;
+}

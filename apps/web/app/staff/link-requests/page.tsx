@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import {
   familyContextService,
   type LinkRequestRow,
@@ -31,7 +31,7 @@ import styles from "./page.module.css";
  */
 export default function LinkRequestsPage() {
   const { summary } = useStaffContext();
-  const canVerify = canRole(summary?.role ?? "", "links.verify");
+  const canVerify = canAnyRole(summary?.roles ?? [], "links.verify");
   const supabaseMode = clientAdapterMode() === "supabase";
   const [requests, setRequests] = useState<LinkRequestRow[] | null>(null);
   const [graphLinks, setGraphLinks] = useState<LinkRequestSummary[] | null>(null);

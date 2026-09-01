@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { FamilyContextProvider } from "@/components/portal/FamilyContextProvider";
 import { PortalShell } from "@/components/layouts/PortalShell";
 import { getServerActor } from "@/lib/auth/actor";
-import { dataAdapter } from "@/lib/supabase/env";
+import { dataAdapter, developmentAuthEnabled } from "@/lib/supabase/env";
 import { loadServerFamilyContext } from "@/lib/supabase/server-loaders";
 import { loadServerDocuments, loadServerNotifications } from "@/lib/supabase/server-loaders";
 import { mapServerFamilyContext } from "@/modules/services/family-context";
@@ -18,9 +18,15 @@ export const metadata: Metadata = {
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   let initialState;
   let initialNotifications;
+  const quickSignIn = developmentAuthEnabled();
   if (dataAdapter() === "supabase") {
-    if ((await getServerActor()) === null) {
+    const actor = await getServerActor();
+    if (actor === null) {
       redirect(`/sign-in?next=${encodeURIComponent("/portal")}`);
+    }
+    if (!actor.roles.includes("guardian")) {
+      if (quickSignIn) redirect(`/sign-in?next=${encodeURIComponent("/portal")}&switch=family`);
+      redirect("/access-denied");
     }
     try {
       const contextPromise = loadServerFamilyContext().then(mapServerFamilyContext);
@@ -40,7 +46,7 @@ export default async function PortalLayout({ children }: { children: React.React
   }
   return (
     <FamilyContextProvider initialState={initialState}>
-      <PortalShell initialNotifications={initialNotifications}>{children}</PortalShell>
+      <PortalShell initialNotifications={initialNotifications} developmentAuth={quickSignIn}>{children}</PortalShell>
     </FamilyContextProvider>
   );
 }

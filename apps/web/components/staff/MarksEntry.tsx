@@ -6,8 +6,9 @@ import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { formatKolkata } from "@/modules/iot/domain";
-import { assignmentsCoverClass, canRole } from "@/modules/services/staff-authorization";
+import { assignmentsCoverClass } from "@/modules/services/staff-authorization";
 import { staffContextService } from "@/modules/services/staff-context";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { academicsService, ENTRY_BATCH_STATUS_META, gradeForPercentage } from "@/modules/services/academics";
 import type { AcademicError, BatchVersion, EntryBatch, MarksRow } from "@/modules/services/academics";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
@@ -112,11 +113,11 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
      reviewers (results.approve); publish and correction belong to result
      publishers (results.publish). Entry controls keep the teacher
      results.enter scope below. */
-  const canApprove = canRole(summary?.role ?? "", "results.approve");
-  const canPublish = canRole(summary?.role ?? "", "results.publish");
-  /* Teacher assignment scope: a teacher may only enter marks for batches in
-     their assigned classes AND subjects (I4). Null while the scope is being
-     resolved. */
+  const canApprove = canAnyRole(summary?.roles ?? [], "results.approve");
+  const canPublish = canAnyRole(summary?.roles ?? [], "results.publish");
+  /* Assignment scope: only the legacy teacher role is scoped by teaching
+     assignments. The Principal's result_entry_officer enters centrally with
+     no assignment dependency (three-portal consolidation, Phase 3). */
   const [assignmentOk, setAssignmentOk] = useState<boolean | null>(null);
 
   useEffect(() => {

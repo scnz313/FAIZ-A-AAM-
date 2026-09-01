@@ -14,9 +14,12 @@ import { type NextRequest, NextResponse } from "next/server";
  */
 export async function updateSession(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-fass-pathname", request.nextUrl.pathname);
+  /* Preserve the original pathname AND search so the staff layout can
+     redirect legacy /staff URLs with their query strings intact. */
+  const pathnameWithSearch = request.nextUrl.pathname + (request.nextUrl.search || "");
+  requestHeaders.set("x-fass-pathname", pathnameWithSearch);
   const nextResponse = () => NextResponse.next({ request: { headers: requestHeaders } });
-  const sessionPath = ["/portal", "/staff", "/apply", "/sign-in", "/auth", "/api", "/register", "/session-expired", "/access-denied"]
+  const sessionPath = ["/portal", "/staff", "/administrator", "/principal", "/apply", "/sign-in", "/auth", "/api", "/register", "/session-expired", "/access-denied"]
     .some((prefix) => request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`));
   if (!sessionPath) return nextResponse();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

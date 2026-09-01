@@ -8,7 +8,7 @@ import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { formatKolkata } from "@/modules/iot/domain";
 import type { ApplicationStatus } from "@/modules/admissions/demo";
 import { admissionsService, type ApplicationRecord } from "@/modules/services/admissions";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 
 import styles from "./ApplicationReview.module.css";
@@ -374,8 +374,8 @@ export function ApplicationReview({
 
   const { summary } = useStaffContext();
   const actorAccountId = summary?.accountId;
-  const canReview = canRole(summary?.role ?? "", "admissions.review");
-  const canApprove = canRole(summary?.role ?? "", "admissions.approve");
+  const canReview = canAnyRole(summary?.roles ?? [], "admissions.review");
+  const canApprove = canAnyRole(summary?.roles ?? [], "admissions.approve");
 
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);

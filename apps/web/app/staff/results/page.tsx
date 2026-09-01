@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 export default async function ResultsPage() {
   const batches = dataAdapter() === "supabase"
-    ? await loadServerResultsBatches() as Awaited<ReturnType<typeof academicsService.listBatches>>
+    ? await loadServerResultsBatches()
     : await academicsService.listBatches();
   return (
     <div className={styles.page}>

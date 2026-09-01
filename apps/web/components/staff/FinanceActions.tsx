@@ -6,7 +6,7 @@ import type { FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { formatINR, financeService, type AdjustmentRequest, type InvoiceView, type RefundRequest } from "@/modules/services/finance";
 
 import styles from "./FinanceActions.module.css";
@@ -34,8 +34,8 @@ export function FinanceActions({
   onLedgerChanged?: () => Promise<void>;
 }) {
   const { summary } = useStaffContext();
-  const canOperate = canRole(summary?.role ?? "", "finance.operate");
-  const canApprove = canRole(summary?.role ?? "", "finance.approve");
+  const canOperate = canAnyRole(summary?.roles ?? [], "finance.operate");
+  const canApprove = canAnyRole(summary?.roles ?? [], "finance.approve");
   const actor = summary?.accountId ?? "demo-officer";
 
   const [adjustments, setAdjustments] = useState<AdjustmentRequest[]>([]);

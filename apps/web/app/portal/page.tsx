@@ -33,7 +33,7 @@ export default async function PortalOverviewPage() {
   return (
     <div className={styles.page}>
       <header>
-        <p className="eyebrow">Parent portal</p>
+        <p className="eyebrow">Guardian portal</p>
         <OverviewGreeting titleClassName={styles.title} />
         <ActiveChildLine />
       </header>

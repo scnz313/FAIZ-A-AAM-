@@ -5,6 +5,7 @@ import {
   type RoleGrant,
   type StaffAssignment,
   type StaffMember,
+  type StaffProfileCode,
   type StaffWorkspaceContext,
   type UserAccount,
 } from "@fass/contracts";
@@ -12,6 +13,7 @@ import {
 import { demoNowIso } from "@/modules/demo/clock";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 import { demoAcademicYears, demoRelationshipGraph } from "@/modules/relationships/demo";
+import { inferStaffProfile, profileLabel as accessProfileLabel } from "@/modules/services/staff-profiles";
 import {
   loadRelationshipStore,
   saveRelationshipStore,
@@ -133,7 +135,7 @@ export interface StaffContextService {
 }
 
 /** Demo staff account used when a staff route is opened without a session. */
-export const DEMO_STAFF_ACCOUNT_ID = "00000000-0000-4000-8000-000000000203";
+export const DEMO_STAFF_ACCOUNT_ID = "00000000-0000-4000-8000-000000000204";
 
 /** Presentation labels for staff roles — display-only, never an access check. */
 const ROLE_LABELS: Record<string, string> = {
@@ -164,10 +166,16 @@ export type StaffWorkspaceSummary = {
   personId: string;
   displayName: string;
   title: string;
+  /** Access profile code when the account was provisioned through one. */
+  profileCode: StaffProfileCode | null;
+  /** Display profile label; null for legacy/custom accounts. */
+  profileLabel: string | null;
   /** The ACTIVE role grant id — workspace switching must send this, never the role name. */
   activeRoleGrantId: string;
   role: string;
   roleLabel: string;
+  /** Every active role grant code for the account (aggregate UI checks). */
+  roles: string[];
   academicYearLabel: string;
   /** e.g. "Class 8-A · Mathematics"; null when the role has no assignments. */
   assignmentLabel: string | null;
@@ -180,6 +188,8 @@ export type ServerStaffContextResponse = {
   displayName: string;
   title: string | null;
   staffMemberId: string;
+  accessProfileCode?: string | null;
+  accessProfileVersion?: number | null;
   activeRoleGrantId: string;
   activeRole: string;
   grantedWorkspaceCount: number;
@@ -275,6 +285,8 @@ export function mapServerStaffContext(value: ServerStaffContextResponse): {
       `${assignment.gradeLabel && assignment.sectionLabel ? `${assignment.gradeLabel}-${assignment.sectionLabel}` : "—"} · ${assignment.subjectName ?? "Unassigned subject"}`,
     )
     .join(", ") || null;
+  const roles = value.grants.filter((grant) => grant.status === "active").map((grant) => grant.role_code);
+  const profileCode = (value.accessProfileCode ?? inferStaffProfile(roles)) as StaffProfileCode | null;
   return {
     identityId: value.accountId,
     summary: {
@@ -283,9 +295,12 @@ export function mapServerStaffContext(value: ServerStaffContextResponse): {
       personId: value.personId,
       displayName: value.displayName,
       title: value.title ?? "Staff member",
+      profileCode,
+      profileLabel: accessProfileLabel(profileCode),
       activeRoleGrantId: value.activeRoleGrantId,
       role: value.activeRole,
       roleLabel: roleLabel(value.activeRole),
+      roles,
       academicYearLabel: year.label,
       assignmentLabel,
       grantedWorkspaceCount: value.grantedWorkspaceCount,
@@ -405,15 +420,20 @@ export const staffContextService: StaffContextService = {
       const assignmentLabel = value.assignments
         .map((assignment) => `${assignment.gradeLabel && assignment.sectionLabel ? `${assignment.gradeLabel}-${assignment.sectionLabel}` : "—"} · ${assignment.subjectName ?? "Unassigned subject"}`)
         .join(", ") || null;
+      const roles = value.grants.filter((grant) => grant.status === "active").map((grant) => grant.role_code);
+      const profileCode = (value.accessProfileCode ?? inferStaffProfile(roles)) as StaffProfileCode | null;
       return {
         accountId: value.accountId,
         staffMemberId: value.staffMemberId,
         personId: value.personId,
         displayName: value.displayName,
         title: value.title ?? "Staff member",
+        profileCode,
+        profileLabel: accessProfileLabel(profileCode),
         activeRoleGrantId: value.activeRoleGrantId,
         role: value.activeRole,
         roleLabel: roleLabel(value.activeRole),
+        roles,
         academicYearLabel: year.label,
         assignmentLabel,
         grantedWorkspaceCount: value.grantedWorkspaceCount,
@@ -435,15 +455,19 @@ export const staffContextService: StaffContextService = {
           return `${section ? `${section.gradeLabel}-${section.sectionLabel}` : "—"} · ${assignment.subjectName}`;
         })
         .join(", ") || null;
+    const profileCode = (resolved.staff.accessProfileCode ?? null) as StaffProfileCode | null;
     return {
       accountId: resolved.account.id,
       staffMemberId: resolved.staff.id,
       personId: resolved.account.personId,
       displayName: person?.displayName ?? "Staff member",
       title: resolved.staff.title,
+      profileCode,
+      profileLabel: accessProfileLabel(profileCode),
       activeRoleGrantId: resolved.roleGrant.id,
       role: resolved.roleGrant.role,
       roleLabel: roleLabel(resolved.roleGrant.role),
+      roles: resolved.grants.filter((grant) => grant.status === "active").map((grant) => grant.role),
       academicYearLabel: resolved.academicYear.label,
       assignmentLabel,
       grantedWorkspaceCount: resolved.grants.length,

@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { DashboardQueues } from "@/components/staff/DashboardQueues";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
-import { canRole } from "@/modules/services/staff-authorization";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 import { admissionsService, type StaffQueueRecord } from "@/modules/services/admissions";
 import { careersService, type JobApplicationRecord } from "@/modules/services/careers";
 import { contentService } from "@/modules/services/content";
@@ -25,21 +25,25 @@ import styles from "./StaffHomeWorkspace.module.css";
  */
 export function StaffHomeWorkspace() {
   const { status, summary } = useStaffContext();
-  const role = summary?.role ?? "";
   const supabaseMode = clientAdapterMode() === "supabase";
   const ready = status === "ready" && summary !== null;
+  /* Aggregate authorization: profile accounts check every active grant;
+     legacy accounts fall back to the single active workspace role. */
+  const roles = summary?.profileCode === null
+    ? (summary?.role ? [summary.role] : [])
+    : (summary?.roles ?? []);
 
-  const showAdmissions = canRole(role, "admissions.view");
-  const showCareers = canRole(role, "careers.view");
-  const showFinance = canRole(role, "finance.view");
-  const showSupport = canRole(role, "support.view");
-  const showResults = canRole(role, "results.view");
-  const showTimetables = canRole(role, "timetable.view");
-  const showContent = canRole(role, "content.view");
-  const showUsers = canRole(role, "users.manage");
-  const showSettings = canRole(role, "settings.manage");
-  const showAudit = canRole(role, "audit.view");
-  const showLinks = canRole(role, "links.verify");
+  const showAdmissions = canAnyRole(roles, "admissions.view");
+  const showCareers = canAnyRole(roles, "careers.view");
+  const showFinance = canAnyRole(roles, "finance.view");
+  const showSupport = canAnyRole(roles, "support.view");
+  const showResults = canAnyRole(roles, "results.view");
+  const showTimetables = canAnyRole(roles, "timetable.view");
+  const showContent = canAnyRole(roles, "content.view");
+  const showUsers = canAnyRole(roles, "users.manage");
+  const showSettings = canAnyRole(roles, "settings.manage");
+  const showAudit = canAnyRole(roles, "audit.view");
+  const showLinks = canAnyRole(roles, "links.verify");
   const showAdmin = showUsers || showSettings || showAudit || showLinks;
 
   /* Admin summary counts: pending link requests and total staff accounts. */

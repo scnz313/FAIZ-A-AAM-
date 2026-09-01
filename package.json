@@ -16,6 +16,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "node scripts/critical-journeys.cjs",
     "test:local-features": "node scripts/local-feature-journeys/index.cjs",
+    "dev:seed-users": "node scripts/seed-dev-users.mjs",
     "db:reset": "supabase db reset",
     "db:test": "supabase db test",
     "db:types": "supabase gen types typescript --local > apps/web/lib/supabase/database.types.ts",

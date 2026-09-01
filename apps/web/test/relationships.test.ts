@@ -11,6 +11,7 @@ import {
   roleGrantSchema,
   staffAssignmentSchema,
   staffMemberSchema,
+  STAFF_PROFILE_ROLES,
   staffWorkspaceContextSchema,
   studentSchema,
   userAccountSchema,
@@ -51,8 +52,6 @@ const PENDING_LINK_ID = "00000000-0000-4000-8000-000000001103";
 const AARIF_LINK_ID = "00000000-0000-4000-8000-000000001101";
 const MARIAM_LINK_ID = "00000000-0000-4000-8000-000000001102";
 const RESTRICTED_LINK_ID = "00000000-0000-4000-8000-000000001104";
-const ENDED_ASSIGNMENT_ID = "00000000-0000-4000-8000-000000000502";
-const SCHEDULED_ASSIGNMENT_ID = "00000000-0000-4000-8000-000000000503";
 const TEACHER_ROLE_GRANT_ID = "00000000-0000-4000-8000-000000000302";
 const FINANCE_ROLE_GRANT_ID = "00000000-0000-4000-8000-000000000304";
 const PUBLISHER_ROLE_GRANT_ID = "00000000-0000-4000-8000-000000000305";
@@ -60,10 +59,7 @@ const ADMISSIONS_ROLE_GRANT_ID = "00000000-0000-4000-8000-000000000306";
 const EXAM_REVIEWER_ROLE_GRANT_ID = "00000000-0000-4000-8000-000000000315";
 const AISHA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000204";
 const RANIA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
-const RANIA_ADMISSIONS_APPROVER_GRANT_ID = "00000000-0000-4000-8000-000000000311";
-const RANIA_FINANCE_APPROVER_GRANT_ID = "00000000-0000-4000-8000-000000000312";
-const RANIA_HR_APPROVER_GRANT_ID = "00000000-0000-4000-8000-000000000313";
-const RANIA_TIMETABLE_MANAGER_GRANT_ID = "00000000-0000-4000-8000-000000000314";
+const RANIA_CONTENT_EDITOR_GRANT_ID = "00000000-0000-4000-8000-000000000307";
 
 beforeEach(() => {
   sessionRemove(RELATIONSHIPS_SESSION_KEY);
@@ -81,8 +77,10 @@ describe("relationship contracts and deterministic graph", () => {
     expect(userAccountSchema.array().parse(demoUserAccounts)).toHaveLength(6);
     /* 10 seeded grants + 6 Phase-1 grants (311–316: four approval/management
        grants for Rania, exam review for Sana, content publishing for Aisha)
-       + 1 independent content-publisher grant (317) for maker/checker. */
-    expect(roleGrantSchema.array().parse(demoRoleGrants)).toHaveLength(17);
+       + 1 independent content-publisher grant (317) for maker/checker
+       + 5 administrator-profile office grants (318–322) for the default
+       Aisha persona. */
+    expect(roleGrantSchema.array().parse(demoRoleGrants)).toHaveLength(22);
     expect(staffMemberSchema.array().parse(demoStaffMembers)).toHaveLength(5);
     expect(staffAssignmentSchema.array().parse(demoStaffAssignments)).toHaveLength(3);
     expect(guardianSchema.array().parse(demoGuardians)).toHaveLength(2);
@@ -198,30 +196,6 @@ describe("family context", () => {
 });
 
 describe("staff context and shared identity", () => {
-  it("scopes the teacher workspace to its active assignment and role", async () => {
-    const workspaces = await staffContextService.listGrantedWorkspaces(FIRDous_ACCOUNT_ID);
-    expect(workspaces.map((grant) => grant.id)).toEqual([TEACHER_ROLE_GRANT_ID]);
-
-    const workspace = await staffContextService.getWorkspace(FIRDous_ACCOUNT_ID);
-    expect(staffWorkspaceContextSchema.parse(workspace)).toMatchObject({
-      accountId: FIRDous_ACCOUNT_ID,
-      activeRoleGrantId: TEACHER_ROLE_GRANT_ID,
-      activeRole: "teacher",
-      academicYearId: CURRENT_YEAR_ID,
-      activeAssignmentIds: ["00000000-0000-4000-8000-000000000501"],
-    });
-
-    const assignments = await staffContextService.getActiveAssignments(FIRDous_ACCOUNT_ID);
-    expect(assignments).toHaveLength(1);
-    expect(assignments[0]).toMatchObject({ subjectName: "Mathematics", gradeSectionId: "00000000-0000-4000-8000-000000000702" });
-    await expect(staffContextService.getActiveAssignments(FIRDous_ACCOUNT_ID, ENDED_ASSIGNMENT_ID)).rejects.toMatchObject({
-      code: "assignment-not-active",
-    });
-    await expect(staffContextService.getActiveAssignments(FIRDous_ACCOUNT_ID, SCHEDULED_ASSIGNMENT_ID)).rejects.toMatchObject({
-      code: "assignment-not-active",
-    });
-  });
-
   it("supports additive role switching without granting a guardian role as staff scope", async () => {
     const granted = await staffContextService.listGrantedWorkspaces(SANA_ACCOUNT_ID);
     expect(granted.map((grant) => grant.id)).toEqual([
@@ -242,46 +216,33 @@ describe("staff context and shared identity", () => {
     });
     expect((await staffContextService.getAcademicYear(SANA_ACCOUNT_ID)).id).toBe(CURRENT_YEAR_ID);
 
-    /* Aisha Lone (account 204) holds the office roles; the Phase-1
-       content_publisher grant sits between content_editor and support. */
+    /* Aisha Lone (account 204) holds the Administrator profile roles; her
+       default workspace is content_publisher (the first grant in order). */
     const aishaGrants = await staffContextService.listGrantedWorkspaces(AISHA_ACCOUNT_ID);
-    expect(aishaGrants.map((grant) => grant.role)).toEqual([
-      "content_editor",
-      "content_publisher",
-      "support_officer",
-      "auditor",
-      "system_administrator",
-    ]);
-    expect((await staffContextService.getWorkspaceSummary(AISHA_ACCOUNT_ID)).roleLabel).toBe("Content editor");
+    expect(aishaGrants.map((grant) => grant.role).sort()).toEqual(
+      [...STAFF_PROFILE_ROLES.administrator].sort(),
+    );
+    expect((await staffContextService.getWorkspaceSummary(AISHA_ACCOUNT_ID)).roleLabel).toBe("Content publisher");
   });
 
-  it("gives Rania Mir the approval and timetable workspaces with admissions approver active", async () => {
+  it("gives Rania Mir the complete Principal profile with content editing active", async () => {
     const granted = await staffContextService.listGrantedWorkspaces(RANIA_ACCOUNT_ID);
-    expect(granted.map((grant) => grant.id)).toEqual([
-      RANIA_ADMISSIONS_APPROVER_GRANT_ID,
-      RANIA_FINANCE_APPROVER_GRANT_ID,
-      RANIA_HR_APPROVER_GRANT_ID,
-      RANIA_TIMETABLE_MANAGER_GRANT_ID,
-    ]);
-    expect(granted.map((grant) => grant.role)).toEqual([
-      "admissions_approver",
-      "finance_approver",
-      "hr_approver",
-      "timetable_manager",
-    ]);
+    expect(granted.map((grant) => grant.role).sort()).toEqual(
+      [...STAFF_PROFILE_ROLES.principal].sort(),
+    );
 
     const workspace = await staffContextService.getWorkspace(RANIA_ACCOUNT_ID);
-    expect(workspace.activeRole).toBe("admissions_approver");
-    expect(workspace.activeRoleGrantId).toBe(RANIA_ADMISSIONS_APPROVER_GRANT_ID);
+    expect(workspace.activeRole).toBe("content_editor");
+    expect(workspace.activeRoleGrantId).toBe(RANIA_CONTENT_EDITOR_GRANT_ID);
 
     const summary = await staffContextService.getWorkspaceSummary(RANIA_ACCOUNT_ID);
     expect(summary).toMatchObject({
       accountId: RANIA_ACCOUNT_ID,
       displayName: "Rania Mir",
       title: "Admissions and finance approver",
-      role: "admissions_approver",
-      roleLabel: "Admissions approver",
-      grantedWorkspaceCount: 4,
+      role: "content_editor",
+      roleLabel: "Content editor",
+      grantedWorkspaceCount: 7,
     });
   });
 
@@ -290,11 +251,15 @@ describe("staff context and shared identity", () => {
     const account = demoUserAccounts.find((candidate) => candidate.id === FIRDous_ACCOUNT_ID)!;
     const roles = demoRoleGrants.filter((grant) => grant.accountId === account.id).map((grant) => grant.role);
     expect(person.id).toBe(account.personId);
-    expect(roles).toEqual(["guardian", "teacher"]);
+    /* Firdous is now a non-login teacher record — only the guardian grant
+       remains on the account. */
+    expect(roles).toEqual(["guardian"]);
     expect((await familyContextService.getContext(FIRDous_ACCOUNT_ID)).guardianId).toBe(
       "00000000-0000-4000-8000-000000001001",
     );
-    expect((await staffContextService.getWorkspace(FIRDous_ACCOUNT_ID)).activeRole).toBe("teacher");
+    await expect(staffContextService.getWorkspace(FIRDous_ACCOUNT_ID)).rejects.toMatchObject({
+      code: "workspace-not-granted",
+    });
   });
 });
 
@@ -348,13 +313,6 @@ describe("family context presentation summaries", () => {
       academicYearLabel: "2026–27",
       assignmentLabel: null,
       grantedWorkspaceCount: 4,
-    });
-
-    const teacher = await staffContextService.getWorkspaceSummary(FIRDous_ACCOUNT_ID);
-    expect(teacher).toMatchObject({
-      role: "teacher",
-      roleLabel: "Teacher",
-      assignmentLabel: "Class 8-A · Mathematics",
     });
 
     await staffContextService.setActiveWorkspace(SANA_ACCOUNT_ID, PUBLISHER_ROLE_GRANT_ID);

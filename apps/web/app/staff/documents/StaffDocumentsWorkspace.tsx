@@ -6,8 +6,9 @@ import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { PrivateDocumentList } from "@/components/ui/PrivateDocumentList";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { documentsService, type PrivateDocumentMetadata } from "@/modules/services/documents";
-import { canRole, workspacesForAction } from "@/modules/services/staff-authorization";
+import { workspacesForAction } from "@/modules/services/staff-authorization";
 import { roleLabel } from "@/modules/services/staff-context";
+import { canAnyRole } from "@/modules/services/staff-profiles";
 
 import styles from "./page.module.css";
 
@@ -27,7 +28,7 @@ export function StaffDocumentsWorkspace() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const allowed = summary !== null && canRole(summary.role, DOCUMENT_ACTION);
+  const allowed = summary !== null && canAnyRole(summary.roles, DOCUMENT_ACTION);
   const activeRoleGrantId = summary?.activeRoleGrantId ?? null;
 
   useEffect(() => {

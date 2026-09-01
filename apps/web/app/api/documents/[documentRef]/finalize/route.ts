@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getServerActor } from "@/lib/auth/actor";
+import { isSameOrigin } from "@/lib/auth/same-origin";
 import { SupabaseStorageProvider } from "@/lib/documents/providers";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -33,8 +34,7 @@ function serviceAuthorized(request: Request): boolean {
 }
 
 export async function POST(request: Request, { params }: Params) {
-  const origin = request.headers.get("origin");
-  if (origin !== null && origin !== new URL(request.url).origin) {
+  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"))) {
     return NextResponse.json({ error: "Cross-origin requests are not accepted." }, { status: 403, headers: { "Cache-Control": "no-store" } });
   }
   if (dataAdapter() !== "supabase") {

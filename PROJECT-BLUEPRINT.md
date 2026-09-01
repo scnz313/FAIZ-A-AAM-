@@ -83,7 +83,7 @@ Do not include these unless the blueprint is explicitly expanded:
 | Admission applicant guardian | Start/save/submit and track a student application | Lightweight verified applicant account |
 | Job applicant | Apply to a vacancy, save draft, submit, withdraw, track | Lightweight verified applicant account |
 | Guardian | View linked children, fees, receipts, results, timetable, notices | Permanent account after verified linking |
-| Student | View own results, timetable, notices, documents | Permanent account when school policy permits |
+| Student | No portal account — students are school records linked to guardians; guardians view results, timetable, and notices on their behalf | No portal account — students never sign in |
 
 ### 2.2 Staff roles
 
@@ -95,7 +95,7 @@ Do not include these unless the blueprint is explicitly expanded:
 | Admissions approver | Approve offers, waitlist, or decline with reason | Cannot bypass capacity without recorded override |
 | Finance officer | Configure approved fee schedules, issue invoices, reconcile payments, initiate approved refunds | Cannot edit results or HR decisions |
 | Finance approver | Approve refunds, write-offs, and financial adjustments | Cannot delete ledger history |
-| Teacher | Enter assigned marks and view assigned class timetable | Cannot publish final results or view unrelated students |
+| Result entry officer | Enter/import marks for result batches (central entry; Principal profile) | Cannot approve or publish result batches |
 | Exam reviewer | Moderate, lock, and return result batches | Cannot change source marks after lock without correction flow |
 | Result publisher | Publish/withdraw approved result versions | Cannot silently edit a published result |
 | Timetable manager | Create, validate, publish, and override timetables | Cannot change results or payments |
@@ -104,6 +104,8 @@ Do not include these unless the blueprint is explicitly expanded:
 | Support officer | Help users, view limited diagnostic state, create support records | Cannot impersonate users or view documents by default |
 | Auditor | Read audit, workflow, and reconciliation evidence | Read-only |
 | System administrator | Manage configuration and access assignments | Business approvals still require the relevant functional role |
+
+Teachers are non-login school records: a teacher holds a staff record plus `teaching_assignments` (class/subject per academic year) for timetable and attribution, never a portal account or role grant. The legacy `teacher` and `student` role definitions remain in history but are non-assignable. Staff access profiles are provisioning presets only: `administrator` expands to roles [system_administrator, content_publisher, admissions_approver, finance_approver, hr_approver, exam_reviewer, result_publisher, auditor]; `principal` expands to [content_editor, admissions_officer, finance_officer, hr_reviewer, result_entry_officer, timetable_manager, support_officer].
 
 ### 2.3 Role rules
 
@@ -287,33 +289,43 @@ Each module should normally contain:
 
 ### 4.4 Staff routes
 
+The signed-in staff product is consolidated into two portal experiences over one shared implementation namespace:
+
 ```text
-/staff
-/staff/content
-/staff/admissions
-/staff/admissions/[applicationRef]
-/staff/careers
-/staff/careers/[applicationRef]
-/staff/finance
-/staff/finance/invoices
-/staff/finance/payments
-/staff/finance/reconciliation
-/staff/results
-/staff/results/[resultBatchRef]
-/staff/timetables
-/staff/notices
-/staff/users
-/staff/audit
-/staff/settings
-/staff/facility
-/staff/facility/zones
-/staff/facility/zones/[zoneId]
-/staff/facility/history
-/staff/facility/alerts
-/staff/facility/devices
-/staff/facility/reports
-/staff/facility/display
+Administrator portal (profile: administrator):
+
+/administrator
+/administrator/admissions
+/administrator/careers
+/administrator/finance
+/administrator/results
+/administrator/notices
+/administrator/content
+/administrator/documents
+/administrator/users
+/administrator/link-requests
+/administrator/guardians
+/administrator/data/imports
+/administrator/data/exports
+/administrator/settings
+/administrator/audit
+
+Principal portal (profile: principal):
+
+/principal
+/principal/admissions
+/principal/careers
+/principal/finance
+/principal/results
+/principal/timetables
+/principal/academics/teachers
+/principal/notices
+/principal/content
+/principal/documents
+/principal/support
 ```
+
+`/staff/*` remains the shared implementation namespace reached via rewrites from `/administrator/*` and `/principal/*`; it is not a separately signed-in portal. Detail routes (for example an application or result-batch detail) hang off the same portal areas.
 
 Routes do not define permissions by themselves. Server authorization must protect every loader, mutation, download, and API endpoint.
 
@@ -707,7 +719,7 @@ Internal payment state must be mapped from provider-specific states through the 
 
 ### Purpose
 
-Allow assigned teachers to enter marks and authorised exam staff to moderate and privately publish versioned results.
+Allow the central result entry officer to enter/import marks and an independent Administrator to moderate, approve, and privately publish versioned results. There is no teacher-login dependency: teachers are non-login school records.
 
 ### Configuration
 
@@ -728,24 +740,26 @@ Alternative states: `RETURNED_FOR_CORRECTION`, `WITHDRAWN`, `SUPERSEDED`.
 
 ### Entry and validation
 
-- Teachers see only assigned subject/class components.
+- Entry is central: the result entry officer (Principal profile) enters/imports marks for result batches; teachers do not sign in and see no entry screens.
 - Mark entry validates numeric range and allowed non-numeric statuses.
 - Bulk import requires a preview showing accepted/rejected rows before commit.
-- Submission locks the teacher’s current version.
+- Submission locks the current entry version.
 - Missing marks, impossible totals, duplicate students, invalid enrollment, and suspicious outliers are flagged.
 
 ### Moderation and publication
 
+- Moderation/approval and publication are performed by an independent Administrator account holding exam_reviewer/result_publisher; the entering result entry officer (Principal profile) cannot approve or publish.
+- No account approves its own originating work. The same independent Administrator may moderate AND publish a Principal-originated result sheet; actor-level no-self-approval is still enforced.
 - Reviewer can approve or return with a reason.
 - Result publisher selects an approved result batch and explicit audience.
 - Publication creates an immutable `result_publication` referencing exact result versions and template version.
-- Parent/student access checks linked student and active/allowed historical enrollment.
+- Parent/guardian access checks linked student and active/allowed historical enrollment.
 - Search engines and public routes never receive result content.
 
 ### Corrections
 
 1. Authorised staff opens a correction request with reason and affected records.
-2. Appropriate approver authorises correction.
+2. The same maker/checker split repeats: the result entry officer re-enters/corrects, and an independent Administrator re-approves and re-publishes.
 3. New result version is entered and reviewed.
 4. New publication supersedes the old version.
 5. Users see correction date/status when policy requires.
@@ -761,11 +775,12 @@ Alternative states: `RETURNED_FOR_CORRECTION`, `WITHDRAWN`, `SUPERSEDED`.
 
 ### Acceptance criteria
 
-- Teacher cannot enter marks for an unassigned class/subject.
+- Mark entry is central to the result entry officer; no teacher login exists or is required for entry.
+- The entering account cannot approve or publish its own batch (no self-approval).
 - Invalid marks and missing required records prevent submission.
 - Publication requires an approved locked batch.
 - A published result cannot be edited in place.
-- Guardian/student sees only the linked/own result.
+- Guardian sees only the linked student's result.
 - Corrected reports identify the current version and preserve history.
 
 ## 5.9 Class timetables and exam date sheets
@@ -786,7 +801,7 @@ Publish reliable class schedules and exam dates while handling substitutions and
 - Period definitions and breaks.
 - Grades/sections.
 - Subjects.
-- Teachers and allowed assignments.
+- Teachers and allowed assignments — teacher references come from non-login `teaching_assignments` records (staff member, year, section, subject), not from accounts or role grants.
 - Rooms/labs and capacity/type.
 - Effective date range.
 

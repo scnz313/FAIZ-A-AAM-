@@ -95,6 +95,11 @@ echo "== transactional RPC suite (plan.md §8)"
 
 psql -h /tmp -p "$PGPORT" -U postgres -d "$DB" -t -c "select 'rpc suite: '||result from (select result from (select 'RPC SUITE PASSED' as result) x) y;"
 
+echo "== staff access profile suite (000042)"
+"${PSQL[@]}" -q -f supabase/tests/database/staff-profiles.test.sql
+
+psql -h /tmp -p "$PGPORT" -U postgres -d "$DB" -t -c "select 'profile suite: '||result from (select result from (select 'PROFILE SUITE PASSED' as result) x) y;"
+
 echo "== Slice 4 results/timetable release suite"
 "${PSQL[@]}" -q -f scripts/validate-results-timetable-release.sql
 
@@ -103,5 +108,8 @@ echo "== Slice 5 operational facade suite"
 
 echo "== Slice 6 provider-job integrity suite"
 "${PSQL[@]}" -q -f supabase/tests/database/slice6-provider-jobs.test.sql
+
+echo "== Consolidation verification suite (000042–000046)"
+"${PSQL[@]}" -q -f supabase/tests/database/consolidation.test.sql
 
 echo "ALL LOCAL DATABASE CHECKS PASSED"

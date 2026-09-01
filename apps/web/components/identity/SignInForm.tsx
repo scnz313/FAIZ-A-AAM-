@@ -24,6 +24,10 @@ type SignInFormProps = {
   adapter: "demo" | "supabase";
   audience?: "family" | "staff";
   navigate?: (href: string) => void;
+  /** Whether TOTP/AAL2 is required. When false (dev only), staff sign-in
+   *  auto-elevates via /api/auth/mfa/dev-elevate instead of showing the QR. */
+  totpRequired?: boolean;
+  developmentPasswordAuth?: boolean;
 };
 
 const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["identifier", "password", "code"];
@@ -44,11 +48,18 @@ function fieldId(field: keyof FieldErrors): string {
  * - Demo mode: the honest prototype flow (+91 90000 00000, any password of
  *   6+ characters) which moves to the demo verification screen.
  */
-export default function SignInForm({ adapter, audience = "family", navigate }: SignInFormProps) {
+export default function SignInForm({
+  adapter,
+  audience = "family",
+  navigate,
+  totpRequired = true,
+  developmentPasswordAuth = false,
+}: SignInFormProps) {
   const router = useRouter();
   const [safeNext, setSafeNext] = useState(audience === "staff" ? "/staff" : "/portal");
   const supabaseMode = adapter === "supabase";
   const staffPasswordMode = supabaseMode && audience === "staff";
+  const passwordMode = staffPasswordMode || (supabaseMode && developmentPasswordAuth);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -86,10 +97,10 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
     } else if (supabaseMode && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())) {
       next.identifier = "Enter a valid email address.";
     }
-    if ((!supabaseMode || staffPasswordMode) && password === "") next.password = "Enter your password.";
+    if ((!supabaseMode || passwordMode) && password === "") next.password = "Enter your password.";
     else if (!supabaseMode && password.length < 6) next.password = "Password must be at least 6 characters.";
-    else if (staffPasswordMode && password.length < 8) next.password = "Password must be at least 8 characters.";
-    if (!staffPasswordMode && codeSent && code.trim().length !== 6) next.code = "Enter the 6-digit code from the email.";
+    else if (passwordMode && password.length < 8) next.password = "Password must be at least 8 characters.";
+    if (!passwordMode && codeSent && code.trim().length !== 6) next.code = "Enter the 6-digit code from the email.";
     return next;
   }
 
@@ -135,7 +146,7 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
     }
   }
 
-  async function signInStaff(): Promise<void> {
+  async function signInWithPassword(): Promise<void> {
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.auth.signInWithPassword({
       email: identifier.trim(),
@@ -145,9 +156,28 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
       setRejected(error.status === 429 ? "Too many sign-in attempts. Wait before trying again." : "Sign-in could not be accepted. Check your details and try again.");
       return;
     }
-    const destination = `/sign-in/totp?next=${encodeURIComponent(safeNext.startsWith("/staff") ? safeNext : "/staff")}`;
-    if (navigate) navigate(destination);
-    else window.location.assign(destination);
+    const staffDestination = safeNext.startsWith("/staff") ? safeNext : "/staff";
+    const destination = audience === "staff" ? staffDestination : safeNext;
+    if (audience === "staff" && !totpRequired) {
+      /* Dev auto-elevation: programmatically enroll+verify TOTP so the
+         session becomes aal2 without scanning a QR (plan.md §4). */
+      try {
+        const res = await fetch("/api/auth/mfa/dev-elevate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        if (!res.ok) throw new Error("elevation failed");
+      } catch {
+        setRejected("Sign-in succeeded but dev MFA elevation failed — try again.");
+        return;
+      }
+    }
+    const next = audience === "staff" && totpRequired
+      ? `/sign-in/totp?next=${encodeURIComponent(destination)}`
+      : destination;
+    if (navigate) navigate(next);
+    else window.location.assign(next);
   }
 
   async function verifyCode(): Promise<void> {
@@ -167,7 +197,18 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
          else lands in the portal. A non-staff context is the normal case. */
       try {
         const staffCheck = await adapterCall<boolean>("identity.hasStaff");
-        router.push(staffCheck.ok && staffCheck.value ? `/sign-in/totp?next=${encodeURIComponent(safeNext)}` : safeNext);
+        if (staffCheck.ok && staffCheck.value) {
+          if (!totpRequired) {
+            await fetch("/api/auth/mfa/dev-elevate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{}",
+            }).catch(() => null);
+          }
+          router.push(totpRequired ? `/sign-in/totp?next=${encodeURIComponent(safeNext)}` : safeNext);
+          return;
+        }
+        router.push(safeNext);
         return;
       } catch {
         /* Network hiccup after a successful sign-in still opens the portal;
@@ -190,8 +231,8 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
     setSubmitting(true);
     try {
       if (supabaseMode) {
-        if (staffPasswordMode) {
-          await signInStaff();
+        if (passwordMode) {
+          await signInWithPassword();
         } else if (codeSent) {
           await verifyCode();
         } else {
@@ -219,8 +260,10 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
             ? resentOnce
               ? "If an account exists, a new code has been sent to your email."
               : "If an account exists, a 6-digit code has been sent to your email. Enter it below."
-            : staffPasswordMode
-              ? "Staff sign-in form — email, password, then two-step verification."
+            : passwordMode
+              ? audience === "staff"
+                ? "Staff sign-in form — email and password."
+                : "Local development sign-in form — email and password."
               : supabaseMode
                 ? "Sign-in form — a code is sent to your email."
                 : "Sign-in form — demo account only."}
@@ -288,7 +331,7 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
             )}
           </div>
 
-          {(!supabaseMode || staffPasswordMode) && (
+          {(!supabaseMode || passwordMode) && (
             <div className={`field ${errors.password ? "field--invalid" : ""}`}>
               <label htmlFor={fieldId("password")}>
                 Password <span aria-hidden="true">*</span>
@@ -311,7 +354,7 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
             </div>
           )}
 
-          {!staffPasswordMode && codeSent && (
+          {!passwordMode && codeSent && (
             <div className={`field ${errors.code ? "field--invalid" : ""}`}>
               <label htmlFor={fieldId("code")}>
                 Verification code <span aria-hidden="true">*</span>
@@ -356,10 +399,10 @@ export default function SignInForm({ adapter, audience = "family", navigate }: S
           <div className={styles.actions}>
             <Button variant="primary" type="submit" disabled={submitting}>
               {submitting
-                ? staffPasswordMode
+                ? passwordMode
                   ? "Signing in…"
                   : "Sending…"
-                : staffPasswordMode
+                : passwordMode
                   ? "Sign in"
                   : codeSent
                     ? "Verify code"

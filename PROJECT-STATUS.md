@@ -1,19 +1,32 @@
 # Project Status — Faiz Aam School Platform
 
 Last updated: 31 August 2026
-Current phase: C5 staging/provider activation gate; local implementation through migration `000041` is verified
+Current phase: three-portal consolidation (Administrator/Principal/Guardian) — Phases R0–P8 locally `VERIFIED` through migration `000046`; Phase 9 staging activation requires explicit approval
 Release state: not deployed; staging backend exists historically, production authorization/deployment does not
 
 ## Current state
 
-The repository contains the completed frontend reference, the committed remote Supabase foundation through migration `000015`, and a local-only provider-ready working set through migration `000041`. The demo adapter remains the default runtime. C0/C1, the C2 application cutover, and the local implementations for Storage/PDF, Resend/outbox, cron, health, and Vercel readiness are verified locally with fakes and scratch PostgreSQL. No remote Supabase, Storage, Resend, payment, or Vercel action was performed. Staging and production are not verified.
+The three-portal consolidation is implemented and locally verified end to end through migration `000046`:
+
+- **R0 repair** — two-profile contracts (`staff-profile-code`, `staff-access` with `STAFF_PROFILE_ROLES`), migration `000042` (profile catalog, profile invitations with immutable role snapshots, profile change with last-administrator guard, hardened `roles_grant`/`roles_revoke` refusing deprecated roles and bundle-breaking grants, Administrator-only guardian-link activation), canonical `/administrator|/principal` routing with legacy-redirect and query preservation, aggregate profile authorization in shell/home/guards, and removal of every Teacher login/dev entry point.
+- **Phase 3** — `000043` non-login `teaching_assignments` (backfilled from legacy teacher assignments, provenance + source refs preserved), timetable `teaching_assignment_id` references (backfilled), result entry moved to `result_entry_officer` + `staff_scope_allowed` with legacy-teacher compatibility, one-independent-Administrator moderation+publication with actor-level no-self-approval, teaching-staff commands/workspace, masked legacy-access inventory and a version-checked retirement command (NOT invoked).
+- **Phase 4** — `000044` import batches/rows/issues/mappings, `external_record_keys` provenance, `guardian_contacts` with delivery state separate from links, import state machine with idempotent group commit, bounded server-side CSV parser (XLSX blocked pending a vetted parser), Administrator import workspace (Upload → Validate → Commit → Report).
+- **Phase 5** — `000045` guardian campaigns/claims (hashed single-use secrets, exact approved-link sets, provider binding, delivery attempts), transactional claim acceptance creating-or-reusing ONE account with one Guardian grant, contact-change requests with shared-contact review; `000045b` enrollment conversion now binds the guardian record, one Guardian grant, and the verified link in the same transaction with idempotent retry.
+- **Phase 6** — Guardian Portal wording consolidation ("Parent portal" removed), family-level "Your children (N)" context, fail-closed child switching (stale context cleared immediately, previous authorized context restored on failure).
+- **Phase 7** — `000046` purpose-bound export requests with allowlisted domains/filters/columns, provider-job generation (`data_export_generate`), 24-hour expiry, formula-safe bounded CSV generator (OWASP triggers neutralized + RFC 4180), Administrator exports workspace.
+
+**Local verification (this working tree, demo adapter + scratch PostgreSQL 17):** typecheck ✓ · lint 0 issues ✓ · **513 web + 73 contract tests** ✓ · production build (84 static pages, 100 routes) ✓ · protected-path cutover guard ✓ · scratch validator applies `000001–000046` from zero and passes the RLS, RPC, staff-profile, slice-4 results/timetable, slice-5 operational, and slice-6 provider-job suites ("ALL LOCAL DATABASE CHECKS PASSED") ✓.
+
+The demo adapter remains the default runtime. No remote Supabase, Storage, Resend, payment, or Vercel action was performed. Staging (Phase 9) and production are not verified.
 
 | Area | Demo UI | Database/RPC | Application cutover | Live verification |
 |---|---|---|---|---|
-| Identity, invitations, contexts | `VERIFIED` | `VERIFIED` locally through `000026` | `VERIFIED` locally | `NOT STARTED` for current staging credentials |
+| Identity, invitations, contexts, staff profiles | `VERIFIED` | `VERIFIED` locally through `000042` | `VERIFIED` locally | `NOT STARTED` for current staging credentials |
+| Teaching records, results entry, timetable | `VERIFIED` | `VERIFIED` locally through `000043` | `VERIFIED` locally | `NOT STARTED` |
+| School-data imports and provenance | `VERIFIED` | `VERIFIED` locally through `000044` | `VERIFIED` locally (CSV; XLSX blocked) | `NOT STARTED` |
+| Guardian claims and enrollment binding | `VERIFIED` | `VERIFIED` locally through `000045`/`000045b` | `VERIFIED` locally (real SMS/email `BLOCKED`) | `NOT STARTED` |
+| Protected exports | `VERIFIED` | `VERIFIED` locally through `000046` | `VERIFIED` locally (CSV; XLSX blocked) | `NOT STARTED` |
 | Admissions, careers, enrollment, uploads | `VERIFIED` | `VERIFIED` locally through `000041` | `VERIFIED` locally; provider calls use fakes | `NOT STARTED` |
-| Results and timetable | `VERIFIED` | `VERIFIED` locally through `000040` | `VERIFIED` locally, including report releases | `NOT STARTED` |
-| Finance, content, support, settings, users, audit, notifications | `VERIFIED` | `VERIFIED` locally through `000039` | `VERIFIED` locally | `NOT STARTED` |
 | Storage, PDF, Resend, outbox, cron, health | Demo/fake contracts `VERIFIED` | `VERIFIED` locally through `000030` | Provider-ready; credentials/configuration `BLOCKED` | `NOT STARTED` |
 | Vercel and production | N/A | N/A | Readiness config only | `NOT STARTED` |
 
@@ -54,7 +67,9 @@ The next gate is C5 staging-only global adapter and provider verification.
 
 ### Committed remote foundation versus local-only migrations
 
-Migrations `000001–000015` are committed and were historically pushed to the linked `FAIZ E AAM` project `jxegiamjcawdywqyutdz`. Migrations `000016–000030` are currently local-only and must be applied to the dedicated staging project only after the migration ledger is re-read and the local gates remain green.
+**Verified read-only ledger facts (31 August 2026, via the Supabase management API):** the linked `FAIZ E AAM` project `jxegiamjcawdywqyutdz` is `ACTIVE_HEALTHY` on PostgreSQL 17 in `eu-west-1`, and its applied migration ledger is exactly `000001–000039`. Local `000040` and `000041` are committed but not live remotely; local `000042_staff_access_profiles.sql` is untracked, being redesigned for the two-profile (administrator/principal) model, and not live. The staff-access-profile, import, claim, and export tables are absent remotely. The remote project contains substantial records and must NOT be assumed disposable; no remote write, migration apply, or account/grant cleanup is authorized while the three-portal consolidation is in progress.
+
+Migrations `000001–000015` are committed and were historically pushed to the linked `FAIZ E AAM` project `jxegiamjcawdywqyutdz`. The B2–B6 notes below describe migrations `000016–000030`, which the verified ledger shows were applied to the remote project; the earlier "local-only, apply after ledger re-read" wording in this subsection is historical.
 
 - **B2 admissions/careers**: windows, applications, immutable versions, drafts, reviews, assessments, offers, events; vacancies, immutable terms, applications, review assignments, scorecards, interviews, events. Public read = published vacancies only. Role-scoped writes (admissions officer/approver, HR reviewer/approver) via new `app.has_any_role` helper.
 - **B3 enrollment**: enrollments (partial unique: one active per student/year), idempotent conversion records, restricted support records.
@@ -329,6 +344,14 @@ The frontend and local backend/provider gates have passed. Do not claim staging 
 
 Every entry below is historical context only. It cannot override the current
 matrix, validation table, blockers, or C0–C5 execution order above.
+
+- **2026-08-31 (Three-portal consolidation audit and rebaseline):** The signed-in product is being consolidated into exactly three portal experiences — Administrator (`/administrator/*`), Principal (`/principal/*`), and Guardian (`/portal/*`); the Teacher and Student portals are removed (teachers become non-login school records with `teaching_assignments`; students remain guardian-linked records).
+
+  **Drafted this session:** two-profile access contracts (administrator/principal provisioning presets with granular role expansion) and the `000042_staff_access_profiles.sql` redesign for the two-profile model (the old three-profile version is not authoritative).
+
+  **Audit findings:** canonical routing still falls back to `/staff/*` instead of the canonical `/administrator/*` + `/principal/*` map; profile homes depend on the active workspace rather than the profile; invitation title/version defects; stale browser journeys; and Phases 3–9 of the consolidation remain. Verified read-only remote facts: ledger exactly `000001–000039`, project `ACTIVE_HEALTHY` PostgreSQL 17 `eu-west-1`, local `000040–000041` not live, `000042` untracked/not live, profile/import/claim/export tables absent remotely, and the project contains substantial records that must not be assumed disposable.
+
+  **Status:** the consolidation is `IN PROGRESS`, not `VERIFIED`. The C5 staging sequence remains paused until the consolidation lands and local gates pass; no Vercel/production work is authorized.
 
 - **2026-08-31 (C5 local feature completion — admissions withdrawal, review state, careers scorecards, CMS pages, finance reconciliation, timetable date input, and demo-leakage removal):** Completed the remaining local features and ran the full local verification gate through migration `000041`:
 
