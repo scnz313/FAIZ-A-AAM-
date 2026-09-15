@@ -322,3 +322,9 @@ Local Node was 24.5.0; Vercel builds with Node 22 per `engines.node`.
 client walkthrough. It is explicitly **not** for production: leave it unset (or `false`) on the
 real production environment so TOTP stays required. Env: set it for Preview and Production of
 the demo deployment only; remove it before promoting the app to real use.
+
+## Demo-only: family password sign-in
+
+`FASS_DEMO_PASSWORD_SIGNIN=true` lets guardians/applicants sign in with the password set on
+their account instead of an emailed OTP, so a walkthrough works with addresses that have no
+inbox. Demo deployments only; leave it unset for real production.

@@ -109,6 +109,14 @@ export function developmentAuthEnabled(): boolean {
   return value === "true" || value === "1" || value === "on";
 }
 
+/** DEMO ONLY: family sign-in uses email+password instead of email OTP so a
+ *  walkthrough works with addresses that have no inbox. Never set on the real
+ *  production environment. */
+export function demoPasswordSignInEnabled(): boolean {
+  const value = process.env.FASS_DEMO_PASSWORD_SIGNIN?.trim().toLowerCase();
+  return value === "true" || value === "1" || value === "on";
+}
+
 export function requireDevelopmentTestPassword(): string {
   if (!developmentAuthEnabled()) throw new Error("Development quick sign-in is disabled.");
   const password = process.env.FASS_DEV_TEST_PASSWORD?.trim() ?? "";

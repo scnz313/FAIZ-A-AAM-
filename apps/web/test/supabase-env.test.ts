@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { dataAdapter, developmentAuthEnabled, providerEnvReadiness, totpRequired } from "@/lib/supabase/env";
+import { dataAdapter, demoPasswordSignInEnabled, developmentAuthEnabled, providerEnvReadiness, totpRequired } from "@/lib/supabase/env";
 import { settingsService } from "@/modules/services/settings";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -113,3 +113,13 @@ describe("Supabase adapter configuration", () => {
     expect(degraded.ready).toBe(false);
   });
 });
+
+  it("gates the demo password sign-in on its explicit flag", () => {
+    vi.stubEnv("FASS_DEMO_PASSWORD_SIGNIN", "");
+    expect(demoPasswordSignInEnabled()).toBe(false);
+    vi.stubEnv("FASS_DEMO_PASSWORD_SIGNIN", "true");
+    expect(demoPasswordSignInEnabled()).toBe(true);
+    vi.stubEnv("FASS_DEMO_PASSWORD_SIGNIN", "off");
+    expect(demoPasswordSignInEnabled()).toBe(false);
+    vi.stubEnv("FASS_DEMO_PASSWORD_SIGNIN", "");
+  });

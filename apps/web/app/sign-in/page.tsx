@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AuthFrame } from "@/components/identity/AuthFrame";
 import AuthHashHandler from "@/components/identity/AuthHashHandler";
 import SignInForm from "@/components/identity/SignInForm";
-import { dataAdapter, developmentAuthEnabled, totpRequired } from "@/lib/supabase/env";
+import { dataAdapter, demoPasswordSignInEnabled, developmentAuthEnabled, totpRequired } from "@/lib/supabase/env";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -28,6 +28,7 @@ export default async function SignInPage({
   const adapter = dataAdapter();
   const supabaseLive = adapter === "supabase";
   const quickSignIn = developmentAuthEnabled();
+  const passwordAuth = quickSignIn || demoPasswordSignInEnabled();
   const mfaRequired = totpRequired();
   const authLinkExpired = params.error === "auth";
   const passwordReset = params.reset === "complete";
@@ -42,7 +43,7 @@ export default async function SignInPage({
       <AuthHashHandler next={next ?? null} />
       {supabaseLive ? (
         <p className={`alert-strip alert-strip--notice`} style={{ marginBottom: 16 }}>
-          {quickSignIn
+          {passwordAuth
             ? "Password sign-in is live for this environment · account help: contact the school office."
             : "Email-OTP sign-in is live for this environment · codes are sent by the school."}
         </p>
@@ -65,7 +66,7 @@ export default async function SignInPage({
       <SignInForm
         adapter={adapter}
         totpRequired={mfaRequired}
-        developmentPasswordAuth={quickSignIn}
+        developmentPasswordAuth={passwordAuth}
       />
       <hr className="rule" style={{ margin: "18px 0 14px" }} />
       <div className="row-between" style={{ flexWrap: "wrap", gap: 10 }}>
