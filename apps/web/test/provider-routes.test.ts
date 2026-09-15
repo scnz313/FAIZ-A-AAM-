@@ -35,7 +35,9 @@ describe("provider and operations route contracts", () => {
   it("Vercel cron config invokes the processing GET endpoint", () => {
     const vercel = source("../../vercel.json");
     expect(vercel).toContain('"path": "/api/outbox"');
-    expect(vercel).toContain('"schedule": "* * * * *"');
+    /* Hobby accounts only accept daily crons; Pro should restore "* * * * *"
+       (docs/VERCEL-DEPLOY.md). The endpoint contract below is unchanged. */
+    expect(vercel).toMatch(/"schedule": "(\* \* \* \* \*|0 0 \* \* \*)"/);
     const route = source("app/api/outbox/route.ts");
     expect(route).toContain("export async function GET");
     expect(route).toContain("return run(request)");
