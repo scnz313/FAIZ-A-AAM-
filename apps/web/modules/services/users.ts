@@ -43,6 +43,9 @@ export type UserRow = {
   profileVersion?: number | null;
   /** Provider delivery state for an invitation-only row (e.g. "failed"). */
   invitationProviderState?: string | null;
+  invitationExpiresAt?: string | null;
+  invitationLastSentAt?: string | null;
+  invitationResendCount?: number;
   email: string;
   status: UserStatus;
   lastActiveLabel: string;
@@ -69,6 +72,9 @@ export type StaffInvitationRecord = {
   title?: string;
   reason: string;
   expiresAtIso: string;
+  lastSentAtIso: string | null;
+  resendCount: number;
+  providerState: string;
   status: StaffInvitationStatus;
   accountId: string | null;
   acceptedAtIso: string | null;
@@ -81,15 +87,23 @@ function loadStaffInvitations(): StaffInvitationRecord[] {
   let changed = false;
   const normalized = stored.map((record) => {
     const { oneTimeRef: _legacyPlaintext, ...withoutPlaintext } = record;
-    if (record.oneTimeHash === undefined || _legacyPlaintext !== undefined) {
+    if (
+      record.oneTimeHash === undefined ||
+      _legacyPlaintext !== undefined ||
+      record.lastSentAtIso === undefined ||
+      record.resendCount === undefined ||
+      record.providerState === undefined
+    ) {
       changed = true;
-      return {
-        ...withoutPlaintext,
-        oneTimeHash: record.oneTimeHash ?? "",
-        status: record.status === "pending" && record.oneTimeHash === undefined ? "expired" : record.status,
-      } as StaffInvitationRecord;
     }
-    return withoutPlaintext as StaffInvitationRecord;
+    return {
+      ...withoutPlaintext,
+      oneTimeHash: record.oneTimeHash ?? "",
+      lastSentAtIso: record.lastSentAtIso ?? null,
+      resendCount: record.resendCount ?? 0,
+      providerState: record.providerState ?? "dispatched",
+      status: record.status === "pending" && record.oneTimeHash === undefined ? "expired" : record.status,
+    } as StaffInvitationRecord;
   });
   if (changed) saveStaffInvitations(normalized);
   return normalized;
@@ -134,6 +148,8 @@ type ServerUserRow = {
     contact: string;
     status: string;
     expires_at: string;
+    last_sent_at: string | null;
+    resend_count: number;
     provider_state: string;
     role_code?: string;
     reason?: string | null;
@@ -159,15 +175,17 @@ function mapServerUser(row: ServerUserRow): UserRow {
   const grants = (row.role_grants ?? []).filter((grant) => grant.role_code !== "guardian" && grant.role_code !== "student");
   const active = grants.filter((grant) => grant.status === "active");
   const name = row.people?.display_name ?? "Invited staff";
-  const status = toUserStatus(row.status);
   const invited = row.id === "" || row.status === "invited";
   const invitationPending = invited && (row.status === "invited" || row.status === "pending");
+  const status = invitationPending && invitation !== undefined && invitation.expires_at <= new Date().toISOString()
+    ? "Expired"
+    : toUserStatus(row.status);
   const mfaStatus = row.mfa_status === "enrolled" || row.mfa_status === "verified"
     ? "Enabled"
     : row.mfa_status === "required" || row.mfa_status === "pending"
       ? "Pending setup"
       : invited
-        ? invitationPending ? "Not applicable until acceptance" : "Not applicable"
+        ? invitationPending ? "After acceptance" : "Not applicable"
         : "Not recorded";
   const member = row.staff_members?.[0] ?? null;
   const profileCode = (member?.access_profile_code ?? invitation?.profile_code ?? null) as StaffProfileCode | null;
@@ -176,6 +194,9 @@ function mapServerUser(row: ServerUserRow): UserRow {
     accountId: invited ? "" : row.id,
     invitationRef: invitation?.reference,
     invitationProviderState: invitation?.provider_state ?? null,
+    invitationExpiresAt: invitation?.expires_at ?? null,
+    invitationLastSentAt: invitation?.last_sent_at ?? null,
+    invitationResendCount: invitation?.resend_count ?? 0,
     name,
     role: profileCode !== null && accessProfileLabel(profileCode) !== null
       ? accessProfileLabel(profileCode)!
@@ -322,6 +343,10 @@ function invitationRow(invitation: StaffInvitationRecord): UserRow {
     key: `invitation-${invitation.invitationRef}`,
     accountId: invitation.accountId ?? "",
     invitationRef: invitation.invitationRef,
+    invitationProviderState: invitation.providerState,
+    invitationExpiresAt: invitation.expiresAtIso,
+    invitationLastSentAt: invitation.lastSentAtIso,
+    invitationResendCount: invitation.resendCount,
     name: invitation.displayName,
     role: profileLabelValue ?? (invitation.role ? roleLabel(invitation.role) : "Staff workspace"),
     profileCode: invitation.profileCode ?? null,
@@ -354,6 +379,7 @@ function listDemoUsers(): UserRow[] {
 export interface InviteResult {
   accountRef: string;
   invitationRef: string;
+  expiresAt: string;
   /** One-time invitation reference — shown once to the admin (demo). */
   oneTimeRef: string;
   userRow: UserRow;
@@ -379,6 +405,8 @@ export interface UsersService {
     title?: string;
     reason: string;
   }): Promise<InviteResult>;
+  resendInvitation(input: { invitationReference: string; reason: string }): Promise<{ invitationRef: string; resendCount: number; expiresAt: string }>;
+  revokeInvitation(input: { invitationReference: string; reason: string }): Promise<void>;
   /** Change an existing account's access profile (Administrator only). */
   changeProfile(input: {
     accountId: string;
@@ -479,14 +507,15 @@ export const usersService: UsersService = {
         email: email.trim(),
         status: "Invited",
         lastActiveLabel: "—",
-        twoFa: "Not applicable until acceptance",
+        twoFa: "After acceptance",
         grants: [],
       };
       return {
         accountRef: "",
         invitationRef: result.value.invitationRef,
+        expiresAt: result.value.expiresAt,
         oneTimeRef: "",
-        userRow: placeholder,
+        userRow: { ...placeholder, invitationExpiresAt: result.value.expiresAt, invitationLastSentAt: new Date().toISOString(), invitationResendCount: 0, invitationProviderState: "dispatched" },
       };
     }
     const contact = email.trim().toLowerCase();
@@ -500,6 +529,7 @@ export const usersService: UsersService = {
       return {
         accountRef: "",
         invitationRef: existing.invitationRef,
+        expiresAt: existing.expiresAtIso,
         oneTimeRef: "",
         userRow: invitationRow(existing),
       };
@@ -517,6 +547,9 @@ export const usersService: UsersService = {
       title,
       reason: cleanReason,
       expiresAtIso: new Date(new Date(demoNowIso()).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      lastSentAtIso: demoNowIso(),
+      resendCount: 0,
+      providerState: "dispatched",
       status: "pending",
       accountId: null,
       acceptedAtIso: null,
@@ -535,9 +568,70 @@ export const usersService: UsersService = {
     return {
       accountRef: "",
       invitationRef: invitation.invitationRef,
+      expiresAt: invitation.expiresAtIso,
       oneTimeRef,
       userRow: invitationRow(invitation),
     };
+  },
+
+  async resendInvitation({ invitationReference, reason }) {
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 3) throw new Error("A resend reason is required.");
+    if (isServerMode()) {
+      const result = await adapterCall<{ invitationRef: string; resendCount: number; expiresAt: string }>("staffInvites.resend", {
+        invitationReference,
+        reason: cleanReason,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Invitation could not be resent.");
+      return result.value;
+    }
+    const invitations = loadStaffInvitations();
+    const invitation = invitations.find((candidate) => candidate.invitationRef === invitationReference);
+    if (invitation === undefined || !["pending", "expired"].includes(invitation.status)) {
+      throw new Error("That staff invitation cannot be resent.");
+    }
+    invitation.status = "pending";
+    invitation.providerState = "dispatched";
+    invitation.resendCount += 1;
+    invitation.lastSentAtIso = demoNowIso();
+    invitation.expiresAtIso = new Date(Math.max(
+      new Date(invitation.expiresAtIso).getTime(),
+      new Date(demoNowIso()).getTime() + 7 * 24 * 60 * 60 * 1000,
+    )).toISOString();
+    saveStaffInvitations(invitations);
+    await auditService.record({
+      actor: "System administrator",
+      action: "Staff invitation resent",
+      target: invitation.invitationRef,
+      outcome: "Success",
+      reason: cleanReason,
+    });
+    return { invitationRef: invitation.invitationRef, resendCount: invitation.resendCount, expiresAt: invitation.expiresAtIso };
+  },
+
+  async revokeInvitation({ invitationReference, reason }) {
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 3) throw new Error("A revocation reason is required.");
+    if (isServerMode()) {
+      const result = await adapterCall<unknown>("staffInvites.revoke", { invitationReference, reason: cleanReason });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "Invitation could not be revoked.");
+      return;
+    }
+    const invitations = loadStaffInvitations();
+    const invitation = invitations.find((candidate) => candidate.invitationRef === invitationReference);
+    if (invitation === undefined || !["pending", "expired"].includes(invitation.status)) {
+      throw new Error("That staff invitation cannot be revoked.");
+    }
+    invitation.status = "revoked";
+    invitation.providerState = "revoked";
+    saveStaffInvitations(invitations);
+    await auditService.record({
+      actor: "System administrator",
+      action: "Staff invitation revoked",
+      target: invitation.invitationRef,
+      outcome: "Success",
+      reason: cleanReason,
+    });
   },
 
   async acceptInvitation({ invitationRef, oneTimeRef, givenName, familyName }) {

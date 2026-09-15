@@ -98,4 +98,38 @@ describe("StaffInvitationForm", () => {
     expect(authMocks.updateUser).toHaveBeenCalledWith({ password: "SecurePass9" });
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/staff-invite-accept", expect.objectContaining({ method: "POST" }));
   });
+
+  it("continues acceptance when the provider reports the same password", async () => {
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    authMocks.updateUser.mockResolvedValue({ error: { code: "same_password", status: 422 } });
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, value: { accountId: "acct-1", staffMemberId: "staff-1", grantRef: "ROLE-1" } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<StaffInvitationForm initialInvitationRef="INV-2026-14A5963F8B" invitationRefReadOnly />);
+
+    expect(screen.getByLabelText(/invitation reference/i)).toHaveAttribute("readonly");
+    await user.type(screen.getByLabelText(/given name/i), "New");
+    await user.type(screen.getByLabelText(/family name/i), "Teacher");
+    await user.type(screen.getByLabelText(/^password/i), "SecurePass9");
+    await user.type(screen.getByLabelText(/confirm password/i), "SecurePass9");
+    await user.click(screen.getByRole("button", { name: "Accept invitation" }));
+
+    expect(await screen.findByRole("heading", { name: "Your staff account is ready." })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("shows a field error for a provider-rejected weak password", async () => {
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    authMocks.updateUser.mockResolvedValue({ error: { code: "weak_password", status: 422 } });
+    const user = userEvent.setup();
+    render(<StaffInvitationForm initialInvitationRef="INV-2026-14A5963F8B" />);
+
+    await user.type(screen.getByLabelText(/given name/i), "New");
+    await user.type(screen.getByLabelText(/family name/i), "Teacher");
+    await user.type(screen.getByLabelText(/^password/i), "SecurePass9");
+    await user.type(screen.getByLabelText(/confirm password/i), "SecurePass9");
+    await user.click(screen.getByRole("button", { name: "Accept invitation" }));
+
+    expect(await screen.findByText("Choose a longer password with letters and numbers.")).toBeInTheDocument();
+  });
 });

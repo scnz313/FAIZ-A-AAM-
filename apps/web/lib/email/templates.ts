@@ -293,8 +293,26 @@ export function securityUpdateEmail(input: { reference: string }) {
   return genericNotificationEmail({ targetRef: input.reference, subject: "Your school account security was updated", eyebrow: "Security", title: "Your account security has changed", body: "Sign in to review the current account and access status", path: "/sign-in" });
 }
 
-export function staffInvitationEmail(input: { reference: string }) {
-  return genericNotificationEmail({ targetRef: input.reference, subject: "A school staff invitation is ready", eyebrow: "School account", title: "Your school invitation is ready", body: "Use the secure invitation flow to continue account setup", path: `/sign-in/invite?invitation=${encodeURIComponent(input.reference)}` });
+export function staffInvitationEmail(input: { reference: string; actionLink: string; expiresAt: string; displayName: string }) {
+  const expiresLabel = new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(input.expiresAt));
+  return {
+    subject: "Your Faiz E Aam School staff account invitation",
+    html: shell({
+      eyebrow: "School account",
+      title: "Accept your staff account invitation",
+      cta: { label: "Accept invitation", href: input.actionLink },
+      paragraphs: [
+        `${escapeHtml(input.displayName)}, you have been invited to set up a staff account for Faiz E Aam Secondary School.`,
+        `Invitation reference: <strong>${escapeHtml(input.reference)}</strong>.`,
+        `This single-use invitation expires on ${escapeHtml(expiresLabel)} Asia/Kolkata.`,
+      ],
+      note: "If you did not expect this, ignore this email.",
+    }),
+  };
 }
 
 export function contentNoticeEmail(input: { reference: string }) {

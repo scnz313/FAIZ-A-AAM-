@@ -10,9 +10,13 @@ import {
   staffInvitesAttachProvider,
   staffInvitesCreateProfileRecord,
   staffInvitesMarkProviderFailed,
+  staffInvitesMarkResent,
+  staffInvitesRevoke,
 } from "@/lib/supabase/domain";
-import { authProvider } from "@/lib/auth/provider";
+import { AuthProviderError, authProvider } from "@/lib/auth/provider";
 import { safeAuthRedirect } from "@/lib/auth/redirect";
+import { createResendSender } from "@/lib/email/resend";
+import { staffInvitationEmail } from "@/lib/email/templates";
 import { callAppRpc } from "@/lib/supabase/rpc";
 import type { ServiceResult } from "@fass/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -107,11 +111,40 @@ export async function registerApplicant(input: {
   };
 }
 
-/**
- * Dispatch a staff invitation through Supabase Auth. The DB invitation is
- * created first, then bound to the provider subject. No manual token crosses
- * the adapter boundary or is rendered in the UI.
- */
+function inviteProviderFailure(error: unknown): ServiceResult<never> {
+  if (error instanceof AuthProviderError) {
+    if (error.code === "email_exists") {
+      return safeFailure("This email already has a sign-in account. Use profile change or recovery instead.");
+    }
+    if (error.code === "rate_limited") {
+      return safeFailure("The sign-in provider is rate limiting invitations. Try again in a few minutes.", true);
+    }
+  }
+  return safeFailure("The invitation could not be sent. No staff access was created.", true);
+}
+
+async function sendStaffInvitation(input: {
+  contact: string;
+  invitationRef: string;
+  actionLink: string;
+  expiresAt: string;
+  displayName: string;
+  attempt: number;
+}): Promise<void> {
+  const email = staffInvitationEmail({
+    reference: input.invitationRef,
+    actionLink: input.actionLink,
+    expiresAt: input.expiresAt,
+    displayName: input.displayName,
+  });
+  await createResendSender()({
+    to: [input.contact.trim().toLowerCase()],
+    subject: email.subject,
+    html: email.html,
+    idempotencyKey: `staff-invite:${input.invitationRef}:${input.attempt}`,
+  });
+}
+
 export async function dispatchStaffInvitation(
   client: SupabaseClient<Database>,
   input: {
@@ -127,22 +160,36 @@ export async function dispatchStaffInvitation(
   if (!record.ok) return record as ServiceResult<{ invitationRef: string; status: "pending"; expiresAt: string }>;
   const invitationRef = String(record.value.invitationRef ?? "");
   const provider = authProvider();
-  let invited: { userId: string; email: string; providerRef?: string };
+  let invited: { userId: string; actionLink: string };
   try {
     const { appUrl } = requireAppEnv();
     const invitationPath = `/sign-in/invite?invitation=${encodeURIComponent(invitationRef)}`;
-    invited = await provider.inviteUser({
+    invited = await provider.createInviteLink({
       email: input.contact.trim().toLowerCase(),
       redirectTo: `${appUrl}/auth/callback?next=${encodeURIComponent(invitationPath)}`,
+      mode: "invite",
+    });
+  } catch (error) {
+    await staffInvitesMarkProviderFailed(client, { invitationReference: invitationRef, reason: "Auth invite provider failed." });
+    return inviteProviderFailure(error) as ServiceResult<{ invitationRef: string; status: "pending"; expiresAt: string }>;
+  }
+  try {
+    await sendStaffInvitation({
+      contact: input.contact,
+      invitationRef,
+      actionLink: invited.actionLink,
+      expiresAt: input.expiresAt,
+      displayName: input.displayName,
+      attempt: 1,
     });
   } catch {
-    await staffInvitesMarkProviderFailed(client, { invitationReference: invitationRef, reason: "Auth invite provider failed." });
-    return safeFailure("The invitation could not be sent. No staff access was created.", true);
+    try { await provider.deleteUser(invited.userId); } catch { /* best effort compensation */ }
+    await staffInvitesMarkProviderFailed(client, { invitationReference: invitationRef, reason: "Email delivery failed" });
+    return safeFailure("The invitation email could not be delivered. No staff access was created.", true);
   }
   const attached = await staffInvitesAttachProvider(client, {
     invitationReference: invitationRef,
     providerSubject: invited.userId,
-    providerInvitationRef: invited.providerRef,
   });
   if (!attached.ok) {
     try { await provider.deleteUser(invited.userId); } catch { /* best effort compensation */ }
@@ -150,6 +197,69 @@ export async function dispatchStaffInvitation(
     return safeFailure("The invitation could not be completed. No staff access was created.", true);
   }
   return { ok: true, value: { invitationRef, status: "pending", expiresAt: input.expiresAt } };
+}
+
+export async function resendStaffInvitation(
+  client: SupabaseClient<Database>,
+  input: { invitationReference: string; reason: string },
+): Promise<ServiceResult<{ invitationRef: string; resendCount: number; expiresAt: string }>> {
+  const admin = createSupabaseAdminClient();
+  const { data: invitation, error } = await admin
+    .from("account_invitations")
+    .select("contact, provider_subject, expires_at, resend_count, intended_display_name, account_id")
+    .eq("reference", input.invitationReference)
+    .eq("purpose", "staff")
+    .in("status", ["pending", "expired"])
+    .is("account_id", null)
+    .maybeSingle();
+  if (error !== null || invitation === null) {
+    return safeFailure("This pending staff invitation could not be found.");
+  }
+  const provider = authProvider();
+  const { appUrl } = requireAppEnv();
+  const invitationPath = `/sign-in/invite?invitation=${encodeURIComponent(input.invitationReference)}`;
+  let invited: { userId: string; actionLink: string };
+  try {
+    invited = await provider.createInviteLink({
+      email: invitation.contact,
+      redirectTo: `${appUrl}/auth/callback?next=${encodeURIComponent(invitationPath)}`,
+      mode: invitation.provider_subject ? "reinvite" : "invite",
+    });
+  } catch (providerError) {
+    return inviteProviderFailure(providerError) as ServiceResult<{ invitationRef: string; resendCount: number; expiresAt: string }>;
+  }
+  const expiresAt = new Date(Math.max(
+    new Date(invitation.expires_at).getTime(),
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
+  )).toISOString();
+  try {
+    await sendStaffInvitation({
+      contact: invitation.contact,
+      invitationRef: input.invitationReference,
+      actionLink: invited.actionLink,
+      expiresAt,
+      displayName: invitation.intended_display_name ?? "Staff member",
+      attempt: invitation.resend_count + 2,
+    });
+  } catch {
+    return safeFailure("The invitation email could not be delivered. Try again.", true);
+  }
+  return staffInvitesMarkResent(client, {
+    invitationReference: input.invitationReference,
+    providerSubject: invited.userId,
+  });
+}
+
+export async function revokeStaffInvitation(
+  client: SupabaseClient<Database>,
+  input: { invitationReference: string; reason: string },
+): Promise<ServiceResult<{ invitationRef: string; providerSubject: string | null; status: "revoked" }>> {
+  const revoked = await staffInvitesRevoke(client, input);
+  if (!revoked.ok) return revoked;
+  if (revoked.value.providerSubject !== null) {
+    try { await authProvider().deleteUser(revoked.value.providerSubject); } catch { /* best effort provider cleanup */ }
+  }
+  return revoked;
 }
 
 export async function acceptStaffInvitation(

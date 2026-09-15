@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import Link from "next/link";
-
 import Button from "@/components/ui/Button";
 import { ErrorPanel } from "@/components/ui/AsyncStates";
+import RelativeTime from "@/components/ui/RelativeTime";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import {
@@ -17,6 +16,7 @@ import {
 import { canAnyRole, listProfileSummaries } from "@/modules/services/staff-profiles";
 import type { StaffProfileCode } from "@fass/contracts";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
+import { formatKolkata } from "@/modules/iot/domain";
 
 import styles from "./page.module.css";
 
@@ -58,6 +58,9 @@ export default function UsersPage() {
   const [suspendingId, setSuspendingId] = useState<string | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
   const [suspendError, setSuspendError] = useState(false);
+  const [revokingInvitationRef, setRevokingInvitationRef] = useState<string | null>(null);
+  const [invitationRevokeReason, setInvitationRevokeReason] = useState("");
+  const [invitationRevokeError, setInvitationRevokeError] = useState(false);
   /* Profile change panel state. */
   const [changingId, setChangingId] = useState<string | null>(null);
   const [changeProfile, setChangeProfile] = useState<StaffProfileCode>("principal");
@@ -142,10 +145,49 @@ export default function UsersPage() {
       setInviteEmail("");
       setInviteReason("");
       setInviteTitle("");
-      announce(`Invitation sent to ${inviteEmail.trim().toLowerCase()} · the signed invitation path is ready.`);
+      announce(`Invitation email sent to ${inviteEmail.trim().toLowerCase()} from the school address.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invitation failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResendInvitation(invitationReference: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await usersService.resendInvitation({
+        invitationReference,
+        reason: "Administrator requested invitation resend.",
+      });
+      announce(`Invitation resent · a new email has been sent from the school address.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invitation resend failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRevokeInvitation(invitationReference: string) {
+    const cleanReason = invitationRevokeReason.trim();
+    if (cleanReason.length < 3) {
+      setInvitationRevokeError(true);
+      return;
+    }
+    setInvitationRevokeError(false);
+    setBusy(true);
+    setError(null);
+    try {
+      await usersService.revokeInvitation({ invitationReference, reason: cleanReason });
+      setRevokingInvitationRef(null);
+      setInvitationRevokeReason("");
+      announce(`Invitation revoked · the invitation link can no longer create staff access.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invitation revoke failed.");
     } finally {
       setBusy(false);
     }
@@ -285,7 +327,7 @@ export default function UsersPage() {
             <strong>{inviteResult.userRow.name}</strong> has been invited as{" "}
             <strong>{inviteResult.userRow.role}</strong>.{" "}
             {supabaseMode
-              ? "Supabase Auth has sent a signed invitation to the verified contact."
+              ? `An invitation email has been sent from the school address. The link inside it is single-use and expires on ${formatKolkata(inviteResult.expiresAt, { format: "short" })}.`
               : "Share this one-time reference with the invitee · it is shown only once:"}
           </p>
           {inviteResult.invitationRef ? (
@@ -299,15 +341,7 @@ export default function UsersPage() {
             </p>
           ) : null}
           <p className={styles.inviteResultNote}>
-            The invitee completes setup at{" "}
-            {inviteResult.invitationRef ? (
-              <Link prefetch={false} href={`/sign-in/invite?invitation=${encodeURIComponent(inviteResult.invitationRef)}`}>
-                the invitation page
-              </Link>
-            ) : (
-              "the invitation link"
-            )}
-            . The account is <em>Invited</em> until acceptance.
+            The invitee must open the email link first; the invitation page only works after that. The account is <em>Invited</em> until acceptance.
           </p>
         </section>
       )}
@@ -444,7 +478,7 @@ export default function UsersPage() {
           </form>
         )}
 
-        <div className="table--scroll">
+        <div className="table-wrap" role="region" aria-label="Staff accounts table" tabIndex={0}>
           {loadError && rows !== null ? (
             <p className="small muted" role="status">
               Staff accounts could not be refreshed. Showing the last loaded records.
@@ -466,7 +500,7 @@ export default function UsersPage() {
               <p className="workspace-state-note">Invite a staff member to get started.</p>
             </div>
           ) : (
-            <table className={`table ${styles.table}`}>
+            <table className={`ledger ${styles.table}`}>
               <caption className="sr-only">Staff accounts with profile, title, email, status and MFA</caption>
               <thead>
                 <tr>
@@ -487,6 +521,22 @@ export default function UsersPage() {
                     expanded={expandedId === row.key}
                     onToggle={() => setExpandedId(expandedId === row.key ? null : row.key)}
                     canManage={canManage}
+                    revokingInvitation={revokingInvitationRef === row.invitationRef}
+                    onInvitationResend={() => row.invitationRef && void handleResendInvitation(row.invitationRef)}
+                    onInvitationRevokeOpen={() => {
+                      setRevokingInvitationRef(row.invitationRef ?? null);
+                      setInvitationRevokeReason("");
+                      setInvitationRevokeError(false);
+                    }}
+                    onInvitationRevokeCancel={() => {
+                      setRevokingInvitationRef(null);
+                      setInvitationRevokeReason("");
+                      setInvitationRevokeError(false);
+                    }}
+                    invitationRevokeReason={invitationRevokeReason}
+                    onInvitationRevokeReasonChange={setInvitationRevokeReason}
+                    invitationRevokeError={invitationRevokeError}
+                    onInvitationRevokeConfirm={() => row.invitationRef && void handleRevokeInvitation(row.invitationRef)}
                     revokingGrantId={revokingGrantId}
                     onRevokeOpen={(grantId) => {
                       setRevokingGrantId(grantId);
@@ -570,6 +620,14 @@ function UserRowItem({
   expanded,
   onToggle,
   canManage,
+  revokingInvitation,
+  onInvitationResend,
+  onInvitationRevokeOpen,
+  onInvitationRevokeCancel,
+  invitationRevokeReason,
+  onInvitationRevokeReasonChange,
+  invitationRevokeError,
+  onInvitationRevokeConfirm,
   revokingGrantId,
   onRevokeOpen,
   onRevokeCancel,
@@ -601,6 +659,14 @@ function UserRowItem({
   expanded: boolean;
   onToggle: () => void;
   canManage: boolean;
+  revokingInvitation: boolean;
+  onInvitationResend: () => void;
+  onInvitationRevokeOpen: () => void;
+  onInvitationRevokeCancel: () => void;
+  invitationRevokeReason: string;
+  onInvitationRevokeReasonChange: (reason: string) => void;
+  invitationRevokeError: boolean;
+  onInvitationRevokeConfirm: () => void;
   revokingGrantId: string | null;
   onRevokeOpen: (grantId: string) => void;
   onRevokeCancel: () => void;
@@ -629,6 +695,8 @@ function UserRowItem({
   profiles: ReturnType<typeof listProfileSummaries>;
 }) {
   const awaitingAcceptance = row.accountId === "";
+  const invitationManageable = row.invitationRef !== undefined && (row.status === "Invited" || row.status === "Expired");
+  const invitationStatusVisible = invitationManageable || (awaitingAcceptance && row.invitationProviderState === "failed");
   /* Invitation-only rows have no account: the button explains the invitation
      state instead of pretending the row can be managed. */
   const invitationActionLabel =
@@ -650,27 +718,84 @@ function UserRowItem({
         <td className={styles.email}>{row.email}</td>
         <td>
           <StatusBadge tone={STATUS_TONE[row.status]}>{row.status}</StatusBadge>
+          {invitationStatusVisible ? (
+            <span className={styles.invitationStatusLine}>
+              {row.invitationProviderState === "failed" ? (
+                "Delivery failed"
+              ) : row.invitationLastSentAt && row.invitationExpiresAt ? (
+                <>
+                  Invitation sent <RelativeTime iso={row.invitationLastSentAt} /> · expires{" "}
+                  <time dateTime={row.invitationExpiresAt}>{formatKolkata(row.invitationExpiresAt, { format: "short" })}</time>
+                </>
+              ) : row.invitationExpiresAt ? (
+                <>Expires <time dateTime={row.invitationExpiresAt}>{formatKolkata(row.invitationExpiresAt, { format: "short" })}</time></>
+              ) : null}
+            </span>
+          ) : null}
         </td>
         <td className={`num ${styles.lastActive}`}>{row.lastActiveLabel}</td>
         <td className={styles.twoFa}>{row.twoFa}</td>
         <td>
-          <button
-            type="button"
-            className="button button--quiet button--small"
-            onClick={onToggle}
-            disabled={!canManage || awaitingAcceptance}
-            aria-expanded={expanded}
-            aria-controls={`user-detail-${row.key}`}
-            aria-label={
-              awaitingAcceptance
-                ? `${invitationActionLabel} · ${row.name}`
-                : expanded
-                  ? `Hide details for ${row.name}`
-                  : `Show details for ${row.name}`
-            }
-          >
-            {awaitingAcceptance ? invitationActionLabel : expanded ? "Close" : canManage ? "Manage" : "View"}
-          </button>
+          {invitationManageable ? (
+            <div className={styles.invitationActions}>
+              <button
+                type="button"
+                className="button button--quiet button--small"
+                onClick={onInvitationResend}
+                disabled={!canManage || busy}
+              >
+                {row.invitationProviderState === "failed" ? "Send again" : "Resend invitation"}
+              </button>
+              {revokingInvitation ? (
+                <div className={styles.invitationRevokeBox}>
+                  <label htmlFor={`invitation-revoke-${row.invitationRef}`}>Revoke reason</label>
+                  <input
+                    id={`invitation-revoke-${row.invitationRef}`}
+                    className="input"
+                    value={invitationRevokeReason}
+                    onChange={(event) => onInvitationRevokeReasonChange(event.target.value)}
+                    aria-invalid={invitationRevokeError}
+                    aria-describedby={invitationRevokeError ? `invitation-revoke-error-${row.invitationRef}` : undefined}
+                    placeholder="Why is this invitation being revoked?"
+                  />
+                  {invitationRevokeError ? <span className="field-error" id={`invitation-revoke-error-${row.invitationRef}`}>Enter at least 3 characters.</span> : null}
+                  <div className={styles.invitationActionButtons}>
+                    <button type="button" className="button button--danger button--small" onClick={onInvitationRevokeConfirm} disabled={busy}>
+                      {busy ? "Revoking…" : "Confirm revoke"}
+                    </button>
+                    <button type="button" className="button button--quiet button--small" onClick={onInvitationRevokeCancel} disabled={busy}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="button button--danger button--small"
+                  onClick={onInvitationRevokeOpen}
+                  disabled={!canManage || busy}
+                >
+                  Revoke invitation
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="button button--quiet button--small"
+              onClick={onToggle}
+              disabled={!canManage || awaitingAcceptance}
+              aria-expanded={expanded}
+              aria-controls={`user-detail-${row.key}`}
+              aria-label={
+                awaitingAcceptance
+                  ? `${invitationActionLabel} · ${row.name}`
+                  : expanded
+                    ? `Hide details for ${row.name}`
+                    : `Show details for ${row.name}`
+              }
+            >
+              {awaitingAcceptance ? invitationActionLabel : expanded ? "Close" : canManage ? "Manage" : "View"}
+            </button>
+          )}
         </td>
       </tr>
       {expanded && (

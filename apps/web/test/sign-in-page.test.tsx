@@ -5,6 +5,7 @@ const hashHandler = vi.hoisted(() => vi.fn((_props: unknown) => null));
 const envMocks = vi.hoisted(() => ({
   dataAdapter: vi.fn((): "supabase" | "demo" => "supabase"),
   developmentAuthEnabled: vi.fn(() => true),
+  demoPasswordSignInEnabled: vi.fn(() => false),
   totpRequired: vi.fn(() => false),
 }));
 
@@ -12,6 +13,7 @@ vi.mock("@/components/identity/AuthHashHandler", () => ({ default: hashHandler }
 vi.mock("@/lib/supabase/env", () => ({
   dataAdapter: envMocks.dataAdapter,
   developmentAuthEnabled: envMocks.developmentAuthEnabled,
+  demoPasswordSignInEnabled: envMocks.demoPasswordSignInEnabled,
   totpRequired: envMocks.totpRequired,
 }));
 
@@ -25,6 +27,7 @@ beforeEach(() => {
   hashHandler.mockClear();
   envMocks.dataAdapter.mockReturnValue("supabase");
   envMocks.developmentAuthEnabled.mockReturnValue(true);
+  envMocks.demoPasswordSignInEnabled.mockReturnValue(false);
   envMocks.totpRequired.mockReturnValue(false);
 });
 

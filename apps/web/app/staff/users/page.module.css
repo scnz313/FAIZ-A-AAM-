@@ -254,6 +254,41 @@
   font-size: 0.82rem;
 }
 
+.invitationStatusLine {
+  color: var(--muted);
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
+.invitationActions {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invitationActions button {
+  white-space: nowrap;
+}
+
+.invitationRevokeBox {
+  display: grid;
+  gap: 6px;
+}
+
+.invitationRevokeBox label {
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.invitationActionButtons {
+  display: flex;
+  gap: 8px;
+}
+
 /* Expandable detail row */
 .detailCell {
   border-top: 0 !important;
@@ -401,7 +436,8 @@
   .grantFormActions,
   .revokeActions,
   .suspendActions,
-  .inviteActions {
+  .inviteActions,
+  .invitationActionButtons {
     flex-direction: column;
     align-items: stretch;
   }

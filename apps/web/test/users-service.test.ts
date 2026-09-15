@@ -125,6 +125,30 @@ describe("usersService.inviteUser", () => {
 
     expect((await usersService.listUsers()).some((user) => user.name === "Audited Person")).toBe(true);
   });
+
+  it("resends an invitation with a renewed expiry and then revokes it", async () => {
+    const invitation = await usersService.inviteUser({
+      name: "Resend Person",
+      email: "resend@faizaam.example",
+      profileCode: "principal",
+      reason: "Initial appointment.",
+    });
+
+    const resent = await usersService.resendInvitation({
+      invitationReference: invitation.invitationRef,
+      reason: "Invitee requested another email.",
+    });
+    expect(resent.resendCount).toBe(1);
+    const row = (await usersService.listUsers()).find((user) => user.invitationRef === invitation.invitationRef);
+    expect(row?.invitationLastSentAt).toBe(PINNED.toISOString());
+    expect(row?.invitationProviderState).toBe("dispatched");
+
+    await usersService.revokeInvitation({
+      invitationReference: invitation.invitationRef,
+      reason: "Appointment was withdrawn.",
+    });
+    expect((await usersService.listUsers()).some((user) => user.invitationRef === invitation.invitationRef)).toBe(false);
+  });
 });
 
 describe("usersService.acceptInvitation", () => {

@@ -99,7 +99,7 @@ describe("usersService.listUsers (supabase mode)", () => {
     adapterMocks.call.mockResolvedValue({ ok: true, value: [pending] });
     const rows = await usersService.listUsers();
     expect(rows[0]?.status).toBe("Invited");
-    expect(rows[0]?.twoFa).toBe("Not applicable until acceptance");
+    expect(rows[0]?.twoFa).toBe("After acceptance");
   });
 
   it("surfaces a directory read failure instead of returning an empty list", async () => {

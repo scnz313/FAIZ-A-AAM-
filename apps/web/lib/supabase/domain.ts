@@ -2424,6 +2424,42 @@ export function staffInvitesMarkProviderFailed(
   });
 }
 
+export function staffInvitesRevoke(
+  supabase: SupabaseClient<Database>,
+  input: { invitationReference: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<{
+      invitationRef: string;
+      providerSubject: string | null;
+      status: "revoked";
+    }>(supabase, "staff_invites_revoke", {
+      p_invitation_reference: input.invitationReference,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "revoked staff invitation");
+  });
+}
+
+export function staffInvitesMarkResent(
+  supabase: SupabaseClient<Database>,
+  input: { invitationReference: string; providerSubject: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<{
+      invitationRef: string;
+      resendCount: number;
+      expiresAt: string;
+    }>(supabase, "staff_invites_mark_resent", {
+      p_invitation_reference: input.invitationReference,
+      p_provider_subject: input.providerSubject,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "resent staff invitation");
+  });
+}
+
 export function staffInvitesAcceptAuth(
   supabase: SupabaseClient<Database>,
   input: { invitationReference: string; givenName: string; familyName: string },
@@ -3143,6 +3179,8 @@ export type AdminDirectoryRow = {
     contact: string;
     status: string;
     expires_at: string;
+    last_sent_at: string | null;
+    resend_count: number;
     provider_state: string;
     profile_code?: string | null;
   }>;

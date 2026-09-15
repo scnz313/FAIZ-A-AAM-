@@ -35,7 +35,12 @@ import {
   teachingStaffList,
   usersListAdmin,
 } from "@/lib/supabase/domain";
-import { dispatchStaffInvitation, acceptStaffInvitation } from "@/lib/auth/identity-server";
+import {
+  acceptStaffInvitation,
+  dispatchStaffInvitation,
+  resendStaffInvitation,
+  revokeStaffInvitation,
+} from "@/lib/auth/identity-server";
 
 import { emptyPayload, operation, publicReference, uuid } from "./common";
 import type { AdapterModule } from "./types";
@@ -89,6 +94,8 @@ export const identityModule: AdapterModule = {
       profileCode: z.enum(["administrator", "principal"]),
       reason: z.string().min(3),
     }), ({ supabase }, payload) => dispatchStaffInvitation(supabase, payload as Parameters<typeof dispatchStaffInvitation>[1])),
+    operation("staffInvites.resend", z.object({ invitationReference: publicReference, reason: z.string().min(3) }), ({ supabase }, payload) => resendStaffInvitation(supabase, payload)),
+    operation("staffInvites.revoke", z.object({ invitationReference: publicReference, reason: z.string().min(3) }), ({ supabase }, payload) => revokeStaffInvitation(supabase, payload)),
     operation("staff.profilesList", emptyPayload, ({ supabase }) => staffProfilesList(supabase)),
     operation("staff.profileChange", z.object({
       accountId: z.string().uuid(),

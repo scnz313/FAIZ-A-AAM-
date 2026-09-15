@@ -13,11 +13,40 @@ export type AuthProvider = {
    * not considered proven until the recipient follows that invitation. */
   createApplicantUser(input: { email: string; redirectTo: string; givenName?: string; familyName?: string }): Promise<{ userId: string; email: string; verificationRequired: true; providerRef?: string }>;
   inviteUser(input: { email: string; redirectTo: string }): Promise<{ userId: string; email: string; providerRef?: string }>;
+  createInviteLink(input: { email: string; redirectTo: string; mode: "invite" | "reinvite" }): Promise<{ userId: string; actionLink: string }>;
   sendRecovery(input: { email: string; redirectTo: string }): Promise<void>;
   deleteUser(userId: string): Promise<void>;
 };
 
+export type AuthProviderErrorCode = "email_exists" | "rate_limited" | "invalid_email" | "unavailable";
+
+export class AuthProviderError extends Error {
+  constructor(
+    readonly code: AuthProviderErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AuthProviderError";
+  }
+}
+
 type ProviderUser = { id: string; email?: string | null };
+type SupabaseAuthError = { code?: string; status?: number; message?: string };
+
+function mapInviteLinkError(error: SupabaseAuthError): AuthProviderError {
+  const code = error.code?.toLowerCase() ?? "";
+  const message = error.message?.toLowerCase() ?? "";
+  if (code === "email_exists" || error.status === 422) {
+    return new AuthProviderError("email_exists", "This email already has a sign-in account.");
+  }
+  if (error.status === 429 || code.includes("rate_limit")) {
+    return new AuthProviderError("rate_limited", "The sign-in provider is rate limiting invitations.");
+  }
+  if (error.status === 400 || code.includes("invalid") || message.includes("invalid email")) {
+    return new AuthProviderError("invalid_email", "Enter a valid email address.");
+  }
+  return new AuthProviderError("unavailable", "The sign-in provider is unavailable.");
+}
 
 function requireUser(user: ProviderUser | null, fallback: string): { userId: string; email: string } {
   if (user === null || typeof user.id !== "string" || user.id.length === 0) {
@@ -44,6 +73,22 @@ function createSupabaseAuthProvider(): AuthProvider {
       });
       if (error !== null) throw new Error("The invitation could not be sent.");
       return { ...requireUser(data.user, "The account provider did not return an invitation user."), providerRef: data.user?.id };
+    },
+
+    async createInviteLink({ email, redirectTo, mode }) {
+      const admin = createSupabaseAdminClient();
+      const { data, error } = await admin.auth.admin.generateLink({
+        type: mode === "invite" ? "invite" : "magiclink",
+        email,
+        options: { redirectTo },
+      });
+      if (error !== null) throw mapInviteLinkError(error);
+      const user = requireUser(data.user, "The account provider did not return an invitation user.");
+      const actionLink = data.properties?.action_link;
+      if (typeof actionLink !== "string" || actionLink.length === 0) {
+        throw new AuthProviderError("unavailable", "The sign-in provider did not return an invitation link.");
+      }
+      return { userId: user.userId, actionLink };
     },
 
     async sendRecovery({ email, redirectTo }) {
@@ -90,6 +135,11 @@ export class FakeAuthProvider implements AuthProvider {
     const user = { userId: this.nextId(), email: normalized, providerRef: `fake-invite-${this.sequence}` };
     this.invited.set(normalized, user);
     return user;
+  }
+
+  async createInviteLink({ email, redirectTo }: { email: string; redirectTo: string; mode: "invite" | "reinvite" }) {
+    const invited = await this.inviteUser({ email, redirectTo });
+    return { userId: invited.userId, actionLink: redirectTo };
   }
 
   async sendRecovery({ email }: { email: string; redirectTo: string }) {

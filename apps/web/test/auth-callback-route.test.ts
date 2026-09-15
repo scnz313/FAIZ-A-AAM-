@@ -3,7 +3,7 @@
  * Auth callback boundary: PKCE `?code=` links exchange server-side and
  * continue to the safe next destination; provider invite links that deliver
  * the session in the URL hash (which never reaches the server) redirect to
- * `/sign-in` with the safe next destination preserved for the client-side
+ * `/auth/complete` with the safe next destination preserved for the client-side
  * hash handler.
  */
 import { NextRequest } from "next/server";
@@ -29,7 +29,7 @@ describe("auth callback no-code redirect", () => {
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
-      "https://school.test/sign-in?error=auth&next=%2Fsign-in%2Finvite",
+      "https://school.test/auth/complete?next=%2Fsign-in%2Finvite",
     );
   });
 
@@ -38,13 +38,13 @@ describe("auth callback no-code redirect", () => {
       new NextRequest("https://school.test/auth/callback?next=https%3A%2F%2Fevil.test%2Fportal"),
     );
 
-    expect(response.headers.get("location")).toBe("https://school.test/sign-in?error=auth");
+    expect(response.headers.get("location")).toBe("https://school.test/auth/complete?next=%2Fportal");
   });
 
   it("still redirects a plain failure without a next destination", async () => {
     const response = await GET(new NextRequest("https://school.test/auth/callback"));
 
-    expect(response.headers.get("location")).toBe("https://school.test/sign-in?error=auth");
+    expect(response.headers.get("location")).toBe("https://school.test/auth/complete?next=%2Fportal");
   });
 });
 
@@ -71,7 +71,7 @@ describe("auth callback PKCE exchange", () => {
     );
 
     expect(response.headers.get("location")).toBe(
-      "https://school.test/sign-in?error=auth&next=%2Fsign-in%2Finvite",
+      "https://school.test/auth/complete?next=%2Fsign-in%2Finvite&error=exchange",
     );
   });
 });

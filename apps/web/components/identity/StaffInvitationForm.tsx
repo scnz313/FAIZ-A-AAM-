@@ -21,7 +21,13 @@ type FieldErrors = {
   confirmation?: string;
 };
 
-export default function StaffInvitationForm({ initialInvitationRef = "" }: { initialInvitationRef?: string }) {
+export default function StaffInvitationForm({
+  initialInvitationRef = "",
+  invitationRefReadOnly = false,
+}: {
+  initialInvitationRef?: string;
+  invitationRefReadOnly?: boolean;
+}) {
   const [invitationRef, setInvitationRef] = useState(initialInvitationRef);
   const [oneTimeRef, setOneTimeRef] = useState("");
   const [givenName, setGivenName] = useState("");
@@ -56,7 +62,17 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
     try {
       if (!demo) {
         const { error: passwordError } = await createSupabaseBrowserClient().auth.updateUser({ password });
-        if (passwordError !== null) throw new Error("Your password could not be saved. Reopen the invitation email and try again.");
+        if (passwordError !== null && passwordError.code !== "same_password") {
+          if (passwordError.code === "weak_password") {
+            setErrors((current) => ({ ...current, password: "Choose a longer password with letters and numbers." }));
+            return;
+          }
+          if (passwordError.code === "session_not_found" || passwordError.status === 401) {
+            setError("Open the invitation email and use its link before completing this form.");
+            return;
+          }
+          throw new Error("Your password could not be saved. Reopen the invitation email and try again.");
+        }
       }
       const accepted = await usersService.acceptInvitation({
         invitationRef: invitationRef.trim(),
@@ -117,7 +133,8 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
           value={invitationRef}
           onChange={setInvitationRef}
           error={errors.invitationRef}
-          placeholder="INV-2026-0501"
+          placeholder="INV-2026-14A5963F8B"
+          readOnly={invitationRefReadOnly}
         />
         {demo ? (
           <Field
@@ -199,6 +216,7 @@ function Field({
   mono = false,
   type = "text",
   autoComplete = "off",
+  readOnly = false,
 }: {
   id: string;
   label: string;
@@ -209,6 +227,7 @@ function Field({
   mono?: boolean;
   type?: "text" | "password";
   autoComplete?: string;
+  readOnly?: boolean;
 }) {
   const errorId = `${id}-error`;
   return (
@@ -224,6 +243,7 @@ function Field({
         aria-invalid={error !== undefined}
         aria-describedby={error ? errorId : undefined}
         autoComplete={autoComplete}
+        readOnly={readOnly}
       />
       {error ? <p id={errorId} className="field-error">{error}</p> : null}
     </div>

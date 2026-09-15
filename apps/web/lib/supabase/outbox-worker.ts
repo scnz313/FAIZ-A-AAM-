@@ -45,7 +45,6 @@ import {
   resultsPublishedEmail,
   resultWithdrawnEmail,
   securityUpdateEmail,
-  staffInvitationEmail,
   supportResponseEmail,
   timetableOverrideEmail,
   timetablePublishedEmail,
@@ -945,7 +944,7 @@ export async function renderEmail(admin: SupabaseClient<Database>, event: Outbox
   if (key.startsWith("email.link_requested")) return linkStatusEmail({ reference: target, approved: false });
   if (key.startsWith("email.support")) return supportResponseEmail({ threadRef: target });
   if (key.startsWith("email.notice") || key.startsWith("email.content")) return noticePublishedEmail({ reference: target });
-  if (key.startsWith("email.staff_invitation")) return staffInvitationEmail({ reference: target });
+  if (key.startsWith("email.staff_invitation")) return null;
   if (key.startsWith("security.")) return securityUpdateEmail({ reference: target });
   if (key.startsWith("email.marks_") || key.startsWith("email.result_entry_sheet_submitted")) return resultEntryReviewEmail({ reference: target });
   if (key.startsWith("content.") || key.startsWith("notice.")) return contentNoticeEmail({ reference: target });

@@ -80,7 +80,27 @@ describe("AuthHashHandler", () => {
     setLocation("/sign-in#access_token=at-4&refresh_token=rt-4&type=invite");
     render(<AuthHashHandler next="/sign-in/invite" navigate={navigate} />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/could not start a sign-in session/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/expired or was already used/i);
+    expect(screen.getByRole("link", { name: "Back to sign in" })).toHaveAttribute("href", "/sign-in");
+    expect(screen.getByRole("link", { name: "Account recovery" })).toHaveAttribute("href", "/sign-in/recovery");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("shows the specific expired copy from a provider error hash", async () => {
+    setLocation("/auth/complete?next=%2Fsign-in%2Finvite#error=access_denied&error_code=otp_expired&error_description=expired");
+    render(<AuthHashHandler next="/sign-in/invite" required navigate={navigate} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This link has expired or was already used. Ask the administrator to resend the invitation, or use recovery if you already set a password.",
+    );
+    expect(authMocks.setSession).not.toHaveBeenCalled();
+  });
+
+  it("shows expired copy when a code exchange failed without a hash", async () => {
+    setLocation("/auth/complete?next=%2Fsign-in%2Finvite&error=exchange");
+    render(<AuthHashHandler next="/sign-in/invite" required exchangeError navigate={navigate} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/expired or was already used/i);
     expect(navigate).not.toHaveBeenCalled();
   });
 });

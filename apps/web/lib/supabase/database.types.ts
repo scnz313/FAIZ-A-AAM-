@@ -1422,6 +1422,14 @@ export type Database = {
         Args: { p_invitation_reference: string; p_reason: string }
         Returns: undefined
       }
+      staff_invites_mark_resent: {
+        Args: { p_invitation_reference: string; p_provider_subject: string }
+        Returns: Json
+      }
+      staff_invites_revoke: {
+        Args: { p_invitation_reference: string; p_reason: string }
+        Returns: Json
+      }
       staff_profile_adopt: {
         Args: { p_account_id: string; p_profile_code: string; p_reason: string }
         Returns: Json
@@ -1722,12 +1730,14 @@ export type Database = {
           intended_subject_ids: string[]
           intended_title: string | null
           invitation_hash: string
+          last_sent_at: string | null
           provider_dispatched_at: string | null
           provider_invitation_ref: string | null
           provider_state: string
           provider_subject: string | null
           purpose: string
           reference: string
+          resend_count: number
           status: string
           updated_at: string
         }
@@ -1750,12 +1760,14 @@ export type Database = {
           intended_subject_ids?: string[]
           intended_title?: string | null
           invitation_hash: string
+          last_sent_at?: string | null
           provider_dispatched_at?: string | null
           provider_invitation_ref?: string | null
           provider_state?: string
           provider_subject?: string | null
           purpose: string
           reference?: string
+          resend_count?: number
           status?: string
           updated_at?: string
         }
@@ -1778,12 +1790,14 @@ export type Database = {
           intended_subject_ids?: string[]
           intended_title?: string | null
           invitation_hash?: string
+          last_sent_at?: string | null
           provider_dispatched_at?: string | null
           provider_invitation_ref?: string | null
           provider_state?: string
           provider_subject?: string | null
           purpose?: string
           reference?: string
+          resend_count?: number
           status?: string
           updated_at?: string
         }
