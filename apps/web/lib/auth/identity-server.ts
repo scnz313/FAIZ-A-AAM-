@@ -6,6 +6,11 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAppEnv } from "@/lib/supabase/env";
 import {
   applicantRegister,
+  guardianClaimAcceptByToken,
+  guardianClaimCreate,
+  guardianClaimMarkDispatched,
+  guardianClaimPreview,
+  guardianClaimRevoke,
   staffInvitesAcceptAuth,
   staffInvitesAttachProvider,
   staffInvitesCreateProfileRecord,
@@ -16,7 +21,7 @@ import {
 import { AuthProviderError, authProvider } from "@/lib/auth/provider";
 import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { createResendSender } from "@/lib/email/resend";
-import { staffInvitationEmail } from "@/lib/email/templates";
+import { guardianActivationEmail, staffInvitationEmail } from "@/lib/email/templates";
 import { callAppRpc } from "@/lib/supabase/rpc";
 import type { ServiceResult } from "@fass/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -260,6 +265,164 @@ export async function revokeStaffInvitation(
     try { await authProvider().deleteUser(revoked.value.providerSubject); } catch { /* best effort provider cleanup */ }
   }
   return revoked;
+}
+
+type GuardianActivationDispatch = { claimReference: string; expiresAt: string };
+
+type GuardianActivationContext = {
+  email: string;
+  guardianName: string;
+  studentNames: string[];
+};
+
+async function loadGuardianActivationContext(contactId: string): Promise<GuardianActivationContext | null> {
+  const admin = createSupabaseAdminClient();
+  const { data: contact, error: contactError } = await admin
+    .from("guardian_contacts")
+    .select("value, guardian_id")
+    .eq("id", contactId)
+    .eq("channel", "email")
+    .maybeSingle();
+  if (contactError !== null || contact === null) return null;
+  const [{ data: guardian, error: guardianError }, { data: links, error: linksError }] = await Promise.all([
+    admin.from("guardians").select("people(display_name)").eq("id", contact.guardian_id).maybeSingle(),
+    admin.from("guardian_student_links").select("students(people(display_name))").eq("guardian_id", contact.guardian_id).eq("status", "active"),
+  ]);
+  if (guardianError !== null || linksError !== null || guardian === null) return null;
+  const guardianPerson = guardian.people as { display_name?: string | null } | null;
+  const studentNames = (links ?? []).flatMap((link) => {
+    const student = link.students as { people?: { display_name?: string | null } | null } | null;
+    const displayName = student?.people?.display_name?.trim();
+    return displayName ? [displayName] : [];
+  });
+  return {
+    email: contact.value.trim().toLowerCase(),
+    guardianName: guardianPerson?.display_name?.trim() || "Guardian",
+    studentNames,
+  };
+}
+
+async function revokeFailedGuardianClaim(
+  client: SupabaseClient<Database>,
+  claimReference: string,
+  category: string,
+): Promise<void> {
+  await guardianClaimRevoke(client, {
+    claimReference,
+    reason: `Dispatch failed: ${category}`,
+  });
+}
+
+function guardianProviderFailure(error: unknown): ServiceResult<GuardianActivationDispatch> {
+  if (error instanceof AuthProviderError && error.code === "rate_limited") {
+    return safeFailure("The sign-in provider is rate limiting invitations. Try again in a few minutes.", true);
+  }
+  return safeFailure("The activation invitation could not be sent. Nothing was activated.", true);
+}
+
+export async function dispatchGuardianActivation(
+  client: SupabaseClient<Database>,
+  input: { guardianId: string; contactId: string; reason: string },
+): Promise<ServiceResult<GuardianActivationDispatch>> {
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const created = await guardianClaimCreate(client, {
+    guardianId: input.guardianId,
+    contactId: input.contactId,
+    expiresAt,
+    reason: input.reason,
+  });
+  if (!created.ok) return created as ServiceResult<GuardianActivationDispatch>;
+  const claimReference = created.value.reference;
+  const context = await loadGuardianActivationContext(input.contactId);
+  if (context === null) {
+    await revokeFailedGuardianClaim(client, claimReference, "contact lookup");
+    return safeFailure("The guardian email could not be loaded. Nothing was activated.", true);
+  }
+
+  const provider = authProvider();
+  const { appUrl } = requireAppEnv();
+  const activationPath = `/sign-in/activate?claim=${encodeURIComponent(created.value.oneTimeSecret)}`;
+  const redirectTo = `${appUrl}/auth/callback?next=${encodeURIComponent(activationPath)}`;
+  let link: { userId: string; actionLink: string };
+  try {
+    try {
+      link = await provider.createInviteLink({ email: context.email, redirectTo, mode: "invite" });
+    } catch (error) {
+      if (!(error instanceof AuthProviderError) || error.code !== "email_exists") throw error;
+      link = await provider.createInviteLink({ email: context.email, redirectTo, mode: "reinvite" });
+    }
+  } catch (error) {
+    await revokeFailedGuardianClaim(client, claimReference, "identity provider");
+    return guardianProviderFailure(error);
+  }
+
+  const message = guardianActivationEmail({
+    reference: claimReference,
+    actionLink: link.actionLink,
+    expiresAt: created.value.expiresAt,
+    guardianName: context.guardianName,
+    studentNames: context.studentNames,
+  });
+  try {
+    await createResendSender()({
+      to: [context.email],
+      subject: message.subject,
+      html: message.html,
+      idempotencyKey: `guardian-claim:${claimReference}:1`,
+    });
+  } catch {
+    await revokeFailedGuardianClaim(client, claimReference, "email delivery");
+    return safeFailure("The activation email could not be delivered. Nothing was activated.", true);
+  }
+
+  const dispatched = await guardianClaimMarkDispatched(client, {
+    claimReference,
+    providerSubject: link.userId,
+  });
+  if (!dispatched.ok) {
+    await revokeFailedGuardianClaim(client, claimReference, "claim dispatch");
+    return safeFailure("The activation invitation could not be completed. Nothing was activated.", true);
+  }
+  return { ok: true, value: { claimReference, expiresAt: created.value.expiresAt } };
+}
+
+export async function resendGuardianActivation(
+  client: SupabaseClient<Database>,
+  input: { claimReference: string; reason: string },
+): Promise<ServiceResult<GuardianActivationDispatch>> {
+  const admin = createSupabaseAdminClient();
+  const { data: claim, error } = await admin
+    .from("guardian_claim_invitations")
+    .select("guardian_id, guardian_contact_id, status")
+    .eq("reference", input.claimReference)
+    .in("status", ["pending", "dispatched", "expired", "failed"])
+    .maybeSingle();
+  if (error !== null || claim === null) return safeFailure("This guardian activation cannot be resent.");
+  const revoked = await guardianClaimRevoke(client, { claimReference: input.claimReference, reason: input.reason });
+  if (!revoked.ok) return revoked as ServiceResult<GuardianActivationDispatch>;
+  return dispatchGuardianActivation(client, {
+    guardianId: claim.guardian_id,
+    contactId: claim.guardian_contact_id,
+    reason: input.reason,
+  });
+}
+
+export function revokeGuardianActivation(
+  client: SupabaseClient<Database>,
+  input: { claimReference: string; reason: string },
+) {
+  return guardianClaimRevoke(client, input);
+}
+
+export function previewGuardianActivation(client: SupabaseClient<Database>, input: { token: string }) {
+  return guardianClaimPreview(client, input.token);
+}
+
+export function acceptGuardianActivation(
+  client: SupabaseClient<Database>,
+  input: { token: string; givenName: string; familyName: string },
+) {
+  return guardianClaimAcceptByToken(client, input);
 }
 
 export async function acceptStaffInvitation(

@@ -293,12 +293,62 @@ export function securityUpdateEmail(input: { reference: string }) {
   return genericNotificationEmail({ targetRef: input.reference, subject: "Your school account security was updated", eyebrow: "Security", title: "Your account security has changed", body: "Sign in to review the current account and access status", path: "/sign-in" });
 }
 
-export function staffInvitationEmail(input: { reference: string; actionLink: string; expiresAt: string; displayName: string }) {
-  const expiresLabel = new Intl.DateTimeFormat("en-IN", {
+function kolkataExpiryLabel(expiresAt: string): string {
+  return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Kolkata",
-  }).format(new Date(input.expiresAt));
+  }).format(new Date(expiresAt));
+}
+
+export function guardianActivationEmail(input: {
+  reference: string;
+  actionLink: string;
+  expiresAt: string;
+  guardianName: string;
+  studentNames: string[];
+}) {
+  const studentList = input.studentNames.length > 0
+    ? input.studentNames.map(escapeHtml).join("<br>")
+    : "Your linked students";
+  return {
+    subject: "Activate your Faiz E Aam School family portal access",
+    html: shell({
+      eyebrow: "Family portal",
+      title: "Activate your family portal access",
+      cta: { label: "Activate portal access", href: input.actionLink },
+      paragraphs: [
+        `${escapeHtml(input.guardianName)}, the school has prepared family portal access for you.`,
+        `Linked students:<br>${studentList}`,
+        `Activation reference: <strong>${escapeHtml(input.reference)}</strong>.`,
+        `This single-use activation expires on ${escapeHtml(kolkataExpiryLabel(input.expiresAt))} Asia/Kolkata.`,
+      ],
+      note: "If you did not expect this, ignore this email.",
+    }),
+  };
+}
+
+export function guardianWelcomeEmail(input: { guardianName: string; studentNames: string[] }) {
+  const { appUrl } = requireAppEnv();
+  const studentList = input.studentNames.length > 0
+    ? input.studentNames.map(escapeHtml).join("<br>")
+    : "Your linked students";
+  return {
+    subject: "Welcome to the Faiz E Aam School family portal",
+    html: shell({
+      eyebrow: "Family portal",
+      title: "Your family portal access is active",
+      cta: { label: "Open the family portal", href: `${appUrl}/portal` },
+      paragraphs: [
+        `${escapeHtml(input.guardianName)}, your family portal access is now active.`,
+        `Linked students:<br>${studentList}`,
+      ],
+    }),
+  };
+}
+
+export function staffInvitationEmail(input: { reference: string; actionLink: string; expiresAt: string; displayName: string }) {
+  const expiresLabel = kolkataExpiryLabel(input.expiresAt);
   return {
     subject: "Your Faiz E Aam School staff account invitation",
     html: shell({

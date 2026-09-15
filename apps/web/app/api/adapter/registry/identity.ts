@@ -12,6 +12,8 @@ import {
   invitesCreate,
   invitesRevoke,
   contextStaffSelect,
+  guardianContactRecord,
+  guardiansAdminList,
   guardianLinksRequest,
   linksApprove,
   linksCapabilitiesSet,
@@ -36,9 +38,14 @@ import {
   usersListAdmin,
 } from "@/lib/supabase/domain";
 import {
+  acceptGuardianActivation,
   acceptStaffInvitation,
+  dispatchGuardianActivation,
   dispatchStaffInvitation,
+  previewGuardianActivation,
+  resendGuardianActivation,
   resendStaffInvitation,
+  revokeGuardianActivation,
   revokeStaffInvitation,
 } from "@/lib/auth/identity-server";
 
@@ -61,6 +68,13 @@ export const identityModule: AdapterModule = {
     operation("identity.hasApplicant", emptyPayload, ({ supabase }) => accountHasApplicantIdentity(supabase)),
     operation("identity.recordAuthEvent", z.object({ event: z.enum(["signed_in", "signed_out", "password_changed"]) }), ({ supabase }, payload) => recordAuthEvent(supabase, payload.event)),
     operation("users.list", emptyPayload, ({ supabase }) => usersListAdmin(supabase)),
+    operation("guardians.adminList", emptyPayload, ({ supabase }) => guardiansAdminList(supabase)),
+    operation("guardians.recordContact", z.object({ guardianId: uuid, channel: z.literal("email"), value: z.string().email(), reason: z.string().min(3) }), ({ supabase }, payload) => guardianContactRecord(supabase, payload)),
+    operation("guardians.activate", z.object({ guardianId: uuid, contactId: uuid, reason: z.string().min(3) }), ({ supabase }, payload) => dispatchGuardianActivation(supabase, payload)),
+    operation("guardians.activationResend", z.object({ claimReference: publicReference, reason: z.string().min(3) }), ({ supabase }, payload) => resendGuardianActivation(supabase, payload)),
+    operation("guardians.activationRevoke", z.object({ claimReference: publicReference, reason: z.string().min(3) }), ({ supabase }, payload) => revokeGuardianActivation(supabase, payload)),
+    operation("guardianClaims.preview", z.object({ token: z.string().min(16) }), ({ supabase }, payload) => previewGuardianActivation(supabase, payload)),
+    operation("guardianClaims.accept", z.object({ token: z.string().min(16), givenName: z.string().min(1), familyName: z.string().min(1) }), ({ supabase }, payload) => acceptGuardianActivation(supabase, payload)),
     operation("users.grantRole", z.object({ accountId: uuid.optional(), accountRef: publicReference.optional(), roleCode: z.string().min(1), reason: z.string().min(1), academicYearIds: z.array(uuid).optional(), gradeSectionIds: z.array(uuid).optional(), subjectIds: z.array(uuid).optional() }).refine((value) => value.accountId !== undefined || value.accountRef !== undefined, "account reference is required"), ({ supabase }, payload) => rolesGrant(supabase, payload as Parameters<typeof rolesGrant>[1])),
     operation("users.revokeRole", z.object({ grantId: uuid.optional(), grantRef: publicReference.optional(), reason: z.string().min(1), expectedVersion: z.number().int().nonnegative() }).refine((value) => value.grantId !== undefined || value.grantRef !== undefined, "grant reference is required"), ({ supabase }, payload) => rolesRevoke(supabase, payload as Parameters<typeof rolesRevoke>[1])),
     operation("users.suspend", z.object({ accountId: uuid.optional(), accountRef: publicReference.optional(), reason: z.string().min(3) }).refine((value) => value.accountId !== undefined || value.accountRef !== undefined, "account reference is required"), async ({ supabase }, payload) => {

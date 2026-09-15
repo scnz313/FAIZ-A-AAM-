@@ -35,6 +35,7 @@ describe("server auth provider boundary", () => {
   it("allows only approved post-authentication destinations", () => {
     expect(safeAuthRedirect("/portal/fees?year=2026", "/portal")).toBe("/portal/fees?year=2026");
     expect(safeAuthRedirect("/sign-in/invite?invitation=INV-1", "/portal")).toBe("/sign-in/invite?invitation=INV-1");
+    expect(safeAuthRedirect("/sign-in/activate?claim=guardian-token", "/portal")).toBe("/sign-in/activate?claim=guardian-token");
     expect(safeAuthRedirect("//evil.test", "/portal")).toBe("/portal");
     expect(safeAuthRedirect("/api/outbox", "/portal")).toBe("/portal");
     expect(safeAuthRedirect("https://evil.test/staff", "/portal")).toBe("/portal");

@@ -14,6 +14,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/domain", () => ({
   applicantRegister: vi.fn(),
+  guardianClaimAcceptByToken: vi.fn(),
+  guardianClaimCreate: vi.fn(),
+  guardianClaimMarkDispatched: vi.fn(),
+  guardianClaimPreview: vi.fn(),
+  guardianClaimRevoke: vi.fn(),
   staffInvitesAcceptAuth: vi.fn(),
   staffInvitesAttachProvider: mocks.attachProvider,
   staffInvitesCreateProfileRecord: mocks.createRecord,

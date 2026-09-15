@@ -8,6 +8,7 @@ const AUTHENTICATED_ROUTE_PREFIXES = [
   "/apply/student",
   "/apply/job",
   "/sign-in/invite",
+  "/sign-in/activate",
   "/sign-in/reset-password",
   "/sign-in/totp",
 ] as const;

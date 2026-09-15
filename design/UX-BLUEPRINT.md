@@ -790,7 +790,7 @@ AuthFrame: site-head (brand only), centered card (`min(440px,100%)` or `min(560p
 | Documents | `documents` | PageHead, documents oversight ledger table |
 | Users | `users` | PageHead, staff ledger table, invite modal (role multi-select) |
 | Link requests | `link-requests` | PageHead, claims ledger table, verify/reject actions, security callout |
-| Guardians | `guardians` | PageHead, V15 planned-workspace empty state (honest placeholder — no fake campaign operations), "what will not change" panel, "until then" links |
+| Guardians | `guardians` | PageHead, guardian activation summary, contacts and linked-students ledger, email send/resend/revoke actions |
 | Imports | `imports` | PageHead, 6-step import wizard (upload/map/validate/resolve/commit/report) |
 | Exports | `exports` | PageHead, exports ledger table, download details KV, format callout |
 | Settings | `settings` | PageHead, versioned config panels, propose-change modal |

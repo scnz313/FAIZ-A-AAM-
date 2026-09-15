@@ -34,6 +34,7 @@ import {
   invoiceIssuedEmail,
   jobApplicationStatusEmail,
   jobApplicationSubmittedEmail,
+  guardianWelcomeEmail,
   linkStatusEmail,
   noticePublishedEmail,
   offerExtendedEmail,
@@ -741,6 +742,27 @@ export async function resolveRecipients(
        * inviter must never receive the invitee's invitation. */
       break;
     }
+    case "guardian_claim_invitation": {
+      const { data: claim, error: claimError } = await db
+        .from("guardian_claim_invitations")
+        .select("guardian_contact_id")
+        .eq("reference", target)
+        .maybeSingle();
+      if (claimError !== null) throw new Error(`recipient lookup failed: ${claimError.message}`);
+      if (claim !== null) {
+        const { data: contact, error: contactError } = await db
+          .from("guardian_contacts")
+          .select("channel, value")
+          .eq("id", claim.guardian_contact_id)
+          .maybeSingle();
+        if (contactError !== null) throw new Error(`recipient lookup failed: ${contactError.message}`);
+        if (contact?.channel === "email") {
+          const recipient = emailRecipient(null, contact.value);
+          if (recipient !== null) recipients.push(recipient);
+        }
+      }
+      break;
+    }
     case "result_batch":
     case "result_batches":
     case "result_entry_sheet":
@@ -819,6 +841,7 @@ export async function resolveRecipients(
 /* ------------------------------------------------------------------ */
 
 export async function renderEmail(admin: SupabaseClient<Database>, event: OutboxEventRow, _recipient: Recipient) {
+  const db = admin as unknown as SupabaseClient;
   const key = event.event_key;
   const target = event.target_reference;
   if (key.startsWith("email.application_submitted")) return applicationSubmittedEmail({ applicationRef: target });
@@ -944,6 +967,28 @@ export async function renderEmail(admin: SupabaseClient<Database>, event: Outbox
   if (key.startsWith("email.link_requested")) return linkStatusEmail({ reference: target, approved: false });
   if (key.startsWith("email.support")) return supportResponseEmail({ threadRef: target });
   if (key.startsWith("email.notice") || key.startsWith("email.content")) return noticePublishedEmail({ reference: target });
+  if (key.startsWith("email.guardian_welcome")) {
+    const { data: claim } = await db
+      .from("guardian_claim_invitations")
+      .select("id, guardian_id")
+      .eq("reference", target)
+      .maybeSingle();
+    if (claim === null) return null;
+    const [{ data: guardian }, { data: claimLinks }] = await Promise.all([
+      db.from("guardians").select("people(display_name)").eq("id", claim.guardian_id).maybeSingle(),
+      db.from("guardian_claim_links").select("guardian_student_links(students(people(display_name)))").eq("claim_id", claim.id),
+    ]);
+    const guardianRow = guardian as { people?: { display_name?: string | null } | null } | null;
+    const studentNames = (claimLinks ?? []).flatMap((claimLink) => {
+      const row = claimLink as { guardian_student_links?: { students?: { people?: { display_name?: string | null } | null } | null } | null };
+      const displayName = row.guardian_student_links?.students?.people?.display_name?.trim();
+      return displayName ? [displayName] : [];
+    });
+    return guardianWelcomeEmail({
+      guardianName: guardianRow?.people?.display_name?.trim() || "Guardian",
+      studentNames,
+    });
+  }
   if (key.startsWith("email.staff_invitation")) return null;
   if (key.startsWith("security.")) return securityUpdateEmail({ reference: target });
   if (key.startsWith("email.marks_") || key.startsWith("email.result_entry_sheet_submitted")) return resultEntryReviewEmail({ reference: target });

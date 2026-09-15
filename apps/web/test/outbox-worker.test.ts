@@ -227,6 +227,16 @@ describe("recipient resolution failure and skip semantics", () => {
       resolveRecipients(admin as never, event({ event_key: "email.staff_invitation:INV-1:v2", target_type: "account_invitation", target_reference: "INV-1" })),
     ).resolves.toEqual([]);
   });
+
+  it("resolves a guardian welcome recipient from the claim contact", async () => {
+    const admin = fakeAdmin({
+      guardian_claim_invitations: [{ reference: "GCL-1", guardian_contact_id: "contact-1" }],
+      guardian_contacts: [{ id: "contact-1", channel: "email", value: "guardian@example.test" }],
+    });
+    await expect(
+      resolveRecipients(admin as never, event({ event_key: "email.guardian_welcome:GCL-1", target_type: "guardian_claim_invitation", target_reference: "GCL-1" })),
+    ).resolves.toEqual([{ accountId: null, email: "guardian@example.test" }]);
+  });
 });
 
 describe("email delivery record integrity", () => {

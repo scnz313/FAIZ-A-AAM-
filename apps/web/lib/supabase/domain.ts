@@ -2316,6 +2316,109 @@ export function invitesCreate(
   });
 }
 
+export function guardiansAdminList(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>[]>(supabase, "guardians_admin_list", {});
+    if (error !== null) throw mapRpcError(error);
+    return data ?? [];
+  });
+}
+
+export function guardianContactRecord(
+  supabase: SupabaseClient<Database>,
+  input: { guardianId: string; channel: "email"; value: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "guardian_contact_record", {
+      p_guardian_id: input.guardianId,
+      p_channel: input.channel,
+      p_value: input.value,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "guardian contact");
+  });
+}
+
+export function guardianClaimCreate(
+  supabase: SupabaseClient<Database>,
+  input: { guardianId: string; contactId: string; expiresAt: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<{
+      claimId: string;
+      reference: string;
+      channel: string;
+      status: string;
+      expiresAt: string;
+      oneTimeSecret: string;
+    }>(supabase, "guardian_claim_create", {
+      p_guardian_id: input.guardianId,
+      p_guardian_contact_id: input.contactId,
+      p_channel: "email",
+      p_expires_at: input.expiresAt,
+      p_campaign_id: null,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "guardian claim");
+  });
+}
+
+export function guardianClaimMarkDispatched(
+  supabase: SupabaseClient<Database>,
+  input: { claimReference: string; providerSubject: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "guardian_claim_mark_dispatched", {
+      p_claim_reference: input.claimReference,
+      p_provider_subject: input.providerSubject,
+      p_provider_ref: null,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "dispatched guardian claim");
+  });
+}
+
+export function guardianClaimRevoke(
+  supabase: SupabaseClient<Database>,
+  input: { claimReference: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "guardian_claim_revoke", {
+      p_claim_reference: input.claimReference,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "revoked guardian claim");
+  });
+}
+
+export function guardianClaimPreview(supabase: SupabaseClient<Database>, token: string) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "guardian_claim_preview", {
+      p_token: token,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "guardian claim preview");
+  });
+}
+
+export function guardianClaimAcceptByToken(
+  supabase: SupabaseClient<Database>,
+  input: { token: string; givenName: string; familyName: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "guardian_claim_accept_by_token", {
+      p_token: input.token,
+      p_given_name: input.givenName,
+      p_family_name: input.familyName,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "accepted guardian claim");
+  });
+}
+
 export function staffInvitesCreate(
   supabase: SupabaseClient<Database>,
   input: {

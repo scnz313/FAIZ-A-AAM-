@@ -849,6 +849,17 @@ export type Database = {
         }
         Returns: Json
       }
+      guardian_claim_preview: { Args: { p_token: string }; Returns: Json }
+      guardian_contact_record: {
+        Args: {
+          p_channel: string
+          p_guardian_id: string
+          p_reason: string
+          p_value: string
+        }
+        Returns: Json
+      }
+      guardians_admin_list: { Args: never; Returns: Json[] }
       guardian_claim_accept:
         | {
             Args: {
