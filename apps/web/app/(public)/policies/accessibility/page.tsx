@@ -9,7 +9,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Accessibility Statement",
   description:
-    "The accessibility target and reporting route for the Faiz Aam Secondary School website · pending school confirmation.",
+    "The accessibility target and reporting route for the Faiz E Aam Secondary School website · pending school confirmation.",
   alternates: { canonical: "/policies/accessibility" },
 };
 

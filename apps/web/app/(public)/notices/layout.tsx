@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   /* The object form keeps the site suffix on child notice titles; a plain
      string here would resolve the segment title absolutely. */
-  title: { default: "Notices", template: "%s · Faiz Aam Secondary School" },
+  title: { default: "Notices", template: "%s · Faiz E Aam Secondary School" },
   alternates: { canonical: "/notices" },
 };
 

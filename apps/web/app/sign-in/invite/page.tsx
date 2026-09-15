@@ -6,7 +6,7 @@ import { dataAdapter } from "@/lib/supabase/env";
 
 export const metadata: Metadata = {
   title: "Accept staff invitation",
-  description: "Accept a Faiz Aam staff invitation and finish account setup.",
+  description: "Accept a Faiz E Aam staff invitation and finish account setup.",
 };
 
 export default async function StaffInvitationPage({

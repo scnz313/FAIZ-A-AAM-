@@ -32,10 +32,10 @@ export const metadata: Metadata = {
   /* Concept domain until launch — same fallback as app/robots.ts and app/sitemap.ts. */
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://faizaam.example"),
   title: {
-    default: "Faiz Aam Secondary School · Bandipora",
-    template: "%s · Faiz Aam Secondary School",
+    default: "Faiz E Aam Secondary School · Bandipora",
+    template: "%s · Faiz E Aam Secondary School",
   },
-  description: "Campus website, admissions, and family portal for Faiz Aam Secondary School, Bandipora.",
+  description: "Campus website, admissions, and family portal for Faiz E Aam Secondary School, Bandipora.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

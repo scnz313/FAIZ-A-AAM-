@@ -1,10 +1,10 @@
-# Faiz Aam school website — design package
+# Faiz E Aam school website — design package
 
 This package is the design-first foundation for the school website.
 
 ## Canonical design prototype (V15, supersedes V14 — 8 September 2026)
 
-The canonical design prototype is **`V15 Faiz Aam School Platform.html`** (repository root). This is a single-file React application containing the complete design system, all screens, all components, and all interaction states. It is the source of truth for every design token, colour, typography choice, component specification, layout pattern, and screen composition in the project. V15 keeps the V14 palette, typography, radii, and breakpoints while adding richer page composition, the `q-head5`/`q-row5` five-column result queue, secondary evidence panels, facts-ledger/record-card primitives, and improved applicant-shell mobile behavior. **Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.** Where V15's own responsive or accessibility behavior is weak, the application fixes beyond the prototype (owner decision).
+The canonical design prototype is **`V15 Faiz E Aam School Platform.html`** (repository root). This is a single-file React application containing the complete design system, all screens, all components, and all interaction states. It is the source of truth for every design token, colour, typography choice, component specification, layout pattern, and screen composition in the project. V15 keeps the V14 palette, typography, radii, and breakpoints while adding richer page composition, the `q-head5`/`q-row5` five-column result queue, secondary evidence panels, facts-ledger/record-card primitives, and improved applicant-shell mobile behavior. **Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.** Where V15's own responsive or accessibility behavior is weak, the application fixes beyond the prototype (owner decision).
 
 **Visual thesis:** "A living school record: Kashmir material cues, literary typography, calm paper surfaces, fine rules, measured grids, and precise institutional information design."
 
@@ -19,12 +19,12 @@ The canonical design prototype is **`V15 Faiz Aam School Platform.html`** (repos
 - `../FEATURE-INTEGRATION-SPEC.md` — detailed role, relationship, context, synchronization, and feature-connection contract.
 - `UX-BLUEPRINT.md` — **the canonical V15 design system reference**: colour tokens, typography, radii, layout, component specifications (§12.1), responsive breakpoints (§16), screen catalog (§17), role/route matrix (§18), navigation structure (§19), and implementation priority (§20).
 - `RESEARCH-NOTES.md` — school/peer research and current primary sources for disclosure, payments, privacy, accessibility, and security.
-- `../V15 Faiz Aam School Platform.html` (repository root) — the interactive design prototype with all screens, components, and states.
+- `../V15 Faiz E Aam School Platform.html` (repository root) — the interactive design prototype with all screens, components, and states.
 
 ## Design artifacts currently present
 
-- **`../V15 Faiz Aam School Platform.html`** (repository root) — the canonical V15 design prototype. Full redesign (V12→V14→V15). Contains: public website (13 screens), identity (7 screens), applicant (4 screens), guardian portal (13 screens), administrator (18 screens), principal (12 screens), UI states gallery (33 states), and system reference. All components, tokens, and layouts are defined in the embedded `<style>` block.
-- `../V14 Faiz Aam School Platform.html` (repository root) — the historical V14 reference, superseded by V15 for all implementation decisions.
+- **`../V15 Faiz E Aam School Platform.html`** (repository root) — the canonical V15 design prototype. Full redesign (V12→V14→V15). Contains: public website (13 screens), identity (7 screens), applicant (4 screens), guardian portal (13 screens), administrator (18 screens), principal (12 screens), UI states gallery (33 states), and system reference. All components, tokens, and layouts are defined in the embedded `<style>` block.
+- `../V14 Faiz E Aam School Platform.html` (repository root) — the historical V14 reference, superseded by V15 for all implementation decisions.
 - `mockups.html` + `styles.css` — earlier inspectable multi-screen concept (pre-V14, superseded).
 - `parent-fees-mockup.jpg` and `results-timetable-mockup.jpg` — rendered early workflow concepts.
 - `faiz-e-aam-*.png` and `landing-images/` — fictional generated visual concepts; see `STUDENT-IMAGE-SET.md`.
@@ -34,7 +34,7 @@ Do not cite missing historical renders or a screenshot filename as implementatio
 
 To review the V15 prototype:
 
-Open `../V15 Faiz Aam School Platform.html` directly in a browser (or use its `#/{workspace}/{route}` hash router). It is a self-contained React application (via CDN) with a demo bar at the bottom for switching between workspaces: Website, Applicant, Guardian, Administrator, Principal, UI states, and System.
+Open `../V15 Faiz E Aam School Platform.html` directly in a browser (or use its `#/{workspace}/{route}` hash router). It is a self-contained React application (via CDN) with a demo bar at the bottom for switching between workspaces: Website, Applicant, Guardian, Administrator, Principal, UI states, and System.
 
 To review the earlier interactive mockup locally:
 

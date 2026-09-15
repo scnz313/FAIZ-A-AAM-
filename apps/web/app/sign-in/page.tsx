@@ -9,7 +9,7 @@ import { dataAdapter, developmentAuthEnabled, totpRequired } from "@/lib/supabas
 export const metadata: Metadata = {
   title: "Sign in",
   description:
-    "Sign in to the Faiz Aam guardian portal. Guardian accounts, once verified by the school. Email OTP when the Supabase adapter is active; UI demo otherwise.",
+    "Sign in to the Faiz E Aam guardian portal. Guardian accounts, once verified by the school. Email OTP when the Supabase adapter is active; UI demo otherwise.",
 };
 
 /**

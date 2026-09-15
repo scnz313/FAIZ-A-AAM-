@@ -7,7 +7,7 @@ import { loadServerAdmissionByRef } from "@/lib/supabase/server-loaders";
 
 export const metadata: Metadata = {
   title: "Application status",
-  description: "Track the progress of a student admission application at Faiz Aam Secondary School.",
+  description: "Track the progress of a student admission application at Faiz E Aam Secondary School.",
   robots: { index: false },
 };
 

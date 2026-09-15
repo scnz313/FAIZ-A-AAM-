@@ -10,7 +10,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Contact",
   description:
-    "Address, phone, email, and office hours for Faiz Aam Secondary School, Bandipora.",
+    "Address, phone, email, and office hours for Faiz E Aam Secondary School, Bandipora.",
   alternates: { canonical: "/contact" },
 };
 
@@ -40,7 +40,7 @@ export default function ContactPage() {
               <div className={styles.detailRow}>
                 <dt>Address</dt>
                 <dd>
-                  Faiz Aam Secondary School, Bandipora, Jammu &amp; Kashmir
+                  Faiz E Aam Secondary School, Bandipora, Jammu &amp; Kashmir
                   193502
                 </dd>
               </div>

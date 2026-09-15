@@ -40,7 +40,7 @@ describe("formatIst", () => {
 
 describe("renderReceiptPdf", () => {
   const input = {
-    schoolName: "Faiz Aam School",
+    schoolName: "Faiz E Aam School",
     schoolContact: "Fee receipt - official record",
     receiptRef: "RCPT-2026-000007",
     issuedAtIso: "2026-08-06T06:30:00Z",

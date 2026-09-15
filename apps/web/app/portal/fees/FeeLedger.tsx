@@ -394,7 +394,7 @@ export function FeeLedger({ initial, initialFilter }: FeeLedgerProps) {
         >
           <div className={styles.statementHeader}>
             <div>
-              <p className="section-label">Faiz Aam Secondary School · Bandipora</p>
+              <p className="section-label">Faiz E Aam Secondary School · Bandipora</p>
               <h2 id="statement-preview-title" className={styles.statementTitle}>
                 Fee statement
               </h2>

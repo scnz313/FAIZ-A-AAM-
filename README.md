@@ -1,4 +1,4 @@
-# Faiz Aam School Platform
+# Faiz E Aam School Platform
 
 This repository is the design and engineering foundation for an integrated school website, applicant centre, family/student portal, and staff workspace.
 
@@ -12,7 +12,7 @@ The canonical sequence is:
 3. [`plan.md`](plan.md) — active C0–C5 Supabase cutover order, entry conditions, exit criteria, and staging gate.
 4. [`FEATURE-INTEGRATION-SPEC.md`](FEATURE-INTEGRATION-SPEC.md) — relationships, shared context, synchronization, feature contracts, and integration tests.
 5. [`UI-COMPLETION-PLAN.md`](UI-COMPLETION-PLAN.md) — completed frontend reference and route-level acceptance evidence.
-6. [`design/UX-BLUEPRINT.md`](design/UX-BLUEPRINT.md) — **canonical V15 design system**: colour tokens, typography, component specifications, responsive breakpoints, screen catalog, and implementation priority. The design prototype is `V15 Faiz Aam School Platform.html` (repository root; V14 remains as the historical reference).
+6. [`design/UX-BLUEPRINT.md`](design/UX-BLUEPRINT.md) — **canonical V15 design system**: colour tokens, typography, component specifications, responsive breakpoints, screen catalog, and implementation priority. The design prototype is `V15 Faiz E Aam School Platform.html` (repository root; V14 remains as the historical reference).
 7. [`design/RESEARCH-NOTES.md`](design/RESEARCH-NOTES.md) — implementation research for payments, privacy, disclosure, accessibility, authentication, and uploads.
 
 ## Current state

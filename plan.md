@@ -1,4 +1,4 @@
-# Faiz Aam School Supabase Backend Blueprint
+# Faiz E Aam School Supabase Backend Blueprint
 
 ## Active execution order — UI-first recovery, 8 September 2026
 
@@ -14,7 +14,7 @@ Work rule: one implementation owner, one active slice, then inspect diff → foc
 
 Completion is tracked separately for V15 appearance, local persistence, cross-module integration, manual interaction, and provider verification. A green build never completes all five columns.
 
-> **V15 design system (8 September 2026):** The canonical UI design prototype is `V15 Faiz Aam School Platform.html` (repository root; V14 remains as the historical reference). All design tokens (ink `#0B1C2A`, paper `#F4EFE5`, saffron `#B96832`, willow `#536D57`, chalk `#FFFDF8`, madder `#A33B2E`), typography (Source Serif 4 + Public Sans + Noto Nastaliq Urdu), components, layout patterns, and screen compositions are documented in `design/UX-BLUEPRINT.md`. V15 adds richer page composition, the `q-head5`/`q-row5` five-column result queue, secondary evidence panels, facts-ledger/record-card primitives, and improved applicant-shell mobile behavior. UI implementation must follow V15; backend cutover work must not change the database, domain services, or backend logic to accommodate visual changes — only UI components, CSS modules, layouts, and page rendering should be updated. Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.
+> **V15 design system (8 September 2026):** The canonical UI design prototype is `V15 Faiz E Aam School Platform.html` (repository root; V14 remains as the historical reference). All design tokens (ink `#0B1C2A`, paper `#F4EFE5`, saffron `#B96832`, willow `#536D57`, chalk `#FFFDF8`, madder `#A33B2E`), typography (Source Serif 4 + Public Sans + Noto Nastaliq Urdu), components, layout patterns, and screen compositions are documented in `design/UX-BLUEPRINT.md`. V15 adds richer page composition, the `q-head5`/`q-row5` five-column result queue, secondary evidence panels, facts-ledger/record-card primitives, and improved applicant-shell mobile behavior. UI implementation must follow V15; backend cutover work must not change the database, domain services, or backend logic to accommodate visual changes — only UI components, CSS modules, layouts, and page rendering should be updated. Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.
 
 ## 1. Summary and locked decisions
 

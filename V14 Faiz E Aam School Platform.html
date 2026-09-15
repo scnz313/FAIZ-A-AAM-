@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Faiz Aam Secondary School, Bandipora · Platform Redesign</title>
-<meta name="description" content="Faiz Aam Secondary School, Bandipora: public website, admissions, guardian portal, administrator and principal workspaces. Design prototype with illustrative data." />
+<title>Faiz E Aam Secondary School, Bandipora · Platform Redesign</title>
+<meta name="description" content="Faiz E Aam Secondary School, Bandipora: public website, admissions, guardian portal, administrator and principal workspaces. Design prototype with illustrative data." />
 <!--
   REDESIGN RECORD · Full Redesign (V12)
   Design read: trust-first institutional school service platform for families and staff in Bandipora, Kashmir,
@@ -27,7 +27,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Public+Sans:ital,wght@0,300..800;1,300..800&family=Noto+Nastaliq+Urdu:wght@400..700&display=swap" rel="stylesheet" />
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet" />
 <style>
-/* ═══ Faiz Aam Secondary School, Bandipora · design system V12 ═══ */
+/* ═══ Faiz E Aam Secondary School, Bandipora · design system V12 ═══ */
 :root{
   --paper:#F4EFE5; --paper-deep:#ECE4D4; --paper-edge:#E4DAC6;
   --chalk:#FFFDF8; --chalk-2:#FBF6EC;
@@ -598,7 +598,7 @@ const Emblem=({s=46,mono,paper})=>{
   const gold = mono ? (paper?"#F4EFE5":"#0B1C2A") : "#C9A227";
   const cream = mono ? (paper?"#0B1C2A":"#F4EFE5") : "#FAF5EA";
   return (
-  <svg className="emblem" width={s} height={s} viewBox="0 0 400 400" role="img" aria-label="Faiz Aam Secondary School emblem">
+  <svg className="emblem" width={s} height={s} viewBox="0 0 400 400" role="img" aria-label="Faiz E Aam Secondary School emblem">
     <path d="M375.5 272.7 L272.7 375.5 L127.3 375.5 L24.5 272.7 L24.5 127.3 L127.3 24.5 L272.7 24.5 L375.5 127.3 Z" fill={ink}/>
     <g transform="translate(200 200) scale(0.93) translate(-200 -200)">
       <path d="M375.5 272.7 L272.7 375.5 L127.3 375.5 L24.5 272.7 L24.5 127.3 L127.3 24.5 L272.7 24.5 L375.5 127.3 Z" fill="none" stroke={gold} strokeWidth="5"/>
@@ -640,7 +640,7 @@ const Contours=()=>(
   </svg>);
 
 /* ── data (illustrative) ───────────────────────── */
-const SCHOOL={name:"Faiz Aam Secondary School",short:"Faiz Aam",place:"Bandipora, Kashmir",
+const SCHOOL={name:"Faiz E Aam Secondary School",short:"Faiz E Aam",place:"Bandipora, Kashmir",
   unit:"A Unit of Darul Uloom Raheemiyyah",mottoU:"رَبِّ زِدْنِي عِلْمًا",mottoT:"O Allah! Increase me in knowledge",
   urdu:"فیضِ عام",addr:"Astanpora, Bandipora, Jammu & Kashmir 193502",phone:"+91 (0)1957 2XX XXX",email:"office@faizaam-school.example",
   hours:"Mon to Sat, 9:00 am to 3:30 pm"};
@@ -841,9 +841,9 @@ const PublicShell=({route,children,go})=>{
         <a href="#" onClick={e=>{e.preventDefault();go("identity","sign-in");}}><Ic n="login" s={15}/>Sign in</a>
       </span></div></div>
     <header className="site-head"><div className="wrap">
-      <a href="#" className="brand-lock" onClick={e=>{e.preventDefault();go("public","home");}} aria-label="Faiz Aam Secondary School, home">
+      <a href="#" className="brand-lock" onClick={e=>{e.preventDefault();go("public","home");}} aria-label="Faiz E Aam Secondary School, home">
         <Emblem s={46}/>
-        <span><span className="brand-name">Faiz Aam Secondary School</span>
+        <span><span className="brand-name">Faiz E Aam Secondary School</span>
         <span className="brand-sub">Bandipora, Kashmir · {SCHOOL.urdu}</span></span></a>
       <nav className="main-nav" aria-label="Primary">
         {PUB_NAV.map(([r,t])=>(<a key={r} href="#" className={cx(route===r&&"on")} onClick={e=>{e.preventDefault();go("public",r);}}>{t}</a>))}</nav>
@@ -865,7 +865,7 @@ const PublicShell=({route,children,go})=>{
     <footer className="site-foot"><div className="wrap">
       <div className="foot-grid">
         <div><div className="foot-brand"><Emblem s={52} mono paper/>
-          <div><div className="brand-name" style={{color:"#F4EFE5"}}>Faiz Aam Secondary School</div>
+          <div><div className="brand-name" style={{color:"#F4EFE5"}}>Faiz E Aam Secondary School</div>
           <div className="urdu-line" style={{marginTop:6}}>{SCHOOL.urdu} · {SCHOOL.mottoU}</div>
           <p className="small" style={{color:"#8FA0AC",marginTop:8,maxWidth:280}}>{SCHOOL.mottoT}. {SCHOOL.unit}, {SCHOOL.addr}</p></div></div></div>
         <div><h4>School</h4>
@@ -943,7 +943,7 @@ const Home=({go})=>(
         <div>
           <div className="kicker reveal d1">Admissions 2027-28 · open this November</div>
           <h1 className="reveal d2">Rooted in Bandipora, <em>measured</em> in every lesson.</h1>
-          <p className="lede reveal d3">Faiz Aam Secondary School is a co-educational day school for Grades 1 to 12, where steady teaching, honest assessment and quiet order carry each student from the first day to the final year.</p>
+          <p className="lede reveal d3">Faiz E Aam Secondary School is a co-educational day school for Grades 1 to 12, where steady teaching, honest assessment and quiet order carry each student from the first day to the final year.</p>
           <div className="hero-ctas reveal d4">
             <Btn v="accent" s="lg" ic="north_east" onClick={()=>go("public","admissions")}>Begin an admission application</Btn>
             <Btn v="ghost" s="lg" onClick={()=>go("public","admissions")}>How admissions work</Btn></div>
@@ -1058,7 +1058,7 @@ const PageHero=({kicker,title,lede})=>(
 const About=()=>(
   <article>
     <PageHero kicker="About" title="A school kept like a record: honestly, and in order."
-      lede="Faiz Aam Secondary School is a unit of Darul Uloom Raheemiyyah, Bandipora. This page states what the school is, how it teaches, and what remains to be confirmed."/>
+      lede="Faiz E Aam Secondary School is a unit of Darul Uloom Raheemiyyah, Bandipora. This page states what the school is, how it teaches, and what remains to be confirmed."/>
     <section className="sec"><div className="wrap-n stack" style={{gap:40}}>
       <div>
         <h2 style={{fontSize:"1.5rem",marginBottom:14}}>History</h2>
@@ -1275,7 +1275,7 @@ const Disclosure=()=>(
         <caption>Mandatory disclosure</caption>
         <thead><tr><th>Item</th><th>Detail</th><th>Status</th></tr></thead>
         <tbody>
-          {[["School name","Faiz Aam Secondary School, Bandipora","Confirmed"],
+          {[["School name","Faiz E Aam Secondary School, Bandipora","Confirmed"],
             ["Management",SCHOOL.unit,"Confirmed"],
             ["School code","To be printed on confirmation","Pending school decision"],
             ["Board & curriculum","J&K state curriculum, English medium","Curriculum confirmed; affiliation record pending verification"],
@@ -1303,7 +1303,7 @@ const Disclosure=()=>(
   </article>);
 const Careers=({go})=>(
   <article>
-    <PageHero kicker="Careers" title="Work at Faiz Aam."
+    <PageHero kicker="Careers" title="Work at Faiz E Aam."
       lede="The school hires subject teachers and support staff through a published process. Applications are made online for a specific vacancy, and are retained per the privacy notice."/>
     <section className="sec"><div className="wrap-n">
       <h2 style={{fontSize:"1.35rem",marginBottom:4}}>Open vacancies</h2>
@@ -1421,7 +1421,7 @@ const AuthFrame=({title,sub,children,foot,go,wide})=>(
   <main id="main" style={{minHeight:"100vh",display:"grid",gridTemplateRows:"auto 1fr"}}>
     <div className="site-head"><div className="wrap" style={{minHeight:70}}>
       <a href="#" className="brand-lock" onClick={e=>{e.preventDefault();go("public","home");}}>
-        <Emblem s={40}/><span><span className="brand-name" style={{fontSize:".98rem"}}>Faiz Aam Secondary School</span>
+        <Emblem s={40}/><span><span className="brand-name" style={{fontSize:".98rem"}}>Faiz E Aam Secondary School</span>
         <span className="brand-sub">Bandipora, Kashmir</span></span></a></div></div>
     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"clamp(28px,6vh,64px) 20px 120px"}}>
       <div style={{width:"min("+(wide?"560px":"440px")+",100%)"}}>
@@ -3174,7 +3174,7 @@ const PrContent=({go})=>{
         <div className="pn-body" style={{paddingTop:14}}>
           <div className="field"><label>Hero promise</label><input className="input" defaultValue="Rooted in Bandipora, measured in every lesson."/></div>
           <div className="field"><label>Opening paragraph</label>
-            <textarea className="textarea" defaultValue={"Faiz Aam Secondary School is a co-educational day school for Grades 1 to 12, where steady teaching, honest assessment and quiet order carry each student from the first day to the final year."}/></div>
+            <textarea className="textarea" defaultValue={"Faiz E Aam Secondary School is a co-educational day school for Grades 1 to 12, where steady teaching, honest assessment and quiet order carry each student from the first day to the final year."}/></div>
           <div className="row-between" style={{flexWrap:"wrap",gap:12}}>
             <p className="tiny muted" style={{maxWidth:420}}>Drafting keeps versions separate: your edits never touch the live page. Review records who asked and who answered.</p>
             {!requested?<button className="btn btn-primary" onClick={()=>setRequested(true)}>Request review</button>
@@ -3418,7 +3418,7 @@ const ApplicantShell=({go,children})=>(
   <main id="main" style={{minHeight:"100vh"}}>
     <div className="site-head"><div className="wrap" style={{minHeight:70,gap:18}}>
       <a href="#" className="brand-lock" onClick={e=>{e.preventDefault();go("public","home");}}>
-        <Emblem s={40}/><span><span className="brand-name" style={{fontSize:".98rem"}}>Faiz Aam Secondary School</span>
+        <Emblem s={40}/><span><span className="brand-name" style={{fontSize:".98rem"}}>Faiz E Aam Secondary School</span>
         <span className="brand-sub">Bandipora, Kashmir</span></span></a>
       <span className="chip" style={{marginLeft:6}}>Applicant area</span>
       <div className="row" style={{marginLeft:"auto",gap:10}}>

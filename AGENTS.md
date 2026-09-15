@@ -1,4 +1,4 @@
-# AI Project Instructions — Faiz Aam School Platform
+# AI Project Instructions — Faiz E Aam School Platform
 
 This file applies to the entire repository. Every AI agent or developer must follow it before planning, editing, testing, or deploying this project.
 
@@ -11,7 +11,7 @@ Before making any project change, read:
 3. `plan.md` — active C0–C5 Supabase cutover order, entry conditions, exit criteria, and staging gate.
 4. `FEATURE-INTEGRATION-SPEC.md` — canonical detailed relationships, role/scope rules, active student context, cross-module synchronization, feature contracts, and required integration tests.
 5. `UI-COMPLETION-PLAN.md` — completed frontend integration reference and route-level acceptance evidence.
-6. `design/UX-BLUEPRINT.md` — visual direction, component map, and user-experience rules for relevant UI work. The canonical design prototype is **`V15 Faiz Aam School Platform.html`** (in the repository root); all design tokens, components, layout patterns, and screen compositions are derived from that file. `V14 Faiz Aam School Platform.html` remains in the repository as the historical reference only.
+6. `design/UX-BLUEPRINT.md` — visual direction, component map, and user-experience rules for relevant UI work. The canonical design prototype is **`V15 Faiz E Aam School Platform.html`** (in the repository root); all design tokens, components, layout patterns, and screen compositions are derived from that file. `V14 Faiz E Aam School Platform.html` remains in the repository as the historical reference only.
 7. `design/RESEARCH-NOTES.md` — regulatory and implementation research when working on payments, privacy, disclosure, accessibility, authentication, or uploads.
 
 Do not begin implementation from a user prompt alone. Reconcile the request with these files first.
@@ -127,7 +127,7 @@ acceptance, and production. All new database corrections start at `000100`.
 
 ## UI guardrails
 
-- The canonical design system is **V15** (`V15 Faiz Aam School Platform.html`, repository root). All UI work must use the V15 design tokens, component classes, and layout patterns documented in `design/UX-BLUEPRINT.md` sections 2 (visual system tokens), 12.1 (component specifications), 16 (responsive breakpoints), 17 (screen catalog), and 18–20 (role matrix, nav structure, implementation priority). V15 inherits the V14 palette/typography/breakpoints and adds richer page composition, the `q-head5`/`q-row5` five-column result queue, secondary evidence panels, and improved applicant-shell mobile behavior.
+- The canonical design system is **V15** (`V15 Faiz E Aam School Platform.html`, repository root). All UI work must use the V15 design tokens, component classes, and layout patterns documented in `design/UX-BLUEPRINT.md` sections 2 (visual system tokens), 12.1 (component specifications), 16 (responsive breakpoints), 17 (screen catalog), and 18–20 (role matrix, nav structure, implementation priority). V15 inherits the V14 palette/typography/breakpoints and adds richer page composition, the `q-head5`/`q-row5` five-column result queue, secondary evidence panels, and improved applicant-shell mobile behavior.
 - **V15 design tokens (CSS custom properties):** ink `#0B1C2A`, paper `#F4EFE5`, saffron `#B96832`, willow `#536D57`, chalk `#FFFDF8`, madder `#A33B2E`, plus their soft/ink/line variants. Fonts: Source Serif 4 (serif), Public Sans (sans), Noto Nastaliq Urdu (Urdu). Radii: 4px (default), 3px (small), 999px (pill). Max widths: 1240px (public), 920px (narrow), 1160px (portal). See `design/UX-BLUEPRINT.md` §2 for the complete token table.
 - **V15 components:** buttons (primary/accent/ghost/quiet/danger), status badges (5 semantic tones with one dot indicator), chips, ledger tables, panels (zero outer padding — `.pn-head`/`.pn-body`), forms (inputs/selects/textareas/OTP/validation), layout primitives (wrap/stack/row/grid/g32/g34/g23/kv/leader/facts-ledger/record-card), public components (ribbon/header/hero/sections/service-rail/notice-strip/story-grid/stages/life-index/dates-ledger/cta-band/footer), portal shell (sidebar/ctx-bar/page/page-head), workflow components (queue/q-row/q-head5/q-row5/timeline/wizard/modal/callouts/upload-slots/payment-states), and brand SVG motifs (eight-point emblem/star/contours/stamp). See `design/UX-BLUEPRINT.md` §12.1 for exact specifications.
 - **V15 responsive breakpoints:** 1920px (wider wrap), 1180px (nav shrinks), 1120px (burger), 1023px (sidebar drawer, grids collapse), 719px (tables scroll, forms collapse, `q-row`/`q-row5` grid-areas), 479px (brand shrinks, full-width CTAs). See `design/UX-BLUEPRINT.md` §16. Where V15's own reflow is weak, improve beyond the prototype (owner decision).

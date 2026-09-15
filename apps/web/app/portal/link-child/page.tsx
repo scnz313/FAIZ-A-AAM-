@@ -9,7 +9,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Link another child",
   description:
-    "Request to link another child to your Faiz Aam family portal account. The school office verifies the request.",
+    "Request to link another child to your Faiz E Aam family portal account. The school office verifies the request.",
 };
 
 /**

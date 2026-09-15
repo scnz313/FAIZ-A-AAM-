@@ -47,7 +47,7 @@ export function ReceiptPanel({ receipt, invoice, studentName, studentClass, live
       <div className={`faas-receipt-sheet ${styles.sheet}`}>
         <header className={styles.sheetHead}>
           <div>
-            <p className={styles.schoolName}>Faiz Aam Secondary School</p>
+            <p className={styles.schoolName}>Faiz E Aam Secondary School</p>
             <p className={styles.sheetLabel}>Fee receipt</p>
           </div>
           <span className={`num ${styles.sheetRef}`}>{receipt.ref}</span>

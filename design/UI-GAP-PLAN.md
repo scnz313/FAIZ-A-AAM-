@@ -1,4 +1,4 @@
-# UI Gap Plan — Faiz Aam School Platform Frontend
+# UI Gap Plan — Faiz E Aam School Platform Frontend
 
 > Archived historical record. Superseded by [`../UI-COMPLETION-PLAN.md`](../UI-COMPLETION-PLAN.md), [`../FEATURE-INTEGRATION-SPEC.md`](../FEATURE-INTEGRATION-SPEC.md), and [`../PROJECT-STATUS.md`](../PROJECT-STATUS.md). This file records the narrower 3 August gap pass only and must not be used for current scope, status, or implementation decisions.
 

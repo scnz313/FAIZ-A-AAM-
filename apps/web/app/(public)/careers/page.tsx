@@ -15,7 +15,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Careers",
   description:
-    "Vacancies at Faiz Aam Secondary School, Bandipora · open positions, how we hire, and what to expect from an application.",
+    "Vacancies at Faiz E Aam Secondary School, Bandipora · open positions, how we hire, and what to expect from an application.",
   alternates: { canonical: "/careers" },
 };
 

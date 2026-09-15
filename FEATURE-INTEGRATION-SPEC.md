@@ -4,9 +4,9 @@ Version: 1.3
 Date: 6 September 2026
 Status: Approved target contract; the current Supabase cutover delta is recorded in `PROJECT-STATUS.md`.
 
-> **V15 design system (supersedes V14, 8 September 2026):** The canonical UI design prototype is `V15 Faiz Aam School Platform.html` (repository root; V14 remains as the historical reference). All UI components, layout patterns, design tokens, and screen compositions must follow the V15 specifications in `design/UX-BLUEPRINT.md` (§2 tokens, §12.1 components, §16 responsive, §17 screen catalog, §18–20 role matrix/nav/implementation). Feature integration and relationship behavior is unchanged — only the visual presentation layer adopts V15. Copy V15 layout only, never its illustrative data, counts, actor names, or client-only authorization behavior.
+> **V15 design system (supersedes V14, 8 September 2026):** The canonical UI design prototype is `V15 Faiz E Aam School Platform.html` (repository root; V14 remains as the historical reference). All UI components, layout patterns, design tokens, and screen compositions must follow the V15 specifications in `design/UX-BLUEPRINT.md` (§2 tokens, §12.1 components, §16 responsive, §17 screen catalog, §18–20 role matrix/nav/implementation). Feature integration and relationship behavior is unchanged — only the visual presentation layer adopts V15. Copy V15 layout only, never its illustrative data, counts, actor names, or client-only authorization behavior.
 
-This is the detailed product contract for how Faiz Aam School users, records, features, and UI states connect. It expands `PROJECT-BLUEPRINT.md`; it never overrides the blueprint. Every agent must read this file before changing a core feature, portal context, service contract, data model, or staff workflow.
+This is the detailed product contract for how Faiz E Aam School users, records, features, and UI states connect. It expands `PROJECT-BLUEPRINT.md`; it never overrides the blueprint. Every agent must read this file before changing a core feature, portal context, service contract, data model, or staff workflow.
 
 The purpose is simple: the platform must feel like one school service, not a collection of unrelated screens. A change made in the owning module must appear everywhere that is allowed to consume it, without duplicating business rules or exposing another person’s data.
 

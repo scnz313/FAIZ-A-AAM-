@@ -32,7 +32,7 @@ export function PublicFooter() {
           <div className="public-footer-brand">
             <Crest size="lg" tone="chalk" />
             <div className="public-footer-brand-copy">
-              <p className="public-footer-name">Faiz Aam Secondary School</p>
+              <p className="public-footer-name">Faiz E Aam Secondary School</p>
               <p className="urdu public-footer-urdu" dir="rtl" lang="ur">
                 فیض عام · رَبِّ زِدْنِي عِلْمًا
               </p>
@@ -48,7 +48,7 @@ export function PublicFooter() {
         </div>
 
         <div className="public-footer-bottom">
-          <span>© 2026 Faiz Aam Secondary School, Bandipora. A Unit of Darul Uloom Raheemiyyah.</span>
+          <span>© 2026 Faiz E Aam Secondary School, Bandipora. A Unit of Darul Uloom Raheemiyyah.</span>
           <Link href="/policies/fees-and-refunds" prefetch={false}>Policies &amp; fees</Link>
         </div>
       </div>

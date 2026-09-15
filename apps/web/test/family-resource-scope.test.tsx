@@ -224,7 +224,7 @@ describe("receipt page access scope", () => {
   it("renders the active child's receipt normally with no access panel", async () => {
     renderReceipt("RC-2026-0102");
 
-    await waitFor(() => expect(screen.getByText("Faiz Aam Secondary School")).toBeTruthy(), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByText("Faiz E Aam Secondary School")).toBeTruthy(), { timeout: 3000 });
     await waitFor(() => expect(screen.queryByText("Checking access…")).toBeNull());
 
     expect(screen.getByText("₹9,200")).toBeTruthy();
@@ -274,7 +274,7 @@ describe("receipt page access scope", () => {
 
     // No record details: no sheet, no reference, no amounts, no items, no
     // print action, no switch control.
-    expect(screen.queryByText("Faiz Aam Secondary School")).toBeNull();
+    expect(screen.queryByText("Faiz E Aam Secondary School")).toBeNull();
     expect(screen.queryByText(/RC-2026-0999/)).toBeNull();
     expect(screen.queryByText("₹6,000")).toBeNull();
     expect(screen.queryByText("Tuition fee")).toBeNull();
@@ -287,7 +287,7 @@ describe("receipt page access scope", () => {
     sessionSet(FINANCE_SESSION_KEYS.receipts, [ADMISSION_RECEIPT]);
     renderReceipt("RC-2026-0888");
 
-    await waitFor(() => expect(screen.getByText("Faiz Aam Secondary School")).toBeTruthy(), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByText("Faiz E Aam Secondary School")).toBeTruthy(), { timeout: 3000 });
     await waitFor(() => expect(screen.queryByText("Checking access…")).toBeNull());
 
     expect(screen.getByText("₹6,000")).toBeTruthy();

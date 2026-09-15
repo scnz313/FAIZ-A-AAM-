@@ -252,23 +252,23 @@ otp_expiry = 900
 # content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.confirmation]
-subject = "Confirm your Faiz Aam email"
+subject = "Confirm your Faiz E Aam email"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.invite]
-subject = "Your Faiz Aam account invitation"
+subject = "Your Faiz E Aam account invitation"
 content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.magic_link]
-subject = "Your Faiz Aam sign-in code"
+subject = "Your Faiz E Aam sign-in code"
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.recovery]
-subject = "Reset your Faiz Aam password"
+subject = "Reset your Faiz E Aam password"
 content_path = "./supabase/templates/recovery.html"
 
 [auth.email.template.email_change]
-subject = "Confirm your Faiz Aam email change"
+subject = "Confirm your Faiz E Aam email change"
 content_path = "./supabase/templates/email_change.html"
 
 # Uncomment to customize notification email template

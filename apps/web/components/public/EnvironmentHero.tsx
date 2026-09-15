@@ -19,7 +19,7 @@ export default function EnvironmentHero() {
             school day can be adjusted to what children actually breathe and feel.
           </p>
           <p className={`folio ${styles.folio}`}>
-            CAMPUS ENVIRONMENT · FAIZ AAM SECONDARY SCHOOL
+            CAMPUS ENVIRONMENT · FAIZ E AAM SECONDARY SCHOOL
           </p>
         </div>
         <ChinarBranch ariaHidden className={styles.branch} />

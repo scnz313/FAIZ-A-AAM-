@@ -43,7 +43,7 @@ function shell(input: {
   return `<html lang="en"><body style="margin:0;background:${PAPER};font-family:Georgia,'Times New Roman',serif">
 <table role="presentation" width="100%" cellPadding="0" cellSpacing="0" style="background:${PAPER};padding:32px 0"><tbody><tr><td align="center">
 <table role="presentation" width="560" cellPadding="0" cellSpacing="0"><tbody>
-<tr><td style="background:${INK};padding:20px 28px;border-radius:10px 10px 0 0"><span style="color:#ffffff;font-size:19px;letter-spacing:0.02em">Faiz Aam Secondary School</span></td></tr>
+<tr><td style="background:${INK};padding:20px 28px;border-radius:10px 10px 0 0"><span style="color:#ffffff;font-size:19px;letter-spacing:0.02em">Faiz E Aam Secondary School</span></td></tr>
 <tr><td style="background:#ffffff;padding:32px 28px">
 <p style="margin:0;color:${SAFFRON};font-size:12px;letter-spacing:0.14em;text-transform:uppercase">${escapeHtml(input.eyebrow)}</p>
 <h1 style="margin:10px 0 18px;color:${INK};font-size:24px;line-height:1.25">${escapeHtml(input.title)}</h1>

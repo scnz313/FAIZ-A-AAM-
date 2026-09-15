@@ -10,7 +10,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Academics",
   description:
-    "Learning stages, the examination cycle, and the school day at Faiz Aam Secondary School, Bandipora.",
+    "Learning stages, the examination cycle, and the school day at Faiz E Aam Secondary School, Bandipora.",
   alternates: { canonical: "/academics" },
 };
 

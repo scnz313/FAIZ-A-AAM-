@@ -1,10 +1,10 @@
-# Project Status — Faiz Aam School Platform
+# Project Status — Faiz E Aam School Platform
 
 ## Authoritative recovery checkpoint — 8 September 2026
 
 **Overall state: IN PROGRESS.** The active execution order is exclusively the opening UI-first recovery section of plan.md. All status/verification claims below this checkpoint are historical and must not override it, even where old headings say "Current", "Next phase", or "VERIFIED". No current remote ledger, provider readiness, or deployment is asserted by this checkpoint.
 
-**V15 supersedes V14 (owner decision, 8 September 2026).** The canonical design prototype is `V15 Faiz Aam School Platform.html` (repository root; V14 remains as the historical reference). Approved rules: (1) V15 is the visual source of truth across code, tests, and documentation; (2) where V15's own responsive/accessibility behavior is weak, the application fixes beyond the prototype; (3) `/environment` and `/staff/facility/*` stay deferred outside UI acceptance; (4) `/administrator/guardians` is an honest planned-workspace placeholder only; (5) copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior. The V15 prototype itself contains a known illustrative admission-detail record mismatch and queue-count inconsistencies; its data is not a specification.
+**V15 supersedes V14 (owner decision, 8 September 2026).** The canonical design prototype is `V15 Faiz E Aam School Platform.html` (repository root; V14 remains as the historical reference). Approved rules: (1) V15 is the visual source of truth across code, tests, and documentation; (2) where V15's own responsive/accessibility behavior is weak, the application fixes beyond the prototype; (3) `/environment` and `/staff/facility/*` stay deferred outside UI acceptance; (4) `/administrator/guardians` is an honest planned-workspace placeholder only; (5) copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior. The V15 prototype itself contains a known illustrative admission-detail record mismatch and queue-count inconsistencies; its data is not a specification.
 
 Read-only baseline: HEAD `fecfdcf`; 264 tracked paths changed at inspection, plus untracked prototype, UI and migration files. Existing changes span presentation, services, database repairs, tests and documentation. V15 fragments already present in the tree: the About two-column layout, admission key-dates ledger, notice-detail sidebar, `q-head5`/`q-row5` CSS, facts-ledger and record-card primitives. Most V15 composition, shells, wizard, queue, and evidence-panel changes remain unimplemented. These static observations do not establish visual acceptance. There are 78 actual `page.tsx` files; prototype screen keys are not necessarily application URLs.
 
@@ -191,7 +191,7 @@ Release state: staging backend migrated (ledger `000001–000060` live on remote
 
 ### V14 design system adoption (6 September 2026) — SUPERSEDED by V15 (8 September 2026)
 
-The canonical UI design prototype was **`V14 Faiz Aam School Platform.html`** from 6 September until 8 September 2026, when the owner approved **V15** as canonical. The V15 adoption note and the current route-level V15 checklist are in the authoritative checkpoint above. The historical V14 documentation updates were:
+The canonical UI design prototype was **`V14 Faiz E Aam School Platform.html`** from 6 September until 8 September 2026, when the owner approved **V15** as canonical. The V15 adoption note and the current route-level V15 checklist are in the authoritative checkpoint above. The historical V14 documentation updates were:
 
 - `design/UX-BLUEPRINT.md` — comprehensive V14 design system reference added: colour tokens (§2), component specifications (§12.1), responsive breakpoints (§16), screen catalog for all 67 screens (§17), role/route matrix (§18), navigation structure (§19), and implementation priority (§20).
 - `AGENTS.md` — UI guardrails section updated with V14 token summary, component catalog reference, and responsive breakpoint reference.

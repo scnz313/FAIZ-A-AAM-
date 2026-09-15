@@ -5,7 +5,7 @@
 const { attachErrorCapture } = require("./helpers.cjs");
 
 const ROUTES = [
-  { path: "/", expect: ["Faiz Aam", "Admissions"] },
+  { path: "/", expect: ["Faiz E Aam", "Admissions"] },
   { path: "/about", expect: ["About"] },
   { path: "/academics", expect: ["Academics"] },
   { path: "/admissions", expect: ["Admissions"] },

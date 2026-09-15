@@ -383,7 +383,7 @@ export function StaffShell({
         </nav>
 
         <div className="side-foot">
-          <span>Faiz Aam · Bandipora</span>
+          <span>Faiz E Aam · Bandipora</span>
           <button
             type="button"
             className="btn btn-quiet btn-sm no-print"
@@ -419,9 +419,9 @@ export function StaffShell({
             >
               <span className="msym" aria-hidden="true">menu</span>
             </button>
-            <Link className="cb-school" href={homeHref} prefetch={false} aria-label="Faiz Aam Secondary School · Staff home">
+            <Link className="cb-school" href={homeHref} prefetch={false} aria-label="Faiz E Aam Secondary School · Staff home">
               <Crest size="xs" tone="chalk" />
-              <span className="hide-s">Faiz Aam Secondary School</span>
+              <span className="hide-s">Faiz E Aam Secondary School</span>
             </Link>
             <div className="ctx-child">
               <div className="cc-meta hide-s">

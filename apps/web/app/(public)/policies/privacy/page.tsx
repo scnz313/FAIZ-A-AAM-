@@ -9,7 +9,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Faiz Aam Secondary School collects, uses, and retains student and family information · pending school confirmation.",
+    "How Faiz E Aam Secondary School collects, uses, and retains student and family information · pending school confirmation.",
   alternates: { canonical: "/policies/privacy" },
 };
 

@@ -14,7 +14,7 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Admissions",
-  description: "How to apply to Faiz Aam Secondary School: the admission process, eligibility, documents, and key dates.",
+  description: "How to apply to Faiz E Aam Secondary School: the admission process, eligibility, documents, and key dates.",
   alternates: { canonical: "/admissions" },
 };
 

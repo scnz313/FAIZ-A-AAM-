@@ -1,8 +1,8 @@
-# Faiz Aam School Platform — Complete Feature Prompt
+# Faiz E Aam School Platform — Complete Feature Prompt
 
 ## Overview
 
-Build a modular-monolith school management platform for a fictional school ("Faiz Aam"). One Next.js App Router application serves public pages, applicant journeys, a guardian/student portal, and staff workspaces — all sharing one PostgreSQL database, one design system, and one account boundary. The platform covers admissions, careers, fees, payments, results, timetables, content, notifications, documents, support, audit, and an optional facility/IoT demonstrator.
+Build a modular-monolith school management platform for a fictional school ("Faiz E Aam"). One Next.js App Router application serves public pages, applicant journeys, a guardian/student portal, and staff workspaces — all sharing one PostgreSQL database, one design system, and one account boundary. The platform covers admissions, careers, fees, payments, results, timetables, content, notifications, documents, support, audit, and an optional facility/IoT demonstrator.
 
 ---
 

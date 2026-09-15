@@ -30,7 +30,7 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   description:
-    "Admissions, school life, notices, and upcoming dates for Faiz Aam Secondary School, Bandipora.",
+    "Admissions, school life, notices, and upcoming dates for Faiz E Aam Secondary School, Bandipora.",
   alternates: { canonical: "/" },
 };
 

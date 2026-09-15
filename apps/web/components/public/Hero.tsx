@@ -7,7 +7,7 @@ import styles from "./Hero.module.css";
 
 const FALLBACK_KICKER = "Admissions 2027-28 · open this November";
 const FALLBACK_LEDE =
-  "Faiz Aam Secondary School is a co-educational day school for Grades 1 to 12, where steady teaching, honest assessment and quiet order carry each student from the first day to the final year.";
+  "Faiz E Aam Secondary School is a co-educational day school for Grades 1 to 12, where steady teaching, honest assessment and quiet order carry each student from the first day to the final year.";
 const FALLBACK_PRIMARY_CTA = "Begin an admission application";
 const FALLBACK_SECONDARY_CTA = "How admissions work";
 const FALLBACK_NOTE =
@@ -36,7 +36,7 @@ export default function Hero({ copy }: { copy?: HeroFields | null } = {}) {
   const note = copy?.note ?? FALLBACK_NOTE;
 
   return (
-    <section className={styles.hero} aria-label="Welcome to Faiz Aam Secondary School">
+    <section className={styles.hero} aria-label="Welcome to Faiz E Aam Secondary School">
       <div className={styles.heroBg} aria-hidden="true">
         <svg viewBox="0 0 1440 640" preserveAspectRatio="xMidYMid slice" className={styles.contours}>
           <g fill="none" stroke="var(--ink)" strokeWidth="1">

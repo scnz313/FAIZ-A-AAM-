@@ -16,10 +16,10 @@ export function ApplicantShell({ children }: { children: ReactNode }) {
     <div className={styles.shell}>
       <header className={styles.head}>
         <div className={styles.headWrap}>
-          <Link href="/" className={styles.brandLock} aria-label="Faiz Aam Secondary School, home">
+          <Link href="/" className={styles.brandLock} aria-label="Faiz E Aam Secondary School, home">
             <Crest size="sm" />
             <span>
-              <span className={styles.brandName}>Faiz Aam Secondary School</span>
+              <span className={styles.brandName}>Faiz E Aam Secondary School</span>
               <span className={styles.brandSub}>Bandipora, Kashmir</span>
             </span>
           </Link>

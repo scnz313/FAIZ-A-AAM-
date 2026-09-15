@@ -8,7 +8,7 @@ import { dataAdapter } from "@/lib/supabase/env";
 export const metadata: Metadata = {
   title: "Verify sign-in",
   description:
-    "Enter the 6-digit verification code to finish signing in to the Faiz Aam family portal. UI demo — the code is shown on screen.",
+    "Enter the 6-digit verification code to finish signing in to the Faiz E Aam family portal. UI demo — the code is shown on screen.",
 };
 
 /**

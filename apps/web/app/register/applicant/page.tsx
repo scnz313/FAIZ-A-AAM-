@@ -8,7 +8,7 @@ import { dataAdapter } from "@/lib/supabase/env";
 
 export const metadata: Metadata = {
   title: "Create applicant account",
-  description: "Create an applicant account and verify your email for a Faiz Aam admission application.",
+  description: "Create an applicant account and verify your email for a Faiz E Aam admission application.",
   robots: { index: false, follow: false },
 };
 

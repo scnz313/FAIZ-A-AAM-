@@ -130,7 +130,7 @@ export async function generateReceiptPdf(
       : [{ label: "Fee payment", amountPaise: record.payments.amount_paise }];
 
   const bytes = renderReceiptPdf({
-    schoolName: "Faiz Aam School",
+    schoolName: "Faiz E Aam School",
     schoolContact: "Fee receipt - official record",
     receiptRef: record.reference,
     issuedAtIso: record.issued_at,
@@ -267,7 +267,7 @@ export async function generateReportCardPdf(
 ): Promise<GeneratedPdf> {
   const record = await resolveReportCard(admin, releaseRef);
   const bytes = renderReportCardPdf({
-    schoolName: "Faiz Aam School",
+    schoolName: "Faiz E Aam School",
     studentRef: record.student_reference,
     studentName: record.student_name,
     className: record.class_name,

@@ -57,7 +57,7 @@ const { chromium } = require("playwright");
       const preview = document.querySelector("#statement-preview");
       if (!preview) return { opens: false };
       const text = preview.innerText;
-      const hasSchool = text.includes("Faiz Aam");
+      const hasSchool = text.includes("Faiz E Aam");
       const hasChild = text.includes("mshzzlab") || text.includes("Integration");
       const hasAmount = /₹/.test(text);
       const hasTable = preview.querySelectorAll("table").length;

@@ -1,10 +1,10 @@
-# Faiz Aam School Platform — Canonical Project Blueprint
+# Faiz E Aam School Platform — Canonical Project Blueprint
 
 Version: 1.3
 Date: 24 August 2026
 Status: Approved product baseline; local implementation is provider-ready, while staging verification and school-specific decisions remain in progress.
 
-This is the canonical product and engineering contract for the Faiz Aam School website and portal. It defines what must be built, how each feature behaves, how modules integrate, and what “done” means. Future AI agents and developers must read this file before changing the project.
+This is the canonical product and engineering contract for the Faiz E Aam School website and portal. It defines what must be built, how each feature behaves, how modules integrate, and what “done” means. Future AI agents and developers must read this file before changing the project.
 
 Supporting documents:
 
@@ -13,7 +13,7 @@ Supporting documents:
 - `plan.md` — active C0–C5 Supabase cutover order, gates, and provider handoff sequence.
 - `FEATURE-INTEGRATION-SPEC.md` — detailed user relationships, shared contexts, feature connections, synchronization, and integration tests.
 - `UI-COMPLETION-PLAN.md` — completed frontend reference and route-level acceptance evidence.
-- `design/UX-BLUEPRINT.md` — **canonical V15 design system**: colour tokens, typography, component specifications (§12.1), responsive breakpoints (§16), screen catalog (§17), role/route matrix (§18), and implementation priority (§20). The design prototype is `V15 Faiz Aam School Platform.html` (repository root); `V14` remains as the historical reference.
+- `design/UX-BLUEPRINT.md` — **canonical V15 design system**: colour tokens, typography, component specifications (§12.1), responsive breakpoints (§16), screen catalog (§17), role/route matrix (§18), and implementation priority (§20). The design prototype is `V15 Faiz E Aam School Platform.html` (repository root); `V14` remains as the historical reference.
 - `design/RESEARCH-NOTES.md` — research and primary implementation sources.
 
 ---
@@ -1382,7 +1382,7 @@ Before production, school leadership/legal/finance owners must validate:
 
 ### 11.1 Visual direction (V15 canonical)
 
-Follow `design/UX-BLUEPRINT.md` and the V15 prototype (`V15 Faiz Aam School Platform.html`, repository root; V14 is retained as the historical reference). V15 keeps the V14 palette, typography, radii, and breakpoints while adding richer page composition, the five-column result queue (`q-head5`/`q-row5`), secondary evidence panels, and improved applicant-shell mobile behavior. **Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.** Where V15's own responsive or accessibility behavior is weak, the application fixes beyond the prototype (owner decision, 8 September 2026):
+Follow `design/UX-BLUEPRINT.md` and the V15 prototype (`V15 Faiz E Aam School Platform.html`, repository root; V14 is retained as the historical reference). V15 keeps the V14 palette, typography, radii, and breakpoints while adding richer page composition, the five-column result queue (`q-head5`/`q-row5`), secondary evidence panels, and improved applicant-shell mobile behavior. **Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.** Where V15's own responsive or accessibility behavior is weak, the application fixes beyond the prototype (owner decision, 8 September 2026):
 
 - **Design tokens:** ink `#0B1C2A`, paper `#F4EFE5`, saffron `#B96832`, willow `#536D57`, chalk `#FFFDF8`, madder `#A33B2E`, plus soft/ink/line variants. See `UX-BLUEPRINT.md` §2 for the complete token table.
 - **Typography:** Source Serif 4 (editorial serif) + Public Sans (legible sans) + Noto Nastaliq Urdu (Urdu strings). Material Symbols Rounded for icons.

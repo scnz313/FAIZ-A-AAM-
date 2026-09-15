@@ -16,7 +16,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "School Life",
   description:
-    "Sports, arts, service, assemblies, trips, and facilities at Faiz Aam Secondary School, Bandipora.",
+    "Sports, arts, service, assemblies, trips, and facilities at Faiz E Aam Secondary School, Bandipora.",
   alternates: { canonical: "/school-life" },
 };
 

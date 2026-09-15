@@ -1,4 +1,4 @@
-# Backend Handoff Matrix — Faiz Aam School Platform
+# Backend Handoff Matrix — Faiz E Aam School Platform
 
 Serves the completed frontend/local-backend handoff and the active `plan.md` C5
 staging gate: every service operation the UI performs is listed with its owning

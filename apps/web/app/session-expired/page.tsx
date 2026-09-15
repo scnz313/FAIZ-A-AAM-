@@ -6,7 +6,7 @@ import { dataAdapter } from "@/lib/supabase/env";
 
 export const metadata: Metadata = {
   title: "Session expired",
-  description: "Your Faiz Aam session ended after inactivity. Sign in again to continue.",
+  description: "Your Faiz E Aam session ended after inactivity. Sign in again to continue.",
 };
 
 /**

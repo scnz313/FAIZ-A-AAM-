@@ -2,7 +2,7 @@
   "name": "fass-platform",
   "private": true,
   "version": "0.1.0",
-  "description": "Faiz Aam School Platform — modular monolith (Next.js web app + shared contracts). Public site, applicant journeys, family portal, staff workspaces, and the Supabase backend foundation (plan.md B0–B8).",
+  "description": "Faiz E Aam School Platform — modular monolith (Next.js web app + shared contracts). Public site, applicant journeys, family portal, staff workspaces, and the Supabase backend foundation (plan.md B0–B8).",
   "workspaces": [
     "apps/web",
     "packages/*"

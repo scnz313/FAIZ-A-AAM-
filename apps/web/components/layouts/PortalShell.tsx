@@ -282,7 +282,7 @@ export function PortalShell({
         </nav>
 
         <div className="side-foot">
-          <span>Faiz Aam · Bandipora</span>
+          <span>Faiz E Aam · Bandipora</span>
           <button
             type="button"
             className="btn btn-quiet btn-sm no-print"
@@ -318,9 +318,9 @@ export function PortalShell({
             >
               <span className="msym" aria-hidden="true">menu</span>
             </button>
-            <Link className="cb-school" href="/portal" prefetch={false} aria-label="Faiz Aam Secondary School · Portal home">
+            <Link className="cb-school" href="/portal" prefetch={false} aria-label="Faiz E Aam Secondary School · Portal home">
               <Crest size="xs" tone="chalk" />
-              <span className="hide-s">Faiz Aam Secondary School</span>
+              <span className="hide-s">Faiz E Aam Secondary School</span>
             </Link>
 
             {status === "ready" && activeStudent ? (

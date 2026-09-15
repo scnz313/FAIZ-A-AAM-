@@ -146,10 +146,10 @@ export function PublicHeader({ tone = "light" }: PublicHeaderProps) {
       {/* V15 site-head — paper background, brand + nav + CTAs */}
       <div className="public-header-main">
         <div className="wrap">
-          <Link className="brand" href="/" prefetch={false} aria-label="Faiz Aam Secondary School home">
+          <Link className="brand" href="/" prefetch={false} aria-label="Faiz E Aam Secondary School home">
             <Crest size="md" tone={dark ? "chalk" : "ink"} />
             <span className="brand-copy">
-              <span className="brand-name">Faiz Aam Secondary School</span>
+              <span className="brand-name">Faiz E Aam Secondary School</span>
               <span className="brand-sub">Bandipora, Kashmir</span>
             </span>
           </Link>

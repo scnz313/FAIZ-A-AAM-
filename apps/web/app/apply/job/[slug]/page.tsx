@@ -15,7 +15,7 @@ type Props = {
 
 export const metadata: Metadata = {
   title: "Apply for a vacancy",
-  description: "Job application form for a vacancy at Faiz Aam Secondary School, Bandipora.",
+  description: "Job application form for a vacancy at Faiz E Aam Secondary School, Bandipora.",
   robots: { index: false, follow: false },
 };
 

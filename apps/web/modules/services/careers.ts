@@ -796,7 +796,7 @@ careersService.getVacancy = async (slug) => {
   const vacancy = vacanciesResult.value.find((candidate) => candidate.reference === slug || slugifyTitle(candidate.title) === slug);
   if (!vacancy) return null;
   const stringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  return { slug, title: vacancy.title, department: vacancy.department ?? "School office", location: typeof vacancy.terms.location === "string" ? vacancy.terms.location : "Faiz Aam School", type: vacancy.terms.type === "Non-teaching" ? "Non-teaching" : "Teaching", qualifications: stringArray(vacancy.terms.qualifications), documents: stringArray(vacancy.terms.documents), deadlineIso: typeof vacancy.terms.deadlineIso === "string" ? vacancy.terms.deadlineIso : new Date().toISOString(), status: "open", description: typeof vacancy.terms.description === "string" ? vacancy.terms.description : "Published vacancy details.", reference: vacancy.reference, version: vacancy.version };
+  return { slug, title: vacancy.title, department: vacancy.department ?? "School office", location: typeof vacancy.terms.location === "string" ? vacancy.terms.location : "Faiz E Aam School", type: vacancy.terms.type === "Non-teaching" ? "Non-teaching" : "Teaching", qualifications: stringArray(vacancy.terms.qualifications), documents: stringArray(vacancy.terms.documents), deadlineIso: typeof vacancy.terms.deadlineIso === "string" ? vacancy.terms.deadlineIso : new Date().toISOString(), status: "open", description: typeof vacancy.terms.description === "string" ? vacancy.terms.description : "Published vacancy details.", reference: vacancy.reference, version: vacancy.version };
 };
 
 careersService.listVacancies = async () => {

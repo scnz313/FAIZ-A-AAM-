@@ -13,7 +13,7 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Apply for admission",
-  description: "Start a student admission application at Faiz Aam Secondary School · what you need, and how the application works.",
+  description: "Start a student admission application at Faiz E Aam Secondary School · what you need, and how the application works.",
   alternates: { canonical: "/admissions/apply" },
 };
 

@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Faiz Aam Secondary School · Bandipora — فیض عام";
+export const alt = "Faiz E Aam Secondary School · Bandipora — فیض عام";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -23,7 +23,7 @@ export default function OpengraphImage() {
           fontFamily: "Georgia, 'Times New Roman', serif",
         }}
       >
-        <div style={{ fontSize: 72, letterSpacing: "-0.02em", color: "#FFFDF8" }}>Faiz Aam</div>
+        <div style={{ fontSize: 72, letterSpacing: "-0.02em", color: "#FFFDF8" }}>Faiz E Aam</div>
         <div dir="rtl" lang="ur" style={{ fontSize: 40, color: "#FFFDF8" }}>
           فیض عام
         </div>

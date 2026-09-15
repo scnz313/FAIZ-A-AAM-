@@ -10,7 +10,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "What Faiz Aam Secondary School is, how it teaches, and what remains to be confirmed.",
+    "What Faiz E Aam Secondary School is, how it teaches, and what remains to be confirmed.",
   alternates: { canonical: "/about" },
 };
 
@@ -56,7 +56,7 @@ export default async function AboutPage() {
       <PageIntro
         eyebrow="About"
         title="A school kept like a record: honestly, and in order."
-        deck="Faiz Aam Secondary School is a unit of Darul Uloom Raheemiyyah, Bandipora. This page states what the school is, how it teaches, and what remains to be confirmed."
+        deck="Faiz E Aam Secondary School is a unit of Darul Uloom Raheemiyyah, Bandipora. This page states what the school is, how it teaches, and what remains to be confirmed."
       />
 
       <section className="sec">

@@ -113,7 +113,7 @@ export function Wallboard() {
             <div className={styles.brand}>
               <Crest size="lg" tone="chalk" />
               <div className={styles.brandCopy}>
-                <span className={styles.brandName}>Faiz Aam</span>
+                <span className={styles.brandName}>Faiz E Aam</span>
                 <span className={styles.brandSub}>Secondary School · Bandipora</span>
                 <span className={`urdu urdu--lg ${styles.brandUrdu}`} dir="rtl" lang="ur">
                   فیض عام
@@ -205,7 +205,7 @@ export function Wallboard() {
       ) : null}
 
       <footer className={styles.foot}>
-        <p className="folio folio--chalk">Faiz Aam Secondary School · Bandipora</p>
+        <p className="folio folio--chalk">Faiz E Aam Secondary School · Bandipora</p>
         <p className={styles.footNote}>Fictional demo readings · not for public broadcast</p>
       </footer>
     </section>

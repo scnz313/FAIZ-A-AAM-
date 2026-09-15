@@ -1,5 +1,5 @@
 /**
- * The Faiz Aam chinar mark — a single 7-lobed chinar leaf
+ * The Faiz E Aam chinar mark — a single 7-lobed chinar leaf
  * (Platanus orientalis) with a tapered petiole, drawn by hand for the
  * design system. It is the Kashmiri signature mark of the school
  * identity. The leaf silhouette is exported as CHINAR_PATH so the crest

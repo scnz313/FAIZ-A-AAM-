@@ -168,7 +168,7 @@ export const loadServerVacancies = cache(async (): Promise<Vacancy[]> => {
       slug: titleSlug,
       title: row.title,
       department: row.department ?? "School office",
-      location: typeof terms.location === "string" ? terms.location : "Faiz Aam School",
+      location: typeof terms.location === "string" ? terms.location : "Faiz E Aam School",
       type: terms.type === "Non-teaching" ? "Non-teaching" : "Teaching",
       qualifications: stringArray(terms.qualifications),
       documents: stringArray(terms.documents),

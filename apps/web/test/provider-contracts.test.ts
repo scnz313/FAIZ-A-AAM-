@@ -60,7 +60,7 @@ describe("provider contracts", () => {
 
   it("renders deterministic report-card bytes", () => {
     const input = {
-      schoolName: "Faiz Aam School",
+      schoolName: "Faiz E Aam School",
       studentRef: "STU-1",
       studentName: "Aarif Khan",
       className: "Class 8 A",

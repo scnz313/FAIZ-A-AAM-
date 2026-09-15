@@ -9,7 +9,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Fees & Refunds",
   description:
-    "How Faiz Aam Secondary School bills fees and processes refunds · pending school confirmation.",
+    "How Faiz E Aam Secondary School bills fees and processes refunds · pending school confirmation.",
   alternates: { canonical: "/policies/fees-and-refunds" },
 };
 

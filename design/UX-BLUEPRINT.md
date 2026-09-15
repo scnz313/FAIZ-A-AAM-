@@ -1,8 +1,8 @@
-# Faiz Aam Secondary School — Digital Experience Blueprint
+# Faiz E Aam Secondary School — Digital Experience Blueprint
 
 Status: approved visual direction and relationship-aware UI contract; school identity/content still requires leadership validation. The public name observed online is **FAIZ E AAM SECONDARY SCHOOL BANDIPORA**. The official spelling, crest, board affiliation, school code, address, phone numbers, leadership names, and fee policy must be confirmed before launch.
 
-Updated: 8 September 2026. The canonical design prototype is **`V15 Faiz Aam School Platform.html`** (repository root; full redesign V12→V14→V15). V15 supersedes V14 (owner decision, 8 September 2026). It keeps the V14 palette, typography, radii, and breakpoints while adding richer page composition, the `q-head5`/`q-row5` five-column result queue, secondary evidence panels, facts-ledger/record-card primitives, and improved applicant-shell mobile behavior. **Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.** Where V15's own responsive or accessibility behavior is weak, the application fixes beyond the prototype. Product relationships, domain ownership, and synchronization behavior are defined in `../FEATURE-INTEGRATION-SPEC.md`; this file defines how that behavior must appear in the interface.
+Updated: 8 September 2026. The canonical design prototype is **`V15 Faiz E Aam School Platform.html`** (repository root; full redesign V12→V14→V15). V15 supersedes V14 (owner decision, 8 September 2026). It keeps the V14 palette, typography, radii, and breakpoints while adding richer page composition, the `q-head5`/`q-row5` five-column result queue, secondary evidence panels, facts-ledger/record-card primitives, and improved applicant-shell mobile behavior. **Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.** Where V15's own responsive or accessibility behavior is weak, the application fixes beyond the prototype. Product relationships, domain ownership, and synchronization behavior are defined in `../FEATURE-INTEGRATION-SPEC.md`; this file defines how that behavior must appear in the interface.
 
 ## 1. Product definition
 
@@ -21,7 +21,7 @@ The homepage must not expose private school operations. It should establish the 
 
 ### Visual system (V15 canonical tokens — inherited from V14)
 
-All CSS custom properties, component classes, and layout patterns are defined in the V15 prototype (`V15 Faiz Aam School Platform.html`, repository root; V14 is the historical reference). The implementation must use these exact tokens.
+All CSS custom properties, component classes, and layout patterns are defined in the V15 prototype (`V15 Faiz E Aam School Platform.html`, repository root; V14 is the historical reference). The implementation must use these exact tokens.
 
 #### Colour tokens
 
@@ -343,7 +343,7 @@ Uploaded documents belong in private object storage with short-lived signed acce
 
 - The school’s public Facebook identity and a public academic-achievement result confirmed the commonly used name.
 - Regional school sites reviewed: Kashmir Harvard Educational Institute and Foundation World School. Useful patterns included clear learning stages, notices, careers, student/parent services, fee management, and legal disclosures; the new design intentionally avoids their carousel-heavy density.
-- CBSE sources were used only as a conditional disclosure benchmark. They do not prove Faiz Aam’s board affiliation.
+- CBSE sources were used only as a conditional disclosure benchmark. They do not prove Faiz E Aam’s board affiliation.
 - Current payment, privacy, accessibility, and security sources are linked in `RESEARCH-NOTES.md`.
 
 ## 11. Relationship-aware UI architecture

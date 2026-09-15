@@ -9,7 +9,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Terms of Use",
   description:
-    "The terms for browsing the public website and using Faiz Aam Secondary School portals · pending school confirmation.",
+    "The terms for browsing the public website and using Faiz E Aam Secondary School portals · pending school confirmation.",
   alternates: { canonical: "/policies/terms" },
 };
 

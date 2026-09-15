@@ -18,7 +18,7 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Overview · Portal",
-  description: "Family portal overview for Faiz Aam Secondary School · fees, notices, and results at a glance.",
+  description: "Family portal overview for Faiz E Aam Secondary School · fees, notices, and results at a glance.",
 };
 
 const QUICK_LINKS: ReadonlyArray<{ icon: string; title: string; href: string }> = [

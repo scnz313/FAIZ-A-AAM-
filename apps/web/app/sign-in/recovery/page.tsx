@@ -7,7 +7,7 @@ import { dataAdapter } from "@/lib/supabase/env";
 
 export const metadata: Metadata = {
   title: "Account recovery",
-  description: "Request secure account recovery instructions using the verified contact on a Faiz Aam account.",
+  description: "Request secure account recovery instructions using the verified contact on a Faiz E Aam account.",
   robots: { index: false, follow: false },
 };
 
