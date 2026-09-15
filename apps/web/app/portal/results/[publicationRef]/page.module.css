@@ -6,26 +6,26 @@
 
 .title {
   font-family: var(--serif);
-  font-size: clamp(30px, 4vw, 38px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
   margin: 0;
 }
 
 .metaLine {
   align-items: center;
-  color: var(--ink-soft);
+  color: var(--muted);
   display: flex;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: 0.82rem;
   gap: 8px;
   margin: 12px 0 0;
 }
 
 .correctionNote {
-  color: var(--saffron-deep);
-  font-size: 13px;
+  color: var(--saffron-ink);
+  font-size: 0.82rem;
   line-height: 1.55;
   margin: 14px 0 0;
   max-width: 58ch;
@@ -45,8 +45,8 @@
 /* Withdrawn notice — brick square marks the tombstones; the record stays
    on file and the notice carries the recorded reason. */
 .withdrawnNote {
-  color: var(--brick-deep);
-  font-size: 13px;
+  color: var(--madder-ink);
+  font-size: 0.82rem;
   line-height: 1.55;
   margin: 14px 0 0;
   max-width: 58ch;
@@ -58,7 +58,7 @@
   width: 10px;
   height: 10px;
   margin-right: 10px;
-  border: 1px solid var(--brick);
+  border: 1px solid var(--madder);
 }
 
 .demoLine {
@@ -67,7 +67,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 14px 0 0;
 }
 
@@ -75,7 +75,7 @@
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.5;
   margin: 0;
   padding-top: 18px;
@@ -84,7 +84,7 @@
 .notFoundText {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 0.92rem;
   line-height: 1.5;
   margin: 0;
   max-width: 56ch;

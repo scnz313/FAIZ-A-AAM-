@@ -1,24 +1,44 @@
-.intro {
-  padding: clamp(48px, 8vw, 96px) clamp(24px, 6vw, 96px) 0;
-  max-width: 1200px;
-  margin: 0 auto;
+/* V15 PageHero — bottom-flush section, kicker + serif h1 + lede */
+
+.head {
+  padding-bottom: 0;
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--saffron-ink);
+  margin: 0 0 22px;
+}
+
+.kicker::before {
+  content: "";
+  width: 34px;
+  height: 1px;
+  background: var(--saffron);
 }
 
 .title {
-  font-family: var(--font-display, var(--serif));
-  font-size: clamp(2.2rem, 4.4vw, 3.4rem);
-  line-height: 1.08;
+  font-family: var(--serif);
+  font-size: clamp(2rem, 4.2vw, 3.1rem);
+  font-weight: 540;
+  line-height: 1.1;
   letter-spacing: -0.01em;
-  margin: var(--space-4) 0 0;
+  margin: 0;
+  max-width: 20ch;
   text-wrap: balance;
 }
 
-.deck {
-  font-family: var(--font-display, var(--serif));
-  font-style: italic;
-  font-size: clamp(1.05rem, 1.8vw, 1.3rem);
+.lede {
+  font-family: var(--serif);
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
   line-height: 1.55;
-  color: var(--ink-soft);
-  max-width: 46ch;
-  margin: var(--space-4) 0 0;
+  color: var(--ink-2);
+  max-width: 44ch;
+  margin: 18px 0 0;
 }

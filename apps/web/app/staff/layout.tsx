@@ -37,7 +37,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
      x-fass-pathname; sign-in/TOTP redirects must return the user to that
      exact URL, not collapse it to /staff. */
   const headerList = await headers();
-  const rawPathname = headerList.get("x-fass-pathname") ?? "/staff";
+  const rawPathname = headerList.get("x-fass-pathname") ?? "/administrator";
   const { pathname, search } = splitPathname(rawPathname);
   const returnTo = `${pathname}${search}`;
 
@@ -52,7 +52,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
     try {
       const [serverContext, notifications] = await Promise.all([
         loadServerStaffContext(),
-        loadServerNotifications(),
+        loadServerNotifications("staff"),
       ]);
       initialState = mapServerStaffContext(serverContext);
       initialNotifications = notifications;

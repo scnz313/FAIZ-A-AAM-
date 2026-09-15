@@ -37,32 +37,29 @@ export function FinanceWorkspace({
   const [views, setViews] = useState<InvoiceView[]>(initialViews);
   const [receipts, setReceipts] = useState<Receipt[]>(initialReceipts);
   const [reconciliation] = useState<FinanceReconciliationProjectionRow[]>(initialReconciliation ?? []);
+  const [loadError, setLoadError] = useState(false);
 
-  const refreshLedger = useCallback(async () => {
-    const [nextViews, nextReceipts] = await Promise.all([
-      financeService.listAllInvoices(),
-      financeService.listReceipts(),
-    ]);
-    setViews(nextViews);
-    setReceipts(nextReceipts);
+  /* Ledger reload never throws: failure surfaces as a retryable error panel
+     instead of silently stale rows — including after a mutation refresh. */
+  const loadLedger = useCallback(async (): Promise<void> => {
+    setLoadError(false);
+    try {
+      const [nextViews, nextReceipts] = await Promise.all([
+        financeService.listAllInvoices(),
+        financeService.listReceipts(),
+      ]);
+      setViews(nextViews);
+      setReceipts(nextReceipts);
+    } catch {
+      setLoadError(true);
+    }
   }, []);
+  const refreshLedger = loadLedger;
 
   useEffect(() => {
     if (mode !== "demo") return;
-    let cancelled = false;
-    void Promise.all([financeService.listAllInvoices(), financeService.listReceipts()])
-      .then(([nextViews, nextReceipts]) => {
-        if (cancelled) return;
-        setViews(nextViews);
-        setReceipts(nextReceipts);
-      })
-      .catch(() => {
-        if (cancelled) return;
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mode]);
+    void loadLedger();
+  }, [mode, loadLedger]);
 
   const collected = views.reduce((sum, view) => sum + view.paidPaise, 0);
   const outstanding = views.reduce((sum, view) => sum + Math.max(0, view.balancePaise), 0);
@@ -89,6 +86,26 @@ export function FinanceWorkspace({
 
   return (
     <>
+      {loadError ? (
+        <div className="callout bad" role="alert" style={{ marginBottom: 18 }}>
+          <span className="msym" aria-hidden="true" style={{ fontSize: 20 }}>
+            close
+          </span>
+          <div>
+            <p className="strong" style={{ margin: 0 }}>
+              The ledger could not be refreshed.
+            </p>
+            <p className="small muted" style={{ margin: "4px 0 0" }}>
+              Rows below may be stale. No payment or adjustment was changed · try again.
+            </p>
+            <div style={{ marginTop: 12 }}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void loadLedger()}>
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <section aria-labelledby="ledger-summary-heading">
         <div className={styles.sectionHead}>
           <h2 id="ledger-summary-heading" className="section-label">
@@ -139,7 +156,7 @@ export function FinanceWorkspace({
           <li>
             <Link prefetch={false} className={styles.queueRow} href={canonicalStaffUrl(profileCode, "/finance/reconciliation")}>
               <p className={styles.queueCopy}>
-                Reconciliation run — {reconciliation[0]?.run_at ? <strong className="num">last {formatKolkata(reconciliation[0].run_at, { format: "day" })}</strong> : <strong>not run</strong>}
+                Reconciliation run · {reconciliation[0]?.run_at ? <strong className="num">last {formatKolkata(reconciliation[0].run_at, { format: "day" })}</strong> : <strong>not run</strong>}
               </p>
               <span className="link-arrow">Open →</span>
             </Link>

@@ -19,6 +19,26 @@ describe("authenticated adapter boundary", () => {
     expect(failure).toMatchObject({ ok: false, correlationRef: "req-124", httpStatus: 409, retryable: false, currentVersion: 2 });
   });
 
+  it("returns an actionable duplicate message instead of hiding a unique conflict", () => {
+    const duplicate = withCorrelation(
+      { ok: false, errors: [{ code: "duplicate", message: 'duplicate key value violates unique constraint "content_items_slug_key"', field: null }] },
+      "req-127",
+    );
+    expect(duplicate).toMatchObject({ ok: false, httpStatus: 409 });
+    if (duplicate.ok) return;
+    expect(duplicate.errors[0]?.message).toMatch(/same unique details already exists/i);
+    expect(duplicate.errors[0]?.message).not.toMatch(/constraint|content_items_slug_key/i);
+  });
+
+  it("leaves a safe domain duplicate message unchanged", () => {
+    const duplicate = withCorrelation(
+      { ok: false, errors: [{ code: "duplicate", message: "You have already responded to this offer.", field: null }] },
+      "req-128",
+    );
+    if (duplicate.ok) return;
+    expect(duplicate.errors[0]?.message).toBe("You have already responded to this offer.");
+  });
+
   it("exposes authoritative state and marks service-unavailable failures retryable", () => {
     expect(withCorrelation({ ok: true, value: { status: "processing", version: 2 } }, "req-125")).toMatchObject({
       httpStatus: 200,

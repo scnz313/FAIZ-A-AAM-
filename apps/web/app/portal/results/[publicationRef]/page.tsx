@@ -11,7 +11,7 @@ function mapRelease(value: unknown): Publication | null {
   if (typeof value !== "object" || value === null) return null;
   const row = value as { id?: unknown; reference?: unknown; term?: unknown; version?: unknown; status?: unknown; publishedAt?: unknown };
   if (typeof row.reference !== "string" || typeof row.term !== "string" || typeof row.version !== "number") return null;
-  return { ref: row.reference, term: row.term, version: row.version, status: row.status === "provisional" ? "provisional" : "final", publishedAtIso: typeof row.publishedAt === "string" ? row.publishedAt : new Date(0).toISOString(), releaseId: typeof row.id === "string" ? row.id : undefined };
+  return { ref: row.reference, term: row.term, version: row.version, status: row.status === "provisional" ? "provisional" : "final", publishedAtIso: typeof row.publishedAt === "string" ? row.publishedAt : null, releaseId: typeof row.id === "string" ? row.id : undefined };
 }
 
 export default async function PortalPublicationPage({ params }: { params: Promise<{ publicationRef: string }> }) {

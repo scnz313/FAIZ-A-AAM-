@@ -30,7 +30,8 @@ export type NotificationKind =
   | "Support"
   | "Security"
   | "Enrollment"
-  | "Environment";
+  | "Environment"
+  | "Update";
 
 export type NotificationItem = {
   id: string;

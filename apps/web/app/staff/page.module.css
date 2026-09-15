@@ -6,10 +6,11 @@
   margin-bottom: var(--space-6);
 }
 
-/* Ruled three-column band — mirrors the facility HeadlineBand rhythm. */
+/* V14 panel — chalk surface with border-radius */
 .band {
   position: relative;
   border: 1px solid var(--line);
+  border-radius: var(--r);
   background: var(--chalk);
 }
 
@@ -25,7 +26,12 @@
 }
 
 .band {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.col,
+.quickLinks > * {
+  min-width: 0;
 }
 
 .col {
@@ -45,15 +51,17 @@
 }
 
 .bigNum {
-  font-family: var(--font-display, var(--serif));
-  font-size: 44px;
+  font-family: var(--serif);
+  font-size: 2.75rem;
   line-height: 1;
-  font-weight: 500;
+  font-weight: 520;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
 }
 
 .bigSuffix {
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-size: 0.8rem;
+  color: var(--muted);
   max-width: 16ch;
   line-height: 1.4;
 }
@@ -64,8 +72,8 @@
   padding: 0;
   display: grid;
   gap: var(--space-2);
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .breakdown li {
@@ -88,18 +96,18 @@
 }
 
 .publishingLine {
-  font-size: 14px;
-  color: var(--ink-soft);
+  font-size: 0.88rem;
+  color: var(--muted);
   margin: var(--space-4) 0 var(--space-5);
 }
 
 .quickLinks {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-4);
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1023px) {
   .band {
     grid-template-columns: 1fr;
   }
@@ -114,11 +122,11 @@
   }
 
   .quickLinks {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .quickLinks {
     grid-template-columns: 1fr;
   }

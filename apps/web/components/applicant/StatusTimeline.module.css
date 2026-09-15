@@ -33,7 +33,7 @@
   width: 9px;
   height: 9px;
   margin-top: 6px;
-  background: var(--ink-faint);
+  background: var(--faint);
 }
 
 .current .node {
@@ -50,21 +50,21 @@
 
 .meta strong {
   font-family: var(--serif);
-  font-size: 19px;
-  font-weight: 500;
+  font-size: 1.2rem;
+  font-weight: 650;
   letter-spacing: -0.01em;
 }
 
 .meta span {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
 
 .currentTag {
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  color: var(--ink-soft);
+  border-radius: var(--r);
+  color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -74,8 +74,8 @@
 
 .actor {
   margin: 5px 0 0;
-  color: var(--ink-faint);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -83,8 +83,8 @@
 
 .note {
   margin: 6px 0 0;
-  color: var(--ink-soft);
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
   line-height: 1.55;
   max-width: 62ch;
 }

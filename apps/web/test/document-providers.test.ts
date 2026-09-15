@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { FakeDocumentScanner, FakeStorageProvider } from "@/modules/services/document-providers";
+import { FakeDocumentScanner, FakeStorageProvider, type ScanInput } from "@/modules/services/document-providers";
+
+function scanInput(overrides: Partial<ScanInput> = {}): ScanInput {
+  return {
+    bucket: "private",
+    objectKey: "uploads/x.pdf",
+    declaredMimeType: "application/pdf",
+    sizeBytes: 1,
+    checksumSha256: "a".repeat(64),
+    bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]),
+    ...overrides,
+  };
+}
 
 describe("document provider contracts", () => {
   it("fake storage returns object bytes for authoritative stat tests", async () => {
@@ -11,8 +23,8 @@ describe("document provider contracts", () => {
   });
 
   it("fake scanner exposes ready/quarantine/failure outcomes without changing domain state", async () => {
-    await expect(new FakeDocumentScanner({ state: "ready" }).scan({ bucket: "private", objectKey: "uploads/x.pdf", declaredMimeType: "application/pdf", sizeBytes: 1, checksumSha256: "a" })).resolves.toMatchObject({ state: "ready" });
-    await expect(new FakeDocumentScanner({ state: "quarantined", detail: "malware" }).scan({ bucket: "private", objectKey: "uploads/x.pdf", declaredMimeType: "application/pdf", sizeBytes: 1, checksumSha256: "a" })).resolves.toMatchObject({ state: "quarantined", detail: "malware" });
+    await expect(new FakeDocumentScanner({ state: "ready" }).scan(scanInput())).resolves.toMatchObject({ state: "ready" });
+    await expect(new FakeDocumentScanner({ state: "quarantined", detail: "malware" }).scan(scanInput())).resolves.toMatchObject({ state: "quarantined", detail: "malware" });
   });
 });
 

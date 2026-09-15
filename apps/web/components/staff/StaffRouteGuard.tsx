@@ -29,6 +29,7 @@ const ROUTE_ACTIONS: ReadonlyArray<{ prefix: string; action: StaffAction }> = [
   { prefix: "/users", action: "users.manage" },
   { prefix: "/data", action: "users.manage" },
   { prefix: "/link-requests", action: "links.verify" },
+  { prefix: "/guardians", action: "links.verify" },
   { prefix: "/audit", action: "audit.view" },
   { prefix: "/settings", action: "settings.manage" },
   { prefix: "/support", action: "support.view" },
@@ -98,11 +99,11 @@ export function StaffRouteGuard({ children }: { children: ReactNode }) {
         <h1 className={styles.title}>This profile cannot open this area</h1>
         <p className={styles.line}>
           <strong>{summary.profileLabel ?? summary.roleLabel}</strong> does not include{" "}
-          <span className="num">{action}</span>. UI visibility is not authorization — the backend adapter remains the
+          <span className="num">{action}</span>. UI visibility is not authorization · the backend adapter remains the
           final authority.
         </p>
         <p className={styles.line}>
-          No granted workspace on this account can perform this action — contact the school office administrator.
+          No granted workspace on this account can perform this action · contact the school office administrator.
         </p>
       </div>
     );
@@ -117,7 +118,7 @@ export function StaffRouteGuard({ children }: { children: ReactNode }) {
       <h1 className={styles.title}>This profile cannot open this area</h1>
       <p className={styles.line}>
         <strong>{summary.profileLabel ?? summary.roleLabel}</strong> does not include{" "}
-        <span className="num">{action}</span>. UI visibility is not authorization — the backend adapter remains the
+        <span className="num">{action}</span>. UI visibility is not authorization · the backend adapter remains the
         final authority.
       </p>
 
@@ -140,7 +141,7 @@ export function StaffRouteGuard({ children }: { children: ReactNode }) {
         </>
       ) : (
         <p className={styles.line}>
-          No granted workspace on this account can perform this action — contact the school office administrator.
+          No granted workspace on this account can perform this action · contact the school office administrator.
         </p>
       )}
     </div>

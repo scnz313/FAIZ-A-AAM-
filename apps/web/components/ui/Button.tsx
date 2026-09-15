@@ -1,11 +1,14 @@
 import type { MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 
-export type ButtonVariant = "primary" | "quiet" | "danger" | "small" | "saffron";
+export type ButtonVariant = "primary" | "quiet" | "danger" | "saffron" | "accent" | "ghost";
+export type ButtonSize = "sm" | "lg";
 
 type ButtonProps = {
   href?: string;
   variant?: ButtonVariant;
+  /** V15 sizes: sm (7px 13px), default (11px 20px), lg (14px 26px). */
+  size?: ButtonSize;
   block?: boolean;
   className?: string;
   children: ReactNode;
@@ -14,14 +17,26 @@ type ButtonProps = {
   disabled?: boolean;
 };
 
+/** V15 variant → canonical .btn class. `saffron` is the legacy name for the
+ *  V15 accent button (saffron ground); both map to `.btn-accent`. */
+const VARIANT_CLASS: Record<ButtonVariant, string> = {
+  primary: "btn-primary",
+  quiet: "btn-quiet",
+  danger: "btn-danger",
+  saffron: "btn-accent",
+  accent: "btn-accent",
+  ghost: "btn-ghost",
+};
+
 /**
- * The single button primitive. Renders an anchor when `href` is given,
- * otherwise a button. Variants map to `.button` + `.button--{variant}`.
+ * The single button primitive — V15 canonical. Emits `.btn` + variant/size
+ * classes. Renders an anchor when `href` is given, otherwise a button.
  * Children may include literal arrow characters ("→") — styled naturally.
  */
 export default function Button({
   href,
-  variant,
+  variant = "primary",
+  size,
   block,
   className,
   children,
@@ -30,8 +45,10 @@ export default function Button({
   disabled,
 }: ButtonProps) {
   const classes = [
-    "button",
-    variant ? `button--${variant}` : "",
+    "btn",
+    VARIANT_CLASS[variant],
+    size === "sm" ? "btn-sm" : "",
+    size === "lg" ? "btn-lg" : "",
     block ? "button--block" : "",
     className ?? "",
   ]
@@ -47,7 +64,6 @@ export default function Button({
       return (
         <Link
           href={href}
-          prefetch={false}
           className={classes}
           onClick={handleClick}
           aria-disabled={disabled || undefined}

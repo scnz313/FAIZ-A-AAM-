@@ -1,152 +1,93 @@
 .page {
-  grid-template-columns: minmax(0, 1fr);
   display: grid;
-  gap: 40px;
+  gap: 18px;
 }
 
 .title {
   font-family: var(--serif);
-  font-size: clamp(30px, 4vw, 38px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
   margin: 0;
 }
 
-.intro {
-  color: var(--muted);
-  font-family: var(--serif);
-  font-size: 15px;
-  line-height: 1.5;
-  margin: 12px 0 0;
-  max-width: 62ch;
+/* V14 notice accordion panels */
+.noticePanel {
+  padding: 0;
 }
 
-/* Anchor tabs mirror the global .tabs button styling. */
-.tabLink {
-  align-items: center;
-  border-bottom: 2px solid transparent;
-  color: var(--ink-soft);
-  display: inline-flex;
-  font-size: 13px;
-  /* 44px touch target. */
-  min-height: 44px;
-  padding: 0 14px;
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.tabLink:hover {
-  color: var(--ink);
-}
-
-.tabLinkActive {
-  border-bottom-color: var(--saffron);
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.rows {
-  margin-top: 14px;
-}
-
-.row {
-  border-bottom: 1px solid var(--line);
-}
-
-/* Urgent rows carry the persistent URGENT badge in the title line. */
-
-.row summary {
+.noticePanel summary {
   cursor: pointer;
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
   list-style: none;
-  padding: 16px 0;
+  padding: 16px 18px;
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  width: 100%;
+  text-align: left;
 }
 
-.row summary::-webkit-details-marker {
+.noticePanel summary::-webkit-details-marker {
   display: none;
 }
 
-.row summary:focus-visible {
+.noticePanel summary:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 4px;
+  outline-offset: -2px;
 }
 
-.rowMeta {
-  align-items: baseline;
+.noticeHeadLeft {
+  flex: 1;
+  min-width: 0;
+}
+
+.noticeChips {
   display: flex;
-  gap: 12px;
-  justify-content: space-between;
-}
-
-.category {
-  color: var(--ink-soft);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.metaRight {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-}
-
-.date {
-  color: var(--ink-faint);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.marker {
-  color: var(--ink-faint);
-  font-size: 15px;
-  line-height: 1;
-  transition: transform 0.15s ease;
-}
-
-.row[open] .marker {
-  transform: rotate(45deg);
-}
-
-.titleLine {
-  align-items: center;
-  display: flex;
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 6px;
+  align-items: center;
 }
 
-.titleLine strong {
-  font-family: var(--serif);
-  font-size: 18px;
-  font-weight: 500;
+.noticeTitle {
+  font-size: 1.02rem;
+  font-weight: 650;
+  margin: 8px 0 0;
+  line-height: 1.35;
 }
 
-.excerpt {
-  color: var(--ink-soft);
-  display: block;
-  font-size: 14px;
-  line-height: 1.5;
+.noticeDate {
   margin-top: 4px;
 }
 
-.body {
-  border-top: 1px dashed var(--line);
-  margin: 0;
-  padding: 14px 0 20px;
+.expandIcon {
+  font-size: 22px;
+  color: var(--muted);
+  flex: none;
+  transition: transform 0.15s ease;
+  margin-top: 2px;
 }
 
-.body p {
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.6;
+.noticePanel[open] .expandIcon {
+  transform: rotate(180deg);
+}
+
+.noticeBody {
+  border-top: 1px solid var(--line-soft);
+  padding: 14px 18px 18px;
+}
+
+.noticeBody p {
   margin: 0 0 10px;
   max-width: 64ch;
 }
 
-.body p:last-child {
+.noticeBody p:last-child {
   margin-bottom: 0;
 }
 
@@ -156,9 +97,20 @@
   color: var(--muted);
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 0.78rem;
   gap: 10px;
   line-height: 1.5;
   margin: 0;
   padding-top: 16px;
+}
+
+@media (max-width: 479px) {
+  .noticePanel summary {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .expandIcon {
+    align-self: flex-end;
+  }
 }

@@ -1,118 +1,122 @@
-/* Application centre shell: ink progress rail | form workspace | context aside. */
+/* V14 application wizard — 2-column rail + form */
 
-.page {
-  background: var(--paper);
-}
-
-.shell {
+.wizard {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 264px;
-  align-items: stretch;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: start;
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: clamp(24px, 4vw, 48px) clamp(16px, 4vw, 40px) 80px;
 }
 
 .railCol {
-  background: var(--ink);
+  position: sticky;
+  top: 24px;
+  min-width: 0;
 }
 
-/* Application context aside ---------------------------------------------- */
-
-.context {
-  display: flex;
-  flex-direction: column;
-  padding: clamp(30px, 4vw, 44px) clamp(20px, 2.5vw, 28px);
-  border-left: 1px solid var(--line);
-  background: var(--paper);
-}
-
-.contextBlock {
-  padding-bottom: 20px;
-  margin-bottom: 22px;
-  border-bottom: 1px solid var(--line);
-}
-
-.contextTitle {
-  display: block;
-  margin-top: 7px;
-  font-family: var(--serif);
-  font-size: 17px;
-  font-weight: 500;
-  line-height: 1.3;
-}
-
-.contextSmall {
-  display: block;
-  margin-top: 5px;
-  color: var(--ink-soft);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.nextList {
-  margin: 10px 0 8px;
-  padding-left: 16px;
-  color: var(--ink-soft);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.privacyNote {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: auto;
-  padding: 15px 16px;
-  background: rgba(83, 109, 87, 0.12);
-}
-
-.privacyNote > span {
-  color: var(--willow);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.privacyNote p {
-  margin: 0;
-  color: var(--ink);
-  font-size: 12px;
-  line-height: 1.55;
+.formCol {
+  min-width: 0;
 }
 
 /* Responsive -------------------------------------------------------------- */
-
-@media (max-width: 1100px) {
-  .shell {
-    grid-template-columns: 250px minmax(0, 1fr);
+@media (max-width: 1023px) {
+  .wizard {
+    grid-template-columns: 1fr;
+    gap: 20px;
   }
 
-  .context {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-
-  .contextBlock {
-    margin-bottom: 0;
-  }
-
-  .privacyNote {
-    grid-column: 1 / -1;
-    margin-top: 8px;
+  .railCol {
+    position: static;
   }
 }
 
-@media (max-width: 700px) {
-  .shell {
+/* Application chooser (signed-in applicants with existing records) --------- */
+.chooser {
+  margin: 0 auto;
+  max-width: 720px;
+  min-width: 0;
+  padding: clamp(24px, 4vw, 48px) clamp(16px, 4vw, 40px) 80px;
+}
+
+.chooserTitle {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  margin: 6px 0 0;
+}
+
+.chooserNote {
+  color: var(--ink-3);
+  line-height: 1.6;
+  margin: 8px 0 22px;
+  max-width: 58ch;
+}
+
+.chooserLoading {
+  color: var(--muted);
+  font-size: 0.86rem;
+  margin: 22px 0;
+}
+
+.appList {
+  border-top: 2px solid var(--ink);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.appRow {
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 16px 4px;
+}
+
+.appMain {
+  min-width: 0;
+}
+
+.appRef {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+}
+
+.appMeta {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.appActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chooserActions {
+  margin-top: 20px;
+}
+
+@media (max-width: 719px) {
+  .appRow {
+    align-items: stretch;
     grid-template-columns: 1fr;
   }
 
-  .context {
-    grid-template-columns: 1fr;
+  .appActions {
+    justify-content: flex-start;
   }
 
-  .privacyNote {
-    grid-column: auto;
+  .appActions a,
+  .appActions button,
+  .chooserActions a {
+    min-height: 44px;
+    width: 100%;
   }
 }

@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
 import Button from "@/components/ui/Button";
+import { ErrorPanel } from "@/components/ui/AsyncStates";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { canAnyRole } from "@/modules/services/staff-profiles";
 import { formatKolkata } from "@/modules/iot/domain";
-import { settingsService, type PolicyPendingKey, type SettingsView } from "@/modules/services/settings";
+import { settingsService, type PolicyPendingKey, type SettingsVersionState, type SettingsView } from "@/modules/services/settings";
 import {
   DEMO_POLICY_META,
   getDemoPolicy,
@@ -42,7 +43,7 @@ function Section({
       </div>
       <div className={styles.sectionBody}>{children}</div>
       <p className={styles.savedBy}>
-        Saved by {savedBy} · {formatKolkata(savedAtIso, { format: "day" })}
+        {savedAtIso.trim() === "" ? "No saved version yet." : `Saved by ${savedBy} · ${formatKolkata(savedAtIso, { format: "day" })}`}
       </p>
     </section>
   );
@@ -70,7 +71,13 @@ function ToggleRow({ id, checked, onChange, disabled = false, help, children }: 
         aria-describedby={help ? `${id}-help` : undefined}
       />
       <div className={styles.toggleCopy}>
-        <label htmlFor={id}>{children}</label>
+        <label htmlFor={id}>
+          {disabled ? (
+            <span className="msym" aria-hidden="true" style={{ fontSize: 16, verticalAlign: -3 }}>lock</span>
+          ) : null}
+          {disabled ? " " : null}
+          {children}
+        </label>
         {help && (
           <p id={`${id}-help`} className={styles.toggleHelp}>
             {help}
@@ -81,6 +88,30 @@ function ToggleRow({ id, checked, onChange, disabled = false, help, children }: 
   );
 }
 
+function LockNote({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <p className={styles.lockNote} id={id}>
+      <span className="msym" aria-hidden="true">lock</span>
+      <span>{children}</span>
+    </p>
+  );
+}
+
+/** Current school time as a datetime-local value (Asia/Kolkata). */
+function defaultEffectiveLocal(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const get = (type: string): string => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
 export default function SettingsPage() {
   const { summary } = useStaffContext();
   const canManage = canAnyRole(summary?.roles ?? [], "settings.manage");
@@ -88,12 +119,16 @@ export default function SettingsPage() {
   const [view, setView] = useState<SettingsView | null>(null);
   const [gradingScheme, setGradingScheme] = useState("Letter grades (A1–E2)");
   const [twoReviewers, setTwoReviewers] = useState(true);
-  const [expiryDays, setExpiryDays] = useState(30);
+  const [expiryDays, setExpiryDays] = useState("");
   const [emailSender, setEmailSender] = useState("notices@faizaam.example");
   const [savedNote, setSavedNote] = useState<{ key: number; text: string } | null>(null);
-  const [resetNote, setResetNote] = useState<{ key: number; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [latestVersion, setLatestVersion] = useState<SettingsVersionState | null>(null);
+  const [approveEffectiveFrom, setApproveEffectiveFrom] = useState("");
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
   const [demoPolicy, setDemoPolicyState] = useState<DemoPolicy>(() => getDemoPolicy());
 
   function updateDemoPolicy(key: DemoPolicyKey, value: boolean) {
@@ -107,23 +142,47 @@ export default function SettingsPage() {
 
   /* The form is seeded from the settings service view; policy-pending
      sections stay visibly flagged until the school confirms them. */
-  useEffect(() => {
-    let cancelled = false;
-    void settingsService.getSettings().then((next) => {
-      if (cancelled) return;
+  const loadSettings = useCallback(async (): Promise<void> => {
+    setLoadFailed(false);
+    try {
+      const next = await settingsService.getSettings();
       setView(next);
       setGradingScheme(next.resultsPolicy.gradingScheme);
       setTwoReviewers(next.resultsPolicy.publicationRequiresTwoReviewers);
-      setExpiryDays(next.noticeDefaults.defaultExpiryDays);
-      setEmailSender(next.noticeDefaults.emailSender);
-    })
-      .catch(() => {
-        if (!cancelled) setSaveError("Could not load settings.");
-      });
-    return () => {
-      cancelled = true;
-    };
+      /* Unconfigured policy is an empty field, never the sentinel string or
+         zero: the number input's min and the email input would otherwise make
+         the whole form permanently invalid and the Save button inert. */
+      setExpiryDays(next.noticeDefaults.defaultExpiryDays > 0 ? String(next.noticeDefaults.defaultExpiryDays) : "");
+      setEmailSender(next.noticeDefaults.emailSender === "Not configured" ? "" : next.noticeDefaults.emailSender);
+      const latest = await settingsService.getLatestVersion();
+      setLatestVersion(latest);
+      if (latest !== null && latest.status !== "effective") setApproveEffectiveFrom(defaultEffectiveLocal());
+    } catch {
+      setLoadFailed(true);
+    }
   }, []);
+
+  async function handleApproveVersion() {
+    if (latestVersion === null) return;
+    setApproving(true);
+    setApproveError(null);
+    try {
+      /* The datetime-local value is school wall time (Asia/Kolkata, fixed
+         +05:30); parsing it with `new Date` would use the workstation zone. */
+      const effectiveFrom = approveEffectiveFrom.trim() === "" ? null : new Date(`${approveEffectiveFrom}:00+05:30`).toISOString();
+      await settingsService.approveVersion({ settingsId: latestVersion.id, expectedVersion: latestVersion.version, effectiveFrom });
+      await loadSettings();
+      setSavedNote((prev) => ({ key: (prev?.key ?? 0) + 1, text: `Policy version ${latestVersion.version} approved and effective.` }));
+    } catch (error) {
+      setApproveError(error instanceof Error ? error.message : "The policy version could not be approved.");
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -138,16 +197,21 @@ export default function SettingsPage() {
             publicationRequiresTwoReviewers: twoReviewers,
           },
           noticeDefaults: {
-            defaultExpiryDays: expiryDays,
+            defaultExpiryDays: expiryDays.trim() === "" ? 0 : Number(expiryDays),
             emailSender,
           },
         },
         actor,
       );
       setView(updated);
+      /* The save stores a new draft version while the effective version stays
+         unchanged, so reload the version state too: otherwise the policy
+         panel would keep showing the old effective version and hide the
+         approval step the new draft requires. */
+      await loadSettings();
       setSavedNote((prev) => ({
         key: (prev?.key ?? 0) + 1,
-        text: "Saved — changes are versioned and audited.",
+        text: "Saved · changes are versioned and audited.",
       }));
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Save failed.");
@@ -156,41 +220,102 @@ export default function SettingsPage() {
     }
   }
 
-  function handleReset() {
-    setResetNote((prev) => ({ key: (prev?.key ?? 0) + 1, text: "Demo data reset (demo) — nothing was deleted." }));
-  }
-
   if (view === null) {
     return (
       <div className={styles.page}>
-        <header className={`workspace-header ${styles.header}`}>
-          <p className="eyebrow">Staff · Settings</p>
-          <h1 className="workspace-title">Settings</h1>
-          <p className="workspace-intro">School configuration — changes are versioned and audited.</p>
-        </header>
-        <p className={styles.loading} role="status">
-          Loading settings…
-        </p>
+        <div className="page-head">
+          <div>
+            <h1 className={styles.title}>Settings</h1>
+            <p className="ph-sub">School configuration · changes are versioned and audited.</p>
+          </div>
+        </div>
+        {loadFailed ? (
+          <ErrorPanel title="Settings could not be loaded" note="The configuration service did not respond. Live policy was not changed.">
+            <Button variant="quiet" type="button" onClick={() => void loadSettings()}>
+              Try again
+            </Button>
+          </ErrorPanel>
+        ) : (
+          <p className={styles.loading} role="status">
+            Loading settings…
+          </p>
+        )}
       </div>
     );
   }
 
   const pending = (key: PolicyPendingKey) => view.policyPending.includes(key);
+  /* Maker/checker: the server refuses self-approval, so the control must not
+     promise an action the current account cannot take. */
+  const savedByMe =
+    latestVersion !== null &&
+    latestVersion.changedByAccountId !== null &&
+    latestVersion.changedByAccountId === summary?.accountId;
 
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Settings</p>
-        <h1 className="workspace-title">Settings</h1>
-        <p className="workspace-intro">School configuration — changes are versioned and audited.</p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Settings</h1>
+          <p className="ph-sub">School configuration · changes are versioned and audited.</p>
+        </div>
+      </div>
 
-      <form className={styles.sections} onSubmit={handleSave}>
+      {latestVersion !== null ? (
+        <section className="panel" aria-labelledby="policy-version-heading">
+          <div className="pn-head">
+            <h2 id="policy-version-heading" className="section-label">Policy version</h2>
+            <StatusBadge tone={latestVersion.status === "effective" ? "good" : "watch"}>
+              {latestVersion.status === "effective" ? "Effective" : latestVersion.status}
+            </StatusBadge>
+          </div>
+          <div className="pn-body">
+            {latestVersion.status === "effective" ? (
+              <p className="small muted">
+                Version {latestVersion.version} is effective. Saving another change stores a new version until it is approved.
+              </p>
+            ) : (
+              <>
+                <p className="small muted">
+                  Version {latestVersion.version} is stored but not effective. Admission submission and the other policy gates stay closed
+                  until an administrator approves it.
+                </p>
+                {savedByMe ? (
+                  <p className="small muted" role="status">
+                    You saved this version · maker/checker discipline requires a different administrator to approve it.
+                  </p>
+                ) : null}
+                <div className="field">
+                  <label htmlFor="settings-approve-effective">Effective from</label>
+                  <input
+                    id="settings-approve-effective"
+                    className={`input ${styles.controlWidth}`}
+                    type="datetime-local"
+                    value={approveEffectiveFrom}
+                    onChange={(event) => setApproveEffectiveFrom(event.target.value)}
+                    disabled={!canManage || approving || savedByMe}
+                  />
+                </div>
+                <div className={styles.saveRow}>
+                  <Button variant="primary" type="button" onClick={() => void handleApproveVersion()} disabled={!canManage || approving || savedByMe}>
+                    {approving ? "Approving…" : savedByMe ? "Independent approval required" : `Approve version ${latestVersion.version}`}
+                  </Button>
+                </div>
+              </>
+            )}
+            {approveError ? (
+              <p className="field-error" role="alert">{approveError}</p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      <form className={styles.sections} onSubmit={handleSave} onInvalid={() => setSaveError("Check the highlighted settings fields before saving.")}>
         <Section title="Academic year" savedBy={view.savedBy} savedAtIso={view.savedAtIso}>
           <div className={styles.controlRow}>
             <div className="field">
               <label htmlFor="setting-year">Active academic year</label>
-              <select id="setting-year" className={`select ${styles.controlWidth}`} value={view.academicYear.label} disabled>
+              <select id="setting-year" className={`select ${styles.controlWidth}`} value={view.academicYear.label} disabled aria-describedby="setting-year-lock">
                 {view.academicYears.map((year) => (
                   <option key={year.label} value={year.label}>
                     {year.label}
@@ -200,36 +325,40 @@ export default function SettingsPage() {
             </div>
             <StatusBadge tone="good">Active</StatusBadge>
           </div>
-          <p className="field-help">The active year locks once results are published.{!supabaseMode ? " Disabled in the demo." : ""}</p>
+          <LockNote id="setting-year-lock">
+            Policy-locked · the active year is managed by the academic calendar and locks once results are published.
+            {!supabaseMode ? " Disabled in the demo." : ""}
+          </LockNote>
         </Section>
 
         <Section title="Admission window" pending={pending("admission-window")} savedBy={view.savedBy} savedAtIso={view.savedAtIso}>
           <div className={styles.datePair}>
             <div className="field">
               <label htmlFor="setting-window-from">Window from</label>
-              <input id="setting-window-from" className="input" type="date" defaultValue={view.admissionWindow.fromIso} disabled />
+              <input id="setting-window-from" className="input" type="date" defaultValue={view.admissionWindow.fromIso} disabled aria-describedby="setting-window-lock" />
             </div>
             <div className="field">
               <label htmlFor="setting-window-to">Window to</label>
-              <input id="setting-window-to" className="input" type="date" defaultValue={view.admissionWindow.toIso} disabled />
+              <input id="setting-window-to" className="input" type="date" defaultValue={view.admissionWindow.toIso} disabled aria-describedby="setting-window-lock" />
             </div>
           </div>
-          <p className="field-help">
-            The admission window follows the confirmed academic calendar{!supabaseMode ? " — dates shown are fictional until then." : "."}
-          </p>
+          <LockNote id="setting-window-lock">
+            Policy-locked · the admission window follows the confirmed academic calendar and takes effect next session.
+            {!supabaseMode ? " Dates shown are fictional demo defaults." : ""}
+          </LockNote>
         </Section>
 
         <Section title="Fee policy" pending={pending("fee-policy")} savedBy={view.savedBy} savedAtIso={view.savedAtIso}>
-          <ToggleRow id="setting-partial-payments" checked={view.feePolicy.partialPaymentsAllowed} onChange={() => {}} disabled>
+          <ToggleRow id="setting-partial-payments" checked={view.feePolicy.partialPaymentsAllowed} onChange={() => {}} disabled help="Policy-locked · requires finance officer approval; takes effect next session.">
             Partial payments allowed
           </ToggleRow>
-          <ToggleRow id="setting-late-fee" checked={view.feePolicy.lateFeeEnabled} onChange={() => {}} disabled>
+          <ToggleRow id="setting-late-fee" checked={view.feePolicy.lateFeeEnabled} onChange={() => {}} disabled help="Policy-locked · requires finance officer approval; takes effect next session.">
             Late fee enabled
           </ToggleRow>
-          <ToggleRow id="setting-concessions" checked={view.feePolicy.concessionsRequireApproval} onChange={() => {}} disabled>
+          <ToggleRow id="setting-concessions" checked={view.feePolicy.concessionsRequireApproval} onChange={() => {}} disabled help="Policy-locked · requires finance officer approval; takes effect next session.">
             Concessions require approval
           </ToggleRow>
-          <p className="field-help">Fee policy edits require finance officer approval.</p>
+          <LockNote id="setting-fee-lock">Policy-locked · fee policy edits require finance officer approval.</LockNote>
         </Section>
 
         <Section title="Results policy" pending={pending("results-policy")} savedBy={view.savedBy} savedAtIso={view.savedAtIso}>
@@ -241,6 +370,11 @@ export default function SettingsPage() {
               value={gradingScheme}
               onChange={(event) => setGradingScheme(event.target.value)}
             >
+              {gradingScheme === "Not configured" ? (
+                <option value="Not configured" disabled>
+                  Not configured · select a scheme
+                </option>
+              ) : null}
               <option>Letter grades (A1–E2)</option>
               <option>Percentage with grades</option>
               <option>Pass/fail with remarks</option>
@@ -265,8 +399,9 @@ export default function SettingsPage() {
               type="number"
               min={1}
               max={365}
+              placeholder="Not configured"
               value={expiryDays}
-              onChange={(event) => setExpiryDays(Number(event.target.value))}
+              onChange={(event) => setExpiryDays(event.target.value)}
             />
           </div>
           <p className="field-help">New notices expire this many days after publish unless overridden.</p>
@@ -288,6 +423,7 @@ export default function SettingsPage() {
                 value={view.workingDays.days.join(", ")}
                 readOnly
                 disabled
+                aria-describedby="setting-working-lock"
               />
             </div>
             <div className="field">
@@ -299,12 +435,13 @@ export default function SettingsPage() {
                 value={view.workingDays.periodsPerDay}
                 readOnly
                 disabled
+                aria-describedby="setting-working-lock"
               />
             </div>
           </div>
-          <p className="field-help">
-            Working days and period counts await the confirmed school calendar — shown as policy pending until then.
-          </p>
+          <LockNote id="setting-working-lock">
+            Policy-locked · working days and period counts await the confirmed school calendar and take effect next session.
+          </LockNote>
         </Section>
 
         <Section title="Notifications" pending={pending("notifications")} savedBy={view.savedBy} savedAtIso={view.savedAtIso}>
@@ -314,6 +451,7 @@ export default function SettingsPage() {
               id="setting-sender"
               className={`input ${styles.controlWidth}`}
               type="email"
+              placeholder="Not configured"
               value={emailSender}
               onChange={(event) => setEmailSender(event.target.value)}
             />
@@ -323,7 +461,7 @@ export default function SettingsPage() {
             checked={view.noticeDefaults.smsEnabled}
             onChange={() => {}}
             disabled
-            help="SMS provider not configured — the toggle stays disabled."
+            help="Policy-locked · SMS provider not configured; the toggle stays disabled until the provider is approved."
           >
             SMS enabled
           </ToggleRow>
@@ -357,7 +495,7 @@ export default function SettingsPage() {
         <div className={styles.sectionBody}>
           <p className={styles.dangerCopy}>
             These rules let every workflow run locally while a school decision is still pending. They are fictional
-            and session-only — they never change approved school policy or the server authorization model.
+            and session-only · they never change approved school policy or the server authorization model.
           </p>
           {DEMO_POLICY_META.map((meta) => (
             <ToggleRow
@@ -377,33 +515,7 @@ export default function SettingsPage() {
             </Button>
           </div>
         </div>
-        <p className={styles.savedBy}>Session-only — changes apply to this browser session and reset on reload.</p>
-      </section>
-      ) : null}
-
-      {!supabaseMode ? (
-      <section className={`panel ${styles.dangerZone}`} aria-labelledby="danger-heading">
-        <h2 id="danger-heading" className={styles.sectionTitle}>
-          Danger zone
-        </h2>
-        <div className={styles.sectionBody}>
-          <p className={styles.dangerCopy}>
-            Reset the demo dataset to its initial state. Nothing is deleted — this is a fictional demo.
-          </p>
-          <div>
-            <Button variant="danger" onClick={handleReset} disabled={!canManage}>
-              Reset demo data
-            </Button>
-          </div>
-          {resetNote && (
-            <p key={resetNote.key} className={styles.resetNote} aria-live="polite">
-              {resetNote.text}
-            </p>
-          )}
-        </div>
-        <p className={styles.savedBy}>
-          Saved by {view.savedBy} · {formatKolkata(view.savedAtIso, { format: "day" })}
-        </p>
+        <p className={styles.savedBy}>Session-only · changes apply to this browser session and reset on reload.</p>
       </section>
       ) : null}
 

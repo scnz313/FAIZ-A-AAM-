@@ -5,6 +5,7 @@ import {
   examSchedulePublish,
   examScheduleSaveDraft,
   resultsApproveCorrection,
+  resultsEntrySheetCreate,
   resultsEntrySheetModerate,
   resultsEntrySheetPublish,
   resultsEntrySheetSaveDraft,
@@ -12,6 +13,7 @@ import {
   resultsGetEntrySheet,
   resultsGetReportRelease,
   resultsListEntrySheets,
+  resultsListExamDefinitions,
   resultsListEntrySheetVersions,
   resultsListReportReleases,
   resultsReportReleasePublish,
@@ -20,6 +22,9 @@ import {
   resultsCorrectionRequest,
   resultsListPublications,
   resultsWithdraw,
+  resultsListReportReleaseCandidates,
+  resultsPublishReportReleaseBatch,
+  resultsListPendingCorrections,
   resolveFamilyContext,
   schoolConfigRead,
   timetableGetEffective,
@@ -59,9 +64,60 @@ export const academicsModule: AdapterModule = {
   domain: "academics",
   operations: [
     operation("results.listBatches", emptyPayload, ({ supabase }) => resultsListEntrySheets(supabase)),
-    operation("results.getBatch", sheetTarget, ({ supabase }, payload) => resultsGetEntrySheet(supabase, (payload.sheetId ?? payload.batchId)!)),
+    /* Exam definitions the signed-in result officer may create a batch for.
+       Read-only; the projection enforces role-grant scope server-side. */
+    operation("results.examDefinitions", emptyPayload, ({ supabase }) => resultsListExamDefinitions(supabase)),
+    /* Create (or idempotently reopen) the entry sheet for one exam/subject and
+       return the full mapped sheet so the caller never sees a partial record. */
+    operation("results.createBatch", z.object({
+      examDefinitionId: uuid,
+      gradeSectionId: uuid,
+      subjectId: uuid,
+      idempotencyKey: z.string().min(1).optional(),
+    }), async ({ supabase }, payload) => {
+      const created = await resultsEntrySheetCreate(supabase, payload);
+      if (!created.ok) return created;
+      const sheetId = (created.value as Record<string, unknown>).sheetId;
+      if (typeof sheetId !== "string") return created;
+      return resultsGetEntrySheet(supabase, sheetId);
+    }),
+    operation("results.getBatch", sheetTarget, async ({ supabase }, payload) => {
+      const sheetId = (payload.sheetId ?? payload.batchId)!;
+      const sheet = await resultsGetEntrySheet(supabase, sheetId);
+      if (!sheet.ok) return sheet;
+      /* The batch record alone carries no workflow note or version history;
+         both travel with the detail read so the entry workspace can show the
+         moderator's return reason and the audited correction trail. */
+      const [versions, corrections] = await Promise.all([
+        resultsListEntrySheetVersions(supabase, sheetId),
+        resultsListPendingCorrections(supabase, sheetId),
+      ]);
+      return {
+        ok: true as const,
+        value: {
+          ...(sheet.value as Record<string, unknown>),
+          versions: versions.ok ? versions.value : [],
+          corrections: corrections.ok ? corrections.value : [],
+        },
+      };
+    }),
     operation("results.listVersions", sheetTarget, ({ supabase }, payload) => resultsListEntrySheetVersions(supabase, (payload.sheetId ?? payload.batchId)!)),
-    operation("results.listPublications", z.object({ studentId: uuid.optional(), studentRef: publicReference.optional() }), ({ supabase }, payload) => resultsListPublications(supabase, payload.studentId)),
+    /* Pending correction requests for the review queue. RLS scopes rows to the
+       caller's entry-sheet/publication scope; reviewers see requests awaiting
+       their independent approval. */
+    operation("results.listCorrections", emptyPayload, ({ supabase }) => resultsListPendingCorrections(supabase)),
+    operation("results.listPublications", z.object({ studentId: uuid.optional(), studentRef: publicReference.optional() }), async ({ supabase, actor, selection }, payload) => {
+      const family = await resolveFamilyContext(supabase, selection.familyStudentId ? { studentId: selection.familyStudentId } : {}, actor);
+      if (family.ok && family.value.guardianId !== null) {
+        const activeStudentId = family.value.activeStudentId;
+        if (activeStudentId === null) return { ok: true as const, value: [] };
+        if (payload.studentId !== undefined && payload.studentId !== activeStudentId) {
+          return { ok: false as const, errors: [{ code: "forbidden" as const, message: "Results are limited to the active child.", field: null }] };
+        }
+        payload.studentId = activeStudentId;
+      }
+      return resultsListPublications(supabase, payload.studentId);
+    }),
     operation("results.publish", sheetWith({ expectedVersion: z.number().int().nonnegative(), idempotencyKey: z.string().min(1).optional() }), ({ supabase }, payload) => resultsEntrySheetPublish(supabase, { sheetId: (payload.sheetId ?? payload.batchId)!, expectedVersion: payload.expectedVersion, idempotencyKey: payload.idempotencyKey })),
     operation("results.submitMarks", sheetWith({ marks, expectedVersion: z.number().int().nonnegative(), idempotencyKey: z.string().min(1).optional() }), async ({ supabase }, payload) => {
       const saved = await resultsEntrySheetSaveDraft(supabase, { sheetId: (payload.sheetId ?? payload.batchId)!, marks: payload.marks as never, expectedVersion: payload.expectedVersion, idempotencyKey: payload.idempotencyKey });
@@ -84,6 +140,8 @@ export const academicsModule: AdapterModule = {
     }),
     operation("results.getRelease", z.object({ releaseId: uuid.optional(), releaseRef: publicReference.optional() }).refine((value) => value.releaseId !== undefined || value.releaseRef !== undefined, "release reference is required"), ({ supabase }, payload) => resultsGetReportRelease(supabase, payload.releaseId!)),
     operation("results.publishRelease", z.object({ studentId: uuid.optional(), studentRef: publicReference.optional(), enrollmentId: uuid.optional(), enrollmentRef: publicReference.optional(), academicYearId: uuid.optional(), academicYearRef: publicReference.optional(), term: z.string().min(1), publicationIds: z.array(uuid).optional(), publicationRefs: z.array(publicReference).optional(), expectedVersion: z.number().int().nonnegative().nullable().optional(), idempotencyKey: z.string().min(1).optional() }).refine((value) => (value.studentId ?? value.studentRef) !== undefined && (value.enrollmentId ?? value.enrollmentRef) !== undefined && (value.academicYearId ?? value.academicYearRef) !== undefined && (value.publicationIds ?? value.publicationRefs)?.length, "report release references are required"), ({ supabase }, payload) => resultsReportReleasePublish(supabase, { studentId: payload.studentId!, enrollmentId: payload.enrollmentId!, academicYearId: payload.academicYearId!, term: payload.term, publicationIds: payload.publicationIds as never, expectedVersion: payload.expectedVersion, idempotencyKey: payload.idempotencyKey })),
+    operation("results.releaseCandidates", sheetTarget, ({ supabase }, payload) => resultsListReportReleaseCandidates(supabase, (payload.sheetId ?? payload.batchId)!)),
+    operation("results.publishReleaseBatch", sheetWith({ studentIds: z.array(uuid).optional(), idempotencyKey: z.string().min(1).optional() }), ({ supabase }, payload) => resultsPublishReportReleaseBatch(supabase, { sheetId: (payload.sheetId ?? payload.batchId)!, studentIds: payload.studentIds, idempotencyKey: payload.idempotencyKey })),
     operation("results.requestCorrection", z.object({ releaseId: uuid.optional(), releaseRef: publicReference.optional(), publicationId: uuid.optional(), publicationRef: publicReference.optional(), reason: z.string().min(1), idempotencyKey: z.string().min(1).optional() }).refine((value) => (value.releaseId ?? value.releaseRef) !== undefined && (value.publicationId ?? value.publicationRef) !== undefined, "correction references are required"), ({ supabase }, payload) => resultsRequestCorrection(supabase, payload as never)),
     operation("results.approveCorrection", z.object({ requestId: uuid.optional(), requestRef: publicReference.optional(), expectedVersion: z.number().int().positive(), idempotencyKey: z.string().min(1).optional() }).refine((value) => (value.requestId ?? value.requestRef) !== undefined, "correction request reference is required"), ({ supabase }, payload) => resultsApproveCorrection(supabase, payload as never)),
     operation("results.correctionDecide", z.object({ requestId: uuid.optional(), requestRef: publicReference.optional(), outcome: z.enum(["approved", "rejected"]), note: z.string().nullable().optional() }).refine((value) => value.requestId !== undefined || value.requestRef !== undefined, "correction request reference is required"), ({ supabase }, payload) => resultsCorrectionDecide(supabase, { requestId: payload.requestId!, outcome: payload.outcome, note: payload.note })),

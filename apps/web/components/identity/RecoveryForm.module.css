@@ -15,8 +15,8 @@
 
 .actionNote {
   margin: 0;
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.5;
 }
 
@@ -31,7 +31,7 @@
 .success {
   padding: 18px 20px;
   border: 1px solid var(--willow);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: rgba(83, 109, 87, 0.08);
   outline: none;
 }
@@ -44,19 +44,19 @@
 .successTitle {
   margin: 0;
   font-family: var(--serif);
-  font-size: 19px;
-  font-weight: 500;
+  font-size: 1.2rem;
+  font-weight: 650;
   line-height: 1.4;
 }
 
 .successLine {
   margin: 12px 0 0;
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.55;
 }
 
 .successLine strong {
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .demoCode {
@@ -67,20 +67,20 @@
   margin: 14px 0 0;
   padding: 12px 14px;
   border: 1px dashed var(--saffron);
-  border-radius: var(--radius);
-  color: var(--ink-soft);
-  font-size: 13px;
+  border-radius: var(--r);
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 
 .demoCode strong {
   color: var(--ink);
-  font-size: 15px;
+  font-size: 0.92rem;
 }
 
 .successNote {
   margin: 14px 0 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
 }

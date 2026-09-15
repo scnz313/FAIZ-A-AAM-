@@ -1,12 +1,20 @@
 .page {
-  grid-template-columns: minmax(0, 1fr);
   display: grid;
-  gap: 44px;
+  gap: 18px;
 }
 
 /* The global workspace-header margin is absorbed by the grid gap. */
 .header {
   margin-bottom: 0;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+  margin: 0;
 }
 
 .panelHead {
@@ -50,26 +58,43 @@
 
 .panelTitle {
   font-family: var(--serif);
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 1.25rem;
+  font-weight: 650;
   margin: 0;
 }
 
 .liveNote {
-  color: var(--saffron-deep);
-  font-size: 13px;
+  color: var(--saffron-ink);
+  font-size: 0.82rem;
   margin: 0 0 14px;
 }
 
 .loading {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 0;
 }
 
 .table {
-  min-width: 780px;
+  min-width: 620px;
+}
+
+/* Column priority follows the panel width, not the viewport. */
+.tableShell {
+  container-type: inline-size;
+}
+
+@container (max-width: 900px) {
+  .colOptional {
+    display: none;
+  }
+}
+
+@container (max-width: 700px) {
+  .colMore {
+    display: none;
+  }
 }
 
 .pageLink {
@@ -86,15 +111,40 @@
 }
 
 .cellAction {
+  align-items: center;
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   justify-content: flex-end;
+}
+
+/* Inline page schedule control: the datetime field and its confirm sit in the
+   action cell until the publisher commits or cancels. */
+.scheduleForm {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scheduleForm :global(.input) {
+  min-width: 200px;
+  width: auto;
+}
+
+/* Scheduled rows carry the effective instant beneath the status badge. */
+.scheduleNote {
+  color: var(--muted);
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 4px;
 }
 
 .note {
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.5;
   margin: 0;
   padding-top: 18px;
@@ -104,4 +154,146 @@
 .table th:global(.num),
 .table td:global(.num) {
   text-align: right;
+}
+
+/* Draft preview dialog — read-only public typography (serif title, ruled
+   meta, lede plus body). No publish action lives inside the preview. */
+.previewDialog {
+  background: var(--chalk);
+  border: 1px solid var(--ink);
+  border-radius: var(--r);
+  color: var(--ink);
+  margin: auto;
+  max-height: calc(100vh - 32px);
+  max-width: min(680px, calc(100% - 32px));
+  padding: 0;
+  width: 680px;
+}
+
+.previewDialog::backdrop {
+  background: rgb(11 28 42 / 58%);
+}
+
+.previewContent {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: clamp(20px, 4vw, 32px);
+}
+
+.previewHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.previewHeader button {
+  flex: none;
+  min-height: 44px;
+}
+
+.previewTitle {
+  font-family: var(--serif);
+  font-size: clamp(1.6rem, 4vw, 2rem);
+  font-weight: 560;
+  letter-spacing: -0.005em;
+  line-height: 1.12;
+  margin: 6px 0 0;
+}
+
+.previewMeta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  gap: 4px 12px;
+  margin: 12px 0 0;
+}
+
+.previewMeta span:not(:last-child)::after {
+  color: var(--faint);
+  content: " ·";
+}
+
+.previewRule {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 14px 0 0;
+}
+
+.previewLede {
+  font-family: var(--serif);
+  font-size: 1.08rem;
+  line-height: 1.6;
+  margin: 16px 0 0;
+}
+
+.previewProse p {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  margin: 12px 0 0;
+}
+
+.previewError {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin: 16px 0 0;
+}
+
+.previewReviewNote {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  margin: 18px 0 0;
+  padding: 10px 12px;
+}
+
+.previewReviewNote :global(.section-label) {
+  margin: 0;
+}
+
+.previewReviewNote p {
+  font-size: 0.82rem;
+  margin: 6px 0 0;
+}
+
+.previewGuard {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  margin: 18px 0 0;
+  padding-top: 14px;
+}
+
+@media (max-width: 719px) {
+  .editorActions {
+    flex-wrap: wrap;
+    justify-content: stretch;
+  }
+
+  .editorActions > :global(.button) {
+    flex: 1;
+  }
+
+  .panelActions {
+    flex-wrap: wrap;
+  }
+
+  .cellAction :global(.btn) {
+    min-height: 44px;
+  }
+
+  .previewDialog {
+    max-width: calc(100% - 24px);
+  }
+
+  .previewHeader {
+    flex-direction: column;
+  }
+
+  .previewHeader button {
+    width: 100%;
+  }
 }

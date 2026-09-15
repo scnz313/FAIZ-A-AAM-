@@ -89,7 +89,7 @@ export default function ResumeDraft() {
             <span className="demo-badge">Demo</span>
           </div>
           <h3 className={styles.title} id="resume-draft-title">
-            Draft in progress — {gradeLabel}
+            Draft in progress · {gradeLabel}
             {savedTime}
           </h3>
           <p className={styles.line}>

@@ -45,6 +45,35 @@ describe("PasswordResetForm", () => {
     expect(routerMocks.replace).toHaveBeenCalledWith("/sign-in?reset=complete");
   });
 
+  it("routes an MFA-enabled recovery session through the authenticator challenge instead of blaming the link", async () => {
+    authMocks.updateUser.mockResolvedValue({ error: { code: "insufficient_aal", message: "AAL2 session is required" } });
+    const user = userEvent.setup();
+    render(<PasswordResetForm />);
+    await user.type(screen.getByLabelText(/^new password/i), "SecurePass9");
+    await user.type(screen.getByLabelText(/^confirm new password/i), "SecurePass9");
+    await user.click(screen.getByRole("button", { name: "Save new password" }));
+
+    await waitFor(() =>
+      expect(routerMocks.replace).toHaveBeenCalledWith(
+        `/sign-in/totp?next=${encodeURIComponent("/sign-in/reset-password")}`,
+      ),
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(/two-step verification is required/i);
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/no longer valid/i);
+  });
+
+  it("still reports a genuinely unusable link for other failures", async () => {
+    authMocks.updateUser.mockResolvedValue({ error: { code: "session_not_found", message: "Session from session_id claim in JWT does not exist" } });
+    const user = userEvent.setup();
+    render(<PasswordResetForm />);
+    await user.type(screen.getByLabelText(/^new password/i), "SecurePass9");
+    await user.type(screen.getByLabelText(/^confirm new password/i), "SecurePass9");
+    await user.click(screen.getByRole("button", { name: "Save new password" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/no longer valid/i));
+    expect(routerMocks.replace).not.toHaveBeenCalled();
+  });
+
   it("keeps mismatched passwords in the form", async () => {
     const user = userEvent.setup();
     render(<PasswordResetForm />);

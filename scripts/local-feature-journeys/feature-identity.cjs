@@ -17,11 +17,11 @@ module.exports = {
       ["/sign-in", "Sign in"],
       ["/sign-in/verify", "code"],
       ["/sign-in/recovery", "Recovery"],
-      ["/sign-in/totp", "Authenticator"],
+      ["/sign-in/totp", "Two-step verification"],
       ["/sign-in/invite", "Invitation"],
       ["/register/applicant", "Applicant"],
       ["/session-expired", "Session"],
-      ["/access-denied", "denied"],
+      ["/access-denied", "not available to you"],
     ]) {
       try {
         await page.goto(`${base}${path}`, { waitUntil: "networkidle" });

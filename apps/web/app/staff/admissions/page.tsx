@@ -16,16 +16,19 @@ export default async function StaffAdmissionsPage() {
   const rows = supabaseMode ? await loadServerAdmissions() : await admissionsService.listStaffRecords();
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Admissions</p>
-        <h1 className="workspace-title">Admissions</h1>
-        <p className="workspace-intro">Session 2026-27 · applications by status.</p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Admissions</h1>
+          <p className="ph-sub">
+            Every application, its stage, and what it needs next. Approve from the detail page.
+          </p>
+        </div>
+      </div>
 
       <AdmissionsQueue rows={rows} />
 
       {!supabaseMode ? (
-        <p className="demo-note">Demo session — every application above is fictional concept data.</p>
+        <p className="demo-note">Demo session · every application above is fictional concept data.</p>
       ) : null}
     </div>
   );

@@ -12,10 +12,11 @@
   height: 38px;
   padding: 0;
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: var(--chalk);
   color: var(--ink);
   cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .button:hover {
@@ -36,25 +37,40 @@
   height: 16px;
   padding: 0 3px;
   border-radius: 1px;
-  background: var(--saffron);
+  /* saffron-ink (not saffron) keeps the 10px bold count at 6.6:1 on chalk
+     text; plain saffron measured 4.05:1 and failed WCAG 2.2 AA. */
+  background: var(--saffron-ink);
   color: var(--chalk);
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
 }
 
-/* Dropdown — flat ruled panel, no shadow (design rule). */
+/* Dropdown — flat ruled panel, no shadow (design rule). The panel is a
+   bounded column: the header and the expand control stay fixed while the
+   list scrolls, so a long account list can never run past the viewport. */
+/* The closed panel must never intercept pointer events: the class display
+   value would otherwise defeat the `hidden` attribute (UA `display:none` has
+   lower specificity), leaving an invisible overlay over the page content. */
+.panel[hidden] {
+  display: none;
+}
+
 .panel {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
   z-index: 60;
+  display: flex;
+  flex-direction: column;
   min-width: 300px;
   max-width: min(90vw, 360px);
+  max-height: min(72vh, 620px);
   background: var(--chalk);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   text-align: left;
+  animation: fade 0.15s ease;
 }
 
 .header {
@@ -66,25 +82,32 @@
   border-bottom: 1px solid var(--line);
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .heading {
   margin: 0;
-  font-size: 11px;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--muted);
 }
 
 .markAll {
   padding: 4px 0;
   border: 0;
   background: transparent;
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
+  transition: color 0.15s ease;
 }
 
 .markAll:hover:not(:disabled) {
@@ -100,11 +123,14 @@
   margin: 0;
   padding: 0;
   list-style: none;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .item {
   display: grid;
-  grid-template-columns: 8px 1fr;
+  grid-template-columns: 8px 1fr auto;
   gap: 10px;
   padding: 12px 16px;
   border-top: 1px solid var(--line);
@@ -125,6 +151,29 @@
   background: var(--saffron);
 }
 
+/* Quiet per-row clear control: 28px hit area, no border, no shadow. */
+.dismiss {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px -6px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-s);
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.dismiss:hover {
+  color: var(--ink);
+  background: var(--paper);
+}
+
 .itemBody {
   min-width: 0;
 }
@@ -142,18 +191,18 @@
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
 }
 
 .time {
   flex: none;
-  font-size: 11px;
-  color: var(--ink-soft);
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 .text {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.45;
   color: var(--ink);
 }
@@ -162,15 +211,116 @@
   display: block;
   text-decoration-color: var(--line-strong);
   text-underline-offset: 3px;
+  transition: color 0.15s ease;
 }
 
 .textLink:hover {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
 }
 
 .empty {
   margin: 0;
   padding: 20px 16px;
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* Ruled expand control under the bounded list, fixed inside the panel. */
+.showAll {
+  padding: 10px 16px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.showAll:hover {
+  color: var(--ink);
+}
+
+/* Inline recoverable failure — muted madder, no shadow (design rule). */
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--madder-line);
+  background: var(--madder-soft);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--madder-ink);
+}
+
+.retry {
+  flex: none;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--madder-ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.retry:hover {
+  color: var(--ink);
+}
+
+@media (max-width: 719px) {
+  .button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .panel {
+    position: fixed;
+    top: 60px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: calc(100dvh - 76px);
+  }
+
+  .markAll {
+    min-height: 44px;
+    display: inline-grid;
+    place-items: center;
+    padding: 8px 0;
+  }
+
+  .dismiss {
+    width: 36px;
+    height: 36px;
+    margin: 0 -8px 0 0;
+  }
+
+  .showAll {
+    min-height: 44px;
+    display: inline-grid;
+    place-items: center;
+    padding: 8px 16px;
+  }
+
+  .retry {
+    min-height: 44px;
+    display: inline-grid;
+    place-items: center;
+    padding: 8px 0;
+  }
 }

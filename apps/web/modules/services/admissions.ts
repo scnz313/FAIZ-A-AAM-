@@ -90,15 +90,32 @@ export type ApplicationRecord = {
   linkRef?: string;
   /** Server-only duplicate signal; never auto-merges on a name match. */
   duplicateReview?: boolean;
+  /** Candidate identity the school recorded for a duplicate review. */
+  duplicateReviewRef?: string;
+  candidateStudentId?: string;
+  candidateStudentName?: string;
+  /** Uploaded application documents (staff projection; real rows in live mode). */
+  documents?: ApplicationDocumentView[];
+  /** Immutable submitted snapshots, oldest first (field-level version compare). */
+  versions?: ApplicationVersionView[];
+  /** Staff review/decision rows, oldest first, including staff-private notes. */
+  staffReviews?: StaffReviewView[];
   /** Authoritative reviewer identity/reference when loaded from Supabase. */
   reviewer?: string;
   /**
    * Maker/checker (Phase 1): the account that moved this application to
-   * assessment. The same account may not offer/waitlist/decline it — a
-   * different approver must record the decision. Recorded on the
-   * session-saved copy only; fixture rows carry no reviewer identity.
+   * assessment. Offer/waitlist/decline require a review recorded by a
+   * different account — the reviewer cannot approve its own review and an
+   * unreviewed application cannot be decided. Recorded on the session-saved
+   * copy only; fixture rows carry no reviewer identity.
    */
   reviewedByAccountId?: string;
+  /**
+   * Demo optimistic-concurrency version (S4 hardening). Fixtures read as 1;
+   * every demo mutation bumps it. Staff transitions accept an optional
+   * `expectedVersion` and reject stale writes instead of overwriting.
+   */
+  version?: number;
 };
 
 /** A staff-queue row: the application record plus queue-only fields. */
@@ -121,23 +138,97 @@ export type ServerAdmissionRow = {
   created_at: string;
   academic_years: { label: string; starts_on: string; ends_on: string; status: string } | null;
   grades: { label: string } | null;
-  admission_drafts: Array<{ draft: Record<string, unknown>; schema_version: number; expires_at: string; updated_at: string }> | null;
-  admission_application_versions: Array<{ id: string; version: number; snapshot: Record<string, unknown>; schema_version: number; created_at: string }> | null;
+  admission_drafts: AdmissionDraftEmbed | AdmissionDraftEmbed[] | null;
+  admission_application_versions: Array<{ id: string; version: number; snapshot?: Record<string, unknown>; schema_version: number; created_at: string }> | null;
   admission_events: Array<{ event_type: string; visible_to_applicant: boolean; copy: string; created_at: string }> | null;
-  admission_reviews?: Array<{ officer_account_id: string; created_at: string }> | null;
-  admission_offers: Array<{
-    id: string;
-    grade_id: string;
-    academic_year_id: string;
-    conditions: Record<string, unknown>;
-    expires_at: string;
-    fee_required: boolean;
-    admission_invoice_ref: string | null;
-    response: string;
-    responded_at: string | null;
-    decided_by_account_id: string | null;
-    version: number;
+  admission_reviews?: Array<{ officer_account_id: string; created_at: string; action: string; visible_reason: string | null; private_note: string | null }> | null;
+  admission_offers: AdmissionOfferEmbed | AdmissionOfferEmbed[] | null;
+  admission_documents?: Array<{
+    requirement_code: string | null;
+    documents: {
+      reference: string;
+      safe_filename: string;
+      category: string;
+      scan_status: string;
+      mime_type: string;
+      size_bytes: number;
+      created_at: string;
+      finalized_at: string | null;
+    } | null;
   }> | null;
+  admission_duplicate_reviews?: AdmissionDuplicateReviewEmbed | AdmissionDuplicateReviewEmbed[] | null;
+};
+
+type AdmissionDraftEmbed = {
+  draft: Record<string, unknown>;
+  schema_version: number;
+  expires_at: string;
+  updated_at: string;
+};
+
+type AdmissionOfferEmbed = {
+  id: string;
+  grade_id: string;
+  academic_year_id: string;
+  conditions: Record<string, unknown>;
+  expires_at: string;
+  fee_required: boolean;
+  admission_invoice_ref: string | null;
+  response: string;
+  responded_at: string | null;
+  decided_by_account_id?: string | null;
+  version: number;
+};
+
+type AdmissionDuplicateReviewEmbed = {
+  status: string;
+  candidate_student_id: string;
+  reference: string;
+  reason: string | null;
+  reviewed_at: string | null;
+  students: { reference?: string; people: { display_name?: string } | null } | null;
+};
+
+/**
+ * PostgREST embeds a to-one relationship as an object (its foreign key is
+ * unique) and a to-many relationship as an array. Both shapes must map
+ * identically, or a live offer/draft silently disappears.
+ */
+function firstRelatedEmbed<T>(value: T | T[] | null | undefined): T | undefined {
+  if (value === null || value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/** One uploaded application document as the staff review reads it. */
+export type ApplicationDocumentView = {
+  requirementCode: string | null;
+  reference: string;
+  filename: string;
+  category: string;
+  scanStatus: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAtIso: string;
+  finalizedAtIso: string | null;
+};
+
+/** One immutable submitted snapshot (used for field-level version compare). */
+export type ApplicationVersionView = {
+  version: number;
+  snapshot: Record<string, unknown>;
+  schemaVersion: number;
+  submittedAtIso: string;
+};
+
+/** One staff review/decision row, including the staff-private note. */
+export type StaffReviewView = {
+  action: string;
+  visibleReason: string | null;
+  privateNote: string | null;
+  officerAccountId: string | null;
+  /** Display name resolved from the officer directory; null until resolved. */
+  officerName?: string | null;
+  atIso: string;
 };
 
 const SERVER_STATUS_TO_APPLICATION: Record<string, ApplicationStatus> = {
@@ -172,8 +263,9 @@ const SERVER_EVENT_TO_STATUS: Record<string, ApplicationStatus> = {
 const serverAdmissionIds = new Map<string, { id: string; version: number; offerVersion: number }>();
 
 export function mapServerApplication(row: ServerAdmissionRow, invoiceAmountPaise = 0): ApplicationRecord {
-  const offer = row.admission_offers?.[0];
+  const offer = firstRelatedEmbed(row.admission_offers);
   const reviewer = [...(row.admission_reviews ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at)).at(-1)?.officer_account_id;
+  const duplicate = firstRelatedEmbed(row.admission_duplicate_reviews);
   const timeline = (row.admission_events ?? [])
     .filter((event) => event.visible_to_applicant)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -200,8 +292,43 @@ export function mapServerApplication(row: ServerAdmissionRow, invoiceAmountPaise
     contact: row.parent_contact ?? "—",
     submittedAtIso: row.submitted_at ?? row.created_at,
     status: SERVER_STATUS_TO_APPLICATION[row.current_status] ?? "Submitted",
+    version: row.version,
     timeline,
     duplicateReview: row.current_status === "duplicate_review",
+    duplicateReviewRef: duplicate?.reference,
+    candidateStudentId: duplicate?.candidate_student_id,
+    candidateStudentName: duplicate?.students?.people?.display_name,
+    documents: (row.admission_documents ?? [])
+      .filter((link) => link.documents !== null)
+      .map((link) => ({
+        requirementCode: link.requirement_code,
+        reference: link.documents!.reference,
+        filename: link.documents!.safe_filename,
+        category: link.documents!.category,
+        scanStatus: link.documents!.scan_status,
+        mimeType: link.documents!.mime_type,
+        sizeBytes: link.documents!.size_bytes,
+        uploadedAtIso: link.documents!.created_at,
+        finalizedAtIso: link.documents!.finalized_at,
+      })),
+    versions: [...(row.admission_application_versions ?? [])]
+      .sort((left, right) => left.version - right.version)
+      .map((entry) => ({
+        version: entry.version,
+        snapshot: entry.snapshot ?? {},
+        schemaVersion: entry.schema_version,
+        submittedAtIso: entry.created_at,
+      })),
+    staffReviews: [...(row.admission_reviews ?? [])]
+      .sort((left, right) => left.created_at.localeCompare(right.created_at))
+      .map((entry) => ({
+        action: entry.action,
+        visibleReason: entry.visible_reason,
+        privateNote: entry.private_note,
+        officerAccountId: entry.officer_account_id,
+        officerName: null,
+        atIso: entry.created_at,
+      })),
     reviewer,
     reviewedByAccountId: reviewer,
     offer: offer === undefined
@@ -236,6 +363,36 @@ async function serverApplicationByRef(ref: string, scope: "mine" | "staff"): Pro
   return (await serverAdmissionRows(scope)).find((record) => record.ref === ref) ?? null;
 }
 
+/** One bounded staff read: never the whole queue for a single application. */
+async function serverAdmissionByRef(ref: string): Promise<ApplicationRecord | null> {
+  const result = await adapterCall<ServerAdmissionRow | null>("admissions.staffByRef", { applicationRef: ref });
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Admissions are unavailable.");
+  if (result.value === null) return null;
+  return withEnrollmentReferences(ref, mapServerApplication(result.value));
+}
+
+/** Enrolled records re-read on the applicant side carry no conversion refs
+ * (the conversion row is staff-only under RLS); this enrichment fills the
+ * public student/enrollment references without exposing internal ids. */
+async function withEnrollmentReferences(ref: string, record: ApplicationRecord): Promise<ApplicationRecord> {
+  if (record.status !== "Enrolled" || (record.studentRef !== undefined && record.enrollmentRef !== undefined)) return record;
+  try {
+    const result = await adapterCall<{ studentRef?: string; enrollmentRef?: string; linkRef?: string | null } | null>(
+      "admissions.enrollmentReference",
+      { applicationRef: ref },
+    );
+    if (!result.ok || result.value === null) return record;
+    return {
+      ...record,
+      studentRef: result.value.studentRef ?? record.studentRef,
+      enrollmentRef: result.value.enrollmentRef ?? record.enrollmentRef,
+      linkRef: result.value.linkRef ?? record.linkRef,
+    };
+  } catch {
+    return record;
+  }
+}
+
 export async function resolveServerApplicationId(ref: string, scope: "mine" | "staff" = "mine"): Promise<string> {
   if (!serverAdmissionIds.has(ref)) await serverAdmissionRows(scope);
   const target = serverAdmissionIds.get(ref);
@@ -247,7 +404,7 @@ async function serverDraftByRef(ref: string): Promise<ApplicationDraft | null> {
   const rows = await serverAdmissionRawRows("mine");
   const row = rows.find((candidate) => candidate.reference === ref);
   if (row) mapServerApplication(row);
-  return row?.admission_drafts?.[0]?.draft as ApplicationDraft | null ?? null;
+  return (firstRelatedEmbed(row?.admission_drafts)?.draft as ApplicationDraft | undefined) ?? null;
 }
 
 function normalizedLabel(value: string): string {
@@ -268,16 +425,20 @@ async function serverAdmissionDecision(
   ref: string,
   operation: "reviewAdvance" | "decide",
   payload: Record<string, unknown>,
+  expectedVersion?: number,
 ): Promise<ApplicationRecord> {
-  if (!serverAdmissionIds.has(ref)) await serverAdmissionRows("staff");
-  const target = serverAdmissionIds.get(ref);
-  if (target === undefined) throw new Error("Application not found.");
+  let version = expectedVersion;
+  if (version === undefined) {
+    const current = await serverAdmissionByRef(ref);
+    if (current === null || current.version === undefined) throw new Error("Application not found.");
+    version = current.version;
+  }
   const result = await adapterCall(
     operation === "reviewAdvance" ? "admissions.reviewAdvance" : "admissions.decide",
-    { applicationRef: ref, expectedVersion: target.version, ...payload },
+    { applicationRef: ref, expectedVersion: version, ...payload },
   );
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Admission decision failed.");
-  const updated = await serverApplicationByRef(ref, "staff");
+  const updated = await serverAdmissionByRef(ref);
   if (updated === null) throw new Error("Admission decision was accepted but the updated application is unavailable.");
   return updated;
 }
@@ -291,6 +452,20 @@ export interface AdmissionsService {
   submitApplication(draft: ApplicationDraft, draftRef?: string): Promise<{ ref: string }>;
   /** The record for a reference, or null when it is not in the school's records. */
   getApplication(ref: string): Promise<ApplicationRecord | null>;
+  /**
+   * The staff-authorized record for one reference. A single bounded read:
+   * the staff queue is never re-fetched to refresh one application.
+   */
+  getStaffApplication(ref: string): Promise<ApplicationRecord | null>;
+  /**
+   * Display-name directory for the officers who recorded review rows on an
+   * application. Review rows carry account ids only, and no interface may
+   * render an id, so callers resolve names through this map and fall back to
+   * "Admissions office" when a name is unavailable.
+   */
+  reviewerDirectory(ref: string): Promise<Record<string, string>>;
+  /** The signed-in applicant's own applications, newest first. */
+  listMyApplications(): Promise<ApplicationRecord[]>;
   /** Applicant response to a seat offer; appends a timeline event. */
   respondToOffer(ref: string, accepted: boolean, by: string, note?: string): Promise<ApplicationRecord>;
   /**
@@ -302,8 +477,17 @@ export interface AdmissionsService {
     ref: string,
     input: { studentRef: string; enrollmentRef: string; linkRef: string | null },
   ): Promise<ApplicationRecord>;
-  /** Staff action: request changes on a submitted application. */
-  requestChange(ref: string, reason: string): Promise<ApplicationRecord>;
+  /** Staff action: request changes on a submitted application. When `expectedVersion` is supplied, stale copies are rejected. `privateNote` stays staff-only. */
+  requestChange(ref: string, reason: string, expectedVersion?: number, privateNote?: string): Promise<ApplicationRecord>;
+  /**
+   * Approver resolution of a duplicate-identity review: approving returns the
+   * application to submitted status, rejecting declines it. The candidate
+   * student and evidence come from the reviewed record.
+   */
+  resolveDuplicateReview(
+    ref: string,
+    input: { outcome: "approved" | "rejected"; reason: string; evidenceReference?: string; expectedVersion?: number },
+  ): Promise<ApplicationRecord>;
   /** Applicant withdrawal — gated on a school policy decision. */
   withdraw(ref: string, by: string): Promise<ApplicationRecord>;
   /** Staff queue: every fixture row plus session-saved records, newest first. */
@@ -311,30 +495,37 @@ export interface AdmissionsService {
   /**
    * Staff action: send the application to the assessment panel. Records the
    * acting account as the reviewer (maker) for maker/checker separation when
-   * `actorAccountId` is supplied; legacy callers may omit it.
+   * `actorAccountId` is supplied; legacy callers may omit it. When
+   * `expectedVersion` is supplied, stale copies are rejected with who/when info.
    */
-  staffMoveToAssessment(ref: string, note?: string, actorAccountId?: string): Promise<ApplicationRecord>;
+  staffMoveToAssessment(ref: string, note?: string, actorAccountId?: string, expectedVersion?: number, privateNote?: string): Promise<ApplicationRecord>;
   /**
    * Staff action: start review on a submitted application (submitted → under_review).
    * Records the acting account as the reviewer for maker/checker separation.
+   * When `expectedVersion` is supplied, stale copies are rejected.
    */
-  staffStartReview(ref: string, note?: string, actorAccountId?: string): Promise<ApplicationRecord>;
+  staffStartReview(ref: string, note?: string, actorAccountId?: string, expectedVersion?: number, privateNote?: string): Promise<ApplicationRecord>;
   /**
    * Staff action: offer a seat after assessment; reason required; a safe
-   * no-op when already Offered. Rejects when `actorAccountId` is the same
-   * account that reviewed the application (maker/checker).
+   * no-op when already Offered. Requires a reviewer step recorded by another
+   * account (maker/checker) and rejects when `actorAccountId` is that
+   * reviewer. When `expectedVersion` is supplied, stale copies are rejected.
    */
-  staffOfferSeat(ref: string, note: string, actorAccountId?: string): Promise<ApplicationRecord>;
+  staffOfferSeat(ref: string, note: string, actorAccountId?: string, expectedVersion?: number, privateNote?: string): Promise<ApplicationRecord>;
   /**
    * Staff action: place the application on the waitlist; reason required.
-   * Rejects when `actorAccountId` reviewed the application (maker/checker).
+   * Requires a reviewer step recorded by another account (maker/checker) and
+   * rejects when `actorAccountId` is that reviewer. When `expectedVersion` is
+   * supplied, stale copies are rejected.
    */
-  staffWaitlist(ref: string, note: string, actorAccountId?: string): Promise<ApplicationRecord>;
+  staffWaitlist(ref: string, note: string, actorAccountId?: string, expectedVersion?: number, privateNote?: string): Promise<ApplicationRecord>;
   /**
-   * Staff action: decline the application; reason required. Rejects when
-   * `actorAccountId` reviewed the application (maker/checker).
+   * Staff action: decline the application; reason required. Requires a
+   * reviewer step recorded by another account (maker/checker) and rejects
+   * when `actorAccountId` is that reviewer. When `expectedVersion` is
+   * supplied, stale copies are rejected.
    */
-  staffDecline(ref: string, note: string, actorAccountId?: string): Promise<ApplicationRecord>;
+  staffDecline(ref: string, note: string, actorAccountId?: string, expectedVersion?: number, privateNote?: string): Promise<ApplicationRecord>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -413,6 +604,7 @@ function changesRequestedFixtureRecord(): ApplicationRecord | null {
       { status: "Under review", atIso: plusMs(submittedAt, DAY_MS), actor: "Admissions office", note: "Documents verified; eligibility confirmed." },
       { status: "Changes requested", atIso: plusMs(submittedAt, 2 * DAY_MS), actor: "Admissions office", note: "Previous-school report card was unreadable — re-upload requested." },
     ],
+    version: 1,
   };
 }
 
@@ -458,6 +650,7 @@ export function fixtureApplicationRecord(ref: string): ApplicationRecord | null 
       status: app.currentStatus,
       timeline: app.timeline,
       offer: app.offer ? { ...app.offer } : undefined,
+      version: 1,
     };
   }
   if (ref === CHANGES_REQUESTED_REF) return changesRequestedFixtureRecord();
@@ -484,6 +677,7 @@ export function fixtureApplicationRecord(ref: string): ApplicationRecord | null 
     submittedAtIso: row.submittedAtIso,
     status: row.status,
     timeline,
+    version: 1,
     offer:
       row.status === "Offered"
         ? {
@@ -514,20 +708,66 @@ const WAITLIST_FROM: readonly ApplicationStatus[] = ["Assessment", "Submitted", 
 const DECLINE_FROM: readonly ApplicationStatus[] = ["Submitted", "Under review", "Changes requested", "Assessment", "Waitlisted"];
 
 /**
- * Maker/checker (Phase 1): an approver may not decide on an application they
- * reviewed. Only enforced when an actor account is supplied — legacy
- * callers/tests that omit it keep the previous behavior.
+ * Maker/checker (Phase 1): a decision requires a recorded reviewer step, and
+ * the deciding account must not be that reviewer. Mirrors the server command,
+ * which refuses an offer/waitlist/decline until a different account has
+ * recorded a review row.
  */
 function requireDifferentApprover(record: ApplicationRecord, actorAccountId?: string): void {
-  if (
-    actorAccountId !== undefined &&
-    record.reviewedByAccountId !== undefined &&
-    actorAccountId === record.reviewedByAccountId
-  ) {
+  if (record.reviewedByAccountId === undefined) {
+    throw new Error(
+      "Maker/checker separation: a separate admissions reviewer step is required before this decision; another account must record the review first.",
+    );
+  }
+  if (actorAccountId !== undefined && actorAccountId === record.reviewedByAccountId) {
     throw new Error(
       "Maker/checker separation — this account reviewed the application and cannot approve its own review; another approver must record the decision.",
     );
   }
+}
+
+/** Demo record version — fixtures without an explicit version read as 1. */
+function currentRecordVersion(record: ApplicationRecord): number {
+  return record.version ?? 1;
+}
+
+function nextRecordVersion(record: ApplicationRecord): number {
+  return currentRecordVersion(record) + 1;
+}
+
+/**
+ * Optimistic-concurrency guard (S4): when the caller supplies an
+ * `expectedVersion`, a stale copy fails with who/when info instead of
+ * silently overwriting. Omitted versions keep legacy behavior for callers
+ * that do not track versions. Uses the existing Error transport.
+ */
+function requireExpectedVersion(record: ApplicationRecord, expectedVersion?: number): void {
+  if (expectedVersion === undefined) return;
+  const current = currentRecordVersion(record);
+  if (expectedVersion !== current) {
+    const last = record.timeline[record.timeline.length - 1];
+    const actor = last?.actor ?? "Admissions office";
+    const atIso = last?.atIso ?? record.submittedAtIso;
+    throw new Error(
+      `Stale write for ${record.ref}: expected version ${expectedVersion} but current is ${current} (last updated by ${actor} at ${atIso}) — reload and retry.`,
+    );
+  }
+}
+
+/** Demo parity for staff-private notes: appended to the record, never to the
+ * applicant-visible timeline. The live service stores the same note on
+ * `admission_reviews.private_note`. */
+function appendStaffReview(
+  record: ApplicationRecord,
+  action: string,
+  atIso: string,
+  visibleReason: string | null,
+  privateNote?: string | null,
+): ApplicationRecord {
+  const note = privateNote?.trim();
+  if (note === undefined || note === "") return record;
+  const entry: StaffReviewView = { action, atIso, visibleReason, privateNote: note, officerAccountId: null, officerName: null };
+  return { ...record, staffReviews: [...(record.staffReviews ?? []), entry] };
 }
 
 /* ------------------------------------------------------------------ */
@@ -557,7 +797,9 @@ export const admissionsService: AdmissionsService = {
         status: string;
         updatedAt: string;
       }>("admissions.saveDraft", {
-        applicationRef: existing === undefined ? undefined : key,
+        /* Always name the existing application when editing: a cold session
+           map must update that application, never create a second one. */
+        applicationRef: key === "new" ? undefined : key,
         academicYearRef: configuration.academicYearRef,
         gradeRef: configuration.gradeRef,
         studentName: draft.studentName,
@@ -617,6 +859,7 @@ export const admissionsService: AdmissionsService = {
             { status: "Submitted", atIso: now, actor: "Applicant", note: "Updated application submitted after the requested changes." },
             { status: "Under review", atIso: plusMs(now, 30 * MIN_MS), actor: "Admissions office", note: "Documents received. The admissions office is verifying eligibility." },
           ],
+          version: nextRecordVersion(existing),
         };
         saveRecord(updated);
         return { ref: updated.ref };
@@ -633,6 +876,7 @@ export const admissionsService: AdmissionsService = {
         contact: draft.phone,
         submittedAtIso: now,
         status: "Submitted",
+        version: 1,
         timeline: [
           { status: "Submitted", atIso: now, actor: "Applicant", note: "Application submitted with all required documents." },
           { status: "Under review", atIso: plusMs(now, 30 * MIN_MS), actor: "Admissions office", note: "Documents received. The admissions office is verifying eligibility." },
@@ -645,15 +889,52 @@ export const admissionsService: AdmissionsService = {
 
   async getApplication(ref) {
     if (clientAdapterMode() === "supabase") {
-      return (await serverApplicationByRef(ref, "mine")) ?? (await serverApplicationByRef(ref, "staff"));
+      /* Applicant scope only: the staff queue is a separate, role-gated read. */
+      const record = await serverApplicationByRef(ref, "mine");
+      return record === null ? null : withEnrollmentReferences(ref, record);
     }
     return respond(() => loadRecord(ref));
   },
 
+  async getStaffApplication(ref) {
+    if (clientAdapterMode() === "supabase") return serverAdmissionByRef(ref);
+    return respond(() => loadRecord(ref));
+  },
+
+  async reviewerDirectory(ref) {
+    if (clientAdapterMode() === "supabase") {
+      const directory = await adapterCall<Array<{ accountId: string; displayName: string }>>(
+        "admissions.reviewerDirectory",
+        { applicationRef: ref },
+      );
+      /* An honest fallback: a denied or failed directory read leaves every
+         review row labelled "Admissions office" instead of an id. */
+      if (!directory.ok) return {};
+      const names: Record<string, string> = {};
+      for (const entry of directory.value) {
+        if (typeof entry.accountId === "string" && typeof entry.displayName === "string" && entry.displayName !== "") {
+          names[entry.accountId] = entry.displayName;
+        }
+      }
+      return names;
+    }
+    return {};
+  },
+
+  async listMyApplications() {
+    if (clientAdapterMode() === "supabase") {
+      return serverAdmissionRows("mine");
+    }
+    return respond(() => Object.values(allRecords()).map((record) => ({ ...record })));
+  },
+
   async respondToOffer(ref, accepted, by, note) {
     if (clientAdapterMode() === "supabase") {
-      const target = serverAdmissionIds.get(ref);
+      /* Resolve through the authoritative projection first: serverApplicationByRef
+         populates serverAdmissionIds, so reading the map before this call
+         always missed on a cold browser session and rejected every response. */
       const current = await serverApplicationByRef(ref, "mine");
+      const target = serverAdmissionIds.get(ref);
       if (target === undefined || current === null || current.offer === undefined) throw new Error("Application offer not found.");
       const result = await adapterCall<{ invoiceRef: string | null }>("admissions.respondOffer", {
         applicationRef: ref,
@@ -673,6 +954,7 @@ export const admissionsService: AdmissionsService = {
       const next: ApplicationRecord = {
         ...record,
         status: accepted ? "Offered" : "Declined",
+        version: nextRecordVersion(record),
         timeline: [
           ...record.timeline,
           accepted
@@ -725,6 +1007,7 @@ export const admissionsService: AdmissionsService = {
       const next: ApplicationRecord = {
         ...record,
         status: "Enrolled",
+        version: nextRecordVersion(record),
         studentRef: input.studentRef,
         enrollmentRef: input.enrollmentRef,
         linkRef: input.linkRef ?? undefined,
@@ -743,22 +1026,42 @@ export const admissionsService: AdmissionsService = {
     });
   },
 
-  async requestChange(ref, reason) {
+  async resolveDuplicateReview(ref, input) {
     if (clientAdapterMode() === "supabase") {
-      const target = serverAdmissionIds.get(ref);
-      if (target === undefined) {
-        await serverAdmissionRows("staff");
+      const current = await serverAdmissionByRef(ref);
+      if (current === null) throw new Error("Application not found.");
+      if (current.candidateStudentId === undefined) {
+        throw new Error("No duplicate-review candidate is recorded for this application.");
       }
-      const current = serverAdmissionIds.get(ref);
-      if (current === undefined) throw new Error("Application not found.");
+      const result = await adapterCall<Record<string, unknown>>("admissions.resolveDuplicateReview", {
+        applicationRef: ref,
+        candidateStudentId: current.candidateStudentId,
+        outcome: input.outcome,
+        evidenceType: "staff_review",
+        evidenceReference: input.evidenceReference ?? current.duplicateReviewRef ?? null,
+        reason: input.reason.trim(),
+        expectedVersion: input.expectedVersion ?? current.version,
+      });
+      if (!result.ok) throw new Error(result.errors[0]?.message ?? "The duplicate review could not be resolved.");
+      const updated = await serverAdmissionByRef(ref);
+      if (updated === null) throw new Error("The review was recorded but the application could not be reloaded.");
+      return updated;
+    }
+    throw new Error("Duplicate-identity review is a live-service flow; demo records never enter it.");
+  },
+
+  async requestChange(ref, reason, expectedVersion, privateNote) {
+    if (clientAdapterMode() === "supabase") {
+      const current = await serverAdmissionByRef(ref);
+      if (current === null) throw new Error("Application not found.");
       const result = await adapterCall("admissions.requestChanges", {
         applicationRef: ref,
-        expectedVersion: current.version,
+        expectedVersion: expectedVersion ?? current.version,
         visibleReason: reason.trim(),
-        privateNote: null,
+        privateNote: privateNote?.trim() || null,
       });
       if (!result.ok) throw new Error(result.errors[0]?.message ?? "Request for changes failed.");
-      const updated = (await serverApplicationByRef(ref, "staff")) ?? (await serverApplicationByRef(ref, "mine"));
+      const updated = await serverAdmissionByRef(ref);
       if (updated === null) throw new Error("Application was updated but could not be reloaded.");
       return updated;
     }
@@ -767,16 +1070,19 @@ export const admissionsService: AdmissionsService = {
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
+      requireExpectedVersion(record, expectedVersion);
       const updated: ApplicationRecord = {
         ...record,
         status: "Changes requested",
+        version: nextRecordVersion(record),
         timeline: [
           ...record.timeline,
           { status: "Changes requested", atIso: demoNowIso(), actor: "Admissions office", note: reason },
         ],
       };
-      saveRecord(updated);
-      return updated;
+      const withNote = appendStaffReview(updated, "requested_changes", updated.timeline.at(-1)?.atIso ?? demoNowIso(), reason, privateNote);
+      saveRecord(withNote);
+      return withNote;
     });
   },
 
@@ -814,6 +1120,7 @@ export const admissionsService: AdmissionsService = {
       const updated: ApplicationRecord = {
         ...record,
         status: "Withdrawn",
+        version: nextRecordVersion(record),
         timeline: [
           ...record.timeline,
           { status: "Withdrawn", atIso: demoNowIso(), actor: by, note: "Application withdrawn by the applicant." },
@@ -834,7 +1141,9 @@ export const admissionsService: AdmissionsService = {
 
   async listStaffRecords() {
     if (clientAdapterMode() === "supabase") {
-      return (await serverAdmissionRows("staff")).map((record) => ({ ...record }));
+      /* The queue surfaces the duplicate signal so reviewers can see it
+         instead of a plain "Under review" row. */
+      return (await serverAdmissionRows("staff")).map((record): StaffQueueRecord => ({ ...record, flagged: record.duplicateReview === true }));
     }
     return respond(() => {
       const fixtureRows: StaffQueueRecord[] = staffApplications
@@ -851,19 +1160,21 @@ export const admissionsService: AdmissionsService = {
     });
   },
 
-  async staffMoveToAssessment(ref, note, actorAccountId) {
+  async staffMoveToAssessment(ref, note, actorAccountId, expectedVersion, privateNote) {
     if (clientAdapterMode() === "supabase") {
-      return serverAdmissionDecision(ref, "reviewAdvance", { action: "assessment", visibleReason: note ?? null, privateNote: null });
+      return serverAdmissionDecision(ref, "reviewAdvance", { action: "assessment", visibleReason: note ?? null, privateNote: privateNote?.trim() || null }, expectedVersion);
     }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
+      requireExpectedVersion(record, expectedVersion);
       if (!MOVE_TO_ASSESSMENT_FROM.includes(record.status)) {
         throw new Error(`Cannot move an application in "${record.status}" to assessment — it must be Submitted, Under review, or Changes requested.`);
       }
       const updated: ApplicationRecord = {
         ...record,
         status: "Assessment",
+        version: nextRecordVersion(record),
         /* Maker/checker: remember who reviewed this application so the same
            account cannot approve its own review later. */
         reviewedByAccountId: actorAccountId ?? record.reviewedByAccountId,
@@ -872,44 +1183,49 @@ export const admissionsService: AdmissionsService = {
           { status: "Assessment", atIso: demoNowIso(), actor: "Admissions office", note: note?.trim() || "Moved to the assessment panel." },
         ],
       };
-      saveRecord(updated);
-      return updated;
+      const withNote = appendStaffReview(updated, "assessment", updated.timeline.at(-1)?.atIso ?? demoNowIso(), updated.timeline.at(-1)?.note ?? null, privateNote);
+      saveRecord(withNote);
+      return withNote;
     });
   },
 
-  async staffStartReview(ref, note, actorAccountId) {
+  async staffStartReview(ref, note, actorAccountId, expectedVersion, privateNote) {
     if (clientAdapterMode() === "supabase") {
-      return serverAdmissionDecision(ref, "reviewAdvance", { action: "under_review", visibleReason: note ?? null, privateNote: null });
+      return serverAdmissionDecision(ref, "reviewAdvance", { action: "under_review", visibleReason: note ?? null, privateNote: privateNote?.trim() || null }, expectedVersion);
     }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
+      requireExpectedVersion(record, expectedVersion);
       if (!START_REVIEW_FROM.includes(record.status)) {
         throw new Error(`Cannot start review on an application in "${record.status}" — it must be Submitted or Changes requested.`);
       }
       const updated: ApplicationRecord = {
         ...record,
         status: "Under review",
+        version: nextRecordVersion(record),
         reviewedByAccountId: actorAccountId ?? record.reviewedByAccountId,
         timeline: [
           ...record.timeline,
           { status: "Under review", atIso: demoNowIso(), actor: "Admissions office", note: note?.trim() || "Review started." },
         ],
       };
-      saveRecord(updated);
-      return updated;
+      const withNote = appendStaffReview(updated, "under_review", updated.timeline.at(-1)?.atIso ?? demoNowIso(), updated.timeline.at(-1)?.note ?? null, privateNote);
+      saveRecord(withNote);
+      return withNote;
     });
   },
 
-  async staffOfferSeat(ref, note, actorAccountId) {
+  async staffOfferSeat(ref, note, actorAccountId, expectedVersion, privateNote) {
     if (clientAdapterMode() === "supabase") {
-      return serverAdmissionDecision(ref, "decide", { action: "offer", visibleReason: note, privateNote: null, conditions: {}, expiresAt: null });
+      return serverAdmissionDecision(ref, "decide", { action: "offer", visibleReason: note, privateNote: privateNote?.trim() || null, conditions: {}, expiresAt: null }, expectedVersion);
     }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
       /* Retry-safe: an outstanding offer is never overwritten or duplicated. */
       if (record.status === "Offered") return record;
+      requireExpectedVersion(record, expectedVersion);
       if (record.status !== "Assessment") {
         throw new Error(`A seat can only be offered after assessment — this application is "${record.status}".`);
       }
@@ -919,6 +1235,7 @@ export const admissionsService: AdmissionsService = {
       const updated: ApplicationRecord = {
         ...record,
         status: "Offered",
+        version: nextRecordVersion(record),
         timeline: [...record.timeline, { status: "Offered", atIso: now, actor: "Admissions office", note: reason }],
         offer: {
           grade: record.grade,
@@ -928,18 +1245,20 @@ export const admissionsService: AdmissionsService = {
           accepted: false,
         },
       };
-      saveRecord(updated);
-      return updated;
+      const withNote = appendStaffReview(updated, "offer", now, reason, privateNote);
+      saveRecord(withNote);
+      return withNote;
     });
   },
 
-  async staffWaitlist(ref, note, actorAccountId) {
+  async staffWaitlist(ref, note, actorAccountId, expectedVersion, privateNote) {
     if (clientAdapterMode() === "supabase") {
-      return serverAdmissionDecision(ref, "decide", { action: "waitlist", visibleReason: note, privateNote: null, conditions: {}, expiresAt: null });
+      return serverAdmissionDecision(ref, "decide", { action: "waitlist", visibleReason: note, privateNote: privateNote?.trim() || null, conditions: {}, expiresAt: null }, expectedVersion);
     }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
+      requireExpectedVersion(record, expectedVersion);
       if (!WAITLIST_FROM.includes(record.status)) {
         throw new Error(`An application in "${record.status}" cannot be waitlisted.`);
       }
@@ -948,20 +1267,23 @@ export const admissionsService: AdmissionsService = {
       const updated: ApplicationRecord = {
         ...record,
         status: "Waitlisted",
+        version: nextRecordVersion(record),
         timeline: [...record.timeline, { status: "Waitlisted", atIso: demoNowIso(), actor: "Admissions office", note: reason }],
       };
-      saveRecord(updated);
-      return updated;
+      const withNote = appendStaffReview(updated, "waitlist", updated.timeline.at(-1)?.atIso ?? demoNowIso(), reason, privateNote);
+      saveRecord(withNote);
+      return withNote;
     });
   },
 
-  async staffDecline(ref, note, actorAccountId) {
+  async staffDecline(ref, note, actorAccountId, expectedVersion, privateNote) {
     if (clientAdapterMode() === "supabase") {
-      return serverAdmissionDecision(ref, "decide", { action: "decline", visibleReason: note, privateNote: null, conditions: {}, expiresAt: null });
+      return serverAdmissionDecision(ref, "decide", { action: "decline", visibleReason: note, privateNote: privateNote?.trim() || null, conditions: {}, expiresAt: null }, expectedVersion);
     }
     return respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
+      requireExpectedVersion(record, expectedVersion);
       if (!DECLINE_FROM.includes(record.status)) {
         throw new Error(`An application in "${record.status}" cannot be declined.`);
       }
@@ -970,10 +1292,12 @@ export const admissionsService: AdmissionsService = {
       const updated: ApplicationRecord = {
         ...record,
         status: "Declined",
+        version: nextRecordVersion(record),
         timeline: [...record.timeline, { status: "Declined", atIso: demoNowIso(), actor: "Admissions office", note: reason }],
       };
-      saveRecord(updated);
-      return updated;
+      const withNote = appendStaffReview(updated, "decline", updated.timeline.at(-1)?.atIso ?? demoNowIso(), reason, privateNote);
+      saveRecord(withNote);
+      return withNote;
     });
   },
 };

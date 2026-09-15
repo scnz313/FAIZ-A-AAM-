@@ -26,5 +26,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(new URL("/sign-in?error=auth", appUrl));
+  /* Provider invite links deliver the session in the URL hash (implicit
+     flow), which never reaches the server. Keep the safe destination so the
+     client-side hash handler can continue after establishing the session. */
+  const signIn = new URL("/sign-in", appUrl);
+  signIn.searchParams.set("error", "auth");
+  const preserved = safeAuthRedirect(searchParams.get("next"), null);
+  if (preserved !== null) signIn.searchParams.set("next", preserved);
+  return NextResponse.redirect(signIn);
 }

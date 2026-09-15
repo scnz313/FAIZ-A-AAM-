@@ -1,6 +1,6 @@
 .wallboard {
   background: var(--ink);
-  color: var(--cream);
+  color: var(--chalk);
   min-height: 84vh;
   overflow: hidden;
   padding: clamp(30px, 5vw, 64px) clamp(24px, 4vw, 56px);
@@ -39,7 +39,7 @@
 .brandName {
   color: var(--chalk);
   font-family: var(--serif);
-  font-size: 30px;
+  font-size: 1.85rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.05;
@@ -57,7 +57,7 @@
 
 .brandUrdu {
   color: var(--chalk);
-  font-size: 20px;
+  font-size: 1.25rem;
   line-height: 1.35;
   margin-top: 4px;
 }
@@ -113,7 +113,7 @@
 
 .heroAqiBand {
   color: var(--saffron-bright);
-  font-size: 13px;
+  font-size: 0.82rem;
   letter-spacing: 0.12em;
   margin: 8px 0 0;
   text-transform: uppercase;
@@ -189,7 +189,7 @@
 
 .tileValues dd {
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: 1.25rem;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
   margin: 0;
@@ -224,7 +224,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px 16px;
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 0;
   padding: 20px 0 4px;
 }
@@ -284,26 +284,26 @@
 .loadingNote {
   color: rgba(255, 255, 255, 0.7);
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 1.4rem;
   margin: 0;
 }
 
 .stateTitle {
-  color: var(--cream);
+  color: var(--chalk);
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 1.4rem;
   margin: 0;
 }
 
 .stateNote {
   color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
+  font-size: 0.78rem;
   line-height: 1.55;
   margin: 0 0 16px;
   max-width: 56ch;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .hero {
     grid-template-columns: 1fr;
   }

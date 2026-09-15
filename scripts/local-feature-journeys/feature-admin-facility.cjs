@@ -14,17 +14,18 @@ module.exports = {
     const check = (name, ok, detail = "") => checks.push({ name, ok, detail });
 
     try {
-      await staffAs(page, base, "/staff/users", { identity: STAFF_IDS.aisha, workspace: /system administrator/i });
+      await staffAs(page, base, "/administrator/users", { identity: STAFF_IDS.aisha, workspace: /system administrator/i });
       await page.waitForTimeout(1200);
       await page.getByText(/Active|Invited/i).first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
       const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("users directory renders", /active|invited/i.test(body), body.slice(-120));
-      const inviteBtn = page.getByRole("button", { name: "Invite user" });
+      const inviteBtn = page.getByRole("button", { name: /Invite (user|staff)/i });
       if ((await inviteBtn.count()) > 0) {
         await inviteBtn.click();
         await page.waitForTimeout(600);
         await page.getByLabel("Name", { exact: true }).fill("Test Invitee");
-        await page.getByLabel("Role", { exact: true }).selectOption({ index: 1 });
+        const profileChoice = page.getByRole("radio").nth(1);
+        if ((await profileChoice.count()) > 0) await profileChoice.click();
         await page.getByLabel("Email", { exact: true }).fill("invitee@example.com");
         await page.getByLabel(/Reason/).fill("New laboratory assistant joining the science team.");
         await page.getByRole("button", { name: "Send invitation" }).click();
@@ -39,7 +40,7 @@ module.exports = {
     }
 
     try {
-      await staffAs(page, base, "/staff/settings", { identity: STAFF_IDS.aisha, workspace: /system administrator|admin/i });
+      await staffAs(page, base, "/administrator/settings", { identity: STAFF_IDS.aisha, workspace: /system administrator|admin/i });
       const scheme = page.getByLabel("Grading scheme");
       if ((await scheme.count()) > 0) {
         await scheme.selectOption({ index: 1 });
@@ -55,7 +56,7 @@ module.exports = {
     }
 
     try {
-      await staffAs(page, base, "/staff/audit", { identity: STAFF_IDS.aisha, workspace: /auditor|system administrator/i });
+      await staffAs(page, base, "/administrator/audit", { identity: STAFF_IDS.aisha, workspace: /auditor|system administrator/i });
       const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("audit explorer renders events", body.includes("Login") || body.includes("Audit"), body.slice(-120));
       const selects = await page.locator("select").count();
@@ -65,7 +66,7 @@ module.exports = {
     }
 
     try {
-      await staffAs(page, base, "/staff/facility", { identity: STAFF_IDS.aisha, workspace: /support officer|system administrator/i });
+      await staffAs(page, base, "/administrator/facility", { identity: STAFF_IDS.aisha, workspace: /support officer|system administrator/i });
       const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("facility overview renders zones", body.includes("zone") || body.includes("PM2.5"), body.slice(-120));
     } catch (error) {
@@ -73,7 +74,7 @@ module.exports = {
     }
 
     try {
-      await staffAs(page, base, "/staff/facility/alerts", { identity: STAFF_IDS.aisha, workspace: /support officer|system administrator/i });
+      await staffAs(page, base, "/administrator/facility/alerts", { identity: STAFF_IDS.aisha, workspace: /support officer|system administrator/i });
       const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("facility alerts render", body.includes("AL-") || body.includes("alert") || body.includes("Alert"), body.slice(-120));
       const ackBtn = page.getByRole("button", { name: "Acknowledge" }).first();
@@ -90,11 +91,11 @@ module.exports = {
     }
 
     for (const [path, label, needle] of [
-      ["/staff/facility/devices", "devices", /device|sensor|Device/i],
-      ["/staff/facility/history", "history", /history|chart|reading/i],
-      ["/staff/facility/reports", "reports", /report|period/i],
-      ["/staff/facility/zones", "zones", /zone|Zone/i],
-      ["/staff/facility/display", "wallboard", /wallboard|zone|Alert/i],
+      ["/administrator/facility/devices", "devices", /device|sensor|Device/i],
+      ["/administrator/facility/history", "history", /history|chart|reading/i],
+      ["/administrator/facility/reports", "reports", /report|period/i],
+      ["/administrator/facility/zones", "zones", /zone|Zone/i],
+      ["/administrator/facility/display", "wallboard", /wallboard|zone|Alert/i],
     ]) {
       try {
         await staffAs(page, base, path, { identity: STAFF_IDS.aisha, workspace: /support officer|system administrator/i });

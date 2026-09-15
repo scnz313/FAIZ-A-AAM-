@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: "Academics",
   description:
     "Learning stages, the examination cycle, and the school day at Faiz Aam Secondary School, Bandipora.",
+  alternates: { canonical: "/academics" },
 };
 
 const STAGES = [
@@ -24,13 +25,19 @@ const STAGES = [
     term: "Middle",
     sub: "Classes 6–8",
     detail:
-      "Wider subjects, laboratories, and longer essays — children learn to study on their own.",
+      "Wider subjects, laboratories, and longer essays · children learn to study on their own.",
   },
   {
     term: "Secondary",
     sub: "Classes 9–10",
     detail:
       "The examination years: structured revision, past papers, and careful guidance.",
+  },
+  {
+    term: "Higher Secondary",
+    sub: "Classes 11–12",
+    detail:
+      "Specialised streams, university guidance and responsible self-study.",
   },
 ] as const;
 
@@ -70,10 +77,6 @@ export default function AcademicsPage() {
         <RuledList rows={STAGES} />
       </PageSection>
 
-      <div className="ornament-rule ornament-rule--tight" aria-hidden="true">
-        <i className="ornament-rule__diamond" />
-      </div>
-
       <PageSection label="Assessment" heading="Examination cycle" headingId="exams-heading">
         <div className={styles.examGrid}>
           {EXAMS.map((exam, index) => (
@@ -88,15 +91,7 @@ export default function AcademicsPage() {
             </article>
           ))}
         </div>
-        <p className={styles.examNote}>
-          Concept copy — the confirmed academic calendar is published with
-          the school’s notices.
-        </p>
       </PageSection>
-
-      <div className="ornament-rule ornament-rule--tight" aria-hidden="true">
-        <i className="ornament-rule__diamond" />
-      </div>
 
       <PageSection label="The day" heading="The school day" headingId="day-heading">
         <div className={`panel ${styles.dayPanel}`}>
@@ -122,10 +117,6 @@ export default function AcademicsPage() {
           <ReadScene ariaHidden className={styles.art} />
           <figcaption className={styles.artCaption}>Concept art</figcaption>
         </figure>
-        <p className={styles.dayNote}>
-          Classes run from 08:45 to 15:30 on school days. On poor-air
-          mornings the assembly moves indoors.
-        </p>
       </PageSection>
 
       <ConceptNote>

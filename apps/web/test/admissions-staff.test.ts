@@ -29,6 +29,10 @@ const PINNED_ISO = PINNED.toISOString();
 /** Pinned clock + 15 days — the offer accept-by deadline. */
 const OFFER_ACCEPT_BY_ISO = "2026-08-20T09:30:00.000Z";
 
+/** Two fictional staff accounts for the maker/checker reviewer + approver steps. */
+const REVIEWER_ACCOUNT_ID = "00000000-0000-4000-8000-000000000203";
+const APPROVER_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
+
 /** A complete fictional draft; the first submission in a clean session is APP-2026-0424. */
 function draft(): ApplicationDraft {
   return {
@@ -104,17 +108,33 @@ describe("admissions staff queue", () => {
     expect(records[0]?.submittedAtIso).toBe(PINNED_ISO);
     expect(records.map((row) => row.ref)).toContain("APP-2026-0417");
   });
+
+  it("listMyApplications returns the session's own applications for the chooser", async () => {
+    const before = await admissionsService.listMyApplications();
+    const { ref } = await admissionsService.submitApplication(draft());
+    const after = await admissionsService.listMyApplications();
+    expect(after.map((record) => record.ref)).toContain(ref);
+    expect(after.length).toBe(before.length + 1);
+  });
 });
 
 describe("admissions staff decisions", () => {
   it("staffOfferSeat requires a reason, then offers from Assessment with a timeline event and offer payload", async () => {
-    await expect(admissionsService.staffOfferSeat("APP-2026-0418", "  ")).rejects.toThrow(/reason/);
+    /* The reviewer step is recorded by another account, as the server requires. */
+    await admissionsService.staffMoveToAssessment("APP-2026-0419", "Panel review.", REVIEWER_ACCOUNT_ID);
+    await expect(
+      admissionsService.staffOfferSeat("APP-2026-0419", "  ", APPROVER_ACCOUNT_ID),
+    ).rejects.toThrow(/reason/);
 
-    const updated = await admissionsService.staffOfferSeat("APP-2026-0418", "Strong interaction; seat offered for Class 6.");
+    const updated = await admissionsService.staffOfferSeat(
+      "APP-2026-0419",
+      "Strong interaction; seat offered for Class 9.",
+      APPROVER_ACCOUNT_ID,
+    );
 
     expect(updated.status).toBe("Offered");
     expect(updated.offer).toMatchObject({
-      grade: "Class 6",
+      grade: "Class 9",
       session: "2026-27",
       admissionFeePaise: 200000,
       accepted: false,
@@ -125,11 +145,11 @@ describe("admissions staff decisions", () => {
       status: "Offered",
       atIso: PINNED_ISO,
       actor: "Admissions office",
-      note: "Strong interaction; seat offered for Class 6.",
+      note: "Strong interaction; seat offered for Class 9.",
     });
 
     /* A retry is a safe no-op: no second timeline event, no overwritten offer. */
-    const retried = await admissionsService.staffOfferSeat("APP-2026-0418", "Duplicate click.");
+    const retried = await admissionsService.staffOfferSeat("APP-2026-0419", "Duplicate click.", APPROVER_ACCOUNT_ID);
     expect(retried.status).toBe("Offered");
     expect(retried.timeline.filter((event) => event.status === "Offered")).toHaveLength(1);
     expect(retried.offer?.admissionFeePaise).toBe(200000);
@@ -145,9 +165,14 @@ describe("admissions staff decisions", () => {
   });
 
   it("staffDecline requires a reason, works from Assessment, and blocks every later decision", async () => {
-    await expect(admissionsService.staffDecline("APP-2026-0418", "")).rejects.toThrow(/reason/);
+    await admissionsService.staffMoveToAssessment("APP-2026-0421", "Panel review.", REVIEWER_ACCOUNT_ID);
+    await expect(admissionsService.staffDecline("APP-2026-0421", "", APPROVER_ACCOUNT_ID)).rejects.toThrow(/reason/);
 
-    const updated = await admissionsService.staffDecline("APP-2026-0418", "Seats are full for this grade this session.");
+    const updated = await admissionsService.staffDecline(
+      "APP-2026-0421",
+      "Seats are full for this grade this session.",
+      APPROVER_ACCOUNT_ID,
+    );
     expect(updated.status).toBe("Declined");
     expect(updated.timeline[updated.timeline.length - 1]).toEqual({
       status: "Declined",
@@ -156,10 +181,16 @@ describe("admissions staff decisions", () => {
       note: "Seats are full for this grade this session.",
     });
 
-    await expect(admissionsService.staffOfferSeat("APP-2026-0418", "Changed our mind.")).rejects.toThrow(/after assessment/);
-    await expect(admissionsService.staffMoveToAssessment("APP-2026-0418")).rejects.toThrow(/assessment/);
-    await expect(admissionsService.staffWaitlist("APP-2026-0418", "Waitlist after all.")).rejects.toThrow(/waitlisted/);
-    await expect(admissionsService.staffDecline("APP-2026-0418", "Decline again.")).rejects.toThrow(/cannot be declined/);
+    await expect(
+      admissionsService.staffOfferSeat("APP-2026-0421", "Changed our mind.", APPROVER_ACCOUNT_ID),
+    ).rejects.toThrow(/after assessment/);
+    await expect(admissionsService.staffMoveToAssessment("APP-2026-0421")).rejects.toThrow(/assessment/);
+    await expect(
+      admissionsService.staffWaitlist("APP-2026-0421", "Waitlist after all.", APPROVER_ACCOUNT_ID),
+    ).rejects.toThrow(/waitlisted/);
+    await expect(
+      admissionsService.staffDecline("APP-2026-0421", "Decline again.", APPROVER_ACCOUNT_ID),
+    ).rejects.toThrow(/cannot be declined/);
   });
 
   it("staffMoveToAssessment works from Under review and appends the default note", async () => {
@@ -200,9 +231,14 @@ describe("admissions staff decisions", () => {
   });
 
   it("staffWaitlist requires a reason and works from Assessment", async () => {
-    await expect(admissionsService.staffWaitlist("APP-2026-0418", "   ")).rejects.toThrow(/reason/);
+    await admissionsService.staffMoveToAssessment("APP-2026-0423", "Panel review.", REVIEWER_ACCOUNT_ID);
+    await expect(admissionsService.staffWaitlist("APP-2026-0423", "   ", APPROVER_ACCOUNT_ID)).rejects.toThrow(/reason/);
 
-    const updated = await admissionsService.staffWaitlist("APP-2026-0418", "Second waiting list — likely a seat opens after July.");
+    const updated = await admissionsService.staffWaitlist(
+      "APP-2026-0423",
+      "Second waiting list — likely a seat opens after July.",
+      APPROVER_ACCOUNT_ID,
+    );
     expect(updated.status).toBe("Waitlisted");
     expect(updated.timeline[updated.timeline.length - 1]).toEqual({
       status: "Waitlisted",
@@ -264,26 +300,52 @@ describe("admissions maker/checker separation (Phase 1)", () => {
     expect(second.reviewedByAccountId).toBe(ACTOR_A);
   });
 
-  it("stays backward compatible when no actor account is supplied", async () => {
-    /* Legacy callers/tests omit the actor: transitions are allowed and no
-       reviewer identity is recorded. */
+  it("keeps staff-private notes on the record and out of the applicant timeline", async () => {
+    const updated = await admissionsService.staffMoveToAssessment(
+      "APP-2026-0422",
+      "Panel review.",
+      undefined,
+      undefined,
+      "DOB discrepancy flagged for the office.",
+    );
+    expect(updated.staffReviews?.at(-1)).toMatchObject({
+      action: "assessment",
+      privateNote: "DOB discrepancy flagged for the office.",
+      visibleReason: "Panel review.",
+    });
+    expect(
+      updated.timeline.some((event) => event.note.includes("DOB discrepancy")),
+    ).toBe(false);
+  });
+
+  it("requires a separate recorded reviewer before any decision", async () => {
+    /* Legacy callers may omit the actor on the maker step: the transition
+       succeeds but records no reviewer identity, so server parity refuses
+       every later decision until another account records the review. */
     const reviewed = await admissionsService.staffMoveToAssessment("APP-2026-0420");
     expect(reviewed.status).toBe("Assessment");
     expect(reviewed.reviewedByAccountId).toBeUndefined();
 
-    const offered = await admissionsService.staffOfferSeat("APP-2026-0420", "Legacy offer without an actor.");
-    expect(offered.status).toBe("Offered");
-    expect(offered.reviewedByAccountId).toBeUndefined();
+    await expect(
+      admissionsService.staffOfferSeat("APP-2026-0420", "Legacy offer without an actor."),
+    ).rejects.toThrow(/a separate admissions reviewer step is required/);
+    await expect(
+      admissionsService.staffOfferSeat("APP-2026-0420", "Offer with an actor but no review.", APPROVER_ACCOUNT_ID),
+    ).rejects.toThrow(/a separate admissions reviewer step is required/);
   });
 });
 
 describe("admissions staff decision persistence", () => {
   it("getApplication returns the updated record after each staff decision, and the queue agrees", async () => {
-    await admissionsService.staffMoveToAssessment("APP-2026-0423");
+    await admissionsService.staffMoveToAssessment("APP-2026-0423", "Panel review.", REVIEWER_ACCOUNT_ID);
     const afterMove = await admissionsService.getApplication("APP-2026-0423");
     expect(afterMove?.status).toBe("Assessment");
 
-    await admissionsService.staffOfferSeat("APP-2026-0423", "Meets the entry criteria for Class 8.");
+    await admissionsService.staffOfferSeat(
+      "APP-2026-0423",
+      "Meets the entry criteria for Class 8.",
+      APPROVER_ACCOUNT_ID,
+    );
     const afterOffer = await admissionsService.getApplication("APP-2026-0423");
     expect(afterOffer?.status).toBe("Offered");
     expect(afterOffer?.offer?.acceptByIso).toBe(OFFER_ACCEPT_BY_ISO);
@@ -294,13 +356,20 @@ describe("admissions staff decision persistence", () => {
     expect(rows.find((row) => row.ref === "APP-2026-0423")?.status).toBe("Offered");
 
     /* A later offer is a no-op; a decline is refused. */
-    const retried = await admissionsService.staffOfferSeat("APP-2026-0423", "Retry.");
+    const retried = await admissionsService.staffOfferSeat("APP-2026-0423", "Retry.", APPROVER_ACCOUNT_ID);
     expect(retried.timeline.filter((event) => event.status === "Offered")).toHaveLength(1);
-    await expect(admissionsService.staffDecline("APP-2026-0423", "Seats reallocated.")).rejects.toThrow(/cannot be declined/);
+    await expect(
+      admissionsService.staffDecline("APP-2026-0423", "Seats reallocated.", APPROVER_ACCOUNT_ID),
+    ).rejects.toThrow(/cannot be declined/);
   });
 
   it("a declined fixture application stays declined through the session store", async () => {
-    await admissionsService.staffDecline("APP-2026-0419", "Candidate did not meet the entry criteria.");
+    await admissionsService.staffMoveToAssessment("APP-2026-0419", "Panel review.", REVIEWER_ACCOUNT_ID);
+    await admissionsService.staffDecline(
+      "APP-2026-0419",
+      "Candidate did not meet the entry criteria.",
+      APPROVER_ACCOUNT_ID,
+    );
 
     const seen = await admissionsService.getApplication("APP-2026-0419");
     expect(seen?.status).toBe("Declined");
@@ -348,12 +417,28 @@ describe("applicant withdrawal (fictional demo policy)", () => {
     await expect(admissionsService.withdraw("APP-2026-0417", "Demo Guardian")).rejects.toThrow(/cannot be withdrawn/);
     /* A session record declined by the office is also terminal. */
     const submitted = await admissionsService.submitApplication(draft());
-    await admissionsService.staffDecline(submitted.ref, "Declined after document verification failed.", "00000000-0000-4000-8000-000000000203");
+    await admissionsService.staffMoveToAssessment(submitted.ref, "Panel review.", REVIEWER_ACCOUNT_ID);
+    await admissionsService.staffDecline(
+      submitted.ref,
+      "Declined after document verification failed.",
+      APPROVER_ACCOUNT_ID,
+    );
     await expect(admissionsService.withdraw(submitted.ref, "Demo Guardian")).rejects.toThrow(/cannot be withdrawn/);
   });
 
   it("throws the policy-pending error when the fictional rule is disabled", async () => {
     setDemoPolicy("admission.withdrawal", false);
     await expect(admissionsService.withdraw("APP-2026-0419", "Demo Guardian")).rejects.toThrow(/pending school policy/);
+  });
+});
+
+describe("admissions version hardening (S4 extension)", () => {
+  it("rejects stale staff writes with who/when info and bumps the version on success", async () => {
+    await expect(admissionsService.staffStartReview("APP-2026-0422", "Stale.", undefined, 999)).rejects.toThrow(
+      /Stale write for APP-2026-0422: expected version 999 but current is 1.*last updated by .* at .*/,
+    );
+    const started = await admissionsService.staffStartReview("APP-2026-0422", "Review started.", undefined, 1);
+    expect(started.version).toBe(2);
+    expect((await admissionsService.getApplication("APP-2026-0422"))?.version).toBe(2);
   });
 });

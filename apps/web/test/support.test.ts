@@ -10,7 +10,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { setDemoNow } from "@/modules/demo/clock";
 import { sessionKey, sessionRemove } from "@/modules/services/session";
-import { supportService } from "@/modules/services/support";
+import {
+  mapRequesterSupportRow,
+  mapServerSupportRow,
+  supportService,
+  toRequesterSafeGrievance,
+  type ServerSupportRow,
+} from "@/modules/services/support";
 
 const PINNED_NOW = new Date("2026-08-10T05:30:00Z");
 const PINNED_ISO = PINNED_NOW.toISOString();
@@ -124,5 +130,71 @@ describe("demo support service — fixture records", () => {
 
   it("returns null for an unknown reference", async () => {
     expect(await supportService.getGrievance("GRV-2026-9999")).toBeNull();
+  });
+});
+
+describe("demo support service — requester-safe vs staff-private projections (S4)", () => {
+  it("getGrievance never leaks private notes or assignment to the requester", async () => {
+    const { ref } = await supportService.submitGrievance(INPUT);
+    await supportService.addPrivateNote(ref, "Internal: verify the counter deposit first.", "A. Lone");
+    await supportService.assign(ref, "Support Officer");
+
+    const seen = await supportService.getGrievance(ref);
+    expect(seen).not.toBeNull();
+    expect(seen).not.toHaveProperty("privateNotes");
+    expect(seen).not.toHaveProperty("assignee");
+    /* The shared thread is applicant-safe by construction — still visible. */
+    expect(seen?.thread).toHaveLength(1);
+    expect(seen?.thread[0]?.kind).toBe("submission");
+  });
+
+  it("listGrievances keeps the staff-private projection for the inbox", async () => {
+    const { ref } = await supportService.submitGrievance(INPUT);
+    await supportService.addPrivateNote(ref, "Internal note.", "A. Lone");
+    await supportService.assign(ref, "Support Officer");
+
+    const all = await supportService.listGrievances();
+    const row = all.find((item) => item.ref === ref);
+    expect(row?.privateNotes).toHaveLength(1);
+    expect(row?.privateNotes?.[0]).toMatchObject({ by: "A. Lone", text: "Internal note." });
+    expect(row?.assignee).toMatchObject({ by: "Support Officer" });
+  });
+
+  it("toRequesterSafeGrievance strips staff-private fields without mutating the stored record", async () => {
+    const { ref } = await supportService.submitGrievance(INPUT);
+    await supportService.addPrivateNote(ref, "Internal note.", "A. Lone");
+
+    const all = await supportService.listGrievances();
+    const staffRow = all.find((item) => item.ref === ref)!;
+    const safe = toRequesterSafeGrievance(staffRow);
+    expect(safe).not.toHaveProperty("privateNotes");
+    expect(safe).not.toHaveProperty("assignee");
+    /* The staff copy is untouched — projection copies, never moves, the data. */
+    expect(staffRow.privateNotes).toHaveLength(1);
+  });
+
+  it("mapServerSupportRow strips private notes for the requester (mine) scope only", () => {
+    const row: ServerSupportRow = {
+      id: "00000000-0000-4000-8000-00000000aa01",
+      reference: "SR-2026-0001",
+      category: "Fees",
+      subject: "Receipt not received",
+      requester_name: "Demo Parent",
+      requester_contact: "+91 90000 00007",
+      status: "in_progress",
+      version: 2,
+      created_at: PINNED_ISO,
+      support_messages: [{ body: "Please confirm.", is_staff: false, created_at: PINNED_ISO }],
+      support_private_notes: [{ body: "Internal note.", author_account_id: "staff-1", created_at: PINNED_ISO }],
+    };
+
+    const mine = mapRequesterSupportRow(row);
+    expect(mine).not.toHaveProperty("privateNotes");
+    expect(mine).not.toHaveProperty("assignee");
+    expect(mine.thread).toHaveLength(1);
+
+    const staff = mapServerSupportRow(row);
+    expect(staff.privateNotes).toHaveLength(1);
+    expect(staff.privateNotes?.[0]).toMatchObject({ by: "staff-1", text: "Internal note." });
   });
 });

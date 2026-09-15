@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { InvoiceLines } from "@/components/staff/InvoiceLines";
+import { RegisterPager } from "@/components/staff/RegisterPager";
 import { FINANCE_DEMO_NOTE, formatINR, INVOICE_STATUS_META } from "@/modules/services/finance";
 import { financeService } from "@/modules/services/finance";
 import { dataAdapter } from "@/lib/supabase/env";
-import { loadServerInvoices } from "@/lib/supabase/server-loaders";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
+import { loadServerInvoiceRegister, loadServerProfileCode } from "@/lib/supabase/server-loaders";
+import { parseFinanceRegisterPage } from "@/modules/services/finance-register";
 import { formatKolkata } from "@/modules/iot/domain";
 import { PrintButton } from "./PrintButton";
 
@@ -14,9 +17,12 @@ export const metadata: Metadata = {
   title: "Invoices · Staff",
 };
 
-export default async function InvoicesPage() {
+export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const supabaseMode = dataAdapter() === "supabase";
-  const views = supabaseMode ? await loadServerInvoices() : await financeService.listAllInvoices();
+  const { page: pageParam } = supabaseMode ? await searchParams : { page: undefined };
+  const register = supabaseMode ? await loadServerInvoiceRegister(parseFinanceRegisterPage(pageParam)) : null;
+  const views = register === null ? await financeService.listAllInvoices() : register.views;
+  const basePath = supabaseMode ? canonicalStaffUrl(await loadServerProfileCode(), "/finance/invoices") : "/staff/finance/invoices";
   return (
     <div className={styles.page}>
       <header className={`workspace-header ${styles.header}`}>
@@ -76,9 +82,20 @@ export default async function InvoicesPage() {
           </table>
           )}
         </div>
+        {register !== null && register.total > 0 ? (
+          <RegisterPager
+            basePath={basePath}
+            page={register.page}
+            pageCount={register.pageCount}
+            shownFrom={register.shownFrom}
+            shownTo={register.shownTo}
+            total={register.total}
+            label="invoices"
+          />
+        ) : null}
         {!supabaseMode ? (
           <p className={styles.footNote}>
-            Print is a demo placeholder — printable invoice copies arrive with the finance backend.
+            Print opens the browser print view · choose “Save as PDF” in the print dialog for a printable copy.
           </p>
         ) : null}
       </section>

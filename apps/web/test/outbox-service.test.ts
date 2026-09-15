@@ -131,3 +131,42 @@ describe("markOutboxEventDelivered", () => {
     expect(() => markOutboxEventDelivered("nonexistent")).toThrow(/No outbox event/);
   });
 });
+
+describe("outbox retry safety — duplicate delivery is a single effect (S4)", () => {
+  it("re-marking delivered never duplicates the record or refreshes its timestamp", () => {
+    enqueueOutboxEvent({ eventId: "evt-001", kind: "payment.posted", targetRef: "INV-1", actor: "A" });
+    const first = markOutboxEventDelivered("evt-001");
+
+    setDemoNow(new Date(PINNED.getTime() + 60 * 60 * 1000));
+    const second = markOutboxEventDelivered("evt-001");
+
+    expect(listOutboxEvents()).toHaveLength(1);
+    expect(second.status).toBe("delivered");
+    expect(second.deliveredAtIso).toBe(first.deliveredAtIso);
+    expect(listPendingOutboxEvents()).toHaveLength(0);
+  });
+
+  it("retrying an enqueue with the same id never mutates the original effect", () => {
+    const first = enqueueOutboxEvent({
+      eventId: "evt-001",
+      kind: "payment.posted",
+      targetRef: "INV-1",
+      actor: "A",
+    });
+    const retry = enqueueOutboxEvent({
+      eventId: "evt-001",
+      kind: "link.approved",
+      targetRef: "OTHER",
+      actor: "B",
+    });
+
+    expect(retry).toEqual(first);
+    expect(listOutboxEvents()).toHaveLength(1);
+    expect(listOutboxEvents()[0]).toMatchObject({
+      kind: "payment.posted",
+      targetRef: "INV-1",
+      actor: "A",
+      status: "pending",
+    });
+  });
+});

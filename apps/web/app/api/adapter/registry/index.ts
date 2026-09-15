@@ -88,6 +88,18 @@ async function resolveGradeCode(supabase: SupabaseClient<Database>, code: string
   return (data as { id: string }).id;
 }
 
+/** Office-issued student reference for a link request. The caller is usually
+ *  not yet linked to the student, so RLS cannot resolve it; the definer
+ *  projection returns only the active student id to a guardian/staff session. */
+async function resolveStudentReference(supabase: SupabaseClient<Database>, reference: string): Promise<string> {
+  const scoped = (supabase as unknown as { schema: (name: string) => { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }> } }).schema("app");
+  const { data, error } = await scoped.rpc("student_reference_lookup", { p_reference: reference });
+  if (error !== null || typeof data !== "string" || data.length === 0) {
+    throw new ReferenceResolutionError("not-found", "The requested record was not found.");
+  }
+  return data;
+}
+
 async function resolveField(
   supabase: SupabaseClient<Database>,
   payload: Record<string, unknown>,
@@ -130,6 +142,8 @@ export async function resolveAdapterReferences(
     case "admissions.decide":
     case "admissions.respondOffer":
     case "admissions.withdraw":
+    case "admissions.reviewerDirectory":
+    case "admissions.enrollmentReference":
     case "enrollment.readiness":
     case "enrollment.convert":
       await resolveField(supabase, payload, "applicationId", "applicationRef", "admission_applications");
@@ -147,7 +161,9 @@ export async function resolveAdapterReferences(
       await resolveField(supabase, payload, "studentId", "studentRef", "students");
       break;
     case "links.request":
-      await resolveField(supabase, payload, "studentId", "studentRef", "students");
+      if (typeof payload.studentId !== "string" && typeof payload.studentRef === "string" && payload.studentRef !== "") {
+        payload.studentId = await resolveStudentReference(supabase, payload.studentRef);
+      }
       break;
     case "results.getBatch":
     case "results.listVersions":
@@ -155,6 +171,8 @@ export async function resolveAdapterReferences(
     case "results.submitMarks":
     case "results.moderate":
     case "results.saveDraft":
+    case "results.releaseCandidates":
+    case "results.publishReleaseBatch":
       if (typeof payload.sheetId !== "string" && typeof payload.sheetRef === "string") await resolveField(supabase, payload, "sheetId", "sheetRef", "result_entry_sheets");
       if (typeof payload.sheetId !== "string" && typeof payload.batchId !== "string" && typeof payload.batchRef === "string") await resolveField(supabase, payload, "sheetId", "batchRef", "result_entry_sheets");
       if (typeof payload.batchId !== "string" && typeof payload.sheetId === "string") payload.batchId = payload.sheetId;
@@ -213,7 +231,21 @@ export async function resolveAdapterReferences(
             try { next.subjectId = await resolveColumn(supabase, "subjects", "code", next.subjectRef); }
             catch { next.subjectId = await resolveColumn(supabase, "subjects", "name", next.subjectRef); }
           }
-          if (typeof next.teacherAssignmentId !== "string" && typeof next.teacherAssignmentRef === "string" && next.teacherAssignmentRef !== "") next.teacherAssignmentId = await resolveReference(supabase, "staff_assignments", next.teacherAssignmentRef);
+          if (typeof next.teacherAssignmentId !== "string" && typeof next.teacherAssignmentRef === "string" && next.teacherAssignmentRef !== "") {
+            /* The canonical teaching record is the authority (000061 cutover):
+               a teaching reference resolves into teachingAssignmentId, a
+               legacy staff reference into teacherAssignmentId. A raw UUID is
+               accepted as the canonical id directly. */
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(next.teacherAssignmentRef)) {
+              next.teachingAssignmentId = next.teacherAssignmentRef;
+            } else {
+              try {
+                next.teachingAssignmentId = await resolveReference(supabase, "teaching_assignments" as RefTable, next.teacherAssignmentRef);
+              } catch {
+                next.teacherAssignmentId = await resolveReference(supabase, "staff_assignments", next.teacherAssignmentRef);
+              }
+            }
+          }
           if (typeof next.roomId !== "string" && typeof next.roomRef === "string" && next.roomRef !== "") next.roomId = await resolveColumn(supabase, "rooms", "code", next.roomRef);
           return next;
         }));
@@ -271,6 +303,7 @@ export async function resolveAdapterReferences(
       }
       break;
     case "notifications.markRead":
+    case "notifications.dismiss":
       /* Notification rows intentionally expose no public reference. */
       break;
     case "staffInvites.create":
@@ -328,6 +361,11 @@ export function statusForServiceResult(result: ServiceResult<unknown>): number {
 
 function safeMessage(error: ServiceError): string {
   if (/sql|postgres|postgrest|relation|column|constraint|stack|secret|token|provider|fetch failed|econn/i.test(error.message)) {
+    /* A raw unique-violation ("duplicate key value violates unique constraint
+       …") is a recoverable, user-actionable conflict. The generic message hid
+       the slug collision from the content workspace; domain duplicate messages
+       that leaked no internals are still returned unchanged above. */
+    if (error.code === "duplicate") return "A record with the same unique details already exists. Review the existing record and try again.";
     return error.code === "forbidden" ? "You do not have access to this record." : "The operation could not be completed.";
   }
   return error.message.length > 240 ? "The operation could not be completed." : error.message;

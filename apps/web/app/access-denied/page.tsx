@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import DevelopmentAccountSwitcher from "@/components/identity/DevelopmentAccountSwitcher";
-import { PublicFooter } from "@/components/layouts/PublicFooter";
-import { PublicHeader } from "@/components/layouts/PublicHeader";
+import AuthFrame from "@/components/identity/AuthFrame";
 import { getServerActor } from "@/lib/auth/actor";
-import { dataAdapter, developmentAuthEnabled } from "@/lib/supabase/env";
-
-import styles from "./page.module.css";
+import { DEFAULT_STAFF_PORTAL, portalPrefixForProfile } from "@/lib/auth/portal-routes";
+import { dataAdapter } from "@/lib/supabase/env";
+import { inferStaffProfile } from "@/modules/services/staff-profiles";
 
 export const metadata: Metadata = {
   title: "Access denied",
@@ -16,52 +14,54 @@ export const metadata: Metadata = {
 };
 
 /**
- * Access-denied state: the wrong-role page, mirroring the not-found pattern.
- * UI demo — authorization is enforced server-side once the backend exists, so
- * today every route is reachable; this page previews the denied state.
+ * Access-denied state — V14 AuthFrame + pay-state pattern.
+ * Authorization is enforced server-side; this page previews the denied state.
  */
 export default async function AccessDeniedPage() {
   const adapter = dataAdapter();
   const demo = adapter === "demo";
-  const quickSignIn = developmentAuthEnabled();
   const actor = adapter === "supabase" ? await getServerActor() : null;
   const hasStaffWorkspace = actor?.roles.some((role) => !["guardian", "student"].includes(role)) ?? false;
   const hasFamilyWorkspace = actor?.roles.includes("guardian") ?? false;
+  const staffPortal = portalPrefixForProfile(inferStaffProfile(actor?.roles ?? [])) ?? DEFAULT_STAFF_PORTAL;
   return (
-    <div className={styles.page}>
-      <PublicHeader tone="light" />
-      <main id="main" tabIndex={-1} className={styles.main}>
-        <div className="not-found">
-          <p className="eyebrow">Access control</p>
-          <h1>Access denied</h1>
-          <p>
-            This area requires a role your account does not have. If this is wrong, contact the school office.
-          </p>
-          <Link className="link-arrow" href="/">
-            Return home →
-          </Link>
-          {hasStaffWorkspace ? (
-            <Link className="link-arrow" href="/staff">
-              Open staff workspace →
-            </Link>
-          ) : null}
-          {hasFamilyWorkspace ? (
-            <Link className="link-arrow" href="/portal">
-              Open family portal →
-            </Link>
-          ) : null}
-          {quickSignIn ? <DevelopmentAccountSwitcher audience="all" /> : null}
-          {demo ? (
-            <p className={styles.demoNote}>
-              <span className="demo-badge">UI demo</span>
-              <span>Authorization is previewed locally in this adapter.</span>
-            </p>
-          ) : (
-            <p className={styles.demoNote}>Access was denied by the current account, role, or record scope. No protected record was disclosed.</p>
-          )}
+    <AuthFrame
+      title="This page is not available to you"
+      sub="Your account does not have access to this area. We cannot show whether the page exists."
+    >
+      <div className="pay-state">
+        <div className="ps-ic bad">
+          <span className="msym" aria-hidden="true">shield_person</span>
         </div>
-      </main>
-      <PublicFooter />
-    </div>
+        <h2>Access checked, entry refused</h2>
+        <p>
+          If you believe this is a mistake, contact the office. Guardians: make sure you opened the link for your linked child.
+        </p>
+        <div className="row" style={{ gap: 10, justifyContent: "center", marginTop: 18, flexWrap: "wrap" }}>
+          <Link className="btn btn-primary btn-sm" href="/sign-in">Sign in with another account</Link>
+          <Link className="btn btn-ghost btn-sm" href="/portal/support">Contact support</Link>
+        </div>
+        {hasStaffWorkspace ? (
+          <Link className="underline-link small" href={staffPortal} style={{ display: "inline-block", marginTop: 12 }}>
+            Open staff portal →
+          </Link>
+        ) : null}
+        {hasFamilyWorkspace ? (
+          <Link className="underline-link small" href="/portal" style={{ display: "inline-block", marginTop: 8 }}>
+            Open family portal →
+          </Link>
+        ) : null}
+      </div>
+      {demo ? (
+        <p className="tiny muted" style={{ textAlign: "center", marginTop: 16 }}>
+          <span className="demo-badge">UI demo</span>{" "}
+          Authorization is previewed locally in this adapter.
+        </p>
+      ) : (
+        <p className="tiny muted" style={{ textAlign: "center", marginTop: 16 }}>
+          Access was denied by the current account, role, or record scope. No protected record was disclosed.
+        </p>
+      )}
+    </AuthFrame>
   );
 }

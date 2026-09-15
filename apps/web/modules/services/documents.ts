@@ -16,10 +16,12 @@ export type DocumentOwnerDomain =
   | "job_application"
   | "student"
   | "invoice"
-  | "result_publication";
+  | "result_publication"
+  | "school_document";
 
 export type DocumentProcessingState = "pending" | "ready" | "quarantined" | "failed" | "denied" | "expired";
 export type DocumentFinalizationState = "pending" | "verified" | "failed";
+export type DocumentVisibility = "private" | "public_approved";
 
 export type PrivateDocumentMetadata = {
   ref: string;
@@ -39,6 +41,8 @@ export type PrivateDocumentMetadata = {
   version: number;
   createdAtIso: string | null;
   updatedAtIso: string | null;
+  /** `public_approved` documents appear in the public downloads register. */
+  visibility: DocumentVisibility;
 };
 
 type RawDocumentMetadata = {
@@ -73,6 +77,7 @@ type RawDocumentMetadata = {
   created_at?: unknown;
   updatedAt?: unknown;
   updated_at?: unknown;
+  visibility?: unknown;
 };
 
 const stringOrNull = (value: unknown): string | null => typeof value === "string" && value.length > 0 ? value : null;
@@ -135,12 +140,45 @@ export function mapPrivateDocumentMetadata(row: RawDocumentMetadata): PrivateDoc
     version: Math.max(1, numberOr(row.version, 1)),
     createdAtIso: stringOrNull(row.createdAt) ?? stringOrNull(row.created_at),
     updatedAtIso: stringOrNull(row.updatedAt) ?? stringOrNull(row.updated_at),
+    visibility: row.visibility === "public_approved" ? "public_approved" : "private",
   };
 }
 
 function uniqueDocuments(rows: PrivateDocumentMetadata[]): PrivateDocumentMetadata[] {
   const seen = new Set<string>();
   return rows.filter((row) => row.ref.length > 0 && !seen.has(row.ref) && seen.add(row.ref));
+}
+
+/**
+ * Generated report cards are written as `report-card-<releaseReference>.pdf`
+ * and the same reference is their immutable source (`document_generation_records.source_reference`).
+ * The generation table is service-role only, so the family projection uses
+ * this canonical filename as the document-to-release link and keeps the
+ * document only while that release is currently published. Anything
+ * unmatched is withheld: a withdrawn or superseded release must never
+ * surface, while the retained row stays available to staff and audit.
+ */
+export function generatedReportCardReleaseReference(
+  document: Pick<PrivateDocumentMetadata, "category" | "filename">,
+): string | null {
+  if (document.category !== "generated_report_card") return null;
+  const match = /^report-card-(.+)\.pdf$/i.exec(document.filename.trim());
+  const reference = match?.[1]?.trim();
+  return reference !== undefined && reference.length > 0 ? reference : null;
+}
+
+/**
+ * Family visibility for the per-student document projection: ordinary
+ * documents pass through, generated report cards require their source release
+ * to be in the currently published set.
+ */
+export function isFamilyVisibleDocument(
+  document: Pick<PrivateDocumentMetadata, "category" | "filename">,
+  publishedReleaseReferences: ReadonlySet<string>,
+): boolean {
+  if (document.category !== "generated_report_card") return true;
+  const releaseReference = generatedReportCardReleaseReference(document);
+  return releaseReference !== null && publishedReleaseReferences.has(releaseReference);
 }
 
 async function listSupabaseDocuments(
@@ -183,15 +221,45 @@ export type StudentDocumentBundle = {
   metadata?: PrivateDocumentMetadata[];
 };
 
+/**
+ * Download gate: only `ready` documents are ever downloadable. Quarantined,
+ * denied, expired, failed, and pending documents never yield a download URL —
+ * ready delivery is always a signed short-lived URL (`expiresAtIso`) issued
+ * by the authorized document route, never a storage key.
+ */
+export function isDocumentDownloadable(state: DocumentProcessingState): boolean {
+  return state === "ready";
+}
+
+export function isDocumentMetadataDownloadable(metadata: Pick<PrivateDocumentMetadata, "processingState">): boolean {
+  return isDocumentDownloadable(metadata.processingState);
+}
+
 export type DocumentDownloadResult =
   | { state: "ready"; url: string; expiresAtIso: string; filename: string }
   | { state: Exclude<DocumentProcessingState, "ready">; message: string };
 
+/** One bounded page of the authorized staff register with an exact total. */
+export type StaffDocumentPage = {
+  rows: PrivateDocumentMetadata[];
+  total: number;
+  nextOffset: number | null;
+};
+
 export interface DocumentsService {
   listForStudent(accountId: string, studentId: string): Promise<StudentDocumentBundle>;
   listForOwner(ownerDomain: DocumentOwnerDomain, ownerRecordRef: string): Promise<PrivateDocumentMetadata[]>;
-  listForStaff(): Promise<PrivateDocumentMetadata[]>;
+  listForStaff(offset?: number, limit?: number): Promise<StaffDocumentPage>;
   requestDownload(documentRef: string): Promise<DocumentDownloadResult>;
+  /**
+   * Approve a clean, finalized document for the public downloads register, or
+   * withdraw it. Resolves with the persisted visibility or throws an honest
+   * refusal message when the document is not approvable.
+   */
+  setPublicVisibility(
+    documentRef: string,
+    visibility: DocumentVisibility,
+  ): Promise<{ ref: string; visibility: DocumentVisibility }>;
 }
 
 export const documentsService: DocumentsService = {
@@ -202,11 +270,24 @@ export const documentsService: DocumentsService = {
     const context = contexts.find((candidate) => candidate.student.id === studentId);
     if (context === undefined) throw new Error("These documents are not accessible to this account.");
 
+    /* Supabase mode derives the term list from the same releases read, so the
+       documents bundle costs one releases request instead of two. Demo mode
+       keeps the fixture term list (it carries not-published terms too). */
+    const supabaseMode = clientAdapterMode() === "supabase";
     const [terms, publications, receipts] = await Promise.all([
-      academicsService.getTerms(),
+      supabaseMode ? Promise.resolve(null) : academicsService.getTerms(),
       academicsService.getPublications(),
       financeService.listReceipts(),
     ]);
+    const bundleTerms = supabaseMode
+      ? publications.map((publication) => ({
+          id: publication.ref,
+          label: publication.term,
+          publicationStatus: publication.status,
+          publishedAtIso: publication.publishedAtIso ?? undefined,
+          version: publication.version,
+        }))
+      : (terms ?? []);
     const studentReceipts = receipts.filter((receipt) => receipt.studentId === studentId);
 
     let metadata: PrivateDocumentMetadata[] | undefined;
@@ -218,7 +299,7 @@ export const documentsService: DocumentsService = {
       ]);
     }
 
-    const reportCards: ReportCardDocument[] = terms.map((term) => {
+    const reportCards: ReportCardDocument[] = bundleTerms.map((term) => {
       const publication = publications.find((item) => item.term === term.label);
       return {
         termId: term.id,
@@ -230,6 +311,18 @@ export const documentsService: DocumentsService = {
         correctionNote: publication?.correctionNote ?? null,
       };
     });
+
+    /* The report-card panel and the private-files register must agree: only
+       generated report cards for releases the family can currently read as
+       published stay in the bundle. */
+    if (metadata !== undefined) {
+      const publishedReleaseReferences = new Set(
+        reportCards
+          .map((card) => card.publicationRef)
+          .filter((reference): reference is string => reference !== null),
+      );
+      metadata = metadata.filter((document) => isFamilyVisibleDocument(document, publishedReleaseReferences));
+    }
 
     return {
       studentId,
@@ -248,11 +341,18 @@ export const documentsService: DocumentsService = {
     return listSupabaseDocuments([{ ownerDomain, ownerRecordRef }]);
   },
 
-  async listForStaff() {
-    if (clientAdapterMode() !== "supabase") return [];
-    const result = await adapterCall<RawDocumentMetadata[]>("documents.list", {});
+  async listForStaff(offset = 0, limit = 50) {
+    if (clientAdapterMode() !== "supabase") return { rows: [], total: 0, nextOffset: null };
+    const result = await adapterCall<{ rows: RawDocumentMetadata[]; total: number; nextOffset: number | null }>(
+      "documents.listPage",
+      { offset, limit },
+    );
     if (!result.ok) throw new Error(result.errors[0]?.message ?? "Documents are unavailable.");
-    return uniqueDocuments(result.value.map(mapPrivateDocumentMetadata));
+    return {
+      rows: uniqueDocuments(result.value.rows.map(mapPrivateDocumentMetadata)),
+      total: result.value.total,
+      nextOffset: result.value.nextOffset,
+    };
   },
 
   async requestDownload(documentRef) {
@@ -293,6 +393,21 @@ export const documentsService: DocumentsService = {
     return {
       state: state === "ready" ? "failed" : state,
       message: typeof body?.error === "string" ? body.error : "The document could not be downloaded. Please try again.",
+    };
+  },
+
+  async setPublicVisibility(documentRef, visibility) {
+    if (clientAdapterMode() !== "supabase") {
+      throw new Error("Public register approval is not available in demo mode.");
+    }
+    const response = await adapterCall<RawDocumentMetadata>("documents.setPublicVisibility", {
+      reference: documentRef,
+      visibility,
+    });
+    if (!response.ok) throw new Error(response.errors[0]?.message ?? "The document visibility could not be changed.");
+    return {
+      ref: stringOrNull(response.value.ref) ?? stringOrNull(response.value.reference) ?? documentRef,
+      visibility: response.value.visibility === "public_approved" ? "public_approved" : "private",
     };
   },
 };

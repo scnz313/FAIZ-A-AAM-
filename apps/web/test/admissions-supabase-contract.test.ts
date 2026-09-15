@@ -131,6 +131,37 @@ describe("admissions Supabase facade", () => {
     expect(fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).op)).toContain("admissions.submit");
   });
 
+  it("restores a draft saved as a to-one embed (live PostgREST shape)", async () => {
+    /* admission_drafts.application_id is UNIQUE, so PostgREST returns an
+       object; the previous array-only read silently lost every saved draft. */
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+        if (request.op === "admissions.listMine") {
+          return json({
+            ok: true,
+            value: [{
+              ...row("draft"),
+              admission_drafts: {
+                draft: { ...draft, studentName: "Restored Child" },
+                schema_version: 1,
+                expires_at: "2026-12-01T00:00:00.000Z",
+                updated_at: "2026-08-10T05:00:00.000Z",
+              },
+              admission_offers: null,
+            }],
+          });
+        }
+        return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
+      }),
+    );
+
+    const restored = await admissionsService.getDraft(APP_REF);
+    expect(restored?.studentName).toBe("Restored Child");
+    expect(restored?.documents).toEqual(draft.documents);
+  });
+
   it("does not fall back to demo records when the owner is denied", async () => {
     vi.stubGlobal(
       "fetch",
@@ -138,21 +169,295 @@ describe("admissions Supabase facade", () => {
     );
     await expect(admissionsService.getApplication(APP_REF)).rejects.toThrow(/application owner/);
   });
+
+  it("responds to an offer on a cold session without a prior status load", async () => {
+    /* Regression: respondToOffer used to read serverAdmissionIds before
+       serverApplicationByRef populated it, so the first response in a fresh
+       browser session always failed with "Application offer not found." */
+    vi.resetModules();
+    const ops: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+        ops.push(request.op);
+        switch (request.op) {
+          case "admissions.listMine":
+            return json({ ok: true, value: [row()] });
+          case "admissions.respondOffer":
+            return json({ ok: true, value: { invoiceRef: "INV-2026-0501" } });
+          default:
+            return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
+        }
+      }),
+    );
+    const fresh = await import("@/modules/services/admissions");
+    const responded = await fresh.admissionsService.respondToOffer(APP_REF, true, "Applicant");
+    expect(responded.ref).toBe(APP_REF);
+    expect(ops).toContain("admissions.respondOffer");
+  });
+
+  it("resolves a duplicate identity review with the recorded candidate and version", async () => {
+    const CANDIDATE_ID = "00000000-0000-4000-8000-00000000c001";
+    const duplicateRow = {
+      ...row("duplicate_review"),
+      admission_duplicate_reviews: [{
+        status: "pending",
+        candidate_student_id: CANDIDATE_ID,
+        reference: "DUP-2026-0001",
+        reason: null,
+        reviewed_at: null,
+        students: { reference: "STU-2026-0001", people: { display_name: "Existing Child" } },
+      }],
+    };
+    const ops: Array<{ op: string; payload: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body ?? "{}")) as { op: string; payload: Record<string, unknown> };
+        ops.push(request);
+        switch (request.op) {
+          case "admissions.staffByRef":
+            return json({ ok: true, value: duplicateRow });
+          case "admissions.resolveDuplicateReview":
+            return json({ ok: true, value: { applicationRef: APP_REF, status: "approved", evidenceRef: "EVID-2026-0001" } });
+          default:
+            return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
+        }
+      }),
+    );
+
+    const updated = await admissionsService.resolveDuplicateReview(APP_REF, {
+      outcome: "approved",
+      reason: "Birth certificate matches the existing record.",
+      expectedVersion: 1,
+    });
+    const resolveCall = ops.find((entry) => entry.op === "admissions.resolveDuplicateReview");
+    expect(resolveCall?.payload.candidateStudentId).toBe(CANDIDATE_ID);
+    expect(resolveCall?.payload.outcome).toBe("approved");
+    expect(resolveCall?.payload.expectedVersion).toBe(1);
+    expect(resolveCall?.payload.evidenceType).toBe("staff_review");
+    expect(updated.ref).toBe(APP_REF);
+    /* A decision refresh is one bounded record read; the queue is never listed again. */
+    expect(ops.map((entry) => entry.op)).toEqual(["admissions.staffByRef", "admissions.resolveDuplicateReview", "admissions.staffByRef"]);
+    expect(ops.some((entry) => entry.op === "admissions.staffQueue")).toBe(false);
+  });
+
+  it("resolves reviewer names through the reviewer directory by public reference", async () => {
+    const ops: Array<{ op: string; payload: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body ?? "{}")) as { op: string; payload: Record<string, unknown> };
+        ops.push(request);
+        if (request.op === "admissions.reviewerDirectory") {
+          return json({
+            ok: true,
+            value: [
+              { accountId: "00000000-0000-4000-8000-00000000e001", displayName: "Aaliya Khan" },
+              { accountId: "00000000-0000-4000-8000-00000000e002", displayName: "Bilal Mir" },
+            ],
+          });
+        }
+        return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
+      }),
+    );
+
+    const directory = await admissionsService.reviewerDirectory(APP_REF);
+    const call = ops.find((entry) => entry.op === "admissions.reviewerDirectory");
+    expect(call?.payload.applicationRef).toBe(APP_REF);
+    expect(call?.payload).not.toHaveProperty("applicationId");
+    expect(directory).toEqual({
+      "00000000-0000-4000-8000-00000000e001": "Aaliya Khan",
+      "00000000-0000-4000-8000-00000000e002": "Bilal Mir",
+    });
+  });
+
+  it("refreshes a staff decision from one bounded record read, never the queue", async () => {
+    const ops: Array<{ op: string; payload: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body ?? "{}")) as { op: string; payload: Record<string, unknown> };
+        ops.push(request);
+        switch (request.op) {
+          case "admissions.staffByRef":
+            return json({ ok: true, value: row("under_review") });
+          case "admissions.reviewAdvance":
+            return json({ ok: true, value: { ok: true } });
+          default:
+            return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
+        }
+      }),
+    );
+
+    const updated = await admissionsService.staffStartReview(APP_REF, "Documents verified.", undefined, 1);
+    expect(updated.ref).toBe(APP_REF);
+    expect(ops.map((entry) => entry.op)).toEqual(["admissions.reviewAdvance", "admissions.staffByRef"]);
+    expect(ops.find((entry) => entry.op === "admissions.reviewAdvance")?.payload.expectedVersion).toBe(1);
+  });
+
+  it("lists the applicant's own applications and never falls back to the staff queue", async () => {
+    const ops: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+        ops.push(request.op);
+        return json({ ok: true, value: [row()] });
+      }),
+    );
+
+    const list = await admissionsService.listMyApplications();
+    expect(list).toHaveLength(1);
+    expect(list[0]?.ref).toBe(APP_REF);
+
+    const single = await admissionsService.getApplication(APP_REF);
+    expect(single?.ref).toBe(APP_REF);
+    expect(ops.filter((op) => op === "admissions.staffQueue")).toHaveLength(0);
+  });
+
+  it("re-reads the public conversion references for an enrolled application", async () => {
+    const ops: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+        ops.push(request.op);
+        switch (request.op) {
+          case "admissions.listMine":
+            return json({ ok: true, value: [row("enrolled")] });
+          case "admissions.enrollmentReference":
+            return json({ ok: true, value: { studentRef: "STU-2026-0001", enrollmentRef: "ENR-2026-0001", linkRef: "LINK-2026-0001", matchedExisting: false } });
+          default:
+            return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
+        }
+      }),
+    );
+
+    const record = await admissionsService.getApplication(APP_REF);
+    expect(record?.studentRef).toBe("STU-2026-0001");
+    expect(record?.enrollmentRef).toBe("ENR-2026-0001");
+    expect(record?.linkRef).toBe("LINK-2026-0001");
+    expect(ops).toContain("admissions.enrollmentReference");
+  });
+
+  it("does not request conversion references for a non-enrolled application", async () => {
+    const ops: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+        ops.push(request.op);
+        return json({ ok: true, value: [row()] });
+      }),
+    );
+
+    const record = await admissionsService.getApplication(APP_REF);
+    expect(record?.studentRef).toBeUndefined();
+    expect(ops).not.toContain("admissions.enrollmentReference");
+  });
 });
 
 describe("server-hydrated admissions components", () => {
-  it("trusts authoritative Supabase queue and not-found props without duplicate reads", () => {
-    const list = vi.spyOn(admissionsService, "listStaffRecords").mockResolvedValue([]);
+  it("paints the Supabase queue from SSR, silently refreshes it once, and trusts not-found props", async () => {
+    const list = vi.spyOn(admissionsService, "listStaffRecords").mockResolvedValue([
+      { ...INITIAL_APPLICATION, status: "Assessment" },
+    ]);
     const get = vi.spyOn(admissionsService, "getApplication").mockResolvedValue(null);
 
     const queue = render(createElement(AdmissionsQueue, { rows: [INITIAL_APPLICATION] }));
-    expect(screen.getByText("Server Child")).toBeInTheDocument();
-    expect(list).not.toHaveBeenCalled();
+    expect(screen.getAllByText((content, element) => element?.textContent?.includes("Server Child") ?? false).length).toBeGreaterThan(0);
+    expect(list).toHaveBeenCalledTimes(1);
+
+    /* The silent re-read replaces the SSR rows without a loading state. */
+    await waitFor(() =>
+      expect(screen.getAllByText((content, element) => element?.textContent?.includes("Assessment") ?? false).length).toBeGreaterThan(0),
+    );
     queue.unmount();
 
     render(createElement(ApplicationReview, { applicationRef: "APP-2026-MISSING", initial: null }));
     expect(screen.getByText("Application not found")).toBeInTheDocument();
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it("renders the real attached documents and never the empty note", () => {
+    vi.spyOn(admissionsService, "reviewerDirectory").mockResolvedValue({});
+    const initial: StaffQueueRecord = {
+      ...INITIAL_APPLICATION,
+      status: "Offered",
+      documents: [{
+        requirementCode: "birth",
+        reference: "DOC-2026-0101",
+        filename: "birth-certificate.pdf",
+        category: "birth",
+        scanStatus: "ready",
+        mimeType: "application/pdf",
+        sizeBytes: 4096,
+        uploadedAtIso: "2026-08-10T05:00:00.000Z",
+        finalizedAtIso: "2026-08-10T05:01:00.000Z",
+      }],
+    };
+
+    render(createElement(ApplicationReview, { applicationRef: APP_REF, initial }));
+
+    expect(screen.queryByText(/No documents have been attached/)).toBeNull();
+    expect(screen.getByText(/birth-certificate\.pdf/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open file" })).toHaveAttribute("href", "/api/documents/DOC-2026-0101");
+  });
+
+  it("renders the configured requirement label instead of the derived code", () => {
+    vi.spyOn(admissionsService, "reviewerDirectory").mockResolvedValue({});
+    const initial: StaffQueueRecord = {
+      ...INITIAL_APPLICATION,
+      status: "Offered",
+      documents: [{
+        requirementCode: "addressProof",
+        reference: "DOC-2026-0102",
+        filename: "address-proof.pdf",
+        category: "addressProof",
+        scanStatus: "ready",
+        mimeType: "application/pdf",
+        sizeBytes: 2048,
+        uploadedAtIso: "2026-08-10T05:00:00.000Z",
+        finalizedAtIso: "2026-08-10T05:01:00.000Z",
+      }],
+    };
+
+    render(createElement(ApplicationReview, {
+      applicationRef: APP_REF,
+      initial,
+      documentLabels: { addressProof: "Address proof" },
+    }));
+
+    expect(screen.getByText(/Address proof/)).toBeInTheDocument();
+    expect(screen.queryByText(/AddressProof/)).toBeNull();
+  });
+
+  it("shows the honest empty note when no document is attached", () => {
+    vi.spyOn(admissionsService, "reviewerDirectory").mockResolvedValue({});
+    render(createElement(ApplicationReview, { applicationRef: APP_REF, initial: { ...INITIAL_APPLICATION, documents: [] } }));
+
+    expect(screen.getByText(/No documents have been attached/)).toBeInTheDocument();
+  });
+
+  it("keeps the SSR Supabase queue rows when the silent refresh fails", async () => {
+    const list = vi.spyOn(admissionsService, "listStaffRecords").mockRejectedValue(new Error("offline"));
+
+    render(createElement(AdmissionsQueue, { rows: [INITIAL_APPLICATION] }));
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+    expect(screen.getAllByText((content, element) => element?.textContent?.includes("Server Child") ?? false).length).toBeGreaterThan(0);
+  });
+
+  it("labels each queue row with the application session, not the submission year", async () => {
+    const queueRow: StaffQueueRecord = { ...INITIAL_APPLICATION, session: "2027–28", submittedAtIso: "2026-08-10T05:00:00.000Z" };
+    vi.spyOn(admissionsService, "listStaffRecords").mockResolvedValue([queueRow]);
+
+    render(createElement(AdmissionsQueue, { rows: [queueRow] }));
+
+    expect(screen.getByText(/session 2027–28/)).toBeInTheDocument();
+    expect(screen.queryByText(/session 2026\b/)).toBeNull();
   });
 
   it("keeps the demo queue mount refresh", async () => {
@@ -162,6 +467,6 @@ describe("server-hydrated admissions components", () => {
     render(createElement(AdmissionsQueue, { rows: [] }));
 
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Server Child")).toBeInTheDocument();
+    expect(screen.getAllByText((content, element) => element?.textContent?.includes("Server Child") ?? false).length).toBeGreaterThan(0);
   });
 });

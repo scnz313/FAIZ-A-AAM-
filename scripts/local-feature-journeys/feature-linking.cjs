@@ -35,14 +35,17 @@ module.exports = {
     try {
       await page.goto(`${base}/portal`, { waitUntil: "networkidle" });
       await page.waitForTimeout(1200);
-      const selector = page.locator("select").filter({ hasText: /Aarif|Mariam/ }).first();
-      check("child switcher present", (await selector.count()) > 0);
-      if ((await selector.count()) > 0) {
-        const options = await selector.locator("option").allTextContents();
+      const switcher = page.getByRole("button", { name: /Your children/ }).first();
+      check("child switcher present", (await switcher.count()) > 0);
+      if ((await switcher.count()) > 0) {
+        await switcher.click();
+        await page.waitForTimeout(500);
+        const childOptions = page.getByRole("menuitem").filter({ hasText: /Aarif|Mariam/ });
+        const options = await childOptions.allTextContents();
         check("two linked children listed", options.length >= 2, options.join(", "));
         const before = (await page.locator("body").innerText()).replace(/\s+/g, " ");
-        await selector.selectOption({ index: 1 });
-        await page.waitForTimeout(800);
+        await childOptions.last().click();
+        await page.waitForTimeout(1200);
         const after = (await page.locator("body").innerText()).replace(/\s+/g, " ");
         check("child switch changes the overview", before !== after);
       }
@@ -51,7 +54,7 @@ module.exports = {
     }
 
     try {
-      await staffAs(page, base, "/staff/link-requests", { identity: STAFF_IDS.aisha });
+      await staffAs(page, base, "/administrator/link-requests", { identity: STAFF_IDS.aisha });
       const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("link-requests page renders", body.includes("Nida Bhat") || body.includes("pending"), body.slice(-140));
       const rejectButtons = page.getByRole("button", { name: "Reject", exact: true });

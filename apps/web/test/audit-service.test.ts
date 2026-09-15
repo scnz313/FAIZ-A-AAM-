@@ -112,3 +112,27 @@ describe("auditService.record", () => {
     expect(third.id).toBe(`AUD-2026-${String(demoAuditEvents.length + 3).padStart(3, "0")}`);
   });
 });
+
+describe("auditService append-only contract (S4)", () => {
+  it("exposes no mutation API — events can only be listed and appended", async () => {
+    expect(auditService).not.toHaveProperty("update");
+    expect(auditService).not.toHaveProperty("remove");
+    expect(auditService).not.toHaveProperty("delete");
+    expect(auditService).not.toHaveProperty("clear");
+    expect(auditService).not.toHaveProperty("edit");
+    expect(Object.keys(auditService).sort()).toEqual(["listEvents", "listEventsPage", "record"]);
+  });
+
+  it("appending never rewrites earlier events", async () => {
+    const before = await auditService.listEvents();
+    const snapshot = before.map((event) => ({ ...event }));
+    expect(snapshot.length).toBeGreaterThan(0);
+
+    await auditService.record({ actor: "Later", action: "Login", target: "—", outcome: "Success" });
+
+    const after = await auditService.listEvents();
+    for (const old of snapshot) {
+      expect(after.find((event) => event.id === old.id)).toEqual(old);
+    }
+  });
+});

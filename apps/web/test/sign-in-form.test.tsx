@@ -26,7 +26,6 @@ vi.mock("next/navigation", () => ({
   useRouter: () => routerMocks,
 }));
 
-import DevelopmentAccountSwitcher from "@/components/identity/DevelopmentAccountSwitcher";
 import SignInForm from "@/components/identity/SignInForm";
 
 beforeEach(() => {
@@ -77,7 +76,37 @@ describe("Supabase sign-in privacy", () => {
       email: "staff@example.test",
       password: "SecurePass9",
     }));
-    expect(routerMocks.push).toHaveBeenCalledWith("/sign-in/totp?next=%2Fstaff");
+    expect(routerMocks.push).toHaveBeenCalledWith("/sign-in/totp?next=%2Fadministrator");
+  });
+
+  it("routes a verified applicant to the application workspace, not the portal", async () => {
+    const user = userEvent.setup();
+    authMocks.signInWithOtp.mockResolvedValue({ error: null });
+    authMocks.verifyOtp.mockResolvedValue({ error: null });
+    adapterMocks.call.mockImplementation((op: string) =>
+      Promise.resolve(op === "identity.hasApplicant" ? { ok: true, value: true } : { ok: true, value: false }),
+    );
+    render(<SignInForm adapter="supabase" navigate={routerMocks.push} />);
+    await user.type(screen.getByLabelText(/^email/i), "applicant@example.test");
+    await user.click(screen.getByRole("button", { name: "Send code" }));
+    await user.type(screen.getByLabelText(/verification code/i), "482913");
+    await user.click(screen.getByRole("button", { name: /verify|continue/i }));
+
+    await waitFor(() => expect(routerMocks.push).toHaveBeenCalledWith("/apply/student"));
+  });
+
+  it("routes a password-signed-in applicant to the application workspace, not the portal", async () => {
+    const user = userEvent.setup();
+    adapterMocks.call.mockImplementation((op: string) =>
+      Promise.resolve(op === "identity.hasApplicant" ? { ok: true, value: true } : { ok: true, value: false }),
+    );
+    render(<SignInForm adapter="supabase" developmentPasswordAuth navigate={routerMocks.push} />);
+    await user.type(screen.getByLabelText(/^email/i), "applicant@example.test");
+    await user.type(screen.getByLabelText(/^password/i), "SecurePass9");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(authMocks.signInWithPassword).toHaveBeenCalled());
+    await waitFor(() => expect(routerMocks.push).toHaveBeenCalledWith("/apply/student"));
   });
 
   it("shows a recoverable error for a failed staff sign-in", async () => {
@@ -94,6 +123,9 @@ describe("Supabase sign-in privacy", () => {
 
   it("uses password sign-in instead of email OTP for local family development", async () => {
     const user = userEvent.setup();
+    adapterMocks.call.mockImplementation((op: string) =>
+      Promise.resolve({ ok: true, value: op !== "identity.hasApplicant" }),
+    );
     render(
       <SignInForm
         adapter="supabase"
@@ -111,44 +143,5 @@ describe("Supabase sign-in privacy", () => {
     }));
     expect(authMocks.signInWithOtp).not.toHaveBeenCalled();
     expect(routerMocks.push).toHaveBeenCalledWith("/portal");
-  });
-
-  it("opens a guardian account with one click", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({
-        ok: true,
-        value: { destination: "/portal", requiresMfaElevation: false },
-      }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const user = userEvent.setup();
-    render(<DevelopmentAccountSwitcher audience="family" navigate={routerMocks.push} />);
-
-    await user.click(screen.getByRole("button", { name: /Guardian/ }));
-
-    await waitFor(() => expect(routerMocks.push).toHaveBeenCalledWith("/portal"));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ account: "parent" });
-  });
-
-  it("auto-elevates a one-click staff account before opening the administrator portal", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          ok: true,
-          value: { destination: "/administrator", requiresMfaElevation: true },
-        }),
-      })
-      .mockResolvedValueOnce({ ok: true });
-    vi.stubGlobal("fetch", fetchMock);
-    const user = userEvent.setup();
-    render(<DevelopmentAccountSwitcher audience="staff" navigate={routerMocks.push} />);
-
-    await user.click(screen.getByRole("button", { name: /Administrator/ }));
-
-    await waitFor(() => expect(routerMocks.push).toHaveBeenCalledWith("/administrator"));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/auth/mfa/dev-elevate", expect.objectContaining({ method: "POST" }));
   });
 });

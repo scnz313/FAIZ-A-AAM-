@@ -1,125 +1,117 @@
 .page {
-  padding: 0 0 var(--space-8);
-}
-
-.header {
-  margin-bottom: var(--space-6);
-}
-
-/* Ruled three-column band — mirrors the facility HeadlineBand rhythm. */
-.band {
-  position: relative;
-  border: 1px solid var(--line);
-  background: var(--chalk);
-}
-
-.band .demoBadge {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-}
-
-.grid,
-.band {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
 }
 
-.band {
-  grid-template-columns: repeat(3, 1fr);
+.title {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+  margin: 0;
 }
 
-.col {
-  padding: var(--space-6);
-  border-left: 1px solid var(--line);
-}
-
-.col:first-child {
-  border-left: 0;
-}
-
-.bigLine {
-  margin: var(--space-3) 0 0;
+/* Role chips in the page-head actions */
+.roleChips {
   display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
-.bigNum {
-  font-family: var(--font-display, var(--serif));
-  font-size: 44px;
-  line-height: 1;
-  font-weight: 500;
+/* V14 work queue — q-mini rows */
+.queue {
+  border-top: 2px solid var(--ink);
 }
 
-.bigSuffix {
-  font-size: 13px;
-  color: var(--ink-soft);
-  max-width: 16ch;
-  line-height: 1.4;
-}
-
-.breakdown {
-  list-style: none;
-  margin: var(--space-4) 0 var(--space-4);
-  padding: 0;
+.qMini {
   display: grid;
-  gap: var(--space-2);
-  font-size: 13px;
-  color: var(--ink-soft);
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  text-decoration: none;
+  color: var(--ink);
+  transition: background 0.15s ease;
 }
 
-.breakdown li {
+.qMini:last-child {
+  border-bottom: 0;
+}
+
+.qMini:hover {
+  background: var(--ink-soft-tint);
+}
+
+.qMiniLeft {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 12px;
+  min-width: 0;
 }
 
-.publishing {
-  margin-top: var(--space-8);
+.qMiniIcon {
+  color: var(--muted);
+  flex: none;
 }
 
-.sectionHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  border-bottom: 1px solid var(--line);
-  padding-bottom: var(--space-3);
+.qMiniTitle {
+  display: block;
+  font-weight: 650;
+  font-size: 0.93rem;
 }
 
-.publishingLine {
-  font-size: 14px;
-  color: var(--ink-soft);
-  margin: var(--space-4) 0 var(--space-5);
+.qMiniDesc {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
-.quickLinks {
+.qMiniCount {
+  font-size: 0.82rem;
+  color: var(--ink-3);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.qMiniChev {
+  color: var(--muted);
+  flex: none;
+}
+
+/* V14 info grid — maker-checker + admin */
+.infoGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 18px;
+  min-width: 0;
 }
 
-@media (max-width: 1000px) {
-  .band {
-    grid-template-columns: 1fr;
-  }
-
-  .col {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-
-  .col:first-child {
-    border-top: 0;
-  }
-
-  .quickLinks {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.infoGrid > * {
+  min-width: 0;
 }
 
-@media (max-width: 700px) {
-  .quickLinks {
-    grid-template-columns: 1fr;
+.emptyNote {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin: 0;
+  padding: 24px 0;
+}
+
+@media (max-width: 719px) {
+  .qMini {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+
+  .qMiniChev {
+    display: none;
   }
 }

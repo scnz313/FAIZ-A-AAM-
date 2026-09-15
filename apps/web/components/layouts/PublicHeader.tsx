@@ -19,17 +19,11 @@ const NAV_LINKS = [
   { label: "School life", href: "/school-life" },
   { label: "Notices", href: "/notices" },
   { label: "Careers", href: "/careers" },
-  { label: "Disclosure", href: "/disclosure" },
-] as const;
-
-/** Utility strip contacts — fictional concept details for the design site. */
-const UTILITY_CONTACTS = [
-  { label: "+91 000 000 0000", href: "tel:+910000000000" },
-  { label: "office@faizaam.example", href: "mailto:office@faizaam.example" },
+  { label: "Contact", href: "/contact" },
 ] as const;
 
 /* Below this width the primary nav collapses into the mobile menu. */
-const MENU_BREAKPOINT = "(max-width: 1000px)";
+const MENU_BREAKPOINT = "(max-width: 1120px)";
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -40,10 +34,10 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 /**
- * Global public header: utility strip (date + contacts), brand, primary
- * nav with the active route marked, and persistent utility actions.
- * The nav underline follows the hover style; the current route keeps it
- * permanently via aria-current="page".
+ * V15 public header — ribbon (unit + disclosure/notices/sign-in) above
+ * site-head (brand + nav + CTAs). The active route keeps the saffron
+ * underline via aria-current="page"; the underline shows statically
+ * (no slide/scale animation).
  */
 export function PublicHeader({ tone = "light" }: PublicHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -72,7 +66,7 @@ export function PublicHeader({ tone = "light" }: PublicHeaderProps) {
 
   /* While open: lock body scroll, focus the first nav link (so Shift+Tab
      wraps inside the trap), trap Tab, close on Escape. Focus returns to
-     the toggle on close. Mirrors the portal/staff drawer behavior. */
+     the toggle on close. */
   useEffect(() => {
     if (!isMobile || !menuOpen) return;
 
@@ -121,78 +115,135 @@ export function PublicHeader({ tone = "light" }: PublicHeaderProps) {
 
   return (
     <header className={`public-header ${dark ? "public-header--dark" : "public-header--light"}`}>
-      {/* The utility strip belongs to inner pages; the hero stays a single
-          clean row — brand, nav, portal action — over the ink ground. */}
+      {/* V14 ribbon — ink background, unit name + quick links */}
       {!dark && (
         <div className="public-utility public-utility--light">
-          <p className="public-utility__date">Bandipora · Jammu &amp; Kashmir</p>
-          <p className="public-utility__links">
-            {UTILITY_CONTACTS.map((contact) => (
-              <a key={contact.label} href={contact.href}>
-                {contact.label}
-              </a>
-            ))}
-          </p>
+          <div className="wrap">
+            <span className="ribbon-unit">
+              <span className="msym" aria-hidden="true">verified</span>
+              <span className="hide-s">A Unit of Darul Uloom Raheemiyyah</span>
+              <span className="dot-sep hide-s" aria-hidden="true" />
+              <span>Bandipora, Kashmir</span>
+            </span>
+            <span className="ribbon-links">
+              <Link href="/disclosure" prefetch={false}>
+                <span className="msym" aria-hidden="true">account_balance</span>
+                Disclosure
+              </Link>
+              <Link href="/notices" prefetch={false}>
+                <span className="msym" aria-hidden="true">campaign</span>
+                Notices
+              </Link>
+              <Link href="/sign-in" prefetch={false}>
+                <span className="msym" aria-hidden="true">login</span>
+                Sign in
+              </Link>
+            </span>
+          </div>
         </div>
       )}
 
+      {/* V15 site-head — paper background, brand + nav + CTAs */}
       <div className="public-header-main">
-        <Link className="brand" href="/" prefetch={false} aria-label="Faiz Aam Secondary School home">
-          <Crest size="md" tone={dark ? "chalk" : "ink"} />
-          <span className="brand-copy">
-            <span className="brand-name-row">
-              <strong>Faiz Aam</strong>
-              <span className="urdu brand-urdu" dir="rtl" lang="ur">
-                فیض عام
-              </span>
+        <div className="wrap">
+          <Link className="brand" href="/" prefetch={false} aria-label="Faiz Aam Secondary School home">
+            <Crest size="md" tone={dark ? "chalk" : "ink"} />
+            <span className="brand-copy">
+              <span className="brand-name">Faiz Aam Secondary School</span>
+              <span className="brand-sub">Bandipora, Kashmir</span>
             </span>
-            <small>Secondary School · Bandipora</small>
-          </span>
-        </Link>
-
-        <button
-          ref={menuButtonRef}
-          type="button"
-          className="menu-toggle"
-          aria-expanded={menuOpen}
-          aria-controls="public-nav"
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          {menuOpen ? "Close" : "Menu"}
-        </button>
-
-        <nav
-          ref={navRef}
-          id="public-nav"
-          className={menuOpen ? "is-open" : undefined}
-          aria-label="Primary navigation"
-          onClick={handleNavClick}
-        >
-          {NAV_LINKS.map((link) => {
-            const active =
-              pathname === link.href || pathname.startsWith(`${link.href}/`);
-            return (
-              <Link
-                key={link.label}
-                href={link.href}
-                prefetch={false}
-                aria-current={active ? "page" : undefined}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="header-actions">
-          <Link className="text-action" href="/portal/fees" prefetch={false}>
-            Pay fees
           </Link>
-          <Link className="portal-button" href="/portal" prefetch={false}>
-            Portal <span aria-hidden="true">↗</span>
-          </Link>
+
+          <nav aria-label="Primary navigation" className="main-nav">
+            {NAV_LINKS.map((link) => {
+              const active =
+                pathname === link.href || pathname.startsWith(`${link.href}/`);
+              return (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  prefetch={false}
+                  className={active ? "on" : undefined}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="head-cta">
+            <Link className="btn btn-ghost btn-sm" href="/sign-in" prefetch={false}>
+              <span className="msym" aria-hidden="true">lock_person</span>
+              Guardian sign-in
+            </Link>
+            <Link className="btn btn-primary btn-sm" href="/admissions" prefetch={false}>
+              Apply for admission
+            </Link>
+          </div>
+
+          <button
+            ref={menuButtonRef}
+            type="button"
+            className="burger"
+            aria-expanded={menuOpen}
+            aria-controls="public-nav-drawer"
+            aria-label="Open menu"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span className="msym" aria-hidden="true">menu</span>
+          </button>
         </div>
       </div>
+
+      {/* V14 mobile drawer — right-side slide-in panel with scrim */}
+      {menuOpen ? (
+        <div className="m-drawer open" role="dialog" aria-modal="true" aria-label="Site menu">
+          <div className="scrim" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+          <nav
+            ref={navRef}
+            id="public-nav-drawer"
+            className="panel"
+            aria-label="Primary navigation"
+            onClick={handleNavClick}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontFamily: "var(--serif)", fontWeight: 600, fontSize: "0.98rem" }}>Menu</span>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setMenuOpen(false)}
+                aria-label="Close menu"
+              >
+                <span className="msym" aria-hidden="true">close</span>
+              </button>
+            </div>
+            {NAV_LINKS.map((link) => {
+              const active =
+                pathname === link.href || pathname.startsWith(`${link.href}/`);
+              return (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  prefetch={false}
+                  className={active ? "on" : undefined}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+              <Link href="/sign-in" prefetch={false} style={{ display: "block", padding: "12px 10px", fontWeight: 650, color: "var(--saffron-ink)" }}>
+                Guardian sign-in →
+              </Link>
+              <Link href="/admissions" prefetch={false} style={{ display: "block", padding: "12px 10px", fontWeight: 650, color: "var(--ink)" }}>
+                Apply for admission →
+              </Link>
+            </div>
+          </nav>
+        </div>
+      ) : null}
     </header>
   );
 }

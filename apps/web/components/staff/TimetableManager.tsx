@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ExamSlot, Period } from "@/modules/academics/demo";
 import Button from "@/components/ui/Button";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
@@ -52,6 +52,83 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
 function formatDemoDate(iso: string): string {
   if (iso === "") return "—";
   return DATE_FORMATTER.format(new Date(iso));
+}
+
+/* Short labels for exam rows staged in this session, formatted the same way
+   the service maps persisted rows ("Tue", "02 Sep"). */
+const EXAM_DAY_FORMATTER = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
+const EXAM_DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" });
+
+/** A staged exam-date row: the published ExamSlot shape plus its required reason. */
+type StagedExamDate = ExamSlot & { id: number; reason: string };
+
+type ExamDateField = "date" | "subject" | "room" | "start" | "end" | "reason";
+type ExamDateErrors = Partial<Record<ExamDateField, string>>;
+
+function timeToMinutes(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (match === null) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function examDateKey(row: { dateIso: string; subject: string }): string {
+  return `${row.dateIso}|${row.subject.trim().toLowerCase()}`;
+}
+
+/**
+ * Client-side gate for one new exam date (and the staged set it joins).
+ * The same rules run again before publish. A staged row for a date and
+ * subject already published in full is refused; staging it here is how a
+ * correction is made (it replaces that entry in the next version).
+ */
+function validateExamDateDraft(
+  draft: { dateIso: string; subject: string; room: string; start: string; end: string; reason: string },
+  staged: ReadonlyArray<StagedExamDate>,
+  persisted: ReadonlyArray<ExamSlot>,
+): ExamDateErrors {
+  const errors: ExamDateErrors = {};
+  if (draft.dateIso === "") errors.date = "Choose the exam date.";
+  else if (timetableWeekdayForDate(draft.dateIso) === null) errors.date = "Choose a valid exam date.";
+  if (draft.subject === "") errors.subject = "Choose the exam subject.";
+  if (draft.room === "") errors.room = "Choose the exam room.";
+  if (draft.start === "") errors.start = "Enter the start time.";
+  if (draft.end === "") errors.end = "Enter the end time.";
+  const startMinutes = timeToMinutes(draft.start);
+  const endMinutes = timeToMinutes(draft.end);
+  if (draft.start !== "" && startMinutes === null) errors.start = "Enter a valid start time.";
+  if (draft.end !== "" && endMinutes === null) errors.end = "Enter a valid end time.";
+  if (startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes) {
+    errors.end = "The end time must be after the start time.";
+  }
+  const duplicate = staged.find(
+    (row) => row.dateIso === draft.dateIso && row.subject.trim().toLowerCase() === draft.subject.trim().toLowerCase(),
+  );
+  if (errors.date === undefined && errors.subject === undefined && duplicate !== undefined) {
+    errors.subject = "A staged paper for this date and subject already exists · remove it first or change the subject.";
+  }
+  const published = persisted.find(
+    (row) => row.dateIso === draft.dateIso && row.subject.trim().toLowerCase() === draft.subject.trim().toLowerCase(),
+  );
+  if (errors.subject === undefined && errors.date === undefined && published !== undefined && published.time === `${draft.start} – ${draft.end}`) {
+    errors.subject = "This paper is already published with the same time · stage a correction with a changed time or date.";
+  }
+  if (draft.reason.trim().length < 10) errors.reason = "Record a reason of at least 10 characters.";
+  return errors;
+}
+
+/** Working set for the next version: persisted rows, with staged rows replacing same date+subject entries. */
+function mergeStagedDateSheet(
+  persisted: ReadonlyArray<ExamSlot>,
+  staged: ReadonlyArray<ExamSlot>,
+): ExamSlot[] {
+  const stagedKeys = new Set(staged.map((row) => examDateKey(row)));
+  return [
+    ...persisted.filter((row) => !stagedKeys.has(examDateKey(row))),
+    ...staged.map(({ dateIso, dayLabel, dateLabel, subject, time, room }) => ({ dateIso, dayLabel, dateLabel, subject, time, room })),
+  ].sort((left, right) => left.dateIso.localeCompare(right.dateIso) || left.time.localeCompare(right.time));
 }
 
 /** Open conflicts are seeded from the 8-A fixture; classes without timetable data have nothing to check. */
@@ -115,6 +192,24 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
   const [dateSheetRows, setDateSheetRows] = useState<ExamSlot[]>(() => dateSheet.map((entry) => ({ ...entry })));
   const [dateSheetPublished, setDateSheetPublished] = useState(false);
   const [dateSheetLive, setDateSheetLive] = useState("");
+  const [stagedDateRows, setStagedDateRows] = useState<StagedExamDate[]>([]);
+  const [dateSheetAlert, setDateSheetAlert] = useState("");
+  const [publishingDateSheet, setPublishingDateSheet] = useState(false);
+  const [examDate, setExamDate] = useState("");
+  const [examSubject, setExamSubject] = useState("");
+  const [examRoom, setExamRoom] = useState("");
+  const [examStart, setExamStart] = useState("");
+  const [examEnd, setExamEnd] = useState("");
+  const [examReason, setExamReason] = useState("");
+  const [examDateErrors, setExamDateErrors] = useState<ExamDateErrors>({});
+  const stagedDateCounter = useRef(0);
+  const examDateRef = useRef<HTMLInputElement>(null);
+  const examSubjectRef = useRef<HTMLSelectElement>(null);
+  const examRoomRef = useRef<HTMLSelectElement>(null);
+  const examStartRef = useRef<HTMLInputElement>(null);
+  const examEndRef = useRef<HTMLInputElement>(null);
+  const examReasonRef = useRef<HTMLTextAreaElement>(null);
+  const stagedDateListRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -202,13 +297,32 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
 
   const isEmptyClass = selectedClass === "" || availableClasses.length === 0 || !availableClasses.includes(selectedClass) || Object.keys(working).length === 0;
   const currentEntry = versions[0] ?? null;
-  const targetVersion = (currentEntry?.version ?? 0) + 1;
+  /* A draft is published as itself; only a published base opens the next
+     version. The confirmation copy must not promise a version that the
+     server will not create. */
+  const targetVersion = currentEntry === null
+    ? 1
+    : currentEntry.status === "draft"
+      ? currentEntry.version
+      : currentEntry.version + 1;
   const workingDays = timetableDays(working);
   const resolving = openConflicts.find((conflict) => conflict.id === resolveId) ?? null;
   const suggestion = resolving && !live ? suggestedResolve(resolving, working, selectedClass) : null;
   const draftFeedback = draftSavedAt !== null
     ? `Draft for Class ${selectedClass} saved at ${formatDemoDate(draftSavedAt)}${live ? "." : " (session demo)."}`
     : "";
+  const dateSheetHasStaged = stagedDateRows.length > 0;
+  /* Publish is re-enabled as soon as staged rows exist (add or remove), so a
+     correction publishes as a new version even after a previous publish. */
+  const dateSheetPublishEnabled =
+    !publishingDateSheet && (dateSheetHasStaged || (!dateSheetPublished && dateSheetRows.length > 0));
+  const dateSheetPublishLabel = publishingDateSheet
+    ? "Publishing…"
+    : dateSheetHasStaged
+      ? (dateSheetPublished ? "Publish correction" : "Publish date sheet")
+      : dateSheetPublished
+        ? (live ? "Published" : "Published (demo)")
+        : "Publish date sheet";
 
   function applyEdit(day: string, time: string, field: EditField, value: string) {
     const next: Record<string, Period[]> = {};
@@ -259,6 +373,15 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
     setDateSheetRows(live ? [] : dateSheet.map((entry) => ({ ...entry })));
     setDateSheetPublished(false);
     setDateSheetLive("");
+    setStagedDateRows([]);
+    setDateSheetAlert("");
+    setExamDate("");
+    setExamSubject("");
+    setExamRoom("");
+    setExamStart("");
+    setExamEnd("");
+    setExamReason("");
+    setExamDateErrors({});
   }
 
   async function saveDraft() {
@@ -267,8 +390,8 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       setDraftSavedAt(draft.savedAtIso);
       if (live) setOpenConflicts(await getTimetableDraftConflicts(draft, selectedClass));
       setPublishFeedback(live
-        ? `Draft for Class ${selectedClass} saved to the school timetable service — not published.`
-        : `Draft for Class ${selectedClass} saved to the session (demo) — not published. It will be restored when you return.`);
+        ? `Draft for Class ${selectedClass} saved to the school timetable service · not published.`
+        : `Draft for Class ${selectedClass} saved to the session (demo) · not published. It will be restored when you return.`);
     } catch (error) {
       setPublishFeedback(`Draft save failed: ${error instanceof Error ? error.message : "unknown error"}.`);
     }
@@ -282,7 +405,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
 
   function applySuggestion(conflict: TimetableConflict) {
     if (suggestion === null) {
-      setResolveFeedback("No safe suggestion found — change the assignment manually in the table below.");
+      setResolveFeedback("No safe suggestion found · change the assignment manually in the table below.");
       return;
     }
     applyEdit(conflict.day, conflict.time, suggestion.field, suggestion.value);
@@ -301,7 +424,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
     setOpenConflicts((current) => current.filter((item) => item.id !== conflict.id));
     setResolveId(null);
     setResolveReason("");
-    setResolveFeedback(`Resolved: ${conflict.message} — ${note.reason}`);
+    setResolveFeedback(`Resolved: ${conflict.message} · ${note.reason}`);
   }
 
   function openPublish() {
@@ -309,18 +432,18 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
     const firstIssue = issues[0];
     if (firstIssue !== undefined) {
       setPublishFeedback(
-        `Cannot publish — ${firstIssue.day} ${firstIssue.time} ${firstIssue.field} is required for the edited period.`,
+        `Cannot publish · ${firstIssue.day} ${firstIssue.time} ${firstIssue.field} is required for the edited period.`,
       );
       return;
     }
     if (openConflicts.length > 0) {
       setPublishFeedback(
-        `Cannot publish — resolve the ${openConflicts.length} open conflict${openConflicts.length === 1 ? "" : "s"} first.`,
+        `Cannot publish · resolve the ${openConflicts.length} open conflict${openConflicts.length === 1 ? "" : "s"} first.`,
       );
       return;
     }
     const prefill = draftNotes
-      .map((note) => `Resolved: ${note.conflictMessage} — ${note.reason}`)
+      .map((note) => `Resolved: ${note.conflictMessage} · ${note.reason}`)
       .join("; ");
     setPublishNote(prefill);
     setPublishFeedback("");
@@ -330,7 +453,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
   async function confirmPublish() {
     const note = publishNote.trim();
     if (note === "") {
-      setPublishFeedback("A change note is required — it becomes the version note in the change log.");
+      setPublishFeedback("A change note is required · it becomes the version note in the change log.");
       return;
     }
     const edits: TimetablePeriodEdit[] = [];
@@ -353,12 +476,12 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       setPublishOpen(false);
       setEffectiveWeekOf(version.weekOf);
       setPublishFeedback(
-        `v${version.version} published for Class ${selectedClass} at ${formatDemoDate(version.publishedAtIso ?? "")}${live ? "" : " (demo session)"} — the portal timetable now shows it.`,
+        `v${version.version} published for Class ${selectedClass} at ${formatDemoDate(version.publishedAtIso ?? "")}${live ? "" : " (demo session)"} · the portal timetable now shows it.`,
       );
     } catch (error) {
       if (error instanceof TimetableConflictError) setOpenConflicts(error.conflicts);
       setPublishFeedback(
-        `Publish failed: ${error instanceof Error ? error.message : "unknown error"} — review the change note and try again.`,
+        `Publish failed: ${error instanceof Error ? error.message : "unknown error"} · review the change note and try again.`,
       );
     } finally {
       setPublishing(false);
@@ -387,6 +510,10 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       setOverrideFeedback("Choose a valid override date.");
       return;
     }
+    if (overrideTime === "") {
+      setOverrideFeedback("Choose the period for this override · the options come from the published timetable for the chosen date.");
+      return;
+    }
     const dateIso = overrideDate;
     setSavingOverride(true);
     setOverrideFeedback("Saving override…");
@@ -406,7 +533,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       setOverrides(await timetableService.listTimetableOverridesAsync(selectedClass));
       setOverrideOpen(false);
       setOverrideFeedback(
-        `${override.ref} recorded — ${override.day} ${override.time} ${override.kind} override applies only on ${override.dateIso}${live ? "." : " (demo session)."}`,
+        `${override.ref} recorded · ${override.day} ${override.time} ${override.kind} override applies only on ${override.dateIso}${live ? "." : " (demo session)."}`,
       );
     } catch (error) {
       setOverrideFeedback(
@@ -424,41 +551,148 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       setOverrideFeedback("A revocation reason of at least 10 characters is required.");
       return;
     }
-    setRevokingRef(revokeTarget.ref);
-    setOverrideFeedback(`Revoking ${revokeTarget.ref}…`);
+    const target = revokeTarget;
+    setRevokingRef(target.ref);
+    setOverrideFeedback(`Revoking ${target.ref}…`);
     try {
       const revoked = await timetableService.revokeTimetableOverride(
-        revokeTarget.ref,
+        target.ref,
         reason,
-        revokeTarget.version,
+        target.version,
         selectedClass,
       );
       setOverrides((current) => current.map((candidate) => candidate.ref === revoked.ref ? revoked : candidate));
       setRevokeTarget(null);
       setRevokeReason("");
-      setOverrideFeedback(`${revoked.ref} revoked — the published base timetable reapplies on that date. The reason remains in history.`);
+      setOverrideFeedback(`${revoked.ref} revoked · the published base timetable reapplies on that date. The reason remains in history.`);
     } catch (error) {
       setOverrideFeedback(
         `Revoke failed: ${error instanceof Error ? error.message : "unknown error"}`,
       );
+      /* A version conflict means this form held a stale row. Reload the
+         authoritative list and rebind the open form so a retry cannot fail
+         forever against the same stale version. */
+      try {
+        const refreshed = await timetableService.listTimetableOverridesAsync(selectedClass);
+        setOverrides(refreshed);
+        const fresh = refreshed.find((candidate) => candidate.ref === target.ref);
+        if (fresh === undefined || fresh.revokedAtIso !== null) {
+          setRevokeTarget(null);
+          setRevokeReason("");
+        } else {
+          setRevokeTarget(fresh);
+        }
+      } catch {
+        /* Keep the original failure message; the list reload is best effort. */
+      }
     } finally {
       setRevokingRef(null);
     }
   }
 
+  /** Move focus to the first control that carries an error, in reading order. */
+  function focusFirstExamDateError(errors: ExamDateErrors) {
+    const order: Array<[ExamDateField, RefObject<HTMLElement | null>]> = [
+      ["date", examDateRef],
+      ["subject", examSubjectRef],
+      ["room", examRoomRef],
+      ["start", examStartRef],
+      ["end", examEndRef],
+      ["reason", examReasonRef],
+    ];
+    for (const [field, ref] of order) {
+      if (errors[field] !== undefined) {
+        ref.current?.focus();
+        return;
+      }
+    }
+  }
+
+  function addExamDate() {
+    const errors = validateExamDateDraft(
+      { dateIso: examDate, subject: examSubject, room: examRoom, start: examStart, end: examEnd, reason: examReason },
+      stagedDateRows,
+      dateSheetRows,
+    );
+    setExamDateErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      focusFirstExamDateError(errors);
+      return;
+    }
+    const date = new Date(`${examDate}T00:00:00.000Z`);
+    stagedDateCounter.current += 1;
+    setStagedDateRows((rows) => [
+      ...rows,
+      {
+        id: stagedDateCounter.current,
+        dateIso: examDate,
+        dayLabel: EXAM_DAY_FORMATTER.format(date),
+        dateLabel: EXAM_DATE_FORMATTER.format(date),
+        subject: examSubject,
+        time: `${examStart} – ${examEnd}`,
+        room: examRoom,
+        reason: examReason.trim(),
+      },
+    ]);
+    setExamDate("");
+    setExamSubject("");
+    setExamRoom("");
+    setExamStart("");
+    setExamEnd("");
+    setExamReason("");
+    setExamDateErrors({});
+    setDateSheetAlert("");
+    setDateSheetLive("");
+  }
+
+  function removeStagedExamDate(id: number) {
+    setStagedDateRows((rows) => rows.filter((row) => row.id !== id));
+    setDateSheetAlert("");
+  }
+
   async function publishDateSheet() {
+    /* The staged rows were validated when they were added; re-check them so a
+       stale list can never publish an invalid entry, and keep the rows on a
+       service failure so the manager can retry. */
+    const invalidStaged = stagedDateRows.find(
+      (row) =>
+        timetableWeekdayForDate(row.dateIso) === null
+        || row.subject.trim() === ""
+        || row.room.trim() === ""
+        || !/^\d{2}:\d{2} – \d{2}:\d{2}$/.test(row.time)
+        || timeToMinutes(row.time.slice(0, 5)) === null
+        || timeToMinutes(row.time.slice(-5)) === null
+        || (timeToMinutes(row.time.slice(0, 5)) ?? 0) >= (timeToMinutes(row.time.slice(-5)) ?? 0),
+    );
+    if (invalidStaged !== undefined) {
+      setDateSheetAlert(`Staged row ${invalidStaged.dateLabel} ${invalidStaged.subject} is incomplete · remove it and add it again.`);
+      stagedDateListRef.current?.focus();
+      return;
+    }
+    const merged = mergeStagedDateSheet(dateSheetRows, stagedDateRows);
+    if (merged.length === 0) {
+      setDateSheetAlert("Add at least one exam date before publishing the date sheet.");
+      examDateRef.current?.focus();
+      return;
+    }
+    const note = stagedDateRows.map((row) => row.reason.trim()).filter((reason) => reason !== "").join(" · ");
+    setPublishingDateSheet(true);
+    setDateSheetAlert("");
     setDateSheetLive("Publishing date sheet…");
     try {
-      const state = await timetableService.publishDateSheet(selectedClass, dateSheetRows);
+      const state = await timetableService.publishDateSheet(selectedClass, merged, note);
       setDateSheetRows(state.entries.map((entry) => ({ ...entry })));
+      setStagedDateRows([]);
       setDateSheetPublished(state.published);
       setDateSheetLive(
-        `Date sheet v${state.version} published at ${formatDemoDate(state.publishedAtIso)}${live ? "" : " (demo session)"} — the portal reads this state.`,
+        `Date sheet v${state.version} published at ${formatDemoDate(state.publishedAtIso)}${live ? "" : " (demo session)"} · the portal reads this state.`,
       );
     } catch (error) {
       setDateSheetLive(
-        `Date sheet not published: ${error instanceof Error ? error.message : "unknown error"}`,
+        `Date sheet not published: ${error instanceof Error ? error.message : "unknown error"} · your staged rows are kept so you can retry.`,
       );
+    } finally {
+      setPublishingDateSheet(false);
     }
   }
 
@@ -504,20 +738,29 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
         ) : (
           <>
             <p className={styles.versionLine}>
-              <strong>Class {selectedClass} timetable</strong> — v{currentEntry.version}, published{" "}
-              {formatDemoDate(currentEntry.publishedAtIso)}
-              {currentEntry.session === true ? " · this session" : ""}{live ? "" : " (demo)"}
+              <strong>Class {selectedClass} timetable</strong> · v{currentEntry.version},{" "}
+              {currentEntry.status === "draft" ? (
+                <>
+                  draft updated {formatDemoDate(currentEntry.publishedAtIso)}
+                  {live ? " · not visible to families until published" : " (demo session)"}
+                </>
+              ) : (
+                <>
+                  published {formatDemoDate(currentEntry.publishedAtIso)}
+                  {currentEntry.session === true ? " · this session" : ""}{live ? "" : " (demo)"}
+                </>
+              )}
             </p>
 
             {draftNotes.length > 0 ? (
               <>
-                <h3 className={styles.changeHeading}>Resolution reasons — this draft</h3>
+                <h3 className={styles.changeHeading}>Resolution reasons · this draft</h3>
                 <ol className={styles.changeLog}>
                   {draftNotes.map((note, index) => (
                     <li key={`${note.atIso}-${index}`} className={styles.changeRow}>
                       <span className={styles.changeVersion}>Note</span>
                       <span>
-                        Resolved: {note.conflictMessage} — {note.reason}
+                        Resolved: {note.conflictMessage} · {note.reason}
                       </span>
                     </li>
                   ))}
@@ -584,10 +827,10 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
 
             {resolving !== null ? (
               <div className={styles.resolvePanel}>
-                <h3 className="section-label">Resolve — {resolving.message}</h3>
+                <h3 className="section-label">Resolve · {resolving.message}</h3>
                 <p className={styles.resolveWhy}>{resolving.detail}</p>
                 <p className={styles.resolveAssignment}>
-                  Affected period: <strong>{resolving.day} {resolving.time}</strong> — {assignmentText(working, resolving.day, resolving.time)}
+                  Affected period: <strong>{resolving.day} {resolving.time}</strong> · {assignmentText(working, resolving.day, resolving.time)}
                 </p>
                 <p className={styles.resolveRule}>
                   Change the assignment in the table below so the conflict disappears, then record why. A resolve without a
@@ -640,7 +883,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       <section className="panel" aria-labelledby="timetable-editor-heading">
         <div className={styles.sectionHead}>
           <h2 id="timetable-editor-heading" className="section-label">
-            Editor — Class {selectedClass}
+            Editor · Class {selectedClass}
           </h2>
           {!live ? <span className="demo-badge">Demo data</span> : null}
         </div>
@@ -657,7 +900,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
           <>
             <p className={styles.editorIntro}>
               Minimal scope: edit subject, teacher, and room per period. Period times are fixed by the {live ? "school configuration" : "published fixture"}.
-              Edited periods are marked; save a draft or publish a new version (append-only — earlier versions stay listed).
+              Edited periods are marked; save a draft or publish a new version (append-only · earlier versions stay listed).
             </p>
 
             <TimetableEditor
@@ -692,7 +935,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
               </div>
             ) : (
               <p className={styles.readOnlyNote} role="status">
-                View only — editing, drafts, and publishing require the Timetable manager workspace. Teachers can view
+                View only · editing, drafts, and publishing require the Timetable manager workspace. Teachers can view
                 their published schedules.
               </p>
             )}
@@ -701,7 +944,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
               <div className={styles.publishPanel}>
                 <h3 className="section-label">Publish v{targetVersion} for Class {selectedClass}?</h3>
                 <p className={styles.publishWhy}>
-                  A new version is created on top of v{targetVersion - 1} — earlier versions remain in the change log (no
+                  A new version is created on top of v{targetVersion - 1} · earlier versions remain in the change log (no
                   silent overwrite). The portal timetable will show this version for the session.
                 </p>
                 <label className={styles.reasonLabel} htmlFor="publish-note">
@@ -732,7 +975,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       <section className="panel" aria-labelledby="timetable-overrides-heading">
         <div className={styles.sectionHead}>
           <h2 id="timetable-overrides-heading" className="section-label">
-            Overrides — Class {selectedClass}
+            Overrides · Class {selectedClass}
           </h2>
           {!live ? <span className="demo-badge">Demo data</span> : null}
         </div>
@@ -748,7 +991,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
         ) : (
           <>
             <p className={styles.conflictIntro}>
-              A date-specific override replaces a teacher, room, subject, or the whole period on one date only — the
+              A date-specific override replaces a teacher, room, subject, or the whole period on one date only · the
               published base timetable is never rewritten. Overrides stay in history after revocation.
             </p>
 
@@ -764,9 +1007,9 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
                       {override.teacher !== undefined ? ` · ${override.teacher}` : ""}
                       {override.subject !== undefined ? ` · ${override.subject}` : ""}
                       {override.room !== undefined ? ` · ${override.room}` : ""}
-                      {" — "}{override.note}
+                      {" · "}{override.note}
                       {override.revokedAtIso !== null ? (
-                        <span> · revoked{override.revocationReason ? ` — ${override.revocationReason}` : ""}</span>
+                        <span> · revoked{override.revocationReason ? ` · ${override.revocationReason}` : ""}</span>
                       ) : canManage ? (
                         <>
                           {" "}
@@ -873,7 +1116,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
                             .filter((period) => period.kind !== "break" && period.kind !== "assembly")
                             .map((period) => (
                               <option key={period.time} value={period.time}>
-                                {period.time} — {period.subject} · {period.teacher}
+                                {period.time} · {period.subject} · {period.teacher}
                               </option>
                             ))}
                         </select>
@@ -900,10 +1143,17 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
                               id="override-teacher"
                               className="input"
                               type="text"
+                              list="override-teacher-options"
                               value={overrideTeacher}
                               onChange={(event) => setOverrideTeacher(event.target.value)}
                               aria-required="true"
                             />
+                            <p className="field-help">Suggestions come from the school timetable configuration.</p>
+                            <datalist id="override-teacher-options">
+                              {editorOptions.teachers.map((teacher) => (
+                                <option key={teacher} value={teacher} />
+                              ))}
+                            </datalist>
                           </div>
                           <div className="field">
                             <label htmlFor="override-subject">Subject</label>
@@ -911,10 +1161,16 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
                               id="override-subject"
                               className="input"
                               type="text"
+                              list="override-subject-options"
                               value={overrideSubject}
                               onChange={(event) => setOverrideSubject(event.target.value)}
                               aria-required="true"
                             />
+                            <datalist id="override-subject-options">
+                              {editorOptions.subjects.map((subject) => (
+                                <option key={subject} value={subject} />
+                              ))}
+                            </datalist>
                           </div>
                         </>
                       ) : null}
@@ -925,10 +1181,17 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
                             id="override-room"
                             className="input"
                             type="text"
+                            list="override-room-options"
                             value={overrideRoom}
                             onChange={(event) => setOverrideRoom(event.target.value)}
                             aria-required="true"
                           />
+                          <p className="field-help">Suggestions come from the school timetable configuration.</p>
+                          <datalist id="override-room-options">
+                            {editorOptions.rooms.map((room) => (
+                              <option key={room} value={room} />
+                            ))}
+                          </datalist>
                         </div>
                       ) : null}
                       <div className={`field ${styles.overrideNoteField}`}>
@@ -961,7 +1224,7 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
               </>
             ) : (
               <p className={styles.readOnlyNote} role="status">
-                View only — recording overrides requires the Timetable manager workspace.
+                View only · recording overrides requires the Timetable manager workspace.
               </p>
             )}
           </>
@@ -971,12 +1234,17 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
       <section className="panel" aria-labelledby="datesheet-heading">
         <div className={styles.sectionHead}>
           <h2 id="datesheet-heading" className="section-label">
-            Exam date sheet — Mid-term
+            Exam date sheet · Mid-term
           </h2>
           {!live ? <span className="demo-badge">Demo data</span> : null}
         </div>
 
-        <div className="table--scroll">
+        <p className={styles.conflictIntro}>
+          Published papers are visible to guardians. Add one paper at a time below; staged rows publish together as a
+          new version and earlier versions stay in the change trail.
+        </p>
+
+        <div className="table--scroll" tabIndex={0} role="group" aria-labelledby="datesheet-heading">
           <table className={`table ${styles.dateSheetTable}`}>
             <thead>
               <tr>
@@ -1006,15 +1274,215 @@ export function TimetableManager({ dateSheet }: { dateSheet: ReadonlyArray<ExamS
         </div>
 
         {canManage ? (
-          <div className={styles.publishRow}>
-            <Button variant="primary" disabled={dateSheetPublished || dateSheetRows.length === 0} onClick={publishDateSheet}>
-              {dateSheetPublished ? (live ? "Published" : "Published (demo)") : "Publish date sheet"}
-            </Button>
-            <p className={styles.live} role="status">
-              {dateSheetLive}
-            </p>
-          </div>
-        ) : null}
+          <>
+            {dateSheetHasStaged ? (
+              <div className={styles.stagedBlock}>
+                <h3 className={styles.changeHeading}>Staged for the next version · not yet visible to guardians</h3>
+                <ul
+                  className={styles.changeLog}
+                  ref={stagedDateListRef}
+                  tabIndex={-1}
+                  aria-label="Staged exam dates"
+                >
+                  {stagedDateRows.map((row) => {
+                    const superseded = dateSheetRows.find((published) => examDateKey(published) === examDateKey(row));
+                    return (
+                      <li key={row.id} className={styles.changeRow}>
+                        <span className={styles.changeVersion}>{row.dateLabel}</span>
+                        <span>
+                          <strong>{row.subject}</strong> · {row.dayLabel} · {row.time} · {row.room}
+                          {superseded !== undefined ? (
+                            <span> · replaces the published {superseded.time} paper</span>
+                          ) : null}
+                          {" · "}
+                          {row.reason}
+                        </span>
+                        <Button variant="quiet" size="sm" onClick={() => removeStagedExamDate(row.id)}>
+                          Remove
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className={styles.publishPanel}>
+              <h3 className="section-label">Add exam date</h3>
+              <p className={styles.publishWhy}>
+                The paper is staged for the next published version. Subject and room options come from the school
+                timetable configuration.
+              </p>
+              <div className={styles.examDateFields}>
+                <div className={`field${examDateErrors.date !== undefined ? " field--invalid" : ""}`}>
+                  <label htmlFor="exam-date-input">Exam date</label>
+                  <input
+                    id="exam-date-input"
+                    ref={examDateRef}
+                    className="input"
+                    type="date"
+                    value={examDate}
+                    onChange={(event) => {
+                      setExamDate(event.target.value);
+                      setExamDateErrors((current) => ({ ...current, date: undefined }));
+                    }}
+                    aria-required="true"
+                    aria-invalid={examDateErrors.date !== undefined}
+                    aria-describedby={examDateErrors.date !== undefined ? "exam-date-error" : undefined}
+                  />
+                  {examDateErrors.date !== undefined ? (
+                    <p className="field-error" id="exam-date-error">{examDateErrors.date}</p>
+                  ) : null}
+                </div>
+                <div className={`field${examDateErrors.subject !== undefined ? " field--invalid" : ""}`}>
+                  <label htmlFor="exam-subject-input">Exam subject</label>
+                  <select
+                    id="exam-subject-input"
+                    ref={examSubjectRef}
+                    className="select"
+                    value={examSubject}
+                    onChange={(event) => {
+                      setExamSubject(event.target.value);
+                      setExamDateErrors((current) => ({ ...current, subject: undefined }));
+                    }}
+                    aria-required="true"
+                    aria-invalid={examDateErrors.subject !== undefined}
+                    aria-describedby={examDateErrors.subject !== undefined ? "exam-subject-error" : undefined}
+                  >
+                    <option value="">Select a subject…</option>
+                    {editorOptions.subjects.map((subject) => (
+                      <option key={subject} value={subject}>
+                        {subject}
+                      </option>
+                    ))}
+                  </select>
+                  {examDateErrors.subject !== undefined ? (
+                    <p className="field-error" id="exam-subject-error">{examDateErrors.subject}</p>
+                  ) : null}
+                </div>
+                <div className={`field${examDateErrors.room !== undefined ? " field--invalid" : ""}`}>
+                  <label htmlFor="exam-room-input">Exam room</label>
+                  <select
+                    id="exam-room-input"
+                    ref={examRoomRef}
+                    className="select"
+                    value={examRoom}
+                    onChange={(event) => {
+                      setExamRoom(event.target.value);
+                      setExamDateErrors((current) => ({ ...current, room: undefined }));
+                    }}
+                    aria-required="true"
+                    aria-invalid={examDateErrors.room !== undefined}
+                    aria-describedby={examDateErrors.room !== undefined ? "exam-room-error" : undefined}
+                  >
+                    <option value="">Select a room…</option>
+                    {editorOptions.rooms.map((room) => (
+                      <option key={room} value={room}>
+                        {room}
+                      </option>
+                    ))}
+                  </select>
+                  {examDateErrors.room !== undefined ? (
+                    <p className="field-error" id="exam-room-error">{examDateErrors.room}</p>
+                  ) : null}
+                </div>
+                <div className={`field${examDateErrors.start !== undefined ? " field--invalid" : ""}`}>
+                  <label htmlFor="exam-start-input">Start time</label>
+                  <input
+                    id="exam-start-input"
+                    ref={examStartRef}
+                    className="input"
+                    type="time"
+                    value={examStart}
+                    onChange={(event) => {
+                      setExamStart(event.target.value);
+                      setExamDateErrors((current) => ({ ...current, start: undefined, end: undefined }));
+                    }}
+                    aria-required="true"
+                    aria-invalid={examDateErrors.start !== undefined}
+                    aria-describedby={examDateErrors.start !== undefined ? "exam-start-error" : undefined}
+                  />
+                  {examDateErrors.start !== undefined ? (
+                    <p className="field-error" id="exam-start-error">{examDateErrors.start}</p>
+                  ) : null}
+                </div>
+                <div className={`field${examDateErrors.end !== undefined ? " field--invalid" : ""}`}>
+                  <label htmlFor="exam-end-input">End time</label>
+                  <input
+                    id="exam-end-input"
+                    ref={examEndRef}
+                    className="input"
+                    type="time"
+                    value={examEnd}
+                    onChange={(event) => {
+                      setExamEnd(event.target.value);
+                      setExamDateErrors((current) => ({ ...current, end: undefined }));
+                    }}
+                    aria-required="true"
+                    aria-invalid={examDateErrors.end !== undefined}
+                    aria-describedby={examDateErrors.end !== undefined ? "exam-end-error" : undefined}
+                  />
+                  {examDateErrors.end !== undefined ? (
+                    <p className="field-error" id="exam-end-error">{examDateErrors.end}</p>
+                  ) : null}
+                </div>
+                <div className={`field ${styles.examDateReasonField}${examDateErrors.reason !== undefined ? " field--invalid" : ""}`}>
+                  <label htmlFor="exam-reason-input">
+                    Exam reason <span className={styles.required}>required</span>
+                  </label>
+                  <textarea
+                    id="exam-reason-input"
+                    ref={examReasonRef}
+                    className={styles.reasonInput}
+                    rows={2}
+                    value={examReason}
+                    onChange={(event) => {
+                      setExamReason(event.target.value);
+                      setExamDateErrors((current) => ({ ...current, reason: undefined }));
+                    }}
+                    aria-required="true"
+                    aria-invalid={examDateErrors.reason !== undefined}
+                    aria-describedby={examDateErrors.reason !== undefined ? "exam-reason-error" : undefined}
+                  />
+                  <p className="field-help">Recorded as the publication note for the next version.</p>
+                  {examDateErrors.reason !== undefined ? (
+                    <p className="field-error" id="exam-reason-error">{examDateErrors.reason}</p>
+                  ) : null}
+                </div>
+              </div>
+              <div className={styles.resolveButtons}>
+                <Button variant="saffron" onClick={addExamDate}>
+                  Add exam date
+                </Button>
+              </div>
+            </div>
+
+            <div className={styles.publishRow}>
+              <Button variant="primary" disabled={!dateSheetPublishEnabled} onClick={() => void publishDateSheet()}>
+                {dateSheetPublishLabel}
+              </Button>
+              <p className={styles.live} role="status">
+                {dateSheetLive}
+              </p>
+              {dateSheetAlert !== "" ? (
+                <p className="field-error" role="alert">
+                  {dateSheetAlert}
+                </p>
+              ) : null}
+              {!dateSheetPublished && dateSheetRows.length === 0 && !dateSheetHasStaged ? (
+                <p className={styles.live} role="status">
+                  {live
+                    ? "No exam dates are configured for this section yet · add the first paper above, then publish it for guardians."
+                    : "No exam dates are available in this demo session; add the first paper above, then publish it for guardians."}
+                </p>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <p className={styles.readOnlyNote} role="status">
+            View only · adding or publishing exam dates requires the Timetable manager workspace.
+          </p>
+        )}
       </section>
     </>
   );

@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import PageIntro from "@/components/public/PageIntro";
-import PageSection from "@/components/public/pages/PageSection";
-import RuledList from "@/components/public/pages/RuledList";
 import ConceptNote from "@/components/public/pages/ConceptNote";
-import { CampusScene } from "@/components/ui/art";
 import { dataAdapter } from "@/lib/supabase/env";
 import { loadServerPublicPageBody } from "@/lib/supabase/server-loaders";
 import styles from "./page.module.css";
@@ -12,25 +10,23 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "The history, approach, and leadership of Faiz Aam Secondary School, Bandipora.",
+    "What Faiz Aam Secondary School is, how it teaches, and what remains to be confirmed.",
+  alternates: { canonical: "/about" },
 };
 
-const APPROACH = [
-  {
-    term: "Discipline",
-    detail:
-      "A firm timetable, morning assembly, and clear rules make the school day safe, predictable, and calm.",
-  },
-  {
-    term: "Character",
-    detail:
-      "Honesty, courtesy, and service are practised daily — in the classroom, the courtyard, and the town.",
-  },
-  {
-    term: "Academic seriousness",
-    detail:
-      "Small classes, careful teaching, and examinations that measure real understanding, not memory alone.",
-  },
+const FACTS: ReadonlyArray<readonly [string, string]> = [
+  ["Unit of", "Darul Uloom Raheemiyyah"],
+  ["Grades", "1 to 12 · co-educational day school"],
+  ["Medium", "English · Urdu and Kashmiri taught"],
+  ["Session", "April to March"],
+  ["Location", "Astanpora, Bandipora"],
+  ["Governance", "Darul Uloom Raheemiyyah governing body"],
+];
+
+const PAGE_SECTIONS = [
+  ["history", "History"],
+  ["approach", "Mission and approach"],
+  ["leadership", "Leadership and governance"],
 ] as const;
 
 export default async function AboutPage() {
@@ -41,13 +37,15 @@ export default async function AboutPage() {
     return (
       <div className={styles.page}>
         <PageIntro eyebrow="The school" title={managed.title} deck={managed.body[0] ?? ""} />
-        <PageSection label="About" heading={managed.title} headingId="managed-about-heading">
-          <div className={styles.story}>
-            {managed.body.slice(1).map((paragraph, index) => (
-              <p key={index}>{paragraph}</p>
-            ))}
+        <section className="sec">
+          <div className="wrap">
+            <div className={styles.story}>
+              {managed.body.slice(1).map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </div>
           </div>
-        </PageSection>
+        </section>
         <ConceptNote>This page is published by the school through the content workspace.</ConceptNote>
       </div>
     );
@@ -56,77 +54,115 @@ export default async function AboutPage() {
   return (
     <div className={styles.page}>
       <PageIntro
-        eyebrow="The school"
-        title="A school rooted in Bandipora"
-        deck="Established in 1976 as a small middle school between the town and the Wular lake, and grown, class by class, into the secondary school it is today."
+        eyebrow="About"
+        title="A school kept like a record: honestly, and in order."
+        deck="Faiz Aam Secondary School is a unit of Darul Uloom Raheemiyyah, Bandipora. This page states what the school is, how it teaches, and what remains to be confirmed."
       />
 
-      <PageSection label="History" heading="Five decades on the same ground" headingId="history-heading">
-        <div className={styles.historyGrid}>
-          <div className={styles.story}>
-            <p className="drop-cap">
-              Faiz Aam began in 1976 as a small middle school, opened by a
-              circle of teachers from Bandipora on a plot of land between the
-              town and the Wular lake. Their idea was simple: a child from this
-              valley should grow up knowing exactly where they come from, and
-              still be ready for whatever the world asks next.
-            </p>
-            <p>
-              The school grew class by class — middle school first, then the
-              secondary section — without changing that founding idea. Assembly
-              still opens the morning, classes follow a firm timetable, and the
-              afternoon closes with games, reading, and homework finished
-              before sunset.
-            </p>
-            <p>
-              The method remains deliberately plain: small classes, clear
-              rules, and teachers who stay for years. The school judges itself
-              as it did in 1976 — by whether its children learn steadily and
-              behave honourably.
-            </p>
-            <p className={styles.note}>
-              Concept history for design review — the school’s official account
-              is yet to be confirmed.
-            </p>
+      <section className="sec">
+        <div className="wrap">
+          <div className="g34">
+            <div className={styles.narrative}>
+              <section id="history" aria-labelledby="about-history-heading">
+                <h2 id="about-history-heading">History</h2>
+                <p>
+                  The school was established as the general-education unit of Darul Uloom
+                  Raheemiyyah, serving families of Bandipora who wanted classical seriousness
+                  and a modern syllabus taught together. It grew grade by grade, kept its
+                  intake deliberately measured, and remains answerable to the same governing
+                  body as the institution that founded it.
+                </p>
+                <p>
+                  Rooms have been added, a laboratory built, a computer room wired. The
+                  intention has not changed: teach steadily, assess honestly, and keep parents
+                  informed through records rather than rumours.
+                </p>
+              </section>
+
+              <section id="approach" aria-labelledby="about-approach-heading">
+                <h2 id="about-approach-heading">Mission and approach</h2>
+                <p className={styles.mission}>
+                  Knowledge before marks; marks before boasts. Every child is known by name,
+                  every subject is taught from a plan, and every claim the school makes can be
+                  checked in a record.
+                </p>
+                <p>
+                  Teaching follows a published scheme of work per subject and grade. Assessment
+                  runs through the term rather than only at its end, and written feedback
+                  reaches guardians through the portal as it is recorded. Remedial time is
+                  timetabled, not improvised. Arabic and Islamic studies sit alongside the
+                  state curriculum with their own timetable allocation.
+                </p>
+              </section>
+
+              <section id="leadership" aria-labelledby="about-leadership-heading">
+                <h2 id="about-leadership-heading">Leadership and governance</h2>
+                <p>
+                  Day-to-day academic leadership rests with the Principal, working within the
+                  policies of the governing body. Appointments, finance and statutory
+                  compliance are overseen by the Administrator&rsquo;s office under the same
+                  body.
+                </p>
+              </section>
+
+              <ConceptNote>
+                This website is part of a design prototype. Text describing the
+                school&rsquo;s history, leadership and calendar is illustrative and awaits the
+                school&rsquo;s confirmation; the structure of these pages is the deliverable,
+                not the specific wording.
+              </ConceptNote>
+            </div>
+
+            <aside className={styles.aside} aria-label="School record summary">
+              <div className="record-card">
+                <div className="rc-head">
+                  <span className="t">School record</span>
+                </div>
+                <div className="rc-body">
+                  <div className="facts-ledger" style={{ borderTop: 0 }}>
+                    {FACTS.map(([k, v]) => (
+                      <div className="fl-row" key={k}>
+                        <span className="k">{k}</span>
+                        <span className="v">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="callout warn">
+                <span className="msym" style={{ fontSize: 20, flex: "none", marginTop: 1, color: "var(--saffron-ink)" }}>
+                  pending_actions
+                </span>
+                <span className="small">
+                  <strong>Verification pending.</strong> Named office bearers, their
+                  appointment records and the affiliation number will be published on the
+                  disclosure page once confirmed by the school office. No names are shown here
+                  as confirmed until that check is complete.
+                </span>
+              </div>
+
+              <section className="panel" aria-label="On this page">
+                <div className="pn-head">
+                  <h2>On this page</h2>
+                </div>
+                <div className="pn-body flush">
+                  {PAGE_SECTIONS.map(([id, label]) => (
+                    <a className="row-between" style={{ padding: "11px 18px", borderBottom: "1px solid var(--line-soft)" }} href={`#${id}`} key={id}>
+                      <span className="small strong">{label}</span>
+                      <span className="msym" style={{ fontSize: 16, color: "var(--muted)" }}>arrow_forward</span>
+                    </a>
+                  ))}
+                  <Link className="row-between" style={{ padding: "11px 18px" }} href="/disclosure">
+                    <span className="small strong">Statutory disclosure</span>
+                    <span className="chip">Pending confirmation</span>
+                  </Link>
+                </div>
+              </section>
+            </aside>
           </div>
-          <figure className={styles.artPanel}>
-            <CampusScene ariaHidden className={styles.art} />
-            <figcaption className={styles.artCaption}>
-              The main block — concept art
-            </figcaption>
-          </figure>
         </div>
-      </PageSection>
-
-      <div className="ornament-rule ornament-rule--tight" aria-hidden="true">
-        <i className="ornament-rule__diamond" />
-      </div>
-
-      <PageSection label="Method" heading="Our approach" headingId="approach-heading">
-        <RuledList rows={APPROACH} />
-      </PageSection>
-
-      <div className="ornament-rule ornament-rule--tight" aria-hidden="true">
-        <i className="ornament-rule__diamond" />
-      </div>
-
-      <PageSection label="Leadership" heading="From the head of school" headingId="leadership-heading">
-        <blockquote className={`pull-quote ${styles.quote}`}>
-          <span className="pull-quote__mark" aria-hidden="true" />
-          <p className={styles.quoteText}>
-            Children learn best when they are known — by name, by family, and
-            by what they can do, not only by what they cannot.
-          </p>
-        </blockquote>
-        <p className={styles.attribution}>
-          Message from the head of school · concept text for design review
-        </p>
-      </PageSection>
-
-      <ConceptNote>
-        The school’s official history, leadership details, and accreditation
-        are pending verification.
-      </ConceptNote>
+      </section>
     </div>
   );
 }

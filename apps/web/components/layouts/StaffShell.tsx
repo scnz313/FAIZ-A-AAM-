@@ -7,7 +7,6 @@ import type { MouseEvent, ReactNode } from "react";
 
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { Crest } from "@/components/ui/Crest";
-import { demoTodayLabel } from "@/modules/demo/clock";
 import { identityService } from "@/modules/services/identity";
 import { roleLabel } from "@/modules/services/staff-context";
 import { canAnyRole } from "@/modules/services/staff-profiles";
@@ -20,42 +19,62 @@ import { canonicalStaffUrl, portalPrefixForProfile, staffSubPathForPathname } fr
 import { NotificationBell } from "./NotificationBell";
 import styles from "./StaffShell.module.css";
 
-type NavLink = { subPath: string; label: string; exact?: boolean; action: StaffAction };
-type NavGroup = { label: string; links: ReadonlyArray<NavLink> };
+type NavLink = { subPath: string; label: string; icon: string; exact?: boolean; action: StaffAction };
+type NavGroup = { label?: string; links: ReadonlyArray<NavLink> };
 
-const NAV_GROUPS: ReadonlyArray<NavGroup> = [
-  {
-    label: "Main",
-    links: [
-      { subPath: "", label: "Home", exact: true, action: "home.view" },
-      { subPath: "/admissions", label: "Admissions", action: "admissions.view" },
-      { subPath: "/careers", label: "Careers", action: "careers.view" },
-      { subPath: "/finance", label: "Finance", action: "finance.view" },
-      { subPath: "/results", label: "Results", action: "results.view" },
-      { subPath: "/timetables", label: "Timetables", action: "timetable.view" },
-      { subPath: "/academics/teachers", label: "Teaching staff", action: "timetable.manage" },
-      { subPath: "/documents", label: "Documents", action: "documents.view" },
-    ],
-  },
-  {
-    label: "Publishing",
-    links: [
-      { subPath: "/notices", label: "Notices", action: "content.view" },
-      { subPath: "/content", label: "Content", action: "content.view" },
-    ],
-  },
-  {
-    label: "Administration",
-    links: [
-      { subPath: "/users", label: "Users", action: "users.manage" },
-      { subPath: "/data/imports", label: "Data imports", action: "users.manage" },
-      { subPath: "/data/exports", label: "Data exports", action: "users.manage" },
-      { subPath: "/link-requests", label: "Link requests", action: "links.verify" },
-      { subPath: "/audit", label: "Audit", action: "audit.view" },
-      { subPath: "/settings", label: "Settings", action: "settings.manage" },
-      { subPath: "/support", label: "Support", action: "support.view" },
-    ],
-  },
+const OVERVIEW: NavLink = { subPath: "", label: "Overview", icon: "space_dashboard", exact: true, action: "home.view" };
+const WORK_LINKS: ReadonlyArray<NavLink> = [
+  { subPath: "/admissions", label: "Admissions", icon: "edit_document", action: "admissions.view" },
+  { subPath: "/careers", label: "Careers", icon: "work", action: "careers.view" },
+  { subPath: "/finance", label: "Finance", icon: "payments", action: "finance.view" },
+  { subPath: "/results", label: "Results", icon: "grading", action: "results.view" },
+];
+const CONTENT_LINKS: ReadonlyArray<NavLink> = [
+  { subPath: "/notices", label: "Notices", icon: "campaign", action: "content.view" },
+  { subPath: "/content", label: "Content", icon: "article", action: "content.view" },
+];
+const RECORD_LINKS: ReadonlyArray<NavLink> = [
+  { subPath: "/documents", label: "Documents", icon: "folder_open", action: "documents.view" },
+  { subPath: "/users", label: "Users", icon: "group", action: "users.manage" },
+  { subPath: "/link-requests", label: "Guardian links", icon: "link", action: "links.verify" },
+  { subPath: "/guardians", label: "Guardians", icon: "family_restroom", action: "links.verify" },
+];
+const DATA_LINKS: ReadonlyArray<NavLink> = [
+  { subPath: "/data/imports", label: "Imports", icon: "upload", action: "users.manage" },
+  { subPath: "/data/exports", label: "Exports", icon: "download", action: "users.manage" },
+  { subPath: "/settings", label: "Settings", icon: "tune", action: "settings.manage" },
+  { subPath: "/audit", label: "Audit", icon: "history", action: "audit.view" },
+];
+const ACADEMIC_LINKS: ReadonlyArray<NavLink> = [
+  { subPath: "/timetables", label: "Timetables", icon: "calendar_month", action: "timetable.view" },
+  { subPath: "/academics/teachers", label: "Teaching records", icon: "person", action: "timetable.manage" },
+];
+const OFFICE_LINKS: ReadonlyArray<NavLink> = [
+  { subPath: "/documents", label: "Documents", icon: "folder_open", action: "documents.view" },
+  { subPath: "/support", label: "Support", icon: "support_agent", action: "support.view" },
+];
+
+const ADMIN_NAV_GROUPS: ReadonlyArray<NavGroup> = [
+  { links: [OVERVIEW] },
+  { label: "Work", links: WORK_LINKS },
+  { label: "Content", links: CONTENT_LINKS },
+  { label: "Records", links: RECORD_LINKS },
+  { label: "Data & control", links: DATA_LINKS },
+];
+
+const PRINCIPAL_NAV_GROUPS: ReadonlyArray<NavGroup> = [
+  { links: [OVERVIEW] },
+  { label: "Work", links: WORK_LINKS },
+  { label: "Academics", links: ACADEMIC_LINKS },
+  { label: "Content", links: CONTENT_LINKS },
+  { label: "Office", links: OFFICE_LINKS },
+];
+
+const LEGACY_NAV_GROUPS: ReadonlyArray<NavGroup> = [
+  { links: [OVERVIEW] },
+  { label: "Work", links: [...WORK_LINKS, ...ACADEMIC_LINKS] },
+  { label: "Publishing", links: CONTENT_LINKS },
+  { label: "Administration", links: [...RECORD_LINKS, ...DATA_LINKS, ...OFFICE_LINKS.filter((link) => link.subPath === "/support")] },
 ];
 
 function isActive(pathname: string, link: NavLink, profileCode: ReturnType<typeof portalPrefixForProfile>): boolean {
@@ -70,7 +89,7 @@ function resolveHref(link: NavLink, profileCode: ReturnType<typeof portalPrefixF
 }
 
 /* Below this width the sidebar becomes an off-canvas drawer. */
-const DRAWER_BREAKPOINT = "(max-width: 1000px)";
+const DRAWER_BREAKPOINT = "(max-width: 1023px)";
 const DRAWER_ID = "shell-nav";
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -119,6 +138,11 @@ export function StaffShell({
   const navigationRoles = summary?.profileCode === null ? (activeRole ? [activeRole] : []) : summary?.roles ?? [];
   const profileCode = summary?.profileCode ?? null;
   const portalPrefix = portalPrefixForProfile(profileCode);
+  const navGroups = profileCode === "administrator"
+    ? ADMIN_NAV_GROUPS
+    : profileCode === "principal"
+      ? PRINCIPAL_NAV_GROUPS
+      : LEGACY_NAV_GROUPS;
   const homeHref = canonicalStaffUrl(profileCode, "");
   const [navOpen, setNavOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -229,12 +253,17 @@ export function StaffShell({
     }
   }
 
+  const staffInitial = (status === "ready" && summary ? summary.displayName : "S").charAt(0).toUpperCase();
+  const roleLabelStr = status === "ready" && summary
+    ? `${summary.profileLabel ?? summary.roleLabel}${supabaseMode ? "" : " · demo session"}`
+    : supabaseMode ? "Staff account" : "Demo session";
+
   return (
-    <div className="facility-shell">
+    <div className="app-shell">
       <aside
         ref={drawerRef}
         id={DRAWER_ID}
-        className={`side-nav${navOpen ? " is-open" : ""}`}
+        className={`side${navOpen ? " open" : ""}`}
         aria-label="Staff navigation panel"
         tabIndex={mounted && isMobile ? -1 : undefined}
         {...(mounted && isMobile && navOpen
@@ -243,101 +272,95 @@ export function StaffShell({
         inert={mounted && isMobile && !navOpen}
         onClick={handleNavClick}
       >
-        <Link className="facility-brand" href={homeHref} prefetch={false}>
-          <Crest size="sm" />
-          <span className="facility-brand-copy">
-            <strong>Faiz Aam</strong>
-            <span className={`urdu ${styles.urdu}`} dir="rtl" lang="ur">
-              فیض عام
+        <div className="side-head">
+          <div className="profile">
+            <span className="avatar" aria-hidden="true">{staffInitial}</span>
+            <span className="who">
+              <span className="nm">{status === "ready" && summary ? summary.displayName : "Staff member"}</span>
+              <span className="rl">{portalPrefix === "/administrator" ? "Administrator" : portalPrefix === "/principal" ? "Principal" : "Staff"}</span>
             </span>
-            <small>{portalPrefix === "/administrator" ? "Administrator" : portalPrefix === "/principal" ? "Principal" : "Staff workspace"}</small>
-          </span>
-        </Link>
+          </div>
+        </div>
 
-        {!supabaseMode ? (
-          <div className={styles.identitySwitcher}>
-            <label htmlFor="staff-identity">Demo identity</label>
-            <select
-              id="staff-identity"
-              className="select"
-              value={identityId ?? ""}
-              onChange={(event) => void switchIdentity(event.target.value)}
-              disabled={switching}
-              aria-describedby="staff-identity-note"
-            >
-              {demoIdentities.map((identity) => (
-                <option key={identity.accountId} value={identity.accountId}>
-                  {identity.displayName} — {identity.summaryLabel}
-                </option>
-              ))}
-            </select>
-            <p id="staff-identity-note" className={styles.identityNote}>
-              Demo stand-in for staff sign-in — the backend issues real sessions.
-            </p>
-            {switchError ? (
+        <nav className="side-nav">
+          {!supabaseMode ? (
+            <div className={styles.identitySwitcher}>
+              <label htmlFor="staff-identity">Demo identity</label>
+              <select
+                id="staff-identity"
+                className="select"
+                value={identityId ?? ""}
+                onChange={(event) => void switchIdentity(event.target.value)}
+                disabled={switching}
+                aria-describedby="staff-identity-note"
+              >
+                {demoIdentities.map((identity) => (
+                  <option key={identity.accountId} value={identity.accountId}>
+                    {identity.displayName} · {identity.summaryLabel}
+                  </option>
+                ))}
+              </select>
+              <p id="staff-identity-note" className={styles.identityNote}>
+                Demo stand-in for staff sign-in · the backend issues real sessions.
+              </p>
+              {switchError ? (
+                <p className={styles.switcherError} role="alert">
+                  {switchError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {status === "ready" && summary ? (
+            <div className={styles.workspaceSwitcher}>
+              {summary.profileCode === null && workspaces.length > 1 ? (
+                <>
+                  <label htmlFor="staff-workspace">Access profile</label>
+                  <select
+                    id="staff-workspace"
+                    className="select"
+                    value={summary.activeRoleGrantId}
+                    onChange={(event) => void switchWorkspace(event.target.value)}
+                    disabled={switching}
+                    aria-describedby={switchError ? "staff-workspace-error" : undefined}
+                  >
+                    {workspaces.map((workspace) => (
+                      <option key={workspace.id} value={workspace.id}>
+                        {roleLabel(workspace.role)}
+                      </option>
+                    ))}
+                  </select>
+                  {switchError ? (
+                    <p id="staff-workspace-error" className={styles.switcherError} role="alert">
+                      {switchError}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : status === "error" ? (
+            <div className={styles.workspaceSwitcher}>
               <p className={styles.switcherError} role="alert">
-                {switchError}
+                {errorMessage}{" "}
+                <button type="button" className="button button--quiet button--small" onClick={retry}>
+                  Try again
+                </button>
               </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {status === "ready" && summary ? (
-          <div className={styles.workspaceSwitcher}>
-            <label htmlFor="staff-workspace">Access profile</label>
-            {summary.profileCode === null && workspaces.length > 1 ? (
-              <>
-                <select
-                  id="staff-workspace"
-                  className="select"
-                  value={summary.activeRoleGrantId}
-                  onChange={(event) => void switchWorkspace(event.target.value)}
-                  disabled={switching}
-                  aria-describedby={switchError ? "staff-workspace-error" : undefined}
-                >
-                  {workspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>
-                      {roleLabel(workspace.role)}
-                    </option>
-                  ))}
-                </select>
-                {switchError ? (
-                  <p id="staff-workspace-error" className={styles.switcherError} role="alert">
-                    {switchError}
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <p className={styles.workspaceNote}>
-                {summary.profileLabel ?? summary.roleLabel}
-                {summary.assignmentLabel ? ` · ${summary.assignmentLabel}` : ""}
+            </div>
+          ) : (
+            <div className={styles.workspaceSwitcher}>
+              <p className={styles.workspaceNote} role="status" aria-live="polite">
+                Loading workspace…
               </p>
-            )}
-          </div>
-        ) : status === "error" ? (
-          <div className={styles.workspaceSwitcher}>
-            <p className={styles.switcherError} role="alert">
-              {errorMessage}{" "}
-              <button type="button" className="button button--quiet button--small" onClick={retry}>
-                Try again
-              </button>
-            </p>
-          </div>
-        ) : (
-          <div className={styles.workspaceSwitcher}>
-            <p className={styles.workspaceNote} role="status" aria-live="polite">
-              Loading workspace…
-            </p>
-          </div>
-        )}
+            </div>
+          )}
 
-        {NAV_GROUPS.map((group) => {
-          const visibleLinks = group.links.filter((link) => canAnyRole(navigationRoles, link.action));
-          if (visibleLinks.length === 0) return null;
-          return (
-            <div className={styles.group} key={group.label}>
-              <p className="section-label">{group.label}</p>
-              <nav aria-label={`${group.label} navigation`}>
+          {navGroups.map((group, index) => {
+            const visibleLinks = group.links.filter((link) => canAnyRole(navigationRoles, link.action));
+            if (visibleLinks.length === 0) return null;
+            return (
+              <div className="nav-group" key={group.label ?? `primary-${index}`}>
+                {group.label ? <div className="ng-label">{group.label}</div> : null}
                 {visibleLinks.map((link) => {
                   const active = isActive(pathname, link, portalPrefix);
                   const href = resolveHref(link, portalPrefix);
@@ -346,107 +369,91 @@ export function StaffShell({
                       key={link.subPath}
                       href={href}
                       prefetch={false}
-                      className={active ? "active" : undefined}
+                      className={active ? "on" : undefined}
                       aria-current={active ? "page" : undefined}
                     >
-                      {link.label}
+                      <span className="msym" aria-hidden="true">{link.icon}</span>
+                      <span>{link.label}</span>
                     </Link>
                   );
                 })}
-              </nav>
-            </div>
-          );
-        })}
+              </div>
+            );
+          })}
+        </nav>
 
-        <div className="side-footer">
-          <div className="signed-in">
-            <span className="avatar" aria-hidden="true">
-              <Crest size="sm" tone="chalk" />
-            </span>
-            <span className="signed-in-copy">
-              <strong>{status === "ready" && summary ? summary.displayName : "Staff member"}</strong>
-              <small>{status === "ready" && summary ? `${summary.profileLabel ?? summary.roleLabel}${supabaseMode ? "" : " · demo session"}` : supabaseMode ? "Staff account" : "Demo session"}</small>
-            </span>
-            <button
-              type="button"
-              className="button button--small button--quiet"
-              onClick={() => void handleSignOut()}
-              title={supabaseMode ? "Sign out of this device" : "Back to sign in — demo sessions are not real"}
-              disabled={signingOut}
-            >
-              {signingOut ? "Signing out…" : "Sign out"} {!supabaseMode ? <span className="num">(demo)</span> : null}
-            </button>
-          </div>
-          {signOutError ? <p className={styles.switcherError} role="alert">{signOutError}</p> : null}
-          {developmentAuth ? (
-            <Link className="support-link" href="/sign-in/staff" prefetch={false}>
-              Switch local staff account
-            </Link>
-          ) : null}
+        <div className="side-foot">
+          <span>Faiz Aam · Bandipora</span>
+          <button
+            type="button"
+            className="btn btn-quiet btn-sm no-print"
+            onClick={() => void handleSignOut()}
+            disabled={signingOut}
+            title={supabaseMode ? "Sign out of this device" : "Back to sign in · demo sessions are not real"}
+          >
+            <span className="msym" aria-hidden="true">logout</span>
+            {signingOut ? "…" : "Exit"}
+          </button>
         </div>
       </aside>
 
-      <div className={`nav-scrim${navOpen ? " is-open" : ""}`} aria-hidden="true" onClick={() => setNavOpen(false)} />
+      {navOpen ? (
+        <div
+          className="nav-scrim is-open"
+          aria-hidden="true"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
 
-      <div className="portal-main">
-        <header className="portal-chrome">
-          {!supabaseMode ? (
-            <p className="alert-strip demo-strip">
-              Demo session — all data shown is fictional concept data. Real records appear once the backend and staff
-              accounts are connected.
-            </p>
-          ) : null}
-
-          <div className="portal-topbar">
+      <div className="app-main">
+        <header className="ctx-bar" aria-label="Staff context">
+          <div className="wrap-x">
             <button
               ref={menuButtonRef}
               type="button"
-              className="shell-menu-button"
+              className="ctx-burger"
+              aria-label="Open navigation"
               aria-expanded={navOpen}
               aria-controls={DRAWER_ID}
               onClick={() => setNavOpen((open) => !open)}
             >
-              Menu
+              <span className="msym" aria-hidden="true">menu</span>
             </button>
-            <p className="eyebrow">{portalPrefix === "/administrator" ? "Administrator workspace" : portalPrefix === "/principal" ? "Principal workspace" : "Staff workspace"}</p>
-            <div className="topbar-actions">
-              <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoStaffNotifications())} accountId={identityId ?? undefined} />
-              {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
+            <Link className="cb-school" href={homeHref} prefetch={false} aria-label="Faiz Aam Secondary School · Staff home">
+              <Crest size="xs" tone="chalk" />
+              <span className="hide-s">Faiz Aam Secondary School</span>
+            </Link>
+            <div className="ctx-child">
+              <div className="cc-meta hide-s">
+                <strong>{roleLabelStr}</strong>
+                {status === "ready" && summary ? `${summary.academicYearLabel}${summary.assignmentLabel ? ` · ${summary.assignmentLabel}` : ""}` : ""}
+                {switching ? " · Updating…" : ""}
+              </div>
+              <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoStaffNotifications())} accountId={identityId ?? undefined} audience="staff" />
+              {developmentAuth ? (
+                <Link className="link-arrow" href="/sign-in/staff" prefetch={false} style={{ color: "#D8CFBB" }}>
+                  Switch account
+                </Link>
+              ) : null}
+              {signOutError ? <span className={styles.switcherError} role="alert">{signOutError}</span> : null}
             </div>
           </div>
-
-          <div className={`folio ${styles.folio}`}>
-            <span>FAIZ AAM SECONDARY SCHOOL · {portalPrefix === "/administrator" ? "ADMINISTRATOR" : portalPrefix === "/principal" ? "PRINCIPAL" : "STAFF"} WORKSPACE</span>
-            <span className={styles.folioDate}>{supabaseMode ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()) : demoTodayLabel()}</span>
-          </div>
-
-          <div className={styles.contextStrip}>
-            {status === "ready" && summary ? (
-              <p className={styles.contextLine}>
-                <span className={styles.contextLabel}>Workspace</span>
-                <strong>{summary.profileLabel ?? summary.roleLabel}</strong>
-                <span>· {summary.academicYearLabel}</span>
-                {summary.assignmentLabel ? <span>· {summary.assignmentLabel}</span> : null}
-                {switching ? <span className={styles.contextPending}>· Updating…</span> : null}
-              </p>
-            ) : status === "error" ? (
-              <p className={styles.contextLine} role="alert">
-                <span className={styles.contextLabel}>Workspace</span>
-                <span className={styles.contextError}>{errorMessage}</span>
-              </p>
-            ) : (
-              <p className={styles.contextLine} role="status" aria-live="polite">
-                <span className={styles.contextLabel}>Workspace</span>
-                <span>Loading workspace…</span>
-              </p>
-            )}
-          </div>
-          <p className="sr-only" role="status" aria-live="polite">
-            {announcement}
-          </p>
         </header>
 
-        <main id="main" tabIndex={-1}>{children}</main>
+        {!supabaseMode ? (
+          <p className="alert-strip demo-strip">
+            Demo session · all data shown is fictional concept data. Real records appear once the backend and staff
+            accounts are connected.
+          </p>
+        ) : null}
+
+        <div className="page">
+          <main id="main" tabIndex={-1}>{children}</main>
+        </div>
+
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
       </div>
     </div>
   );

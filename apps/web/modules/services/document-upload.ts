@@ -4,7 +4,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { normalizeDocumentProcessingState, type DocumentProcessingState } from "@/modules/services/documents";
 
 export type DocumentUploadInput = {
-  ownerDomain: "admission_application" | "job_application" | "student" | "data_import_batch";
+  ownerDomain: "admission_application" | "job_application" | "student" | "data_import_batch" | "school_document";
   ownerRecordRef: string;
   attachmentCode: string;
   file: File;
@@ -25,6 +25,17 @@ export type DocumentUploadStatus = {
 
 async function responseBody(response: Response): Promise<Record<string, unknown> | null> {
   return response.json().catch(() => null) as Promise<Record<string, unknown> | null>;
+}
+
+/** Browsers report `.csv` inconsistently (empty, text/plain, or the legacy
+ * Excel mime). Normalize by extension so the declared type matches the
+ * server's authoritative `text/csv` boundary. */
+function effectiveMimeType(file: { type: string; name: string }): string {
+  const lowered = file.name.toLowerCase();
+  if (lowered.endsWith(".csv") && (file.type === "" || file.type === "text/plain" || file.type === "application/vnd.ms-excel")) {
+    return "text/csv";
+  }
+  return file.type;
 }
 
 /** Read the authoritative server finalization/scan state for recovery UI. */
@@ -51,10 +62,11 @@ export async function getDocumentUploadStatus(documentRef: string): Promise<Docu
  * verified document to its owner, and leaves scanning asynchronous.
  */
 export async function uploadDocumentFile(input: DocumentUploadInput): Promise<DocumentUploadResult> {
+  const mimeType = effectiveMimeType(input.file);
   if (input.file.size <= 0 || (input.maxBytes !== undefined && input.file.size > input.maxBytes)) {
     throw new Error("This file is larger than the configured document limit.");
   }
-  if (input.allowedMimeTypes !== undefined && !input.allowedMimeTypes.includes(input.file.type)) {
+  if (input.allowedMimeTypes !== undefined && !input.allowedMimeTypes.includes(mimeType)) {
     throw new Error("This file type is not allowed for the selected document.");
   }
 
@@ -67,7 +79,7 @@ export async function uploadDocumentFile(input: DocumentUploadInput): Promise<Do
       ownerRecordRef: input.ownerRecordRef,
       attachmentCode: input.attachmentCode,
       filename: input.file.name,
-      mimeType: input.file.type,
+      mimeType,
       sizeBytes: input.file.size,
     }),
   });
@@ -91,7 +103,7 @@ export async function uploadDocumentFile(input: DocumentUploadInput): Promise<Do
   const storage = createSupabaseBrowserClient();
   const { error: uploadError } = await storage.storage
     .from(intent.bucket)
-    .uploadToSignedUrl(intent.objectKey, intent.token, input.file, { contentType: input.file.type });
+    .uploadToSignedUrl(intent.objectKey, intent.token, input.file, { contentType: mimeType });
   if (uploadError !== null) throw new Error("The document could not be uploaded. Please try again.");
 
   const finalizeResponse = await fetch(`/api/documents/${encodeURIComponent(intent.documentRef)}/finalize`, {

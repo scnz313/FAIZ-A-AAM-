@@ -1,5 +1,5 @@
 .section {
-  padding: clamp(72px, 9vw, 120px) clamp(48px, 8vw, 96px);
+  padding: clamp(44px, 6vw, 84px) clamp(16px, 4vw, 40px);
   background: var(--paper);
 }
 
@@ -9,19 +9,19 @@
 
 .heading {
   margin: 0 0 16px;
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: clamp(28px, 3.4vw, 40px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-family: var(--serif);
+  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+  font-weight: 540;
+  letter-spacing: -0.01em;
   line-height: 1.1;
 }
 
 .intro {
   max-width: 640px;
   margin: 0 0 28px;
-  font-size: 15px;
+  font-size: 0.92rem;
   line-height: 1.6;
-  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+  color: var(--muted);
 }
 
 .bands {
@@ -45,19 +45,19 @@
 
 .bandRow p {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.6;
-  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+  color: var(--muted);
 }
 
 .note {
   margin: 28px 0 0;
-  font-size: 12px;
+  font-size: 0.78rem;
   line-height: 1.6;
-  color: var(--ink-soft, rgba(11, 28, 42, 0.72));
+  color: var(--muted);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .bandRow {
     grid-template-columns: 1fr;
     gap: 8px;

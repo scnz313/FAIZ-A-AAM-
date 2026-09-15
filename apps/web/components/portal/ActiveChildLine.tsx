@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { gradeSectionLabel } from "@/modules/services/family-context";
 
 import { useFamilyContext } from "./FamilyContextProvider";
@@ -25,11 +27,28 @@ export function ActiveChildLine() {
     );
   }
 
-  if (status === "loading" || activeStudent === null) {
+  if (status === "loading" || (activeStudent === null && switching)) {
     return (
       <p className={styles.line} role="status" aria-live="polite">
         <span className={styles.label}>Linked student</span>
         <span>Loading linked student…</span>
+      </p>
+    );
+  }
+
+  /* Ready with no active child: a guardian whose links are pending, rejected,
+     or revoked. The page has no records to show, so say so instead of
+     claiming a load is still in progress. */
+  if (activeStudent === null) {
+    return (
+      <p className={styles.line} role="status">
+        <span className={styles.label}>Linked student</span>
+        <span>
+          No linked child yet ·{" "}
+          <Link prefetch={false} className="underline-link" href="/portal/link-child">
+            link a child to see their records
+          </Link>
+        </span>
       </p>
     );
   }

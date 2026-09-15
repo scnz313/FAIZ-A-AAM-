@@ -60,3 +60,47 @@ export async function documentActorCanAccess(
   });
   return authorization.error === null && authorization.data === true;
 }
+
+/**
+ * Staff/audit document access, resolved by the same database predicate that
+ * `document_actor_allowed` uses for its staff branch. It isolates the staff
+ * path from the guardian path, so a family boundary can withhold a
+ * superseded generated report card without regressing staff or audit reads.
+ */
+export async function documentStaffCanAccess(
+  client: SupabaseClient<Database>,
+  document: Pick<StoredDocumentAccessRecord, "owner_domain" | "owner_record_id">,
+): Promise<boolean> {
+  const authorization = await callAppRpc<boolean>(client, "document_staff_allowed", {
+    p_owner_domain: document.owner_domain,
+    p_owner_record_id: document.owner_record_id,
+  });
+  return authorization.error === null && authorization.data === true;
+}
+
+/**
+ * Whether a generated report card's immutable source release is currently
+ * published. The document row alone cannot carry this: the generation link
+ * lives in the service-role `document_generation_records` table, and a
+ * withdrawal supersedes the release without deleting the retained PDF row.
+ * A missing/unreadable link is treated as not published so the family
+ * boundary never serves unverifiable withdrawn content.
+ */
+export async function generatedReportCardCurrentlyPublished(
+  admin: SupabaseClient<Database>,
+  documentId: string,
+): Promise<boolean> {
+  const { data: generation, error: generationError } = await admin
+    .from("document_generation_records")
+    .select("source_record_id, document_type")
+    .eq("document_id", documentId)
+    .maybeSingle();
+  if (generationError !== null || generation === null || generation.document_type !== "report_card") return false;
+  const { data: release, error: releaseError } = await admin
+    .from("result_report_releases")
+    .select("status")
+    .eq("id", generation.source_record_id)
+    .maybeSingle();
+  if (releaseError !== null || release === null) return false;
+  return release.status === "published";
+}

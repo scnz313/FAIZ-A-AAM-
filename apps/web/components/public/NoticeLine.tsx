@@ -5,8 +5,19 @@ import { getOverview } from "@/lib/iot/api";
 import { dataAdapter } from "@/lib/supabase/env";
 import { loadServerPublicContent } from "@/lib/supabase/server-loaders";
 import { formatKolkata } from "@/modules/iot/domain";
+import type { ContentNotice } from "@/modules/services/content";
 import { BAND_TONE } from "./shared";
 import styles from "./NoticeLine.module.css";
+
+type NoticeLineProps = {
+  /** Published public notices resolved by the page. When provided, the line
+   *  reads them instead of loading its own copy; in demo mode this is the
+   *  fixture-backed store the other public pages read. */
+  notices?: ContentNotice[];
+  /** Slug already shown in the urgent AlertStrip, skipped here so the same
+   *  notice never appears twice on the home page. */
+  excludeSlug?: string;
+};
 
 /**
  * Latest-notice strip. In Supabase mode the strip shows the latest
@@ -15,16 +26,20 @@ import styles from "./NoticeLine.module.css";
  * notice. If the facade is unavailable, the strip falls back to the static
  * advisory copy alone.
  */
-export default async function NoticeLine() {
+export default async function NoticeLine({ notices: providedNotices, excludeSlug }: NoticeLineProps = {}) {
   const [overview, notices] = await Promise.all([
     getOverview().catch((): OverviewSummary | null => null),
-    dataAdapter() === "supabase" ? loadServerPublicContent().catch(() => []) : Promise.resolve([]),
+    providedNotices !== undefined
+      ? Promise.resolve(providedNotices)
+      : dataAdapter() === "supabase"
+        ? loadServerPublicContent().catch(() => [])
+        : Promise.resolve([]),
   ]);
   const outdoor = overview?.outdoor ?? null;
 
   let latestNotice: { title: string; excerpt: string; dateIso: string; href: string } | null = null;
   const published = notices
-    .filter((notice) => notice.status === "published")
+    .filter((notice) => notice.status === "published" && notice.slug !== excludeSlug)
     .sort((left, right) => new Date(right.dateIso).getTime() - new Date(left.dateIso).getTime());
   const latest = published[0];
   if (latest) {
@@ -36,10 +51,11 @@ export default async function NoticeLine() {
     };
   }
 
-  const headline = latestNotice?.title ?? "Winter air-quality advisory — the school moves assembly indoors on poor-air days.";
+  const headline = latestNotice?.title ?? "Winter air-quality advisory: the school moves assembly indoors on poor-air days.";
 
   return (
-    <aside className="alert-strip alert-strip--warning" aria-label="Latest notice">
+    <aside className={styles.strip} aria-label="Latest notice" style={{ marginTop: "clamp(28px, 4vw, 48px)", marginBottom: "clamp(28px, 4vw, 48px)" }}>
+      <span className={styles.tag}>Notice</span>
       <div className={styles.inner}>
         <p className={styles.text}>
           {latestNotice ? (
@@ -64,11 +80,11 @@ export default async function NoticeLine() {
         ) : null}
         {latestNotice ? (
           <Link className="link-arrow" href={latestNotice.href}>
-            Read notice →
+            Read notice <span className="msym" aria-hidden="true">arrow_forward</span>
           </Link>
         ) : (
-          <Link className="link-arrow" href="/environment">
-            Campus environment →
+          <Link className="link-arrow" href="/notices">
+            All notices <span className="msym" aria-hidden="true">arrow_forward</span>
           </Link>
         )}
       </div>

@@ -4,7 +4,7 @@
 const { chromium } = require("playwright");
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
-const route = process.argv[3] ?? "/staff/finance";
+const route = process.argv[3] ?? "/principal/finance";
 const width = Number(process.argv[4] ?? 390);
 
 (async () => {

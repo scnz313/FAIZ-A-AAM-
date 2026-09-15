@@ -1,5 +1,7 @@
 # Frontend Integration Plan — Faiz Aam School Platform
 
+> **8 September 2026:** This file is an archived pre-V15 reference. Prior completion statements do not certify the new V15 UI. The active execution order is the opening section of `plan.md`; the current route acceptance checklist and evidence are in `PROJECT-STATUS.md`.
+
 Status: completed frontend reference; backend cutover tracked in `plan.md` C0–C5
 Owner: product/UI implementation team  
 Audit date: 5 August 2026  
@@ -10,6 +12,8 @@ This document is the completed frontend integration reference. `PROJECT-BLUEPRIN
 > **Archived frontend handoff:** This file preserves the completed UI scope, route-level acceptance criteria, and demo-contract decisions. Historical implementation evidence belongs in `PROJECT-STATUS.md`; the active execution order is only `plan.md` C2–C5.
 
 > **Portal consolidation delta (31 August 2026):** This archived reference predates the three-portal consolidation. Staff routes are now canonically `/administrator/*` (Administrator) and `/principal/*` (Principal) over the shared `/staff/*` implementation namespace, and the Guardian portal is `/portal/*`. Teacher portal and Student portal references in this document are historical: teachers are non-login school records with teaching assignments, and students are school records linked to guardians.
+
+> **V15 design system adoption (8 September 2026, supersedes the 6 September V14 note):** The canonical design prototype is now `V15 Faiz Aam School Platform.html` (repository root; V14 remains as the historical reference). All design tokens, component specifications, layout patterns, responsive breakpoints, and screen compositions are documented in `design/UX-BLUEPRINT.md` §2 (tokens), §12.1 (components), §16 (responsive), §17 (screen catalog), and §18–20 (role matrix, nav, implementation priority). When implementing UI changes, use the V15 design system as the source of truth for visual appearance. Do not change the database, domain services, or backend logic — only update UI components, CSS modules, layouts, and page rendering. Copy V15 layout only, never its illustrative data, counts, actor names, or client-only authorization behavior.
 
 The frontend handoff gate is complete. Do not add visual features here unless the product blueprint changes; continue implementation from `plan.md` C0–C5.
 

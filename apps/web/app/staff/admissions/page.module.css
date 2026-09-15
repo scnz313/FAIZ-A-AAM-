@@ -1,43 +1,13 @@
 .page {
-  padding: 0 0 var(--space-8);
-}
-
-.header {
-  margin-bottom: var(--space-6);
-}
-
-.metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
-  margin-bottom: var(--space-8);
+  gap: 18px;
 }
 
-.metric {
-  background: var(--chalk);
+.title {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
   margin: 0;
-  padding: var(--space-5);
-  display: grid;
-  gap: var(--space-2);
-}
-
-.metricNum {
-  font-family: var(--font-display, var(--serif));
-  font-size: 32px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-@media (max-width: 1000px) {
-  .metrics {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 700px) {
-  .metrics {
-    grid-template-columns: 1fr;
-  }
 }

@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sha256 } from "@/lib/supabase/outbox-worker";
-import { deliveryProjection, normalizedWebhookPayload, verifyResendWebhook, webhookSuppressionReason, type ResendPayload } from "@/lib/email/webhook";
+import { deliveryFailureClass, deliveryProjection, normalizedWebhookPayload, verifyResendWebhook, webhookSuppressionReason, type ResendPayload } from "@/lib/email/webhook";
 import { providerLog } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ async function projectDelivery(
   eventAt: string,
 ): Promise<void> {
   const emailId = payload.data?.email_id;
-  const projection = deliveryProjection(eventType);
+  const projection = deliveryProjection(eventType, payload);
   if (projection !== null && typeof emailId === "string" && emailId.length > 0) {
     const { data: delivery } = await admin
       .from("notification_deliveries")
@@ -39,7 +39,7 @@ async function projectDelivery(
           status: projection.status,
           provider_event_at: eventAt,
           provider_event_rank: projection.rank,
-          failure_class: projection.status === "failed" ? "provider" : null,
+          failure_class: deliveryFailureClass(projection),
           updated_at: new Date().toISOString(),
         }).eq("id", delivery.id);
         if (error !== null) throw new Error("delivery status could not be recorded");

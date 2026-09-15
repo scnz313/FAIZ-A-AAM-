@@ -1,139 +1,89 @@
-.urdu {
-  font-size: 12px;
-  line-height: 1.9;
-  padding-top: 0.1em;
-  color: var(--ink-soft);
-}
-
 .folio {
-  margin-top: var(--space-2);
-}
-
-.group {
-  margin-top: var(--space-6);
-}
-
-.group nav {
-  margin-top: var(--space-1);
-}
-
-@media (max-width: 700px) {
-  /* The date span crowds the folio line on phones; the left label alone
-     reads cleanly on narrow screens. */
-  .folioDate {
-    display: none;
-  }
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint, var(--muted));
 }
 
 .identitySwitcher {
-  margin: var(--space-5) 0 var(--space-1);
+  margin: 0 0 14px;
+  padding: 0 10px;
 }
 
 .identitySwitcher label {
   display: block;
-  font-size: 11px;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-soft);
-  margin-bottom: var(--space-2);
+  color: var(--muted);
+  margin-bottom: 6px;
 }
 
 .identitySwitcher select {
   width: 100%;
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 .identityNote {
-  margin: var(--space-2) 0 0;
-  font-size: 11px;
+  margin: 6px 0 0;
+  font-size: 0.72rem;
   line-height: 1.5;
-  color: var(--ink-faint, var(--ink-soft));
-}
-
-@media (max-width: 700px) {
-  /* Keep ≥16px so iOS Safari does not auto-zoom when the identity
-     switcher receives focus. */
-  .identitySwitcher select {
-    font-size: 16px;
-  }
+  color: var(--muted);
 }
 
 .workspaceSwitcher {
-  margin: var(--space-5) 0 var(--space-1);
+  margin: 0 0 14px;
+  padding: 0 10px;
 }
 
 .workspaceSwitcher label {
   display: block;
-  font-size: 11px;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-soft);
-  margin-bottom: var(--space-2);
+  color: var(--muted);
+  margin-bottom: 6px;
 }
 
 .workspaceSwitcher select {
   width: 100%;
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 .workspaceNote {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.5;
-  color: var(--ink-soft);
+  color: var(--muted);
 }
 
 .switcherError {
-  margin: var(--space-2) 0 0;
-  font-size: 12px;
+  margin: 6px 0 0;
+  font-size: 0.78rem;
   line-height: 1.5;
   color: var(--danger, #a03b2c);
 }
 
-/* Service-driven active-workspace context strip under the folio rule. */
-.contextStrip {
-  margin-top: var(--space-3);
-  border-top: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
-  padding-top: var(--space-2);
-}
+@media (max-width: 719px) {
+  .folioDate {
+    display: none;
+  }
 
-.contextLine {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.4em;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ink-soft);
-}
-
-.contextLabel {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-faint, var(--ink-soft));
-}
-
-.contextLine strong {
-  color: var(--ink);
-  font-weight: 700;
-}
-
-.contextPending {
-  color: var(--saffron, #b96832);
-}
-
-.contextError {
-  color: var(--danger, #a03b2c);
-}
-
-@media (max-width: 700px) {
-  /* Keep ≥16px so iOS Safari does not auto-zoom when the workspace
-     switcher receives focus. */
+  /* Keep ≥16px so iOS Safari does not auto-zoom when select elements
+     receive focus. */
+  .identitySwitcher select,
   .workspaceSwitcher select {
-    font-size: 16px;
+    font-size: 1rem;
   }
 }

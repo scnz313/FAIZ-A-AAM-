@@ -6,33 +6,12 @@ import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { formatKolkata } from "@/modules/iot/domain";
 import {
-  type AuditAction,
+  auditService,
   type AuditEvent,
   type AuditOutcome,
 } from "@/modules/services/audit";
 
 import styles from "./AuditExplorer.module.css";
-
-const ACTIONS: readonly AuditAction[] = [
-  "Login",
-  "Application reviewed",
-  "Result published",
-  "Result withdrawn",
-  "Payment reconciled",
-  "Payment posted",
-  "Notice published",
-  "Notice unpublished",
-  "Notice edited",
-  "Page status updated",
-  "Timetable changed",
-  "Setting changed",
-  "Invoice viewed",
-  "Link requested",
-  "Link approved",
-  "Link rejected",
-  "Link revoked",
-  "Enrollment converted",
-];
 
 const OUTCOME_TONE: Record<AuditOutcome, "good" | "alert"> = {
   Success: "good",
@@ -62,31 +41,56 @@ function daysSince(iso: string, now: Date): number {
   return Math.round((to - from) / 86_400_000);
 }
 
-const REF_RE = /^(INV|APP|JOB|GW)/;
+const REF_RE = /^(INV|APP|JOB|GW|ROLE|LINK|IMP|EXP|SET|STU)/;
+
+const PAGE_SIZE = 50;
 
 /**
- * Read-only demo audit explorer: actor, action and date-range filters over
- * the safe audit events supplied by the page from the audit service (the
+ * Read-only audit explorer: actor, action and date-range filters over the
+ * safe audit events supplied by the page from the audit service (the
  * seeded demo list is the fallback). No editing or deletion is offered
  * anywhere.
+ *
+ * The action filter is derived from the events actually loaded, so newly
+ * recorded action kinds (for example "Account suspended" or "MFA verified")
+ * are filterable instead of being invisible behind a stale fixed list. When
+ * `initialCursor` is present, the register continues to paginate backwards
+ * through history with "Load older events" instead of silently stopping at
+ * the first page.
  */
-export function AuditExplorer({ events = [] }: { events?: readonly AuditEvent[] }) {
+export function AuditExplorer({
+  events = [],
+  initialCursor = null,
+  paged = false,
+}: {
+  events?: readonly AuditEvent[];
+  initialCursor?: string | null;
+  paged?: boolean;
+}) {
+  const [rows, setRows] = useState<readonly AuditEvent[]>(events);
+  const [cursor, setCursor] = useState<string | null>(initialCursor);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
   const [actor, setActor] = useState("all");
-  const [action, setAction] = useState<"all" | AuditAction>("all");
+  const [action, setAction] = useState("all");
   const [range, setRange] = useState<RangeKey>("30d");
 
-  const actors = useMemo(() => Array.from(new Set(events.map((event) => event.actor))).sort(), [events]);
+  const actors = useMemo(() => Array.from(new Set(rows.map((event) => event.actor))).sort(), [rows]);
+  const actions = useMemo(
+    () => Array.from(new Set(rows.map((event) => event.action))).sort((left, right) => left.localeCompare(right)),
+    [rows],
+  );
 
   const visible = useMemo(() => {
     const days = RANGES.find((r) => r.key === range)?.days ?? 30;
     const now = new Date();
-    return events.filter(
+    return rows.filter(
       (event) =>
         (actor === "all" || event.actor === actor) &&
         (action === "all" || event.action === action) &&
         daysSince(event.timestampIso, now) <= days,
     );
-  }, [actor, action, range, events]);
+  }, [actor, action, range, rows]);
 
   function resetFilters() {
     setActor("all");
@@ -94,10 +98,29 @@ export function AuditExplorer({ events = [] }: { events?: readonly AuditEvent[] 
     setRange("30d");
   }
 
+  async function loadOlder(): Promise<void> {
+    if (loadingOlder || cursor === null) return;
+    setLoadingOlder(true);
+    setOlderError(null);
+    try {
+      const page = await auditService.listEventsPage({ limit: PAGE_SIZE, cursor });
+      setRows((current) => {
+        const seen = new Set(current.map((event) => event.id));
+        return [...current, ...page.events.filter((event) => !seen.has(event.id))];
+      });
+      setCursor(page.nextCursor);
+    } catch {
+      setOlderError("Older audit events could not be loaded · the loaded history is unchanged. Try again.");
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
+
   return (
     <div>
       <p className={styles.liveCount} aria-live="polite">
         {visible.length} audit event{visible.length === 1 ? "" : "s"} shown
+        {paged ? ` · newest ${rows.length} loaded` : ""}
       </p>
 
       <div className={styles.filterRow}>
@@ -118,10 +141,10 @@ export function AuditExplorer({ events = [] }: { events?: readonly AuditEvent[] 
             id="audit-action"
             className="select"
             value={action}
-            onChange={(event) => setAction(event.target.value as "all" | AuditAction)}
+            onChange={(event) => setAction(event.target.value)}
           >
             <option value="all">All actions</option>
-            {ACTIONS.map((name) => (
+            {actions.map((name) => (
               <option key={name} value={name}>
                 {name}
               </option>
@@ -146,10 +169,20 @@ export function AuditExplorer({ events = [] }: { events?: readonly AuditEvent[] 
       {visible.length === 0 ? (
         <div className="workspace-state">
           <p className="workspace-state-title">No audit events in this view</p>
-          <p className="workspace-state-note">No events match the current actor, action and date filters.</p>
-          <Button variant="quiet" onClick={resetFilters}>
-            Reset filters
-          </Button>
+          <p className="workspace-state-note">
+            No events match the current actor, action and date filters.
+            {cursor !== null ? " Older events are available and may match." : ""}
+          </p>
+          <div className={styles.stateActions}>
+            <Button variant="quiet" onClick={resetFilters}>
+              Reset filters
+            </Button>
+            {cursor !== null ? (
+              <Button variant="quiet" onClick={() => void loadOlder()} disabled={loadingOlder}>
+                {loadingOlder ? "Loading older events…" : "Load older events"}
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : (
         <div className="table--scroll">
@@ -182,7 +215,23 @@ export function AuditExplorer({ events = [] }: { events?: readonly AuditEvent[] 
               ))}
             </tbody>
           </table>
-          {events.length > 0 ? <p className={styles.demoNote}>Read-only audit projection · safe metadata only.</p> : null}
+          {paged ? (
+            <div className={styles.olderRow}>
+              {olderError !== null ? (
+                <p className="field-error" role="alert">
+                  {olderError}
+                </p>
+              ) : null}
+              {cursor !== null ? (
+                <Button variant="quiet" onClick={() => void loadOlder()} disabled={loadingOlder}>
+                  {loadingOlder ? "Loading older events…" : "Load older events"}
+                </Button>
+              ) : (
+                <p className="small muted">End of the audit register.</p>
+              )}
+            </div>
+          ) : null}
+          {rows.length > 0 ? <p className={styles.demoNote}>Read-only audit projection · safe metadata only.</p> : null}
         </div>
       )}
     </div>

@@ -1,12 +1,8 @@
 import type { Metadata } from "next";
 
-import { PublicFooter } from "@/components/layouts/PublicFooter";
-import { PublicHeader } from "@/components/layouts/PublicHeader";
+import { AuthFrame } from "@/components/identity/AuthFrame";
 import StaffInvitationForm from "@/components/identity/StaffInvitationForm";
-import PageIntro from "@/components/public/PageIntro";
 import { dataAdapter } from "@/lib/supabase/env";
-
-import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Accept staff invitation",
@@ -22,23 +18,12 @@ export default async function StaffInvitationPage({
   const invitation = Array.isArray(params.invitation) ? params.invitation[0] : params.invitation;
   const supabaseMode = dataAdapter() === "supabase";
   return (
-    <div className={styles.page}>
-      <PublicHeader tone="light" />
-      <main id="main" tabIndex={-1} className={styles.main}>
-        <div className={styles.frame}>
-          <PageIntro
-            eyebrow="Staff sign-in"
-            title="Accept your invitation"
-            deck={supabaseMode ? "Open this page from the invitation email, confirm your name, and set the password used for staff sign in." : "Use the private references from the school office to create your staff workspace access."}
-          />
-          <section className={styles.section} aria-label="Accept staff invitation">
-            <div className={`panel ${styles.card}`}>
-              <StaffInvitationForm initialInvitationRef={invitation ?? ""} />
-            </div>
-          </section>
-        </div>
-      </main>
-      <PublicFooter />
-    </div>
+    <AuthFrame
+      wide
+      title="Accept your invitation"
+      sub={supabaseMode ? "Open this page from the invitation email, confirm your name, and set the password used for staff sign in." : "Use the private references from the school office to create your staff workspace access."}
+    >
+      <StaffInvitationForm initialInvitationRef={invitation ?? ""} />
+    </AuthFrame>
   );
 }

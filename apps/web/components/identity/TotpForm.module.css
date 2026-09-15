@@ -20,7 +20,7 @@
   display: block;
   margin-top: 6px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 0.82rem;
   letter-spacing: 0.04em;
   word-break: break-all;
   background: var(--paper-deep, #f5f2ec);
@@ -30,7 +30,7 @@
 
 .codeInput {
   letter-spacing: 0.35em;
-  font-size: 20px;
+  font-size: 1.25rem;
   text-align: center;
 }
 

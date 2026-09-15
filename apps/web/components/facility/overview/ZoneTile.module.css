@@ -1,5 +1,5 @@
 .tile {
-  background: var(--cream);
+  background: var(--chalk);
   border: 1px solid var(--line);
   display: block;
   padding: 22px 22px 18px;
@@ -25,7 +25,7 @@
 
 .name {
   font-family: var(--serif);
-  font-size: 21px;
+  font-size: 1.3rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   margin: 0;
@@ -38,7 +38,7 @@
 
 .where {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   letter-spacing: 0.02em;
   margin: 5px 0 0;
 }
@@ -63,7 +63,7 @@
 
 .rowLabel {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 0;
 }
 
@@ -76,15 +76,15 @@
 
 .value {
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 1.4rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1;
 }
 
 .unit {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;

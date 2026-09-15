@@ -159,6 +159,21 @@ select ay.id, g.id, '2026-08-01T00:00:00+05:30', '2026-10-31T23:59:59+05:30', 60
  where ay.label = '2026-27'
 on conflict (academic_year_id, grade_id) do nothing;
 
+-- Document requirements are configuration data: without them the applicant
+-- form renders no file inputs and no application document can attach.
+insert into public.admission_document_requirements
+  (admission_window_id, code, label, required, allowed_mime_types, max_bytes, status, version)
+select aw.id, d.code, d.label, true, d.allowed_mime_types, d.max_bytes, 'active', 1
+  from public.admission_windows aw
+  join public.academic_years ay on ay.id = aw.academic_year_id and ay.label = '2026-27'
+  cross join (values
+    ('birth', 'Birth certificate', array['application/pdf', 'image/jpeg', 'image/png']::text[], 5242880::bigint),
+    ('photo', 'Student photograph', array['image/jpeg', 'image/png']::text[], 5242880::bigint),
+    ('reportCard', 'Previous report card', array['application/pdf', 'image/jpeg', 'image/png']::text[], 5242880::bigint),
+    ('addressProof', 'Address proof', array['application/pdf', 'image/jpeg', 'image/png']::text[], 5242880::bigint)
+  ) as d(code, label, allowed_mime_types, max_bytes)
+on conflict (admission_window_id, code, version) do nothing;
+
 -- =============================================================================
 -- B4 fee schedule (synthetic draft; never effective until approved)
 -- =============================================================================
@@ -232,8 +247,9 @@ select ttv.id, 1, p.period_number, p.starts_at, p.ends_at, s.id, r.id, p.kind
       where tp.timetable_version_id = ttv.id and tp.day_of_week = 1 and tp.period_number = p.period_number);
 
 -- =============================================================================
--- B6 notices (published public + scheduled family notice; content pages are
--- authored by staff through the CMS and never seeded)
+-- B6 notices (published + scheduled; both public-audience fixtures, mirroring
+-- the 000079 backfill rule; content pages are authored by staff through the
+-- CMS and never seeded)
 -- =============================================================================
 insert into public.content_items (kind, slug, current_status) values
   ('notice', 'notice-admissions-2026-27', 'published'),
@@ -253,7 +269,7 @@ insert into public.notice_audiences (notice_id, audience)
 select ntc.id, 'public'
   from public.notices ntc
   join public.content_items ci on ci.id = ntc.content_item_id
- where ci.slug = 'notice-admissions-2026-27'
+ where ci.slug in ('notice-admissions-2026-27', 'notice-annual-day')
    and not exists (
      select 1 from public.notice_audiences na
       where na.notice_id = ntc.id and na.audience = 'public');

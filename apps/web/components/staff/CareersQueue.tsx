@@ -42,6 +42,21 @@ const FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
 ];
 
 /**
+ * Reviewer column value. The live staff projection carries the assigned
+ * reviewer account id but not their directory name, so the queue states the
+ * assignment honestly instead of borrowing the last recorded actor (which
+ * read as a reviewer). Demo fixtures keep their named timeline actor.
+ * Exported for the regression test.
+ */
+export function queueReviewerLabel(
+  record: Pick<JobApplicationRecord, "reviewerAccountId" | "timeline">,
+  demoMode: boolean,
+): string {
+  if (demoMode) return applicationReviewer(record) ?? "—";
+  return record.reviewerAccountId !== undefined && record.reviewerAccountId !== "" ? "Assigned reviewer" : "—";
+}
+
+/**
  * Staff recruitment queue. Vacancy titles arrive from the owning server
  * loader/service; this component never imports fixture records.
  */
@@ -120,7 +135,7 @@ export function CareersQueue({ initial, vacancyTitles, demoMode }: { initial: Jo
                 <td>
                   <StatusBadge tone={STATUS_TONE[record.status]}>{record.status}</StatusBadge>
                 </td>
-                <td>{applicationReviewer(record) ?? "—"}</td>
+                <td>{queueReviewerLabel(record, demoMode)}</td>
               </tr>
             ))}
           </tbody>

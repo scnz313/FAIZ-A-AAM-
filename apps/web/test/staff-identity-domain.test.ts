@@ -9,7 +9,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { invitesCreate, usersListAdmin } from "@/lib/supabase/domain";
+import { invitesCreate, linksListMine, mapServerLinkRow, usersListAdmin } from "@/lib/supabase/domain";
 import type { Database } from "@/lib/supabase/database.types";
 
 function clientWithUsersRpc(resolution: { data: unknown; error: { message: string } | null }): {
@@ -96,5 +96,139 @@ describe("invitesCreate", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors[0]?.message.length).toBeGreaterThan(0);
+  });
+});
+
+describe("guardian-link name projection", () => {
+  const baseRow = {
+    id: "00000000-0000-4000-8000-000000000901",
+    reference: "LINK-2026-B55517",
+    guardian_id: "00000000-0000-4000-8000-000000000201",
+    student_id: "00000000-0000-4000-8000-000000000902",
+    relationship_label: "Parent",
+    status: "active",
+    verification_source: "guardian_request",
+    approved_at: "2026-09-01T00:00:00Z",
+    effective_from: "2026-09-01T00:00:00Z",
+    effective_to: null,
+    restriction_reason: null,
+    rejection_reason: null,
+    contact_priority: 1,
+    is_emergency_contact: false,
+    is_billing_contact: false,
+    version: 1,
+    guardian_link_capabilities: [{ capability: "profile" }],
+  };
+
+  it("never renders a blank guardian or student name on a link row", () => {
+    const blank = mapServerLinkRow({ ...baseRow, guardian_name: "", student_name: "   " });
+    expect(blank.guardianName).toBe("Unnamed guardian");
+    expect(blank.studentName).toBe("Unnamed student");
+    expect(blank.studentRef).toBe("");
+  });
+
+  it("keeps recorded names when present", () => {
+    const named = mapServerLinkRow({ ...baseRow, guardian_name: "Test Guardian", student_name: "Test Student One", student_reference: "STU-2026-F456A1" });
+    expect(named.guardianName).toBe("Test Guardian");
+    expect(named.studentName).toBe("Test Student One");
+    expect(named.studentRef).toBe("STU-2026-F456A1");
+  });
+
+  it("shows the creation instant for a pending link with no effective_from", () => {
+    const pending = mapServerLinkRow({
+      ...baseRow,
+      status: "pending_verification",
+      approved_at: null,
+      effective_from: null,
+      created_at: "2026-09-15T05:30:00.000Z",
+    });
+    expect(pending.link.effectiveFromIso).toBe("2026-09-15T05:30:00.000Z");
+    expect(pending.link.effectiveFromIso).not.toBe(new Date(0).toISOString());
+  });
+
+  it("keeps the recorded effective_from when the link is active", () => {
+    const active = mapServerLinkRow({ ...baseRow, created_at: "2026-08-01T00:00:00.000Z" });
+    expect(active.link.effectiveFromIso).toBe("2026-09-01T00:00:00Z");
+  });
+});
+
+describe("linksListMine", () => {
+  function clientWithAppRpc(resolution: { data: unknown; error: { message: string } | null }): {
+    client: SupabaseClient<Database>;
+    rpc: ReturnType<typeof vi.fn>;
+  } {
+    const rpc = vi.fn().mockResolvedValue(resolution);
+    const client = {
+      schema: vi.fn().mockReturnValue({ rpc }),
+    } as unknown as SupabaseClient<Database>;
+    return { client, rpc };
+  }
+
+  const PENDING_ROW = {
+    id: "00000000-0000-4000-8000-000000000901",
+    reference: "LINK-2026-B0B263C8F1",
+    guardian_id: "00000000-0000-4000-8000-000000000201",
+    student_id: "00000000-0000-4000-8000-000000000902",
+    relationship_label: "Father",
+    status: "pending_verification",
+    verification_source: "guardian_request",
+    approved_at: null,
+    effective_from: null,
+    effective_to: null,
+    restriction_reason: null,
+    rejection_reason: null,
+    contact_priority: 1,
+    is_emergency_contact: false,
+    is_billing_contact: false,
+    version: 1,
+    created_at: "2026-09-15T16:28:27.752584+00:00",
+    guardian_name: "Firdous Ahmad",
+    student_name: "Aayan Yousuf",
+    student_reference: "STU-2026-2E5844DDB8",
+    guardian_link_capabilities: [],
+  };
+
+  it("surfaces the requested student reference and name for a pending link", async () => {
+    const { client, rpc } = clientWithAppRpc({ data: [PENDING_ROW], error: null });
+    const result = await linksListMine(client);
+    expect(rpc).toHaveBeenCalledWith("guardian_links_mine", {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
+    expect(result.value[0]?.studentRef).toBe("STU-2026-2E5844DDB8");
+    expect(result.value[0]?.studentName).toBe("Aayan Yousuf");
+    expect(result.value[0]?.guardianName).toBe("Firdous Ahmad");
+    expect(result.value[0]?.link.effectiveFromIso).toBe("2026-09-15T16:28:27.752584+00:00");
+  });
+
+  it("keeps the queue's pending-only read scope", async () => {
+    const activeRow = {
+      ...PENDING_ROW,
+      id: "00000000-0000-4000-8000-000000000903",
+      reference: "LINK-2026-2B35722A6C",
+      status: "active",
+      effective_from: "2026-08-01T00:00:00Z",
+    };
+    const { client } = clientWithAppRpc({ data: [PENDING_ROW, activeRow], error: null });
+    const result = await linksListMine(client);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.map((row) => row.link.ref)).toEqual(["LINK-2026-B0B263C8F1"]);
+  });
+
+  it("maps a projection failure to the canonical envelope", async () => {
+    const { client } = clientWithAppRpc({ data: null, error: { message: "permission denied for function guardian_links_mine" } });
+    const result = await linksListMine(client);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors[0]?.code).toBe("unavailable");
+  });
+
+  it("returns an empty queue without error", async () => {
+    const { client } = clientWithAppRpc({ data: [], error: null });
+    const result = await linksListMine(client);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toEqual([]);
   });
 });

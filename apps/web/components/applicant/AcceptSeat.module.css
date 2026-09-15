@@ -23,7 +23,7 @@
 .acceptedTitle {
   margin: 0 0 5px;
   color: var(--willow);
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -31,15 +31,15 @@
 
 .acceptedNote {
   margin: 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 
 .acceptHint {
   margin: 10px 0 0;
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.5;
 }
 
@@ -62,27 +62,27 @@
 .confirmTitle {
   margin: 0 0 8px;
   font-family: var(--serif);
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 650;
   line-height: 1.35;
 }
 
 .declineHint {
   margin: 0 0 10px;
-  color: var(--brick);
-  font-size: 12px;
+  color: var(--madder);
+  font-size: 0.78rem;
   line-height: 1.5;
 }
 
 .noteLabel {
   display: block;
   margin: 10px 0 4px;
-  font-size: 12px;
+  font-size: 0.78rem;
   font-weight: 600;
 }
 
 .noteOptional {
-  color: var(--ink-faint);
+  color: var(--muted);
   font-weight: 400;
 }
 
@@ -95,7 +95,7 @@
 
 .confirmError {
   margin: 10px 0 0;
-  color: var(--brick);
-  font-size: 12px;
+  color: var(--madder);
+  font-size: 0.78rem;
   line-height: 1.5;
 }

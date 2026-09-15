@@ -91,29 +91,25 @@ async function jobApplication(page) {
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
+  /* The public intake is a three-step form with no documents and one
+     optional profile photo (owner decision, 15 September 2026). */
   await page.getByLabel("Full name").fill("Bilal Ahmad Mir");
-  await page.getByLabel("Phone").fill("9419001000");
   await page.getByLabel("Email").fill("bilal.mir@example.com");
+  await page.getByLabel("Phone").fill("9419001000");
   await page.getByRole("button", { name: /Save & continue/ }).click();
 
-  await page.getByLabel("Highest qualification").selectOption("Master of Science (M.Sc.)");
+  await page.locator("#qualification").selectOption({ index: 1 });
+  await page.locator("#experience").selectOption({ index: 1 });
   await page.getByLabel("Subject / specialisation").fill("Mathematics");
   await page.getByLabel("Institution").fill("Kashmir University");
-  await page.getByLabel("Year completed").selectOption("2019");
   await page.getByRole("button", { name: /Save & continue/ }).click();
 
-  await page.getByLabel("Years of experience").selectOption("3–5 years");
-  await page.getByLabel("Current role").fill("Mathematics teacher");
-  for (const doc of ["Photograph", "Educational certificates", "Experience certificates", "Identity proof"]) {
-    await page.getByLabel(doc).setInputFiles({ name: "demo.pdf", mimeType: "application/pdf", buffer: Buffer.from("demo") });
-  }
-  await page.getByRole("button", { name: /Save & continue/ }).click();
-
-  await page.getByLabel(/I confirm that the information/).check();
+  await page.locator("#photo").setInputFiles({ name: "profile.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000154a24f5f0000000049454e44ae426082", "hex") });
+  await page.locator("#consent").check();
   await page.getByRole("button", { name: /Submit application/ }).click();
 
-  await page.waitForURL(/\/apply\/job\/JOB-\d{4}-\d{4}\/status$/, { timeout: TIMEOUT });
-  await page.getByText("Submitted", { exact: true }).first().waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText(/Thank you · your application is with the school/).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText(/JOB-2026-[A-Z0-9]+/).first().waitFor({ state: "visible", timeout: TIMEOUT });
 }
 
 /* ------------------------------------------------------------------ */
@@ -218,7 +214,7 @@ async function payment(page) {
   await page.getByLabel("Demo scenario").selectOption("Success");
   await page.getByRole("button", { name: "Continue to checkout" }).click();
 
-  await page.getByText("Payment recorded — demo", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText("Payment recorded · demo", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
   /* The adapter issues exactly one NEW receipt for the confirmed attempt.
      Fixtures are RC-2026-0102/0131; the session counter (seeded at 145)
      issues RC-2026-0145+. The success panel must link to that fresh
@@ -245,13 +241,15 @@ async function identitySignIn(page) {
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await page.waitForURL(/\/sign-in\/verify$/, { timeout: TIMEOUT });
-  await page.getByLabel("Verification code").fill("482913");
-  await page.getByRole("button", { name: "Verify code" }).click();
+  for (let index = 0; index < 6; index += 1) {
+    await page.getByLabel(`Digit ${index + 1}`).fill("482913"[index]);
+  }
+  await page.getByRole("button", { name: "Verify and continue" }).click();
   await page.getByText("Verification complete", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
 
   await page.getByRole("link", { name: /Open the portal/ }).click();
   await page.waitForURL(/\/portal$/, { timeout: TIMEOUT });
-  await page.getByText(/Demo session — sample family data/).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText(/Your children/).first().waitFor({ state: "visible", timeout: TIMEOUT });
 }
 
 /* ------------------------------------------------------------------ */
@@ -261,16 +259,11 @@ async function identitySignIn(page) {
 async function staffAdmissionDecision(page) {
   /* APP-2026-0419 is the "Under review" fixture row — a clean start for
      the decision chain, since the demo session is cleared below. */
-  await page.goto(`${BASE}/staff/admissions/APP-2026-0419`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/principal/admissions/APP-2026-0419`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  /* I4: the finance workspace is denied for admissions review — the guard
-     offers a direct switch to the granted admissions workspace. */
-  await page
-    .getByText("This workspace cannot open this area", { exact: true })
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-  await page.getByRole("button", { name: "Open as Admissions officer" }).click();
+  await page.getByRole("combobox", { name: "Demo identity" }).selectOption("00000000-0000-4000-8000-000000000205");
   await page.getByRole("combobox", { name: "Decision" }).waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* Step 1 — move to assessment (no reason required). The decision panel
@@ -278,7 +271,7 @@ async function staffAdmissionDecision(page) {
      the combobox role explicitly. The officer's maker step (admissions.review). */
   await page.getByRole("combobox", { name: "Decision" }).selectOption("assessment");
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByRole("button", { name: /Confirm — Move to assessment/ }).click();
+  await page.getByRole("button", { name: /Confirm · Move to assessment/ }).click();
   await page.getByText("Assessment", { exact: true }).first().waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* Step 2 — offer seat is the approver's checker step (admissions.approve).
@@ -286,12 +279,12 @@ async function staffAdmissionDecision(page) {
      identity to Rania Mir, whose first workspace is Admissions approver. */
   await page
     .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000205");
+    .selectOption("00000000-0000-4000-8000-000000000204");
   await page.getByRole("combobox", { name: "Decision" }).waitFor({ state: "visible", timeout: TIMEOUT });
   await page.getByRole("combobox", { name: "Decision" }).selectOption("offer");
-  await page.getByLabel(/Reason for offer seat/).fill("Strong assessment; documents verified.");
+  await page.getByLabel(/Reason shown to applicant/).fill("Strong assessment; documents verified.");
   await page.getByRole("button", { name: "Review decision" }).click();
-  await page.getByRole("button", { name: /Confirm — Offer seat/ }).click();
+  await page.getByRole("button", { name: /Confirm · Offer seat/ }).click();
   await page.getByText("Offered", { exact: true }).first().waitFor({ state: "visible", timeout: TIMEOUT });
   await page.getByText(/Offer seat recorded/).waitFor({ state: "visible", timeout: TIMEOUT });
 }
@@ -305,12 +298,14 @@ async function twoChildPortal(page) {
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  /* The seeded guardian has two active linked children; the selector must
-     be service-driven, not the old single-option constant. */
-  const childSelect = page.getByRole("combobox", { name: "Linked child" });
-  await childSelect.waitFor({ state: "visible", timeout: TIMEOUT });
-  const options = await childSelect.locator("option").allTextContents();
-  if (options.length !== 2) throw new Error(`expected two linked children, got ${options.length}`);
+  /* The seeded guardian has two active linked children; the switcher is a
+     popover menu, driven by the service, not a single-option constant. */
+  const switcher = page.getByRole("button", { name: /Your children/ }).first();
+  await switcher.waitFor({ state: "visible", timeout: TIMEOUT });
+  await switcher.click();
+  const children = page.locator(".child-pop").getByRole("menuitem").filter({ hasText: /Aarif Hussain|Mariam Hussain/ });
+  const options = await children.count();
+  if (options !== 2) throw new Error(`expected two linked children, got ${options}`);
 
   /* Default context is the first active enrollment — Aarif. */
   await page
@@ -319,7 +314,7 @@ async function twoChildPortal(page) {
     .waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* Switch to Mariam: the shell strip and overview must follow. */
-  await childSelect.selectOption("00000000-0000-4000-8000-000000000902");
+  await page.getByRole("menuitem", { name: /Mariam Hussain/ }).click();
   await page
     .locator("strong", { hasText: "Mariam Hussain" })
     .first()
@@ -345,22 +340,10 @@ async function twoChildPortal(page) {
 /* ------------------------------------------------------------------ */
 
 async function staffLinkRequest(page) {
-  await page.goto(`${BASE}/staff/link-requests`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/administrator/link-requests`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  /* links.verify belongs to the identity/support grant only — Sana's granted
-     workspaces cannot review links, so this is a full denial. */
-  await page
-    .getByText(/No granted workspace on this account can perform this action/)
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-
-  /* Switch the demo identity to Aisha Lone; the guard offers her granted
-     support workspace directly. */
-  await page
-    .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000204");
-  await page.getByRole("button", { name: "Open as Support officer" }).click();
 
   /* The seeded pending request: Nida Bhat → Zoya Khan. */
   await page.getByText("Nida Bhat").first().waitFor({ state: "visible", timeout: TIMEOUT });
@@ -389,7 +372,7 @@ async function admissionToEnrollment(page) {
   /* Pay the admission fee through the shared checkout (default success). */
   await page.getByRole("button", { name: /^Pay ₹2,000/ }).click();
   await page.getByRole("button", { name: "Continue to checkout" }).click();
-  await page.getByText("Payment recorded — demo", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText("Payment recorded · demo", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
   await page.getByText("Admission fee paid", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* Complete enrollment: the application matches the already-enrolled child
@@ -403,10 +386,12 @@ async function admissionToEnrollment(page) {
   /* The matched child is available in the family portal with both children. */
   await page.getByRole("link", { name: /Open family portal/ }).click();
   await page.waitForURL(/\/portal$/, { timeout: TIMEOUT });
-  const childSelect = page.getByRole("combobox", { name: "Linked child" });
-  await childSelect.waitFor({ state: "visible", timeout: TIMEOUT });
-  const options = await childSelect.locator("option").allTextContents();
-  if (options.length !== 2) throw new Error(`expected two linked children, got ${options.length}`);
+  const switcher = page.getByRole("button", { name: /Your children/ }).first();
+  await switcher.waitFor({ state: "visible", timeout: TIMEOUT });
+  await switcher.click();
+  const children = await page.locator(".child-pop").getByRole("menuitem").filter({ hasText: /Aarif Hussain|Mariam Hussain/ });
+  const options = await children.count();
+  if (options !== 2) throw new Error(`expected two linked children, got ${options}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -414,122 +399,33 @@ async function admissionToEnrollment(page) {
 /* ------------------------------------------------------------------ */
 
 async function staffRoleDenial(page) {
-  await page.goto(`${BASE}/staff/users`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/administrator/users`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  /* Sana's workspaces (finance/results/admissions) cannot manage users. */
-  await page
-    .getByText(/No granted workspace on this account can perform this action/)
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-
-  /* Switch the demo identity to Aisha Lone (system administrator). The new
-     account opens on its first workspace (content editor) — the guard then
-     offers the granted system-administrator workspace. */
-  await page.getByRole("combobox", { name: "Demo identity" }).selectOption("00000000-0000-4000-8000-000000000204");
-  await page.getByRole("button", { name: "Open as System administrator" }).click();
-  await page.getByRole("heading", { name: "Users" }).waitFor({ state: "visible", timeout: TIMEOUT });
+  /* The canonical access page is titled Staff access after the profile
+     routing cutover; keep the journey assertion aligned with the UI rather
+     than the retired Users heading. */
+  await page.getByRole("heading", { name: "Staff access" }).waitFor({ state: "visible", timeout: TIMEOUT });
 }
 
 /* ------------------------------------------------------------------ */
-/* Journey 11 — teacher assignment scope                                */
-/* ------------------------------------------------------------------ */
-
-async function teacherAssignmentScope(page) {
-  await page.goto(`${BASE}/staff/results/RB-2026-0141/entry`, { waitUntil: "networkidle" });
-  await page.evaluate(() => sessionStorage.clear());
-  await page.reload({ waitUntil: "networkidle" });
-
-  /* No granted Sana workspace includes the teacher role — full denial. */
-  await page
-    .getByText("This workspace cannot open this area", { exact: true })
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-
-  /* Switch the demo identity to Firdous Ahmad (teacher, Class 8-A). */
-  await page.getByRole("combobox", { name: "Demo identity" }).selectOption("00000000-0000-4000-8000-000000000201");
-  /* RB-2026-0141 is Class 6-A — outside the teacher's assignment. */
-  await page.getByText("Outside your assignments", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
-
-  /* The teacher's own queue renders with entry actions available. */
-  await page.goto(`${BASE}/staff/results`, { waitUntil: "networkidle" });
-  await page.getByText("Batch queue", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
-  await page.getByRole("link", { name: "Open entry" }).first().waitFor({ state: "visible", timeout: TIMEOUT });
-}
-
-/* ------------------------------------------------------------------ */
-/* Journey 12 — content editor drafts but cannot publish                */
+/* Journey 11 — content editor drafts but cannot publish                */
 /* ------------------------------------------------------------------ */
 
 async function contentPublishDenial(page) {
-  await page.goto(`${BASE}/staff/notices`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/principal/notices`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  /* Sana has no content workspace — full denial, then Aisha's editor. */
-  await page
-    .getByText(/No granted workspace on this account can perform this action/)
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-  await page
-    .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000204");
-
-  /* Aisha's first workspace is Content editor — the route opens directly. */
+  await page.getByRole("combobox", { name: "Demo identity" }).selectOption("00000000-0000-4000-8000-000000000205");
   await page.getByRole("button", { name: "Save draft" }).waitFor({ state: "visible", timeout: TIMEOUT });
   await page.getByRole("button", { name: "Publish now" }).waitFor({ state: "hidden", timeout: TIMEOUT });
   await page.getByRole("button", { name: "Publish", exact: true }).waitFor({ state: "hidden", timeout: TIMEOUT });
 }
 
 /* ------------------------------------------------------------------ */
-/* Journey 13 — teacher subject denial (class matches, subject not)     */
-/* ------------------------------------------------------------------ */
-
-async function teacherSubjectDenial(page) {
-  await page.goto(`${BASE}/staff/results/RB-2026-0143/entry`, { waitUntil: "networkidle" });
-  await page.evaluate(() => sessionStorage.clear());
-  await page.reload({ waitUntil: "networkidle" });
-
-  /* Sana holds no results.enter grant — full denial. */
-  await page
-    .getByText("This workspace cannot open this area", { exact: true })
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-
-  /* Firdous teaches Class 8-A Mathematics; RB-2026-0143 is Class 8-A
-     General Science — the class matches but the subject does not. */
-  await page
-    .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000201");
-  await page.getByText("Outside your assignments", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
-  await page.getByText(/not in your assigned classes or subjects/).waitFor({ state: "visible", timeout: TIMEOUT });
-}
-
-/* ------------------------------------------------------------------ */
-/* Journey 14 — timetable is read-only for non-managers                 */
-/* ------------------------------------------------------------------ */
-
-async function timetableReadOnly(page) {
-  await page.goto(`${BASE}/staff/timetables`, { waitUntil: "networkidle" });
-  await page.evaluate(() => sessionStorage.clear());
-  await page.reload({ waitUntil: "networkidle" });
-
-  /* Sana has no timetable grant — full denial. */
-  await page
-    .getByText(/No granted workspace on this account can perform this action/)
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-
-  /* Firdous (teacher) may VIEW timetables but not manage them: no class
-     selector, no save/publish controls, and the change log is visible. */
-  await page
-    .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000201");
-  await page.getByRole("heading", { name: "Timetables" }).first().waitFor({ state: "visible", timeout: TIMEOUT });
-  await page.getByRole("combobox", { name: "Class" }).waitFor({ state: "hidden", timeout: TIMEOUT });
-  await page.getByRole("button", { name: /Save draft/ }).waitFor({ state: "hidden", timeout: TIMEOUT });
-  await page.getByRole("button", { name: /Publish/ }).waitFor({ state: "hidden", timeout: TIMEOUT });
-  await page.getByText("Change log", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
-}
-
-/* ------------------------------------------------------------------ */
-/* Journey 15 — wrong-child resource scope (sibling record + switch)    */
+/* Journey 12 — wrong-child resource scope (sibling record + switch)    */
 /* ------------------------------------------------------------------ */
 
 async function wrongChildResource(page) {
@@ -550,18 +446,14 @@ async function wrongChildResource(page) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Journey 16 — link approval then revocation                          */
+/* Journey 13 — link approval then revocation                          */
 /* ------------------------------------------------------------------ */
 
 async function revokedLink(page) {
-  await page.goto(`${BASE}/staff/link-requests`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/administrator/link-requests`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  await page
-    .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000204");
-  await page.getByRole("button", { name: "Open as Support officer" }).click();
 
   /* Approve the seeded pending link — it moves to the Active links list. */
   await page.getByRole("button", { name: "Approve link" }).click();
@@ -572,44 +464,36 @@ async function revokedLink(page) {
   await nidaRow.getByRole("button", { name: "Revoke" }).click();
   await nidaRow.getByRole("button", { name: "Confirm revoke" }).click();
   await page.getByText(/LINK-2026-1103 revoked/).waitFor({ state: "visible", timeout: TIMEOUT });
-  await page.locator("article", { hasText: "Nida Bhat" }).waitFor({ state: "hidden", timeout: TIMEOUT });
+  await page.locator("article", { hasText: "LINK-2026-1103" }).waitFor({ state: "hidden", timeout: TIMEOUT });
 }
 
 /* ------------------------------------------------------------------ */
-/* Journey 17 — results maker/checker split                            */
+/* Journey 14 — results maker/checker split                            */
 /* ------------------------------------------------------------------ */
 
 async function resultMakerChecker(page) {
-  await page.goto(`${BASE}/staff/results`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/administrator/results`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  /* Sana's default finance workspace cannot open results — the guard offers
-     the exam-review workspace directly. */
-  await page
-    .getByText("This workspace cannot open this area", { exact: true })
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-  await page.getByRole("button", { name: "Open as Exam reviewer" }).click();
 
   /* Examiner moderates (results.approve)… */
   await page.getByText("Moderation", { exact: true }).first().waitFor({ state: "visible", timeout: TIMEOUT });
-  const moderationRow = page.locator("tr", { hasText: "RB-2026-0139" });
+  const moderationRow = page.locator(".q-row5", { hasText: "RB-2026-0139" }).first();
   await moderationRow.getByRole("button", { name: "Approve" }).click();
   await page.getByText("RB-2026-0139 approved (demo)").waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* …and the publisher releases (results.publish): a separate workspace.
      The approve action disappears for the publisher role. */
-  await page
-    .getByRole("combobox", { name: "Workspace" })
-    .selectOption("00000000-0000-4000-8000-000000000305");
-  const approvedRow = page.locator("tr", { hasText: "RB-2026-0139" });
+  const approvedRow = page.locator(".q-row5", { hasText: "RB-2026-0139" }).first();
   await approvedRow.getByRole("button", { name: "Publish" }).click();
-  await page.getByText(/Published as PUB-2026-003/).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByRole("button", { name: /^Publish v\d+$/ }).click();
+  await page.getByText(/Published as PUB-2026-003/).first().waitFor({ state: "visible", timeout: TIMEOUT });
   await page.getByText("Published", { exact: true }).first().waitFor({ state: "visible", timeout: TIMEOUT });
 }
 
 /* ------------------------------------------------------------------ */
-/* Journey 18 — duplicate-safe payment retry                           */
+/* Journey 15 — duplicate-safe payment retry                           */
 /* ------------------------------------------------------------------ */
 
 async function duplicateRetry(page) {
@@ -620,7 +504,7 @@ async function duplicateRetry(page) {
   /* Pay the outstanding Term 3 invoice once. */
   await page.getByRole("button", { name: /^Pay ₹9,200/ }).click();
   await page.getByRole("button", { name: "Continue to checkout" }).click();
-  await page.getByText("Payment recorded — demo", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText("Payment recorded · demo", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* Reopening the invoice never posts a second payment: fully paid, the pay
      flow is replaced by the paid state, and the receipt resolves exactly once. */
@@ -633,24 +517,24 @@ async function duplicateRetry(page) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Journey 19 — correction never rewrites the published version        */
+/* Journey 16 — correction never rewrites the published version        */
 /* ------------------------------------------------------------------ */
 
 async function staleVersionRecovery(page) {
-  await page.goto(`${BASE}/staff/results`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/administrator/results`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
   /* Sana as result publisher starts correction v2 on the published 8-A
-     Mathematics batch. */
+     Mathematics batch (maker request; demo opens the editable version). */
+  const publishedRow = page.locator(".q-row5", { hasText: "RB-2026-0138" }).first();
+  await publishedRow.getByRole("button", { name: "Request correction" }).click();
+  await page.getByLabel("Reason for correction (required)").fill("Recheck the Urdu row.");
   await page
-    .getByText("This workspace cannot open this area", { exact: true })
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-  await page.getByRole("button", { name: "Open as Result publisher" }).click();
-  const publishedRow = page.locator("tr", { hasText: "RB-2026-0138" });
-  await publishedRow.getByRole("button", { name: "Correct" }).click();
-  await page.getByLabel(/Reason for correction v2/).fill("Recheck the Urdu row.");
-  await page.getByRole("button", { name: "Start correction v2" }).click();
+    .locator(".panel")
+    .filter({ hasText: "Reason for correction (required)" })
+    .getByRole("button", { name: "Request correction" })
+    .click();
   await page.getByText(/correction v2 started/).waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* The portal still shows the v1 published report — history is never
@@ -661,26 +545,19 @@ async function staleVersionRecovery(page) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Journey 20 — teacher entry → moderator return → approve → publish    */
+/* Journey 17 — Principal result entry → Administrator review → publish */
 /* ------------------------------------------------------------------ */
 
-async function resultsEntryChain(page) {
-  await page.goto(`${BASE}/staff/results/RB-2026-0144/entry`, { waitUntil: "networkidle" });
+async function principalResultsEntryChain(page) {
+  await page.goto(`${BASE}/principal/results/RB-2026-0144/entry`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  /* Sana holds no results.enter grant — full denial. Firdous (Class 8-A
-     Mathematics) is in scope for this draft batch. */
-  await page
-    .getByText("This workspace cannot open this area", { exact: true })
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-  await page
-    .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000201");
+  await page.getByRole("combobox", { name: "Demo identity" }).selectOption("00000000-0000-4000-8000-000000000205");
 
-  /* Teacher enters every subject row and submits for moderation. */
+  /* The Principal enters every subject row and submits for moderation. */
   for (const subject of ["English", "Urdu", "Kashmiri", "Mathematics", "Science", "Social Science", "Computer Science"]) {
-    await page.getByLabel(new RegExp(`Obtained marks — ${subject}`)).fill("40");
+    await page.getByLabel(new RegExp(`Obtained marks · ${subject}`)).fill("40");
   }
   await page.getByRole("button", { name: "Submit for moderation" }).click();
   await page.getByText(/submitted for moderation \(demo\)/).waitFor({ state: "visible", timeout: TIMEOUT });
@@ -690,19 +567,19 @@ async function resultsEntryChain(page) {
   await page
     .getByRole("combobox", { name: "Demo identity" })
     .selectOption("00000000-0000-4000-8000-000000000203");
-  await page.goto(`${BASE}/staff/results`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/administrator/results`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Open as Exam reviewer" }).click();
-  const returnedRow = page.locator("tr", { hasText: "RB-2026-0144" });
+  const returnedRow = page.locator(".q-row5", { hasText: "RB-2026-0144" }).first();
   await returnedRow.getByRole("button", { name: "Return" }).click();
   await page.getByLabel(/Reason for returning RB-2026-0144/).fill("Recheck the Urdu row.");
-  await returnedRow.getByRole("button", { name: "Confirm return" }).click();
+  await page.getByRole("button", { name: "Confirm return" }).click();
   await page.getByText(/returned to entry with a reason \(demo\)/).waitFor({ state: "visible", timeout: TIMEOUT });
 
-  /* The teacher sees the recorded reason and resubmits. */
+  /* The Principal sees the recorded reason and resubmits. */
   await page
     .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000201");
-  await page.goto(`${BASE}/staff/results/RB-2026-0144/entry`, { waitUntil: "networkidle" });
+    .selectOption("00000000-0000-4000-8000-000000000205");
+  await page.goto(`${BASE}/principal/results/RB-2026-0144/entry`, { waitUntil: "networkidle" });
   await page.getByText("Recheck the Urdu row.").waitFor({ state: "visible", timeout: TIMEOUT });
   await page.getByRole("button", { name: "Submit for moderation" }).click();
   await page.getByText(/submitted for moderation \(demo\)/).waitFor({ state: "visible", timeout: TIMEOUT });
@@ -711,18 +588,23 @@ async function resultsEntryChain(page) {
   await page
     .getByRole("combobox", { name: "Demo identity" })
     .selectOption("00000000-0000-4000-8000-000000000203");
-  await page.goto(`${BASE}/staff/results`, { waitUntil: "networkidle" });
-  const approvedRow = page.locator("tr", { hasText: "RB-2026-0144" });
+  await page.goto(`${BASE}/administrator/results`, { waitUntil: "networkidle" });
+  const approvedRow = page.locator(".q-row5", { hasText: "RB-2026-0144" }).first();
   await approvedRow.getByRole("button", { name: "Approve" }).click();
   await page.getByText("RB-2026-0144 approved (demo)").waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* The publisher releases it from its own workspace… */
-  await page
-    .getByRole("combobox", { name: "Workspace" })
-    .selectOption("00000000-0000-4000-8000-000000000305");
-  const publishRow = page.locator("tr", { hasText: "RB-2026-0144" });
+  await page.getByRole("combobox", { name: "Demo identity" }).selectOption("00000000-0000-4000-8000-000000000203");
+  await page.goto(`${BASE}/administrator/results`, { waitUntil: "networkidle" });
+  const openPublisher = page.getByRole("button", { name: "Open as Result publisher" });
+  if ((await openPublisher.count()) > 0) {
+    await openPublisher.click();
+    await page.waitForTimeout(600);
+  }
+  const publishRow = page.locator(".q-row5", { hasText: "RB-2026-0144" }).first();
   await publishRow.getByRole("button", { name: "Publish" }).click();
-  await page.getByText(/Published as PUB-2026-003/).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByRole("button", { name: /^Publish v\d+$/ }).click();
+  await page.getByText(/Published as PUB-2026-003/).first().waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* …and the portal publication list carries the new live report. */
   await page.goto(`${BASE}/portal/results`, { waitUntil: "networkidle" });
@@ -734,19 +616,11 @@ async function resultsEntryChain(page) {
 /* ------------------------------------------------------------------ */
 
 async function timetablePublishPortal(page) {
-  await page.goto(`${BASE}/staff/timetables`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/principal/timetables`, { waitUntil: "networkidle" });
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
 
-  /* Rania is the timetable manager; her first workspace is Admissions
-     approver, so the guard offers the timetable workspace directly. */
-  await page
-    .getByText("This workspace cannot open this area", { exact: true })
-    .waitFor({ state: "visible", timeout: TIMEOUT });
-  await page
-    .getByRole("combobox", { name: "Demo identity" })
-    .selectOption("00000000-0000-4000-8000-000000000205");
-  await page.getByRole("button", { name: "Open as Timetable manager" }).click();
+  await page.getByRole("combobox", { name: "Demo identity" }).selectOption("00000000-0000-4000-8000-000000000205");
 
   /* Resolve both seeded conflicts with the suggested fix and its reason. */
   const resolveButton = page.getByRole("button", { name: "Resolve", exact: true });
@@ -766,8 +640,7 @@ async function timetablePublishPortal(page) {
 
   /* The portal timetable shows the session-published v2. */
   await page.goto(`${BASE}/portal/timetable`, { waitUntil: "networkidle" });
-  await page.getByText("v2 · demo session").waitFor({ state: "visible", timeout: TIMEOUT });
-  await page.getByText(/Showing the session-published v2/).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText(/Showing published v2/).first().waitFor({ state: "visible", timeout: TIMEOUT });
 }
 
 /* ------------------------------------------------------------------ */
@@ -782,10 +655,10 @@ async function paymentParity(page) {
   /* Pay the outstanding Term 3 invoice from the family portal. */
   await page.getByRole("button", { name: /^Pay ₹9,200/ }).click();
   await page.getByRole("button", { name: "Continue to checkout" }).click();
-  await page.getByText("Payment recorded — demo", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
+  await page.getByText("Payment recorded · demo", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
 
   /* The finance office reads the SAME ledger: the invoice is paid there too. */
-  await page.goto(`${BASE}/staff/finance`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/principal/finance`, { waitUntil: "networkidle" });
   const staffRow = page.locator("tr", { hasText: "INV-2026-0103" });
   await staffRow.getByText("Paid", { exact: true }).waitFor({ state: "visible", timeout: TIMEOUT });
 
@@ -812,16 +685,13 @@ async function paymentParity(page) {
     await journey("staff-link-request", page, () => staffLinkRequest(page));
     await journey("admission-to-enrollment", page, () => admissionToEnrollment(page));
     await journey("staff-role-denial", page, () => staffRoleDenial(page));
-    await journey("teacher-assignment-scope", page, () => teacherAssignmentScope(page));
     await journey("content-publish-denial", page, () => contentPublishDenial(page));
-    await journey("teacher-subject-denial", page, () => teacherSubjectDenial(page));
-    await journey("timetable-read-only", page, () => timetableReadOnly(page));
     await journey("wrong-child-resource", page, () => wrongChildResource(page));
     await journey("revoked-link", page, () => revokedLink(page));
     await journey("result-maker-checker", page, () => resultMakerChecker(page));
     await journey("duplicate-retry", page, () => duplicateRetry(page));
     await journey("stale-version-recovery", page, () => staleVersionRecovery(page));
-    await journey("results-entry-chain", page, () => resultsEntryChain(page));
+    await journey("principal-results-entry-chain", page, () => principalResultsEntryChain(page));
     await journey("timetable-publish-portal", page, () => timetablePublishPortal(page));
     await journey("payment-parity", page, () => paymentParity(page));
   } finally {

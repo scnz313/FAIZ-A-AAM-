@@ -151,10 +151,19 @@ export const teachingStaffService: TeachingStaffService = {
       if (!result.ok) throw new Error(result.errors[0]?.message ?? "The assignment could not be created.");
       return { assignmentId: result.value.assignmentId, ref: result.value.reference };
     }
+    if (!input.reason?.trim()) throw new Error("A reason is required — it becomes part of the assignment history.");
+    if (!input.academicYearId?.trim() || !input.gradeSectionId?.trim() || !input.subjectId?.trim()) {
+      throw new Error("An assignment needs an academic year, a class, and a subject.");
+    }
     const store = loadRelationshipStore();
+    const staff = store.staffMembers.find((candidate) => candidate.id === input.staffMemberId);
+    if (!staff) throw new Error("Teaching staff record not found.");
     const subject = DEMO_SUBJECTS.find((candidate) => candidate.id === input.subjectId);
     const assignmentId = `00000000-0000-4000-8000-${String(500 + store.grantCounter).padStart(12, "0")}`;
     const ref = nextRef("TAS", store.grantCounter);
+    /* Teaching assignments are independent of logins: roleGrantId stays null
+       and this path never touches userAccounts or role_grants. Teachers hold
+       no accounts/grants by construction. */
     store.staffAssignments.push({
       id: assignmentId,
       ref,
@@ -189,6 +198,11 @@ export const teachingStaffService: TeachingStaffService = {
     const assignment = store.staffAssignments.find((candidate) => candidate.id === parsed.assignmentId);
     if (assignment === undefined) throw new Error("Teaching assignment not found.");
     if (assignment.status === "ended") throw new Error("This assignment is already ended.");
+    /* Demo optimistic concurrency: active teaching assignments are version 1
+       (see deriveStoreTeachingStaff). A stale expectedVersion never ends history. */
+    if (parsed.expectedVersion !== 1) {
+      throw new Error(`Teaching assignment version mismatch (expected 1, found ${parsed.expectedVersion}).`);
+    }
     assignment.status = "ended";
     assignment.effectiveToIso = demoNowIso();
     saveRelationshipStore(store);

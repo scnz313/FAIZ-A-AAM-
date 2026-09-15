@@ -1,0 +1,48 @@
+.note {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  margin: 0 0 12px;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.actions .note {
+  margin: 0;
+}
+
+.summary {
+  color: var(--ink-3);
+  font-size: 0.86rem;
+  margin: 12px 0 0;
+}
+
+.failed {
+  color: var(--madder);
+  font-size: 0.84rem;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.rowNote {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+@media (max-width: 719px) {
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rowNote {
+    text-align: left;
+  }
+}

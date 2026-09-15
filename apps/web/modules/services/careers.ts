@@ -27,13 +27,14 @@ export type JobDraft = {
   fullName: string;
   phone: string;
   email: string;
+  location: string;
   qualification: string;
   subject: string;
   year: string;
   institution: string;
   experience: string;
   currentRole: string;
-  documents: Record<string, string>;
+  message: string;
   consent: boolean;
 };
 
@@ -64,10 +65,45 @@ export type JobApplicationRecord = {
   interview?: { atIso: string; note?: string };
   /** Reviewer account id once assigned (staff projection). */
   reviewerAccountId?: string;
+  /**
+   * Contact identity recorded on the application. Anonymous public-intake
+   * applications carry it on the application row; account-bound records keep
+   * it on the applicant's account instead, so it may be absent.
+   */
+  contactEmail?: string;
+  contactPhone?: string;
   /** Attributed scorecard rows (staff projection). */
   scorecards?: Array<{ score: number; notes: string | null; byAccountId: string; atIso: string }>;
   /** The latest immutable submitted snapshot (staff projection). */
   submittedSnapshot?: Record<string, unknown>;
+  /**
+   * Documents linked through the attachment table (`job_documents`), as the
+   * staff projection reads them. RLS filters the related `documents` row, so a
+   * scan-pending or unauthorized file is simply absent here; the file itself
+   * is served only through the authorized document route.
+   */
+  attachedDocuments?: Array<{
+    requirementCode: string | null;
+    reference: string;
+    filename: string;
+    category: string;
+    scanStatus: string;
+    mimeType: string;
+    sizeBytes: number;
+    uploadedAtIso: string;
+  }>;
+  /**
+   * Demo optimistic-concurrency version (S4 hardening). Fixtures read as 1;
+   * every demo mutation bumps it. Staff transitions accept an optional
+   * `expectedVersion` and reject stale writes instead of overwriting.
+   */
+  version?: number;
+  /**
+   * Maker/checker (S4): the account that shortlisted the candidate. The same
+   * account may not offer the position — a different approver must decide.
+   * Recorded only when the caller supplies an actor; fixtures carry none.
+   */
+  shortlistedByAccountId?: string;
 };
 
 /** The boundary every careers caller uses; the demo adapter is replaceable. */
@@ -87,18 +123,18 @@ export interface CareersService {
   withdraw(ref: string, by: string): Promise<JobApplicationRecord>;
   /** Staff queue: every fixture and session-saved record, newest submitted first. */
   listStaffRecords(): Promise<JobApplicationRecord[]>;
-  /** Staff decision: shortlist a candidate (from Submitted or Eligibility review). */
-  staffShortlist(ref: string, note?: string): Promise<JobApplicationRecord>;
-  /** Staff decision: request an interview and attach a demo slot (from Shortlisted). */
-  staffRequestInterview(ref: string, note?: string): Promise<JobApplicationRecord>;
-  /** Staff decision: offer the position (from Interview; a reason is required). */
-  staffOffer(ref: string, note: string): Promise<JobApplicationRecord>;
-  /** Staff decision: record not-selected (a reason is required). */
-  staffNotSelected(ref: string, note: string): Promise<JobApplicationRecord>;
-  /** HR approver: assign a reviewer to an application (returns the refreshed record). */
-  assignReviewer(ref: string, reviewerAccountId: string): Promise<JobApplicationRecord>;
-  /** HR reviewer: record an attributed scorecard (returns the refreshed record). */
-  saveScorecard(ref: string, score: number, notes?: string): Promise<JobApplicationRecord>;
+  /** Staff decision: shortlist a candidate (from Submitted or Eligibility review). When `actorAccountId` is supplied it is recorded as the maker; when `expectedVersion` is supplied stale copies are rejected. */
+  staffShortlist(ref: string, note?: string, actorAccountId?: string, expectedVersion?: number): Promise<JobApplicationRecord>;
+  /** Staff decision: request an interview and attach a demo slot (from Shortlisted). When `expectedVersion` is supplied stale copies are rejected. */
+  staffRequestInterview(ref: string, note?: string, actorAccountId?: string, expectedVersion?: number): Promise<JobApplicationRecord>;
+  /** Staff decision: offer the position (from Interview; a reason is required). Rejects when `actorAccountId` shortlisted the candidate or authored a scorecard (maker/checker). When `expectedVersion` is supplied stale copies are rejected. */
+  staffOffer(ref: string, note: string, actorAccountId?: string, expectedVersion?: number): Promise<JobApplicationRecord>;
+  /** Staff decision: record not-selected (a reason is required). Rejects when `actorAccountId` authored a scorecard on the application (maker/checker). When `expectedVersion` is supplied stale copies are rejected. */
+  staffNotSelected(ref: string, note: string, actorAccountId?: string, expectedVersion?: number): Promise<JobApplicationRecord>;
+  /** HR approver: assign a reviewer to an application (returns the refreshed record). When `expectedVersion` is supplied stale copies are rejected. */
+  assignReviewer(ref: string, reviewerAccountId: string, expectedVersion?: number): Promise<JobApplicationRecord>;
+  /** HR reviewer: record an attributed scorecard (returns the refreshed record). When `actorAccountId` is supplied it is recorded as the scorecard author; when `expectedVersion` is supplied stale copies are rejected. */
+  saveScorecard(ref: string, score: number, notes?: string, actorAccountId?: string, expectedVersion?: number): Promise<JobApplicationRecord>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -199,6 +235,7 @@ export function fixtureApplicationRecord(ref: string): JobApplicationRecord | nu
     submittedAtIso: row.submittedAtIso,
     status: row.status,
     timeline,
+    version: 1,
   };
 }
 
@@ -220,7 +257,7 @@ function nextReference(): string {
 const PANEL_ACTOR = "Recruitment panel";
 
 /** The reviewer who last acted on a record, or null before any staff event. */
-export function applicationReviewer(record: JobApplicationRecord): string | null {
+export function applicationReviewer(record: Pick<JobApplicationRecord, "timeline">): string | null {
   const lastStaffEvent = [...record.timeline].reverse().find((event) => event.actor !== "Applicant");
   return lastStaffEvent ? lastStaffEvent.actor : null;
 }
@@ -243,11 +280,60 @@ function requireReason(note: string | undefined, actionLabel: string): string {
   return reason;
 }
 
+/** Demo record version — fixtures without an explicit version read as 1. */
+function currentJobVersion(record: JobApplicationRecord): number {
+  return record.version ?? 1;
+}
+
+function nextJobVersion(record: JobApplicationRecord): number {
+  return currentJobVersion(record) + 1;
+}
+
 /**
- * Shared staff-decision write: validates the transition, appends the
- * timestamped event with the actor and note, persists, and returns the
- * updated record. Retries are safe: an already-terminal record fails the
- * transition check instead of appending a duplicate event.
+ * Optimistic-concurrency guard (S4): when the caller supplies an
+ * `expectedVersion`, a stale copy fails with who/when info instead of
+ * silently overwriting. Omitted versions keep legacy behavior. Uses the
+ * existing Error transport.
+ */
+function requireJobExpectedVersion(record: JobApplicationRecord, expectedVersion?: number): void {
+  if (expectedVersion === undefined) return;
+  const current = currentJobVersion(record);
+  if (expectedVersion !== current) {
+    const last = record.timeline[record.timeline.length - 1];
+    const actor = last?.actor ?? "Recruitment panel";
+    const atIso = last?.atIso ?? record.submittedAtIso;
+    throw new Error(
+      `Stale write for ${record.ref}: expected version ${expectedVersion} but current is ${current} (last updated by ${actor} at ${atIso}) — reload and retry.`,
+    );
+  }
+}
+
+/**
+ * Maker/checker (S4): the shortlister or scorecard author may not approve
+ * their own review. Only enforced when an actor account is supplied — legacy
+ * callers that omit it keep the previous behavior.
+ */
+function requireDifferentDecider(record: JobApplicationRecord, actorAccountId: string | undefined, kind: "offer" | "decision"): void {
+  if (actorAccountId === undefined) return;
+  if (record.shortlistedByAccountId !== undefined && actorAccountId === record.shortlistedByAccountId && kind === "offer") {
+    throw new Error(
+      "Maker/checker separation — this account shortlisted the candidate and cannot offer its own shortlist; another approver must record the decision.",
+    );
+  }
+  const scoredBySelf = (record.scorecards ?? []).some((card) => card.byAccountId === actorAccountId);
+  if (scoredBySelf) {
+    throw new Error(
+      "Maker/checker separation — this account recorded a scorecard on the application and cannot approve its own review; another approver must record the decision.",
+    );
+  }
+}
+
+/**
+ * Shared staff-decision write: validates the transition and the optional
+ * expected version, appends the timestamped event with the actor and note,
+ * bumps the demo version, persists, and returns the updated record. Retries
+ * are safe: an already-terminal record fails the transition check instead of
+ * appending a duplicate event; stale copies fail with who/when info.
  */
 function applyStaffDecision(
   ref: string,
@@ -256,9 +342,11 @@ function applyStaffDecision(
   actionLabel: string,
   note: string,
   patch: Partial<JobApplicationRecord> = {},
+  expectedVersion?: number,
 ): JobApplicationRecord {
   const record = loadRecord(ref);
   if (!record) throw new Error(`Application ${ref} was not found.`);
+  requireJobExpectedVersion(record, expectedVersion);
   if (!from.includes(record.status)) {
     throw new Error(
       `${actionLabel} is not allowed for ${ref}: the application is "${record.status}" — it must be ${allowedPhrase(from)}.`,
@@ -268,6 +356,7 @@ function applyStaffDecision(
     ...record,
     ...patch,
     status: to,
+    version: nextJobVersion(record),
     timeline: [...record.timeline, { status: to, atIso: demoNowIso(), actor: reviewerFor(ref), note }],
   };
   saveRecord(updated);
@@ -313,6 +402,7 @@ export const careersService: CareersService = {
         name: draft.fullName,
         submittedAtIso: now,
         status: "Submitted",
+        version: 1,
         timeline: [
           { status: "Submitted", atIso: now, actor: "Applicant", note: "Application received by the school." },
         ],
@@ -335,6 +425,7 @@ export const careersService: CareersService = {
       const updated: JobApplicationRecord = {
         ...record,
         status: "Withdrawn",
+        version: nextJobVersion(record),
         timeline: [
           ...record.timeline,
           { status: "Withdrawn", atIso: demoNowIso(), actor: by, note: "Application withdrawn by the applicant." },
@@ -361,7 +452,7 @@ export const careersService: CareersService = {
     });
   },
 
-  async staffShortlist(ref, note) {
+  async staffShortlist(ref, note, actorAccountId, expectedVersion) {
     const result = await respond(() =>
       applyStaffDecision(
         ref,
@@ -369,52 +460,66 @@ export const careersService: CareersService = {
         "Shortlisted",
         "Shortlisting",
         note?.trim() || "Candidate shortlisted for the next stage.",
+        actorAccountId === undefined ? {} : { shortlistedByAccountId: actorAccountId },
+        expectedVersion,
       ),
     );
     void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Candidate shortlisted" });
     return result;
   },
 
-  async staffRequestInterview(ref, note) {
+  async staffRequestInterview(ref, note, actorAccountId, expectedVersion) {
+    void actorAccountId;
     const now = demoNowIso();
     const reason = note?.trim();
     const result = await respond(() =>
       applyStaffDecision(ref, ["Shortlisted"], "Interview", "Requesting an interview", reason || "Interview requested — the panel will confirm the slot.", {
         interview: { atIso: plusMs(now, 3 * DAY_MS), note: reason || undefined },
-      }),
+      }, expectedVersion),
     );
     void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Interview requested" });
     return result;
   },
 
-  async staffOffer(ref, note) {
-    const result = await respond(() =>
-      applyStaffDecision(ref, ["Interview"], "Offered", "Offering the position", requireReason(note, "Offering the position")),
-    );
+  async staffOffer(ref, note, actorAccountId, expectedVersion) {
+    const preview = loadRecord(ref);
+    if (preview) requireDifferentDecider(preview, actorAccountId, "offer");
+    const result = await respond(() => {
+      const current = loadRecord(ref);
+      if (current) requireDifferentDecider(current, actorAccountId, "offer");
+      return applyStaffDecision(ref, ["Interview"], "Offered", "Offering the position", requireReason(note, "Offering the position"), {}, expectedVersion);
+    });
     void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Position offered" });
     return result;
   },
 
-  async staffNotSelected(ref, note) {
-    const result = await respond(() =>
-      applyStaffDecision(
+  async staffNotSelected(ref, note, actorAccountId, expectedVersion) {
+    const preview = loadRecord(ref);
+    if (preview) requireDifferentDecider(preview, actorAccountId, "decision");
+    const result = await respond(() => {
+      const current = loadRecord(ref);
+      if (current) requireDifferentDecider(current, actorAccountId, "decision");
+      return applyStaffDecision(
         ref,
         ["Submitted", "Eligibility review", "Shortlisted", "Interview"],
         "Not selected",
         "Recording the candidate as not selected",
         requireReason(note, "Recording the candidate as not selected"),
-      ),
-    );
+        {},
+        expectedVersion,
+      );
+    });
     void auditService.record({ actor: "HR office", action: "Application reviewed", target: ref, outcome: "Success", reason: "Candidate not selected" });
     return result;
   },
 
-  async assignReviewer(ref, reviewerAccountId) {
+  async assignReviewer(ref, reviewerAccountId, expectedVersion) {
     /* Demo mode keeps the assignment in the session record for UI parity. */
     const result = await respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
-      const updated = { ...record, reviewerAccountId };
+      requireJobExpectedVersion(record, expectedVersion);
+      const updated = { ...record, reviewerAccountId, version: nextJobVersion(record) };
       saveRecord(updated);
       return updated;
     });
@@ -422,16 +527,18 @@ export const careersService: CareersService = {
     return result;
   },
 
-  async saveScorecard(ref, score, notes) {
+  async saveScorecard(ref, score, notes, actorAccountId, expectedVersion) {
     const result = await respond(() => {
       const record = loadRecord(ref);
       if (!record) throw new Error("Application not found.");
+      requireJobExpectedVersion(record, expectedVersion);
       if (!Number.isInteger(score) || score < 1 || score > 5) {
         throw new Error("Score must be a whole number from 1 to 5.");
       }
       const updated = {
         ...record,
-        scorecards: [...(record.scorecards ?? []), { score, notes: notes?.trim() || null, byAccountId: "demo-reviewer", atIso: demoNowIso() }],
+        version: nextJobVersion(record),
+        scorecards: [...(record.scorecards ?? []), { score, notes: notes?.trim() || null, byAccountId: actorAccountId ?? "demo-reviewer", atIso: demoNowIso() }],
       };
       saveRecord(updated);
       return updated;
@@ -445,22 +552,45 @@ export const careersService: CareersService = {
 /* Supabase adapter (server rows → the same domain shapes)              */
 /* ------------------------------------------------------------------ */
 
+/** One saved draft row; `job_application_drafts.application_id` is UNIQUE. */
+export type ServerJobDraftRow = {
+  draft: Record<string, unknown>;
+  schema_version: number;
+  expires_at: string;
+  updated_at: string;
+  version?: number;
+};
+
 export type ServerJobRow = {
   id: string;
   reference: string;
   applicant_name?: string;
+  applicant_email?: string | null;
+  applicant_phone?: string | null;
   owner_account_id?: string;
   vacancy_id?: string;
   current_status: string;
   version: number;
   created_at: string;
   job_vacancies?: { title?: string; reference?: string } | null;
-  job_application_drafts?: Array<{ draft: Record<string, unknown>; schema_version: number; expires_at: string; updated_at: string; version?: number }> | null;
+  job_application_drafts?: ServerJobDraftRow | ServerJobDraftRow[] | null;
   job_interviews?: Array<{ scheduled_at: string; notes: string | null; outcome: string | null }> | null;
   job_application_versions: Array<{ version: number; snapshot: Record<string, unknown> }> | null;
   job_events: Array<{ event_type: string; visible_to_applicant: boolean; copy: string; created_at: string }> | null;
-  job_review_assignments?: Array<{ reviewer_account_id: string; status: string; assigned_at: string }> | null;
-  job_scorecards?: Array<{ score: number; notes: string | null; created_by_account_id: string; created_at: string }> | null;
+  job_review_assignments?: Array<{ reviewer_account_id: string; status: string; created_at: string }> | null;
+  job_scorecards?: Array<{ score: number; notes: string | null; reviewer_account_id: string; created_at: string }> | null;
+  job_documents?: Array<{
+    requirement_code: string | null;
+    documents: {
+      reference: string;
+      safe_filename: string;
+      category: string;
+      scan_status: string;
+      mime_type: string;
+      size_bytes: number;
+      created_at: string;
+    } | null;
+  }> | null;
 };
 
 const SERVER_STATUS_TO_DEMO: Record<string, JobApplicationStatus> = {
@@ -474,6 +604,35 @@ const SERVER_STATUS_TO_DEMO: Record<string, JobApplicationStatus> = {
   withdrawn: "Withdrawn",
 };
 
+/**
+ * `job_events.event_type` is not a status: `jobs_decide_v2` records
+ * `shortlist` / `interview` / `offer` / `not_selected`, while the legacy
+ * `jobs_decide` recorded `shortlisted` / `offered`. Mapping both vocabularies
+ * keeps each timeline label truthful instead of collapsing them to
+ * "Submitted".
+ */
+const SERVER_JOB_EVENT_TO_STATUS: Record<string, JobApplicationStatus> = {
+  submitted: "Submitted",
+  shortlist: "Shortlisted",
+  shortlisted: "Shortlisted",
+  interview: "Interview",
+  offer: "Offered",
+  offered: "Offered",
+  not_selected: "Not selected",
+  withdrawn: "Withdrawn",
+};
+
+/**
+ * PostgREST embeds a to-one relationship as an object (its foreign key is
+ * unique) and a to-many relationship as an array. Both shapes must map
+ * identically, or a live saved draft silently disappears. Mirrors the
+ * `firstRelatedEmbed` helper in admissions.ts.
+ */
+function firstRelatedEmbed<T>(value: T | T[] | null | undefined): T | undefined {
+  if (value === null || value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function isServerCareers(): boolean {
   return clientAdapterMode() === "supabase";
 }
@@ -485,6 +644,7 @@ function slugifyTitle(title: string): string {
 type ServerVacancy = {
   vacancyId: string;
   versionId: string;
+  version?: number;
   reference: string;
   title: string;
   department: string | null;
@@ -495,7 +655,7 @@ export function mapServerJob(row: ServerJobRow): JobApplicationRecord {
   const events = (row.job_events ?? [])
     .filter((event) => event.visible_to_applicant)
     .map((event) => ({
-      status: SERVER_STATUS_TO_DEMO[event.event_type] ?? "Submitted",
+      status: SERVER_JOB_EVENT_TO_STATUS[event.event_type] ?? SERVER_STATUS_TO_DEMO[row.current_status] ?? "Submitted",
       atIso: event.created_at,
       actor: event.event_type === "submitted" ? "Applicant" : "HR office",
       note: event.copy,
@@ -511,8 +671,31 @@ export function mapServerJob(row: ServerJobRow): JobApplicationRecord {
         : row.reference;
   const interviewEvent = (row.job_events ?? []).find((event) => event.event_type === "interview");
   const reviewer = [...(row.job_review_assignments ?? [])]
-    .sort((left, right) => left.assigned_at.localeCompare(right.assigned_at))
+    .sort((left, right) => left.created_at.localeCompare(right.created_at))
     .at(-1);
+  /* The linked document rows the staff may read. A `null` embed means the
+     document row was filtered by RLS (scan pending or out of scope): it is
+     deliberately absent, never rendered as an empty attachment. */
+  const attachedDocuments = (row.job_documents ?? []).flatMap((link) => {
+    const document = firstRelatedEmbed(link.documents);
+    if (document === undefined) return [];
+    return [{
+      requirementCode: link.requirement_code,
+      reference: document.reference,
+      filename: document.safe_filename,
+      category: document.category,
+      scanStatus: document.scan_status,
+      mimeType: document.mime_type,
+      sizeBytes: document.size_bytes,
+      uploadedAtIso: document.created_at,
+    }];
+  });
+  const contactEmail = typeof row.applicant_email === "string" && row.applicant_email.trim() !== ""
+    ? row.applicant_email.trim()
+    : undefined;
+  const contactPhone = typeof row.applicant_phone === "string" && row.applicant_phone.trim() !== ""
+    ? row.applicant_phone.trim()
+    : undefined;
   return {
     ref: row.reference,
     vacancySlug: slugifyTitle(row.job_vacancies?.title ?? row.job_vacancies?.reference ?? "vacancy"),
@@ -526,13 +709,17 @@ export function mapServerJob(row: ServerJobRow): JobApplicationRecord {
         ? { atIso: String(latestSnapshot.interviewAtIso), note: undefined }
         : undefined,
     reviewerAccountId: reviewer?.status !== "revoked" ? reviewer?.reviewer_account_id : undefined,
+    contactEmail,
+    contactPhone,
     scorecards: (row.job_scorecards ?? []).map((card) => ({
       score: card.score,
       notes: card.notes,
-      byAccountId: card.created_by_account_id,
+      byAccountId: card.reviewer_account_id,
       atIso: card.created_at,
     })),
     submittedSnapshot: latestSnapshot,
+    attachedDocuments,
+    version: row.version,
   };
 }
 
@@ -587,7 +774,9 @@ careersService.submitApplication = async (slug, draft, applicationRef) => {
   const draftResult = existing
     ? { ok: true as const, value: { id: existing.id, ref: existing.reference, version: existing.version } }
     : await adapterCall<{ id: string; ref: string; version: number }>("jobs.createDraft", {
-      vacancyRef: vacancy.reference,
+      /* The resolved version id comes from the public vacancy projection, so
+         the draft command never needs an authenticated vacancy-table read. */
+      vacancyVersionId: vacancy.versionId,
       applicantName: draft.fullName,
     });
   if (!draftResult.ok) throw new Error(draftResult.errors[0]?.message ?? "Application could not be created.");
@@ -607,7 +796,7 @@ careersService.getVacancy = async (slug) => {
   const vacancy = vacanciesResult.value.find((candidate) => candidate.reference === slug || slugifyTitle(candidate.title) === slug);
   if (!vacancy) return null;
   const stringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  return { slug, title: vacancy.title, department: vacancy.department ?? "School office", location: typeof vacancy.terms.location === "string" ? vacancy.terms.location : "Faiz Aam School", type: vacancy.terms.type === "Non-teaching" ? "Non-teaching" : "Teaching", qualifications: stringArray(vacancy.terms.qualifications), documents: stringArray(vacancy.terms.documents), deadlineIso: typeof vacancy.terms.deadlineIso === "string" ? vacancy.terms.deadlineIso : new Date().toISOString(), status: "open", description: typeof vacancy.terms.description === "string" ? vacancy.terms.description : "Published vacancy details." };
+  return { slug, title: vacancy.title, department: vacancy.department ?? "School office", location: typeof vacancy.terms.location === "string" ? vacancy.terms.location : "Faiz Aam School", type: vacancy.terms.type === "Non-teaching" ? "Non-teaching" : "Teaching", qualifications: stringArray(vacancy.terms.qualifications), documents: stringArray(vacancy.terms.documents), deadlineIso: typeof vacancy.terms.deadlineIso === "string" ? vacancy.terms.deadlineIso : new Date().toISOString(), status: "open", description: typeof vacancy.terms.description === "string" ? vacancy.terms.description : "Published vacancy details.", reference: vacancy.reference, version: vacancy.version };
 };
 
 careersService.listVacancies = async () => {
@@ -626,6 +815,8 @@ careersService.listVacancies = async () => {
     deadlineIso: typeof vacancy.terms.deadlineIso === "string" ? vacancy.terms.deadlineIso : new Date().toISOString(),
     status: "open",
     description: typeof vacancy.terms.description === "string" ? vacancy.terms.description : "Published vacancy details.",
+    reference: vacancy.reference,
+    version: vacancy.version,
   }));
 };
 
@@ -638,7 +829,7 @@ careersService.getDraft = async (slug) => {
   const listed = await adapterCall<ServerJobRow[]>("jobs.listMine");
   if (!listed.ok) throw new Error(listed.errors[0]?.message ?? "Applications unavailable.");
   const row = listed.value.find((candidate) => candidate.vacancy_id === vacancy.vacancyId && candidate.current_status === "draft");
-  const saved = row?.job_application_drafts?.[0];
+  const saved = firstRelatedEmbed(row?.job_application_drafts);
   if (!row || !saved) return null;
   return { ref: row.reference, draft: saved.draft as unknown as JobDraft, savedAtIso: saved.updated_at };
 };
@@ -652,7 +843,7 @@ careersService.saveDraft = async (slug, draft, applicationRef) => {
   const listed = await adapterCall<ServerJobRow[]>("jobs.listMine");
   let row = listed.ok ? listed.value.find((candidate) => (applicationRef !== undefined ? candidate.reference === applicationRef : candidate.vacancy_id === vacancy.vacancyId && candidate.current_status === "draft")) : undefined;
   if (!row) {
-    const created = await adapterCall<{ id: string; ref: string; version: number }>("jobs.createDraft", { vacancyRef: vacancy.reference, applicantName: draft.fullName });
+    const created = await adapterCall<{ id: string; ref: string; version: number }>("jobs.createDraft", { vacancyVersionId: vacancy.versionId, applicantName: draft.fullName });
     if (!created.ok) throw new Error(created.errors[0]?.message ?? "Application could not be created.");
     const reread = await adapterCall<ServerJobRow[]>("jobs.listMine");
     row = reread.ok ? reread.value.find((candidate) => candidate.id === created.value.id) : undefined;
@@ -664,7 +855,7 @@ careersService.saveDraft = async (slug, draft, applicationRef) => {
 };
 
 careersService.getApplication = async (ref) =>
-  isServerCareers() ? (await serverJobByRef(ref, "mine")) ?? serverJobByRef(ref, "staff") : originalGetApplication(ref);
+  isServerCareers() ? (await serverJobByRef(ref, "staff")) ?? serverJobByRef(ref, "mine") : originalGetApplication(ref);
 careersService.listStaffRecords = async () =>
   isServerCareers() ? serverJobs("staff") : originalListStaffRecords();
 
@@ -677,13 +868,25 @@ careersService.withdraw = async (ref, by) => {
   return (await serverJobByRef(ref, "mine")) ?? { ref, vacancySlug: "", name: by, submittedAtIso: new Date().toISOString(), status: "Withdrawn", timeline: [] };
 };
 
+/** Resolve the internal id for a reference, reading the authorized staff queue
+    when the in-memory map has not been populated yet. The staff review page
+    receives its initial record from a server loader, so a decision triggered
+    before any client list call must not fail with "not in the queue". */
+async function resolveServerJobId(ref: string): Promise<string> {
+  const known = serverJobIds.get(ref);
+  if (known !== undefined) return known;
+  await serverJobs("staff");
+  const resolved = serverJobIds.get(ref);
+  if (resolved === undefined) throw new Error("Application not found in the queue.");
+  return resolved;
+}
+
 async function serverDecide(
   ref: string,
   action: "shortlist" | "interview" | "offer" | "not_selected",
   note?: string,
 ): Promise<JobApplicationRecord> {
-  const applicationId = serverJobIds.get(ref);
-  if (applicationId === undefined) throw new Error("Application not found in the queue.");
+  await resolveServerJobId(ref);
   const result = await adapterCall<unknown>("jobs.decideV2", {
     applicationRef: ref,
     action,
@@ -696,34 +899,32 @@ async function serverDecide(
   return serverJobByRef(ref, "staff") as Promise<JobApplicationRecord>;
 }
 
-careersService.staffShortlist = async (ref, note) => {
-  if (!isServerCareers()) return originalStaffShortlist(ref, note);
+careersService.staffShortlist = async (ref, note, actorAccountId, expectedVersion) => {
+  if (!isServerCareers()) return originalStaffShortlist(ref, note, actorAccountId, expectedVersion);
   return serverDecide(ref, "shortlist", note);
 };
-careersService.staffRequestInterview = async (ref, note) => {
-  if (!isServerCareers()) return originalStaffRequestInterview(ref, note);
+careersService.staffRequestInterview = async (ref, note, actorAccountId, expectedVersion) => {
+  if (!isServerCareers()) return originalStaffRequestInterview(ref, note, actorAccountId, expectedVersion);
   return serverDecide(ref, "interview", note);
 };
-careersService.staffOffer = async (ref, note) => {
-  if (!isServerCareers()) return originalStaffOffer(ref, note);
+careersService.staffOffer = async (ref, note, actorAccountId, expectedVersion) => {
+  if (!isServerCareers()) return originalStaffOffer(ref, note, actorAccountId, expectedVersion);
   return serverDecide(ref, "offer", note);
 };
-careersService.staffNotSelected = async (ref, note) => {
-  if (!isServerCareers()) return originalStaffNotSelected(ref, note);
+careersService.staffNotSelected = async (ref, note, actorAccountId, expectedVersion) => {
+  if (!isServerCareers()) return originalStaffNotSelected(ref, note, actorAccountId, expectedVersion);
   return serverDecide(ref, "not_selected", note);
 };
-careersService.assignReviewer = async (ref, reviewerAccountId) => {
-  if (!isServerCareers()) return originalAssignReviewer(ref, reviewerAccountId);
-  const applicationId = serverJobIds.get(ref);
-  if (applicationId === undefined) throw new Error("Application not found in the queue.");
+careersService.assignReviewer = async (ref, reviewerAccountId, expectedVersion) => {
+  if (!isServerCareers()) return originalAssignReviewer(ref, reviewerAccountId, expectedVersion);
+  await resolveServerJobId(ref);
   const result = await adapterCall<unknown>("jobs.assignReviewer", { applicationRef: ref, reviewerAccountId });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Reviewer assignment failed.");
   return (await serverJobs("staff")).find((candidate) => candidate.ref === ref) as JobApplicationRecord;
 };
-careersService.saveScorecard = async (ref, score, notes) => {
-  if (!isServerCareers()) return originalSaveScorecard(ref, score, notes);
-  const applicationId = serverJobIds.get(ref);
-  if (applicationId === undefined) throw new Error("Application not found in the queue.");
+careersService.saveScorecard = async (ref, score, notes, actorAccountId, expectedVersion) => {
+  if (!isServerCareers()) return originalSaveScorecard(ref, score, notes, actorAccountId, expectedVersion);
+  await resolveServerJobId(ref);
   const result = await adapterCall<unknown>("jobs.saveScorecard", { applicationRef: ref, score, notes: notes?.trim() || null });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Scorecard could not be saved.");
   return (await serverJobs("staff")).find((candidate) => candidate.ref === ref) as JobApplicationRecord;

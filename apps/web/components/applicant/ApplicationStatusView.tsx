@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import Button from "@/components/ui/Button";
+import { LoadingSkeleton } from "@/components/ui/AsyncStates";
 import StatusTimeline from "@/components/applicant/StatusTimeline";
 import AcceptSeat from "@/components/applicant/AcceptSeat";
 import AdmissionFeeStep from "@/components/applicant/AdmissionFeeStep";
@@ -76,6 +77,17 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
       });
   }, [applicationRef]);
 
+  /* Silent re-read after a failed action: the record may have changed in
+     another tab or by a staff decision, so the panel never keeps stale state. */
+  const refresh = useCallback(async () => {
+    try {
+      const current = await admissionsService.getApplication(applicationRef);
+      if (current !== null) setRecord(current);
+    } catch {
+      /* Keep the current view; the error message already explains the failure. */
+    }
+  }, [applicationRef]);
+
   useEffect(() => {
     if (initial !== undefined) {
       setLoading(false);
@@ -91,12 +103,15 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
     try {
       const updated = await admissionsService.respondToOffer(record.ref, accepted, record.parentName, note);
       setRecord(updated);
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error && error.message !== "" ? error.message : "";
       setResponseError(
-        accepted
-          ? "We could not record the acceptance. Please try again."
-          : "We could not record the decline. Please try again.",
+        message ||
+          (accepted
+            ? "We could not record the acceptance. Please try again."
+            : "We could not record the decline. Please try again."),
       );
+      await refresh();
     } finally {
       setResponding(false);
     }
@@ -112,6 +127,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
       setConfirmingWithdraw(false);
     } catch (error) {
       setWithdrawError(error instanceof Error ? error.message : "We could not record the withdrawal. Please try again.");
+      await refresh();
     } finally {
       setResponding(false);
     }
@@ -120,9 +136,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
   if (loading) {
     return (
       <div className={styles.shell}>
-        <p className={styles.loadingLine} aria-live="polite">
-          Checking the application record…
-        </p>
+        <LoadingSkeleton lines={5} label="Checking the application record" />
       </div>
     );
   }
@@ -161,8 +175,12 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
               What you can do
             </h2>
             <ol className={styles.nextList}>
-              <li>Check the reference number against your acknowledgement — applications are tracked by reference only.</li>
-              <li>If you just submitted, the acknowledgement link works for this browser session.</li>
+              <li>Check the reference number against your acknowledgement · applications are tracked by reference only.</li>
+              <li>
+                {supabaseMode
+                  ? "If you just submitted, sign in to the account that submitted it to open its status."
+                  : "If you just submitted, the acknowledgement link works for this browser session."}
+              </li>
               <li>If you believe this is an error, contact the school office with the reference.</li>
             </ol>
           </section>
@@ -261,7 +279,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
             <section className={styles.offerPanel} aria-labelledby="offer-heading">
               <p className="section-label">Offer</p>
               <h2 className={styles.offerTitle} id="offer-heading">
-                Seat offered — {record.offer.grade}, {record.offer.session}
+                Seat offered · {record.offer.grade}, {record.offer.session}
               </h2>
               <dl className={styles.detailList}>
                 <div className={styles.detailRow}>
@@ -276,7 +294,11 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
                 </div>
                 <div className={styles.detailRow}>
                   <dt>Admission fee</dt>
-                  <dd className={styles.fee}>{formatINR(record.offer.admissionFeePaise)}</dd>
+                  <dd className={styles.fee}>
+                    {record.offer.admissionFeePaise > 0
+                      ? formatINR(record.offer.admissionFeePaise)
+                      : "To be confirmed by the school office"}
+                  </dd>
                 </div>
               </dl>
               <div className={styles.offerActions}>
@@ -292,27 +314,52 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
                 />
               </div>
               <p className={styles.sideNote}>
-                Payment comes after acceptance — the school never collects the admission amount before the seat is
+                Payment comes after acceptance · the school never collects the admission amount before the seat is
                 confirmed.
               </p>
             </section>
           ) : null}
 
           {record.status === "Declined" ? (
-            <section className={styles.declinedPanel} aria-labelledby="declined-heading">
-              <p className="section-label">Offer response</p>
-              <h2 className={styles.declinedTitle} id="declined-heading">
-                Offer declined
-              </h2>
-              <p className={styles.declinedNote}>
-                The seat has been released to the next candidate. This application is now closed.
-              </p>
-              <ol className={styles.nextList}>
-                <li>The seat moves to the next eligible candidate.</li>
-                <li>Your application record stays on file for this admission cycle.</li>
-                <li>A future session requires a fresh application.</li>
-              </ol>
-            </section>
+            record.offer?.declined === true ? (
+              <section className={styles.declinedPanel} aria-labelledby="declined-heading">
+                <p className="section-label">Offer response</p>
+                <h2 className={styles.declinedTitle} id="declined-heading">
+                  Offer declined
+                </h2>
+                <p className={styles.declinedNote}>
+                  The seat has been released to the next candidate. This application is now closed.
+                </p>
+                <ol className={styles.nextList}>
+                  <li>The seat moves to the next eligible candidate.</li>
+                  <li>Your application record stays on file for this admission cycle.</li>
+                  <li>A future session requires a fresh application.</li>
+                </ol>
+              </section>
+            ) : (
+              <section className={styles.declinedPanel} aria-labelledby="declined-heading">
+                <p className="section-label">Application outcome</p>
+                <h2 className={styles.declinedTitle} id="declined-heading">
+                  Application not successful
+                </h2>
+                <p className={styles.declinedNote}>
+                  The admissions office did not offer a seat for this session.
+                </p>
+                {(() => {
+                  const declineReason = [...(record.staffReviews ?? [])]
+                    .reverse()
+                    .find((review) => /declin/i.test(review.action) && (review.visibleReason ?? "").trim() !== "")
+                    ?.visibleReason;
+                  return declineReason ? (
+                    <p className={styles.declinedNote}>The reason recorded by the school: {declineReason}</p>
+                  ) : null;
+                })()}
+                <ol className={styles.nextList}>
+                  <li>Your application record stays on file for this admission cycle.</li>
+                  <li>A future session requires a fresh application.</li>
+                </ol>
+              </section>
+            )
           ) : null}
 
           {record.status === "Enrolled" && record.studentRef ? (
@@ -335,7 +382,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
               </dl>
               <p className={styles.sideNote}>
                 {record.linkRef
-                  ? "The child is linked to the guardian's family portal — sign in to see fees, results, timetable, and notices under the linked child."
+                  ? "The child is linked to the guardian's family portal · sign in to see fees, results, timetable, and notices under the linked child."
                   : "The school will invite the guardian to link the child to a family portal account."}
               </p>
               <div className={styles.offerActions}>
@@ -360,8 +407,8 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
                 confirmingWithdraw ? (
                   <div className={styles.withdrawConfirm} role="group" aria-label="Confirm withdrawal">
                     <p className={styles.sideNote}>
-                      Withdraw the application for <strong>{record.studentName}</strong>? This ends the application —
-                      the school can no longer review or decide it.
+                      Withdraw the application for <strong>{record.studentName}</strong>? This ends the application
+                      and the school can no longer review or decide it.
                       {!supabaseMode ? " This is a fictional demo rule; the school's real withdrawal policy remains pending." : ""}
                     </p>
                     <div className={styles.withdrawActions}>
@@ -385,7 +432,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
                     </Button>
                     <p className={styles.sideNote}>
                       {!supabaseMode
-                        ? "Fictional demo policy — withdrawal is allowed before a final decision under the demo rules; the school's real policy is still pending."
+                        ? "Fictional demo policy · withdrawal is allowed before a final decision under the demo rules; the school's real policy is still pending."
                         : "Withdrawal is allowed before a final decision is recorded."}
                     </p>
                   </>
@@ -396,7 +443,7 @@ export default function ApplicationStatusView({ applicationRef, initial }: { app
                     Withdraw application
                   </Button>
                   <p className={styles.sideNote}>
-                    Withdrawal policy is pending a school decision — this control is not yet available.
+                    Withdrawal policy is pending a school decision · this control is not yet available.
                   </p>
                 </>
               )}

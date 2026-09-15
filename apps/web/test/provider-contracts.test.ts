@@ -5,11 +5,23 @@ import { Webhook } from "svix";
 
 import { createResendSender } from "@/lib/email/resend";
 import { applicationSubmittedEmail, invoiceIssuedEmail, offerExtendedEmail } from "@/lib/email/templates";
-import { deliveryProjection, normalizedWebhookPayload, verifyResendWebhook, webhookSuppressionReason } from "@/lib/email/webhook";
+import { deliveryFailureClass, deliveryProjection, normalizedWebhookPayload, verifyResendWebhook, webhookSuppressionReason } from "@/lib/email/webhook";
 import { generateReceiptPdf, generatedObjectKey, mapReportCardSnapshot } from "@/lib/pdf/adapter";
 import { renderReportCardPdf } from "@/lib/pdf/render";
-import { FakeDocumentScanner, FakeStorageProvider, HttpDocumentScanner } from "@/modules/services/document-providers";
+import { FakeDocumentScanner, FakeStorageProvider, HttpDocumentScanner, type ScanInput } from "@/modules/services/document-providers";
 import { FakePaymentProvider } from "@/modules/services/payment-provider";
+
+function scanInput(overrides: Partial<ScanInput> = {}): ScanInput {
+  return {
+    bucket: "b",
+    objectKey: "k",
+    declaredMimeType: "application/pdf",
+    sizeBytes: 1,
+    checksumSha256: "a".repeat(64),
+    bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]),
+    ...overrides,
+  };
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -33,11 +45,11 @@ describe("provider contracts", () => {
   });
 
   it("scanner preserves ready/quarantined/failed contract states", async () => {
-    await expect(new FakeDocumentScanner({ state: "ready" }).scan({ bucket: "b", objectKey: "k", declaredMimeType: "application/pdf", sizeBytes: 1, checksumSha256: "a" })).resolves.toMatchObject({ state: "ready" });
-    await expect(new FakeDocumentScanner({ state: "quarantined", detail: "malware" }).scan({ bucket: "b", objectKey: "k", declaredMimeType: "application/pdf", sizeBytes: 1, checksumSha256: "a" })).resolves.toMatchObject({ state: "quarantined", detail: "malware" });
+    await expect(new FakeDocumentScanner({ state: "ready" }).scan(scanInput())).resolves.toMatchObject({ state: "ready" });
+    await expect(new FakeDocumentScanner({ state: "quarantined", detail: "malware" }).scan(scanInput())).resolves.toMatchObject({ state: "quarantined", detail: "malware" });
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ status: "failed", detail: "provider timeout" }), { status: 200 }));
-    await expect(new HttpDocumentScanner({ endpoint: "https://scanner.invalid", secret: "scanner-secret", fetchImpl }).scan({ bucket: "b", objectKey: "k", declaredMimeType: "application/pdf", sizeBytes: 1, checksumSha256: "a" })).resolves.toMatchObject({ state: "failed" });
-    expect(fetchImpl).toHaveBeenCalledWith("https://scanner.invalid", expect.objectContaining({ method: "POST" }));
+    await expect(new HttpDocumentScanner({ endpoint: "https://scanner.invalid", secret: "scanner-secret", fetchImpl }).scan(scanInput())).resolves.toMatchObject({ state: "failed" });
+    expect(fetchImpl).toHaveBeenCalledWith("https://scanner.invalid", expect.objectContaining({ method: "POST", body: expect.any(Uint8Array) }));
   });
 
   it("generated keys do not contain a human receipt/reference", () => {
@@ -119,6 +131,16 @@ describe("provider contracts", () => {
     expect(deliveryProjection("email.failed")).toEqual({ status: "failed", rank: 20 });
     expect(deliveryProjection("email.delivered")).toEqual({ status: "delivered", rank: 30 });
     expect(deliveryProjection("email.bounced")).toEqual({ status: "bounced", rank: 40 });
+  });
+
+  it("keeps a transient bounce retryable instead of terminal", () => {
+    const transientBounce = { data: { email_id: "email-1", to: ["guardian@example.test"], bounce: { type: "Transient" } } };
+    const permanentBounce = { data: { email_id: "email-1", to: ["guardian@example.test"], bounce: { type: "Permanent", subType: "NoEmail" } } };
+    expect(deliveryProjection("email.bounced", transientBounce)).toEqual({ status: "failed", rank: 15 });
+    expect(webhookSuppressionReason(transientBounce, "email.bounced")).toBeNull();
+    expect(deliveryFailureClass(deliveryProjection("email.bounced", transientBounce))).toBe("transient");
+    expect(deliveryFailureClass(deliveryProjection("email.bounced", permanentBounce))).toBe("permanent");
+    expect(deliveryFailureClass(deliveryProjection("email.delivered", transientBounce))).toBeNull();
   });
 
   it("stores only hashed recipients and suppresses permanent bounces or complaints", () => {

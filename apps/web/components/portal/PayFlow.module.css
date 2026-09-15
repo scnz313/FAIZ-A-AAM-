@@ -7,8 +7,8 @@
 
 /* Compact status line — the only live region in the checkout island. */
 .liveLine {
-  color: var(--saffron-deep);
-  font-size: 12px;
+  color: var(--saffron-ink);
+  font-size: 0.78rem;
   line-height: 1.4;
   margin: 0 0 14px;
   min-height: 1.4em;
@@ -31,15 +31,15 @@
 
 .flowTitle {
   font-family: var(--serif);
-  font-size: 26px;
-  font-weight: 500;
+  font-size: 1.6rem;
+  font-weight: 540;
   letter-spacing: -0.01em;
   margin: 0;
 }
 
 .flowRef {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 6px 0 0;
 }
 
@@ -50,8 +50,8 @@
 }
 
 .methodLegend {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   margin-bottom: 4px;
@@ -79,20 +79,20 @@
 
 .methodCopy strong {
   display: block;
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
 .methodCopy small {
   color: var(--muted);
   display: block;
-  font-size: 12px;
+  font-size: 0.78rem;
   margin-top: 2px;
 }
 
 .flowNote {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
   line-height: 1.6;
   margin: 18px 0 0;
   max-width: 58ch;
@@ -110,8 +110,8 @@
 }
 
 .scenario label {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -125,7 +125,7 @@
 }
 
 .scenario .select {
-  font-size: 12px;
+  font-size: 0.78rem;
   padding: 7px 34px 7px 10px;
 }
 
@@ -136,13 +136,13 @@
 
 .stateTitle {
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 1.4rem;
   margin: 0;
 }
 
 .stateText {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.6;
   margin: 8px 0 0;
   max-width: 52ch;
@@ -161,13 +161,13 @@
 
 .processingLine {
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 1.4rem;
   margin: 0;
 }
 
 .processingNote {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 8px 0 0;
   max-width: 52ch;
 }
@@ -178,14 +178,14 @@
 
 .successMark {
   color: var(--willow);
-  font-size: 26px;
+  font-size: 1.6rem;
   line-height: 1;
   margin: 0;
 }
 
 .successTitle {
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 1.4rem;
   margin: 6px 0 0;
 }
 
@@ -197,13 +197,13 @@
 .successMeta > div {
   border-bottom: 1px solid var(--line);
   display: flex;
-  font-size: 13px;
+  font-size: 0.82rem;
   justify-content: space-between;
   padding: 10px 0;
 }
 
 .successMeta dt {
-  color: var(--ink-soft);
+  color: var(--muted);
   margin: 0;
 }
 

@@ -12,14 +12,15 @@ export const metadata: Metadata = {
   title: "Invoice · Portal",
 };
 
-function InvoiceNotFound({ reference }: { reference: string }) {
+function InvoiceNotFound({ reference, live }: { reference: string; live: boolean }) {
   return (
     <div className={styles.notFound}>
       <p className="eyebrow">Portal · Invoice</p>
       <h1 className={styles.title}>Invoice not found</h1>
       <p className={styles.notFoundText}>
-        No invoice with the reference <span className="num">{reference}</span> exists in this demo ledger. Check the
-        reference in the address, or return to the fee ledger.
+        No invoice with the reference <span className="num">{reference}</span>{" "}
+        {live ? "is attached to this family account." : "exists in this demo ledger."} Check the reference in the
+        address, or return to the fee ledger.
       </p>
       <Link prefetch={false} className="link-arrow" href="/portal/fees">
         ← Back to fees
@@ -30,11 +31,12 @@ function InvoiceNotFound({ reference }: { reference: string }) {
 
 export default async function InvoicePage({ params }: { params: Promise<{ invoiceRef: string }> }) {
   const { invoiceRef } = await params;
+  const supabaseMode = dataAdapter() === "supabase";
   const initial =
-    dataAdapter() === "supabase"
+    supabaseMode
       ? (await loadServerActiveStudentInvoices()).find((view) => view.invoice.ref === invoiceRef) ?? null
       : await financeService.getInvoice(invoiceRef);
-  if (!initial) return <InvoiceNotFound reference={invoiceRef} />;
+  if (!initial) return <InvoiceNotFound reference={invoiceRef} live={supabaseMode} />;
 
   return (
     <div className={styles.page}>

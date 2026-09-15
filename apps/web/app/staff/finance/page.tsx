@@ -12,7 +12,8 @@ export const metadata: Metadata = {
 };
 
 /**
- * Staff finance workspace. The server renders the fixture-based first paint;
+ * Staff finance workspace — V14 aligned. PageHead + FinanceWorkspace
+ * with tab navigation. The server renders the fixture-based first paint;
  * the FinanceWorkspace island re-reads the same finance service on mount so
  * browser-session payments posted through the shared checkout appear here —
  * family and staff balances agree.
@@ -31,11 +32,15 @@ export default async function FinancePage() {
 
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Finance</p>
-        <h1 className="workspace-title">Finance</h1>
-        <p className="workspace-intro">Term ledger, payments, and reconciliation.</p>
-      </header>
+      {/* V14 PageHead */}
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Finance</h1>
+          <p className="ph-sub">
+            Invoices, payments and reconciliation for the whole school. Approvals respect finance_approver role and maker-checker separation.
+          </p>
+        </div>
+      </div>
 
       <FinanceWorkspace initialViews={views} initialReceipts={receipts} initialReconciliation={reconciliation} mode={supabaseMode ? "supabase" : "demo"} />
 

@@ -48,7 +48,7 @@ describe("portal document preview", () => {
     /* The page reads the per-student bundle through the documents service
        (academics + finance adapters resolve asynchronously), so the preview
        triggers appear after the load settles. */
-    const triggers = await screen.findAllByRole("button", { name: "Preview (demo)" });
+    const triggers = await screen.findAllByRole("button", { name: /PDF/ });
     const trigger = triggers[0];
     if (!trigger) throw new Error("Expected at least one document preview trigger");
     await user.click(trigger);
@@ -63,7 +63,7 @@ describe("portal document preview", () => {
     await user.selectOptions(state, "access-denied");
     expect(screen.getByText("Access denied", { selector: "p" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Download demo" }));
-    expect(screen.getByText(/Demo download blocked — access denied/, { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText(/Demo download blocked · access denied/, { selector: "p" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^Close$/ }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

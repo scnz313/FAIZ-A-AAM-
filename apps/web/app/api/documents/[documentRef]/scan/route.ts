@@ -3,11 +3,12 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { secretsMatch } from "@/lib/auth/secret-equal";
 
 function serviceAuthorized(request: Request): boolean {
   const expected = process.env.DOCUMENT_SCANNER_SECRET;
   const authorization = request.headers.get("authorization");
-  return typeof expected === "string" && expected.length >= 16 && authorization === `Bearer ${expected}`;
+  return typeof expected === "string" && expected.length >= 16 && secretsMatch(authorization, `Bearer ${expected}`);
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ documentRef: string }> }) {

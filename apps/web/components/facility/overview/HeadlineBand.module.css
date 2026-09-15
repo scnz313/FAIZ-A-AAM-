@@ -53,20 +53,20 @@
 .bigSuffix {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   margin-left: 10px;
 }
 
 .detail {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
   line-height: 1.7;
   margin: 16px 0 0;
 }
 
 .asOf {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 14px 0 0;
 }
 
@@ -82,11 +82,11 @@
 .breakdown li {
   align-items: center;
   display: flex;
-  font-size: 12px;
+  font-size: 0.78rem;
   gap: 7px;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .badge {
     position: static;
   }

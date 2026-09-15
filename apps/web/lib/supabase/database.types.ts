@@ -354,6 +354,15 @@ export type Database = {
         }
         Returns: Json
       }
+      content_unpublish_v3: {
+        Args: {
+          p_content_item_id: string
+          p_expected_version?: number
+          p_idempotency_key?: string
+          p_reason: string
+        }
+        Returns: Json
+      }
       content_validate_body: { Args: { p_body: Json }; Returns: Json }
       context_family_select: {
         Args: { p_expected_version?: number; p_student_id: string }
@@ -398,6 +407,10 @@ export type Database = {
           p_request_reference: string
           p_row_count: number
         }
+        Returns: Json
+      }
+      data_export_recover: {
+        Args: { p_reason: string; p_request_id: string }
         Returns: Json
       }
       data_export_request:
@@ -461,9 +474,22 @@ export type Database = {
       }
       data_import_flag_shared_contacts: { Args: never; Returns: number }
       data_import_list_batches: { Args: never; Returns: Json[] }
+      data_import_list_batches_paginated: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
       data_import_list_issues: {
         Args: { p_batch_id: string; p_severity?: string }
         Returns: Json[]
+      }
+      data_import_list_issues_paginated: {
+        Args: {
+          p_batch_id: string
+          p_limit?: number
+          p_offset?: number
+          p_severity?: string
+        }
+        Returns: Json
       }
       data_import_preview: { Args: { p_batch_id: string }; Returns: Json }
       data_import_record_issue: {
@@ -563,9 +589,22 @@ export type Database = {
         Args: { p_detail?: string; p_document_id: string }
         Returns: Json
       }
+      documents_projection_get: {
+        Args: { p_reference: string }
+        Returns: Json
+      }
       documents_projection_list: {
         Args: { p_owner_domain?: string; p_owner_record_id?: string }
         Returns: Json[]
+      }
+      documents_projection_list_paginated: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_owner_domain?: string
+          p_owner_record_id?: string
+        }
+        Returns: Json
       }
       documents_retention_candidates: {
         Args: { p_limit?: number }
@@ -576,6 +615,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      documents_set_public_visibility: {
+        Args: { p_document_id: string; p_public: boolean; p_reason?: string }
+        Returns: Json
       }
       enqueue_outbox: {
         Args: {
@@ -872,6 +915,12 @@ export type Database = {
         Args: { p_capability: string; p_student_id: string }
         Returns: boolean
       }
+      guardian_link_get: { Args: { p_link_id: string }; Returns: Json }
+      guardian_link_requests_list_paginated: {
+        Args: { p_limit?: number; p_offset?: number; p_status: string }
+        Returns: Json
+      }
+      guardian_links_mine: { Args: never; Returns: Json }
       guardian_links_request: {
         Args: { p_relationship_label: string; p_student_id: string }
         Returns: Json
@@ -1033,6 +1082,11 @@ export type Database = {
         Args: { p_contact: string }
         Returns: string
       }
+      notifications_dismiss: {
+        Args: { p_expected_version?: number; p_notification_id: string }
+        Returns: Json
+      }
+      notifications_dismiss_all: { Args: never; Returns: number }
       notifications_mark_all: {
         Args: { p_expected_version?: number }
         Returns: number
@@ -4869,6 +4923,7 @@ export type Database = {
         Row: {
           body: string | null
           created_at: string
+          dismissed_at: string | null
           id: string
           idempotency_key: string | null
           kind: string
@@ -4883,6 +4938,7 @@ export type Database = {
         Insert: {
           body?: string | null
           created_at?: string
+          dismissed_at?: string | null
           id?: string
           idempotency_key?: string | null
           kind: string
@@ -4897,6 +4953,7 @@ export type Database = {
         Update: {
           body?: string | null
           created_at?: string
+          dismissed_at?: string | null
           id?: string
           idempotency_key?: string | null
           kind?: string
@@ -5193,7 +5250,7 @@ export type Database = {
           created_at: string
           id: string
           snapshot: Json
-          submitted_by_account_id: string
+          submitted_by_account_id: string | null
           version: number
         }
         Insert: {
@@ -5201,7 +5258,7 @@ export type Database = {
           created_at?: string
           id?: string
           snapshot: Json
-          submitted_by_account_id: string
+          submitted_by_account_id?: string | null
           version: number
         }
         Update: {
@@ -5209,7 +5266,7 @@ export type Database = {
           created_at?: string
           id?: string
           snapshot?: Json
-          submitted_by_account_id?: string
+          submitted_by_account_id?: string | null
           version?: number
         }
         Relationships: [
@@ -5231,11 +5288,14 @@ export type Database = {
       }
       job_applications: {
         Row: {
+          applicant_email: string | null
+          applicant_location: string | null
           applicant_name: string
+          applicant_phone: string | null
           created_at: string
           current_status: string
           id: string
-          owner_account_id: string
+          owner_account_id: string | null
           reference: string
           updated_at: string
           vacancy_id: string
@@ -5243,11 +5303,14 @@ export type Database = {
           version: number
         }
         Insert: {
+          applicant_email?: string | null
+          applicant_location?: string | null
           applicant_name: string
+          applicant_phone?: string | null
           created_at?: string
           current_status?: string
           id?: string
-          owner_account_id: string
+          owner_account_id?: string | null
           reference?: string
           updated_at?: string
           vacancy_id: string
@@ -5255,11 +5318,14 @@ export type Database = {
           version?: number
         }
         Update: {
+          applicant_email?: string | null
+          applicant_location?: string | null
           applicant_name?: string
+          applicant_phone?: string | null
           created_at?: string
           current_status?: string
           id?: string
-          owner_account_id?: string
+          owner_account_id?: string | null
           reference?: string
           updated_at?: string
           vacancy_id?: string
@@ -5951,7 +6017,8 @@ export type Database = {
           provider_event_at: string | null
           provider_event_rank: number
           provider_message_id: string | null
-          recipient_account_id: string
+          recipient_account_id: string | null
+          recipient_contact: string | null
           status: string
           template_version: string
           updated_at: string
@@ -5968,7 +6035,8 @@ export type Database = {
           provider_event_at?: string | null
           provider_event_rank?: number
           provider_message_id?: string | null
-          recipient_account_id: string
+          recipient_account_id?: string | null
+          recipient_contact?: string | null
           status?: string
           template_version: string
           updated_at?: string
@@ -5985,7 +6053,8 @@ export type Database = {
           provider_event_at?: string | null
           provider_event_rank?: number
           provider_message_id?: string | null
-          recipient_account_id?: string
+          recipient_account_id?: string | null
+          recipient_contact?: string | null
           status?: string
           template_version?: string
           updated_at?: string

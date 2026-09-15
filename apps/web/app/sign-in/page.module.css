@@ -1,4 +1,4 @@
-/* Sign-in — public paper page with a centred identity card. */
+/* V14 AuthFrame — paper page with centered identity card */
 
 .page {
   background: var(--paper);
@@ -7,28 +7,71 @@
   flex-direction: column;
 }
 
-/* Slim honest warning under the header — full width, before the frame. */
 .alertStrip {
   text-align: center;
+  max-width: var(--wrap);
+  margin: 0 auto;
+  width: 100%;
 }
 
 .main {
   flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(40px, 6vw, 80px) clamp(16px, 4vw, 40px);
+  gap: 20px;
 }
 
 .frame {
-  max-width: 1200px;
+  max-width: 440px;
+  width: 100%;
   margin: 0 auto;
+}
+
+/* V14 wide auth frame — used by staff sign-in (560px). */
+.frame--wide {
+  max-width: 560px;
+}
+
+.frame--wide .card,
+.frame--wide .demoNote {
+  max-width: 560px;
+}
+
+/* Override PageIntro's section padding inside the auth frame */
+.frame > header {
+  padding: 0;
+  max-width: none;
+}
+
+.frame > header h1 {
+  font-size: 1.75rem;
+  line-height: 1.15;
+  max-width: none;
+}
+
+.frame > header .deck {
+  margin-top: 8px;
+  margin-bottom: 22px;
+  font-style: normal;
+  font-size: 0.92rem;
+  color: var(--muted);
 }
 
 .section {
-  padding: clamp(40px, 6vw, 72px) clamp(24px, 6vw, 96px) clamp(72px, 9vw, 120px);
+  margin-top: 24px;
 }
 
 .card {
-  max-width: 480px;
+  max-width: 440px;
+  width: 100%;
   margin: 0 auto;
-  padding: clamp(24px, 4vw, 36px);
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  padding: 24px;
 }
 
 .demoNote {
@@ -36,9 +79,10 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  max-width: 480px;
-  margin: 18px auto 0;
-  color: var(--ink-soft);
-  font-size: 12px;
+  max-width: 440px;
+  margin: 16px auto 0;
+  color: var(--muted);
+  font-size: 0.75rem;
   line-height: 1.55;
+  text-align: center;
 }

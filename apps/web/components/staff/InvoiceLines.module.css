@@ -13,7 +13,7 @@
 }
 
 .lines summary::before {
-  color: var(--ink-soft);
+  color: var(--muted);
   content: "+";
   font-family: var(--sans);
 }
@@ -23,8 +23,8 @@
 }
 
 .lineCount {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .lineItems {
@@ -37,12 +37,12 @@
   display: flex;
   gap: 16px;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: 0.82rem;
   padding: 4px 0;
 }
 
 .concession {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-style: italic;
 }
 
@@ -51,7 +51,7 @@
   display: flex;
   gap: 16px;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 600;
   margin-top: 6px;
   padding-top: 6px;

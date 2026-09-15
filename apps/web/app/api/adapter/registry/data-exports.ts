@@ -2,17 +2,18 @@ import { z } from "zod";
 
 import {
   dataExportCancel,
-  dataExportCreateSignedDownload,
   dataExportList,
   dataExportListCatalog,
   dataExportListPaginated,
+  dataExportRecover,
   dataExportRequest,
+  dataExportRetry,
   dataHealthCheck,
   dataHealthListSnapshots,
   dataHealthSnapshot,
 } from "@/lib/supabase/domain";
 
-import { emptyPayload, operation, publicReference } from "./common";
+import { emptyPayload, operation, publicReference, uuid } from "./common";
 import type { AdapterModule } from "./types";
 
 export const dataExportModule: AdapterModule = {
@@ -33,7 +34,8 @@ export const dataExportModule: AdapterModule = {
       reason: z.string().min(3),
     }), ({ supabase }, payload) => dataExportRequest(supabase, payload)),
     operation("dataExports.cancel", z.object({ requestReference: publicReference, reason: z.string().min(3) }), ({ supabase }, payload) => dataExportCancel(supabase, payload)),
-    operation("dataExports.signedDownload", z.object({ requestReference: publicReference }), ({ supabase }, payload) => dataExportCreateSignedDownload(supabase, payload)),
+    operation("dataExports.retry", z.object({ requestReference: publicReference, reason: z.string().min(3) }), ({ supabase }, payload) => dataExportRetry(supabase, payload)),
+    operation("dataExports.recover", z.object({ requestId: uuid, reason: z.string().min(3) }), ({ supabase }, payload) => dataExportRecover(supabase, payload)),
     operation("dataExports.healthCheck", emptyPayload, ({ supabase }) => dataHealthCheck(supabase)),
     operation("dataExports.healthSnapshot", emptyPayload, ({ supabase }) => dataHealthSnapshot(supabase)),
     operation("dataExports.healthSnapshots", z.object({ limit: z.number().int().min(1).max(50).optional() }), ({ supabase }, payload) => dataHealthListSnapshots(supabase, payload.limit)),

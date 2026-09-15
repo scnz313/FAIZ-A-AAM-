@@ -8,6 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { FamilyContextProvider } from "@/components/portal/FamilyContextProvider";
 import { PublicationPageClient } from "@/components/portal/PublicationPageClient";
@@ -23,6 +24,7 @@ import { marksByTerm } from "@/modules/academics/demo";
 import { setDemoNow } from "@/modules/demo/clock";
 import { academicsService } from "@/modules/services/academics";
 import { auditService, AUDIT_SESSION_KEY_EXPORT } from "@/modules/services/audit";
+import { documentsService } from "@/modules/services/documents";
 import { clearOutboxSession } from "@/modules/services/outbox";
 import { sessionKey, sessionRemove, sessionSet } from "@/modules/services/session";
 import {
@@ -192,6 +194,46 @@ describe("portal marks source", () => {
     /* Mariam's English mark (78) is present; the fixture English mark (84) is not. */
     expect(screen.getByText("78")).toBeTruthy();
     expect(screen.queryByText("91")).toBeNull();
+  });
+
+  it("offers the generated report card for download when the release document exists", async () => {
+    const snapshot = await academicsService.getStudentResultSnapshot(MARIAM_ID, CURRENT_YEAR_ID);
+    const rows = snapshot?.terms["Term 1"] ?? [];
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    const requestDownload = vi.spyOn(documentsService, "requestDownload").mockResolvedValue({
+      state: "ready",
+      url: "https://example.test/signed/report-card.pdf",
+      expiresAtIso: new Date(Date.now() + 60_000).toISOString(),
+      filename: "report-card-RPR-2026-8F4E8122F2.pdf",
+    });
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    render(
+      <ResultTable
+        term={{ id: "term-1", label: "Term 1", publicationStatus: "final", publishedAtIso: "2026-06-15T06:00:00Z" }}
+        marks={rows}
+        reportCardDocument={{ reference: "DOC-2026-273239B515", filename: "report-card-RPR-2026-8F4E8122F2.pdf" }}
+      />,
+    );
+
+    const download = screen.getByRole("button", { name: "Download official report (PDF)" });
+    await user.click(download);
+    await waitFor(() => expect(requestDownload).toHaveBeenCalledWith("DOC-2026-273239B515"));
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status").textContent).toContain("short-lived download link");
+  });
+
+  it("keeps the honest placeholder when no generated report card exists", () => {
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    render(
+      <ResultTable
+        term={{ id: "term-1", label: "Term 1", publicationStatus: "final", publishedAtIso: "2026-06-15T06:00:00Z" }}
+        marks={[]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Official report (PDF)" })).toBeDisabled();
+    expect(screen.getByText(/being prepared/)).toBeTruthy();
   });
 });
 

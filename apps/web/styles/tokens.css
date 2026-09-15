@@ -1,31 +1,57 @@
 /* ================================================================== */
-/* Design tokens — Faiz Aam design system                              */
+/* Design tokens — Faiz Aam design system (V15 canonical)              */
 /* The single source of truth for colour, type, spacing and status.    */
 /* Loaded by app/layout.tsx before globals.css.                        */
+/* Aligned to V15 Faiz Aam School Platform.html (repository root).     */
+/* V15 inherits the V14 palette/typography/radii unchanged.            */
 /* ================================================================== */
 
 :root {
-  /* Core palette ------------------------------------------------------ */
-  --ink: #0b1c2a; /* deep ink navy — primary surfaces, primary buttons   */
-  --ink-2: #14293b; /* hover ink, used by .button--primary:hover          */
-  --paper: #f6f2e9; /* page ground — warm unbleached paper                */
-  --saffron: #b96832; /* brand accent — rules, focus, active states        */
-  --saffron-deep: #8c4a1e; /* deep saffron — saffron text on paper surfaces  */
-  --willow: #536d57; /* calm green — "good" status                        */
-  --willow-deep: #3f5243; /* deep willow — notice strips on chalk text      */
-  --chalk: #ffffff; /* raised surface — panels, sidebar, badges           */
-  --brick: #a23b2e; /* alert red — threshold crossings                    */
-  --brick-deep: #7e2b20; /* severe red — critical strips, danger buttons    */
-  --ink-soft: #5a6670; /* secondary text on paper                          */
-  --ink-faint: #5c6670; /* tertiary text, offline status                    */
-  --line: rgba(11, 28, 42, 0.09); /* hairline rules — fine, quiet           */
-  --line-strong: rgba(11, 28, 42, 0.2); /* stronger rules, crosshair        */
-  --paper-deep: #f1ecdf; /* deeper paper for inset bands                    */
-  --focus: #b96832; /* visible focus ring (WCAG 2.2 AA)                  */
+  /* Core palette (V15 — inherited from V14) ----------------------------- */
+  --paper: #F4EFE5; /* page ground — warm unbleached paper                */
+  --paper-deep: #ECE4D4; /* deeper paper for inset bands                   */
+  --paper-edge: #E4DAC6; /* paper edge variation                           */
+  --chalk: #FFFDF8; /* raised surface — panels, sidebar, badges            */
+  --chalk-2: #FBF6EC; /* hover surface, upload zones                       */
+  --ink: #0B1C2A; /* deep ink navy — primary surfaces, primary buttons     */
+  --ink-2: #22333F; /* secondary text, nav links                           */
+  --ink-3: #3E4F5C; /* tertiary text, queue metadata                       */
+  --muted: #5A6167; /* muted text, hints, labels                           */
+  --faint: #8D8674; /* nav group labels, state-cell tags                   */
+  --saffron: #B96832; /* brand accent — rules, focus, active states        */
+  --saffron-ink: #8C4A1B; /* saffron text on paper surfaces                */
+  --saffron-soft: #F2E0CE; /* pending/progress status background            */
+  --saffron-line: #D8AE8B; /* pending/progress status border                */
+  --saffron-strong: #74380F; /* accent-control hover ground — darker saffron */
+  --willow: #536D57; /* calm green — "good" status                         */
+  --willow-ink: #39513F; /* success status text, stamp colour               */
+  --willow-soft: #E1E8DD; /* success status background, child avatar bg     */
+  --willow-line: #B3C2B2; /* success callout border, verified chip border   */
+  --madder: #A33B2E; /* alert red — threshold crossings, destructive       */
+  --madder-ink: #7F2C1F; /* severe red — critical strips, danger buttons    */
+  --madder-soft: #F3DDD6; /* error status background                        */
+  --madder-line: #D9A99E; /* error status border                            */
+  --danger: var(--madder); /* alias: danger text color                         */
 
-  --radius: 6px; /* softly-rounded controls — clean, never pills       */
+  /* Rules (V15 — inherited from V14) -------------------------------------------------- */
+  --line: rgba(11, 28, 42, 0.16); /* standard borders, panel borders         */
+  --line-soft: rgba(11, 28, 42, 0.09); /* soft borders, dotted separators     */
+  --line-strong: rgba(11, 28, 42, 0.34); /* stronger rules, input borders      */
+  --rule: rgba(11, 28, 42, 0.18); /* editorial rule (alias of line)          */
+  --ink-soft-tint: rgba(11, 28, 42, 0.045); /* hover tint for rows, nav items  */
+  --focus: var(--saffron-ink); /* visible focus ring (WCAG 2.2 AA)           */
 
-  /* Spacing scale — 4 px base ------------------------------------------ */
+  /* Radii (V15 — inherited from V14) -------------------------------------------------- */
+  --r: 4px; /* standard radius — panels, inputs, buttons, modals            */
+  --r-s: 3px; /* small radius — nav items, small controls                    */
+  --r-pill: 999px; /* pill radius — status badges, chips                     */
+  --radius: 4px; /* legacy alias for --r (kept for module CSS compatibility) */
+
+  /* Layout widths (V15 — inherited from V14) ------------------------------------------ */
+  --wrap: 1240px; /* public page max width                                 */
+  --wrap-narrow: 920px; /* narrow content pages                              */
+
+  /* Spacing scale — 4 px base (kept from previous) ---------------------- */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -35,21 +61,20 @@
   --space-7: 32px;
   --space-8: 40px;
 
-  /* Chalk-tint scale for ink-ground rails and instrument readouts -------- */
+  /* Chalk-tint scale for ink-ground rails (kept for facility/environment) */
   --chalk-soft: #9fb1bb; /* muted chalk text on ink                            */
   --chalk-muted: #5f7680; /* rail bullets and borders on ink                   */
   --rail-line: rgba(159, 177, 187, 0.22); /* hairline rules on ink rails   */
-  --willow-soft: #56645a; /* deep willow text on pale grounds                  */
-  --saffron-soft: #e0a06c; /* softer saffron accents on ink                    */
   --willow-bright: #8eb698; /* brighter willow accents on ink                  */
+  --saffron-bright: #d1844d; /* brighter saffron for accents on ink            */
 
   /* Status semantics — app-wide, do not remap per screen -------------- */
   --status-good: var(--willow);
   --status-watch: var(--saffron);
-  --status-alert: var(--brick);
-  --status-severe: var(--brick-deep);
-  --status-neutral: var(--ink-soft);
-  --status-offline: var(--ink-faint);
+  --status-alert: var(--madder);
+  --status-severe: var(--madder-ink);
+  --status-neutral: var(--muted);
+  --status-offline: var(--faint);
 
   /* Typography --------------------------------------------------------- */
   /* --font-display / --font-sans are set by next/font in app/layout.tsx.
@@ -57,12 +82,20 @@
      module CSS written against the original mockup names) picks up the
      loaded webfonts, with editorial fallbacks when fonts are absent.    */
   --serif: var(--font-display, Georgia, "Times New Roman", serif);
-  --sans: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
+  --sans: var(--font-sans, -apple-system, "Segoe UI", system-ui, sans-serif);
   /* Nastaliq Urdu for wordmarks — set by next/font in app/layout.tsx. */
   --urdu: var(--font-urdu, Georgia, serif);
 
   /* Legacy aliases kept for module CSS written against design/styles.css */
   --cream: var(--chalk);
-  --saffron-bright: #d1844d; /* brighter saffron for accents on ink          */
-  --muted: #5a6670; /* muted text on paper — AA 4.5+ against --paper      */
+  --ink-soft: var(--muted); /* alias: old --ink-soft maps to V15 --muted    */
+  --ink-faint: var(--faint); /* alias: old --ink-faint maps to V15 --faint   */
+  --saffron-deep: var(--saffron-ink); /* alias: old --saffron-deep → V15     */
+  --willow-deep: var(--willow-ink); /* alias: old --willow-deep → V15         */
+  --brick: var(--madder); /* alias: old --brick maps to V15 --madder          */
+  --brick-deep: var(--madder-ink); /* alias: old --brick-deep → V15            */
+  --willow-soft-bg: var(--willow-soft); /* alias for module CSS using old name */
+  --ink-60: var(--muted); /* alias: AA text tone for older module CSS          */
+  --hairline: var(--line); /* alias: hairline rule for older module CSS        */
+  --surface: var(--chalk); /* alias: raised surface for older module CSS       */
 }

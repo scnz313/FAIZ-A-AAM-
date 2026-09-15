@@ -246,6 +246,8 @@ export const FINANCE_SESSION_KEYS = {
   refundCounter: sessionKey("finance-refund-counter"),
   reconCounter: sessionKey("finance-recon-counter"),
   ledgerCounter: sessionKey("finance-ledger-counter"),
+  attemptKeys: sessionKey("finance-attempt-keys"),
+  adjustmentKeys: sessionKey("finance-adjustment-keys"),
 } as const;
 
 /** Counter seeds: PAY-2026-0301, G-2026-0201, RC-2026-0145, INV-2026-0301. */
@@ -308,6 +310,22 @@ function loadConfirms(): Record<string, ConfirmedPair> {
 
 function saveConfirms(confirms: Record<string, ConfirmedPair>): void {
   sessionSet(FINANCE_SESSION_KEYS.confirms, confirms);
+}
+
+function loadAttemptKeys(): Record<string, string> {
+  return sessionGet<Record<string, string>>(FINANCE_SESSION_KEYS.attemptKeys) ?? {};
+}
+
+function saveAttemptKeys(keys: Record<string, string>): void {
+  sessionSet(FINANCE_SESSION_KEYS.attemptKeys, keys);
+}
+
+function loadAdjustmentKeys(): Record<string, string> {
+  return sessionGet<Record<string, string>>(FINANCE_SESSION_KEYS.adjustmentKeys) ?? {};
+}
+
+function saveAdjustmentKeys(keys: Record<string, string>): void {
+  sessionSet(FINANCE_SESSION_KEYS.adjustmentKeys, keys);
 }
 
 /** Monotonic session counter: returns the current value and stores next. */
@@ -654,11 +672,35 @@ export async function createPaymentAttempt(
     if (!invoice) {
       throw new FinanceServiceError("invoice-not-found", `Invoice ${invoiceRef} does not exist in this demo ledger.`);
     }
-    if (amountPaise <= 0 || amountPaise !== invoiceBalance(invoice)) {
+    /* Authoritative balance includes posted ledger effects (concessions,
+       adjustments, refunds) so a stale or partial amount never opens a
+       checkout. Only the full outstanding balance is accepted — partial
+       payments stay rejected until school policy explicitly allows them. */
+    const authoritativeBalance = invoiceBalance(invoice) + postedLedgerSum(invoice.ref);
+    if (!Number.isInteger(amountPaise) || amountPaise <= 0 || amountPaise !== authoritativeBalance) {
       throw new FinanceServiceError(
         "amount-mismatch",
         "The amount is out of date — refresh the invoice and try again.",
       );
+    }
+    /* Idempotent retry: the same key returns the same attempt instead of
+       opening a second checkout. A key reused with different parameters is
+       rejected so a stale retry never charges the wrong amount. */
+    if (idempotencyKey !== undefined) {
+      const attemptKeys = loadAttemptKeys();
+      const existingId = attemptKeys[idempotencyKey];
+      if (existingId !== undefined) {
+        const existing = loadAttempts().find((item) => item.id === existingId);
+        if (existing) {
+          if (existing.invoiceRef !== invoiceRef || existing.method !== method || existing.amountPaise !== amountPaise) {
+            throw new FinanceServiceError(
+              "amount-mismatch",
+              "The amount is out of date — refresh the invoice and try again.",
+            );
+          }
+          return { ...existing };
+        }
+      }
     }
     const id = `PAY-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.attemptCounter, ATTEMPT_COUNTER_SEED))}`;
     const attempt: PaymentAttempt = {
@@ -672,6 +714,11 @@ export async function createPaymentAttempt(
       gatewayRef: `G-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.gatewayCounter, GATEWAY_COUNTER_SEED))}`,
     };
     saveAttempts([...loadAttempts(), attempt]);
+    if (idempotencyKey !== undefined) {
+      const attemptKeys = loadAttemptKeys();
+      attemptKeys[idempotencyKey] = id;
+      saveAttemptKeys(attemptKeys);
+    }
     return { ...attempt };
   });
 }
@@ -766,6 +813,7 @@ export async function confirmSuccess(attemptId: string): Promise<ConfirmedPair> 
       providerTxnId: attempt.gatewayRef ?? attempt.id,
       amountPaise: attempt.amountPaise,
       method: attempt.method,
+      idempotencyKey: `payment:${attempt.id}`,
     });
     if (!result.ok) {
       throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Posting failed.");
@@ -830,6 +878,16 @@ export async function confirmSuccess(attemptId: string): Promise<ConfirmedPair> 
     }
     if (!invoice) {
       throw new FinanceServiceError("invoice-not-found", `Invoice ${attempt.invoiceRef} does not exist in this demo ledger.`);
+    }
+    /* Fee invariant: the webhook posts exactly the amount the gateway
+       confirmed for the current authoritative balance. A stale attempt
+       (e.g. a concession posted after checkout started) never overpays. */
+    const authoritativeBalance = invoiceTotal(invoice) - invoicePaid(invoice) + postedLedgerSum(invoice.ref);
+    if (!Number.isInteger(attempt.amountPaise) || attempt.amountPaise !== authoritativeBalance) {
+      throw new FinanceServiceError(
+        "amount-mismatch",
+        "The amount is out of date — refresh the invoice and try again.",
+      );
     }
 
     const receipt: Receipt = {
@@ -966,12 +1024,31 @@ export async function requestAdjustment(input: {
     }
     const reason = input.reason.trim();
     if (reason.length < 10) throw new Error("A reason of at least 10 characters is required.");
+    if (!Number.isInteger(input.amountPaise) || input.amountPaise === 0) {
+      throw new Error("The adjustment amount must be a non-zero integer paise value.");
+    }
     const invoice = loadInvoices().find((candidate) => candidate.ref === input.invoiceRef);
     if (!invoice) throw new Error("Invoice not found.");
     const balance = invoiceTotal(invoice) - invoicePaid(invoice) + postedLedgerSum(invoice.ref);
     const signed = input.type === "adjustment" ? input.amountPaise : -Math.abs(input.amountPaise);
     if (signed > 0 && signed > balance) {
       throw new Error("The adjustment exceeds the outstanding balance.");
+    }
+    /* Idempotency (mirrors the server's adjustment:<invoice>:v<version> key):
+       a double-submit at the same ledger state returns the request the first
+       call already created instead of appending a duplicate. Scoping on the
+       posted ledger sum — which only a posting changes — keeps a deliberate
+       re-request after settlement available, while an identical request that
+       is still pending or approved replays. */
+    const ledgerState = postedLedgerSum(input.invoiceRef);
+    const operationKey = `adjustment:${input.invoiceRef}:l${ledgerState}:${stableOperationKey(`${input.type}|${input.amountPaise}|${reason}`)}`;
+    const adjustmentKeys = loadAdjustmentKeys();
+    const replayRef = adjustmentKeys[operationKey];
+    if (replayRef !== undefined) {
+      const replay = loadAdjustments().find((candidate) => candidate.ref === replayRef);
+      if (replay !== undefined && (replay.status === "pending" || replay.status === "approved")) {
+        return { ...replay };
+      }
     }
     const ref = `ADJ-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.adjustmentCounter, ADJUSTMENT_COUNTER_SEED))}`;
     const request: AdjustmentRequest = {
@@ -990,6 +1067,7 @@ export async function requestAdjustment(input: {
       version: 1,
     };
     saveAdjustments([...loadAdjustments(), request]);
+    saveAdjustmentKeys({ ...adjustmentKeys, [operationKey]: ref });
     return { ...request };
   });
 }
@@ -1020,6 +1098,11 @@ export async function approveAdjustment(input: {
     const requests = await listAdjustments();
     const request = requests.find((candidate) => candidate.ref === input.ref);
     if (!request) throw new Error("Adjustment not found.");
+    if (request.status !== "pending") throw new Error(`Adjustment ${input.ref} is already ${request.status}.`);
+    if (request.requestedBy === input.decidedBy) {
+      throw new Error("The requesting officer cannot approve their own adjustment (maker/checker).");
+    }
+    if (input.reason.trim().length < 10) throw new Error("A decision reason of at least 10 characters is required.");
     const result = await adapterCall<unknown>("finance.approveAdjustment", {
       adjustmentId: request.id ?? request.ref,
       expectedVersion: request.version,
@@ -1056,6 +1139,11 @@ export async function approveAdjustment(input: {
 /**
  * Post an approved adjustment: appends a signed ledger entry (append-only —
  * invoice items are never rewritten) and records the audit trail.
+ *
+ * Maker/checker boundary: the rule is that no account approves its own
+ * originating work, so the APPROVING officer may never post their own
+ * decision. The requester may post after an independent approval — posting
+ * executes an already-approved decision rather than granting it.
  */
 export async function postAdjustment(input: { ref: string; postedBy: string }): Promise<AdjustmentRequest> {
   if (isServerMode()) {
@@ -1063,6 +1151,9 @@ export async function postAdjustment(input: { ref: string; postedBy: string }): 
     const request = requests.find((candidate) => candidate.ref === input.ref);
     if (!request) throw new Error("Adjustment not found.");
     if (request.status !== "approved") throw new Error(`Adjustment ${input.ref} must be approved before posting.`);
+    if (request.decidedBy !== null && request.decidedBy === input.postedBy) {
+      throw new Error("The approving officer cannot post their own approval (maker/checker).");
+    }
     const result = await adapterCall<unknown>("finance.postAdjustment", {
       adjustmentId: request.id ?? request.ref,
       expectedVersion: request.version,
@@ -1075,6 +1166,9 @@ export async function postAdjustment(input: { ref: string; postedBy: string }): 
     const requests = loadAdjustments();
     const request = requireRequest(requests, input.ref);
     if (request.status !== "approved") throw new Error(`Adjustment ${input.ref} must be approved before posting.`);
+    if (request.decidedBy !== null && request.decidedBy === input.postedBy) {
+      throw new Error("The approving officer cannot post their own approval (maker/checker).");
+    }
     const entry: LedgerEntry = {
       ref: `LED-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.ledgerCounter, LEDGER_COUNTER_SEED))}`,
       invoiceRef: request.invoiceRef,
@@ -1139,7 +1233,7 @@ export async function requestRefund(input: {
     }
     const reason = input.reason.trim();
     if (reason.length < 10) throw new Error("A reason of at least 10 characters is required.");
-    if (input.amountPaise <= 0) throw new Error("A refund must be a positive amount.");
+    if (!Number.isInteger(input.amountPaise) || input.amountPaise <= 0) throw new Error("A refund must be a positive integer paise amount.");
     const holder = [...fixtureInvoices, ...fixtureMariamInvoices, ...loadInvoices()].find((candidate) =>
       candidate.payments.some((payment) => payment.ref === input.paymentRef),
     );
@@ -1193,6 +1287,11 @@ export async function approveRefund(input: {
     const requests = await listRefunds();
     const request = requests.find((candidate) => candidate.ref === input.ref);
     if (!request) throw new Error("Refund request not found.");
+    if (request.status !== "pending") throw new Error(`Refund ${input.ref} is already ${request.status}.`);
+    if (request.requestedBy === input.decidedBy) {
+      throw new Error("The requesting officer cannot approve their own refund (maker/checker).");
+    }
+    if (input.reason.trim().length < 10) throw new Error("A decision reason of at least 10 characters is required.");
     const result = await adapterCall<unknown>("finance.approveRefund", {
       refundRequestId: request.id ?? request.ref,
       expectedVersion: request.version,
@@ -1230,6 +1329,10 @@ export async function approveRefund(input: {
  * Post an approved refund through the local sandbox provider: a refund
  * ledger entry restores the invoice balance (append-only — the original
  * payment and receipt stay on record).
+ *
+ * Maker/checker boundary: identical to adjustments — the approving officer
+ * may never post their own decision; the requester may post after an
+ * independent approval.
  */
 export async function postRefund(input: { ref: string; postedBy: string }): Promise<RefundRequest> {
   if (isServerMode()) {
@@ -1237,10 +1340,14 @@ export async function postRefund(input: { ref: string; postedBy: string }): Prom
     const request = requests.find((candidate) => candidate.ref === input.ref);
     if (!request) throw new Error("Refund request not found.");
     if (request.status !== "approved") throw new Error(`Refund ${input.ref} must be approved before posting.`);
+    if (request.decidedBy !== null && request.decidedBy === input.postedBy) {
+      throw new Error("The approving officer cannot post their own approval (maker/checker).");
+    }
     const result = await adapterCall<unknown>("finance.postRefund", {
       refundRequestId: request.id ?? request.ref,
       expectedVersion: request.version,
       providerRef: null,
+      idempotencyKey: `refund:${request.ref}`,
     });
     if (!result.ok) throw new FinanceServiceError("gateway-unreachable", result.errors[0]?.message ?? "Refund posting failed.");
     return { ...request, status: "posted", postedAtIso: new Date().toISOString(), version: request.version + 1 };
@@ -1248,6 +1355,9 @@ export async function postRefund(input: { ref: string; postedBy: string }): Prom
   const requests = loadRefunds();
   const request = requireRequest(requests, input.ref);
   if (request.status !== "approved") throw new Error(`Refund ${input.ref} must be approved before posting.`);
+  if (request.decidedBy !== null && request.decidedBy === input.postedBy) {
+    throw new Error("The approving officer cannot post their own approval (maker/checker).");
+  }
   const provider = createLocalSandboxPaymentProvider();
   const refund = await provider.refund({
     providerTxnRef: request.paymentRef,
@@ -1255,6 +1365,11 @@ export async function postRefund(input: { ref: string; postedBy: string }): Prom
     idempotencyKey: `refund:${request.ref}`,
   });
   return respond(() => {
+    /* Re-check inside the posting step: a concurrent retry that passed the
+       pre-provider guard must not append a second ledger entry. */
+    const current = loadRefunds().find((candidate) => candidate.ref === input.ref);
+    if (!current) throw new Error(`No ${input.ref} request carries the reference ${input.ref}.`);
+    if (current.status !== "approved") throw new Error(`Refund ${input.ref} must be approved before posting.`);
     const entry: LedgerEntry = {
       ref: `LED-2026-${pad4(nextCounter(FINANCE_SESSION_KEYS.ledgerCounter, LEDGER_COUNTER_SEED))}`,
       invoiceRef: request.invoiceRef,

@@ -124,53 +124,32 @@ describe("student application draft privacy", () => {
   });
 });
 
-describe("job application draft privacy", () => {
-  it("keeps contacts and upload details out of the saved draft", async () => {
+describe("job application public form privacy", () => {
+  it("keeps every answer on the page and never writes a browser draft", async () => {
     const user = userEvent.setup();
     render(<JobForm vacancy={vacancies[0]!} />);
 
-    /* Step 1 — personal details (name + sensitive contacts). */
     await user.type(screen.getByLabelText(/^Full name/), "Demo Applicant");
     await user.type(screen.getByLabelText(/^Phone/), "+919000000000");
     await user.type(screen.getByLabelText(/^Email/), "applicant@example.com");
     await user.click(screen.getByRole("button", { name: /Save & continue/ }));
 
-    /* Step 2 — qualifications. */
     await user.selectOptions(screen.getByLabelText(/^Highest qualification/), "Bachelor of Education (B.Ed.)");
     await user.type(screen.getByLabelText(/^Subject \/ specialisation/), "Mathematics");
-    await user.type(screen.getByLabelText(/^Institution/), "Demo College");
-    await user.selectOptions(screen.getByLabelText(/^Year completed/), "2020");
-    await user.click(screen.getByRole("button", { name: /Save & continue/ }));
-
-    /* Step 3 — experience and document uploads (file names are sensitive). */
     await user.selectOptions(screen.getByLabelText(/^Years of experience/), "3–5 years");
     await user.type(screen.getByLabelText(/^Current role/), "Teacher");
-    for (const doc of ["Photograph", "Educational certificates", "Experience certificates", "Identity proof"]) {
-      await user.upload(screen.getByLabelText(doc), new File(["demo"], "cv.pdf", { type: "application/pdf" }));
-    }
     await user.click(screen.getByRole("button", { name: /Save & continue/ }));
 
-    await waitFor(() => {
-      const raw = window.sessionStorage.getItem(JOB_DRAFT_KEY);
-      expect(raw).not.toBeNull();
-      const envelope = JSON.parse(raw ?? "{}") as { step?: number; values?: Record<string, unknown> };
-      expect(envelope.step).toBe(3);
-      expect(envelope.values?.fullName).toBe("Demo Applicant");
-      expect(envelope.values?.qualification).toBe("Bachelor of Education (B.Ed.)");
-      const serialized = JSON.stringify(envelope);
-      for (const sensitive of JOB_SENSITIVE_VALUES) {
-        expect(serialized).not.toContain(sensitive);
-      }
-      expect(envelope.values?.phone).toBe("");
-      expect(envelope.values?.email).toBe("");
-      expect(envelope.values?.documents).toEqual({});
-    });
-
-    expect(window.localStorage.getItem(JOB_DRAFT_KEY)).toBeNull();
+    /* The public form is deliberately storage-free before submission: the
+       applicant has no account and no draft is persisted anywhere. */
+    expect(window.sessionStorage.getItem(JOB_DRAFT_KEY)).toBeNull();
+    expect(window.sessionStorage.length).toBe(0);
+    expect(window.localStorage.length).toBe(0);
     expectLocalStorageClean(JOB_SENSITIVE_VALUES);
+    expect(screen.getByText("Demo Applicant")).toBeInTheDocument();
   });
 
-  it("clears the draft keys on submission", async () => {
+  it("shows the honest email-only success state without a draft key", async () => {
     const user = userEvent.setup();
     render(<JobForm vacancy={vacancies[0]!} />);
 
@@ -180,24 +159,16 @@ describe("job application draft privacy", () => {
     await user.click(screen.getByRole("button", { name: /Save & continue/ }));
 
     await user.selectOptions(screen.getByLabelText(/^Highest qualification/), "Bachelor of Education (B.Ed.)");
-    await user.type(screen.getByLabelText(/^Subject \/ specialisation/), "Mathematics");
-    await user.type(screen.getByLabelText(/^Institution/), "Demo College");
-    await user.selectOptions(screen.getByLabelText(/^Year completed/), "2020");
-    await user.click(screen.getByRole("button", { name: /Save & continue/ }));
-
     await user.selectOptions(screen.getByLabelText(/^Years of experience/), "3–5 years");
-    await user.type(screen.getByLabelText(/^Current role/), "Teacher");
-    for (const doc of ["Photograph", "Educational certificates", "Experience certificates", "Identity proof"]) {
-      await user.upload(screen.getByLabelText(doc), new File(["demo"], "cv.pdf", { type: "application/pdf" }));
-    }
     await user.click(screen.getByRole("button", { name: /Save & continue/ }));
 
     await user.click(screen.getByLabelText(/I confirm that the information/));
     await user.click(screen.getByRole("button", { name: /Submit application/ }));
 
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith(expect.stringMatching(/^\/apply\/job\//));
+      expect(screen.getByText("Thank you · your application is with the school.")).toBeInTheDocument();
     });
+    expect(pushMock).not.toHaveBeenCalled();
 
     expect(window.sessionStorage.getItem(JOB_DRAFT_KEY)).toBeNull();
     expect(window.localStorage.getItem(JOB_DRAFT_KEY)).toBeNull();

@@ -1,12 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { PublicFooter } from "@/components/layouts/PublicFooter";
-import { PublicHeader } from "@/components/layouts/PublicHeader";
-import Button from "@/components/ui/Button";
+import AuthFrame from "@/components/identity/AuthFrame";
 import { dataAdapter } from "@/lib/supabase/env";
-
-import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Session expired",
@@ -14,39 +10,36 @@ export const metadata: Metadata = {
 };
 
 /**
- * Session-expired state, mirroring the not-found pattern: a centred block on
- * the paper page with one primary action. UI demo — sessions are not real
- * yet, so this page previews the state the backend will produce.
+ * Session-expired state — V14 AuthFrame + pay-state pattern.
+ * Sessions are not real yet in demo mode; this page previews the state.
  */
 export default function SessionExpiredPage() {
   const demo = dataAdapter() === "demo";
   return (
-    <div className={styles.page}>
-      <PublicHeader tone="light" />
-      <main id="main" tabIndex={-1} className={styles.main}>
-        <div className="not-found">
-          <p className="eyebrow">Family portal · Security</p>
-          <h1>Session expired</h1>
-          <p>For your safety, the session ended after inactivity. Sign in again to continue.</p>
-          <div className={styles.actions}>
-            <Button href="/sign-in" variant="primary">
-              Sign in again →
-            </Button>
-            <Link className="link-arrow" href="/">
-              Back to the school home →
-            </Link>
-          </div>
-          {demo ? (
-            <p className={styles.demoNote}>
-              <span className="demo-badge">UI demo</span>
-              <span>This adapter previews the session-expiry state.</span>
-            </p>
-          ) : (
-            <p className={styles.demoNote}>Your previous session can no longer access protected records. Sign in again to continue safely.</p>
-          )}
+    <AuthFrame
+      title="Your session ended"
+      sub="For the safety of student records, sessions close after a period of inactivity."
+    >
+      <div className="pay-state">
+        <div className="ps-ic wait">
+          <span className="msym" aria-hidden="true">time_auto</span>
         </div>
-      </main>
-      <PublicFooter />
-    </div>
+        <h2>Nothing was lost</h2>
+        <p>Unsaved drafts stay saved. Sign in again to pick up where you left off.</p>
+        <Link className="btn btn-primary" href="/sign-in" style={{ marginTop: 18 }}>
+          Sign in again
+        </Link>
+      </div>
+      {demo ? (
+        <p className="tiny muted" style={{ textAlign: "center", marginTop: 16 }}>
+          <span className="demo-badge">UI demo</span>{" "}
+          This adapter previews the session-expiry state.
+        </p>
+      ) : (
+        <p className="tiny muted" style={{ textAlign: "center", marginTop: 16 }}>
+          Your previous session can no longer access protected records. Sign in again to continue safely.
+        </p>
+      )}
+    </AuthFrame>
   );
 }

@@ -49,7 +49,9 @@ export class DomainError extends Error {
 
 const RPC_ERROR_PATTERNS: Array<{ match: RegExp; code: ErrorCode }> = [
   { match: /version mismatch/i, code: "stale-version" },
-  { match: /not in an editable state|only .* can|must be accepted before|not paid|amount mismatch|already settled/i, code: "conflict" },
+  { match: /not in an editable state|only .* can|must be accepted before|not paid|amount mismatch|already settled|not ready to commit|unresolved errors|already closed/i, code: "conflict" },
+  { match: /separate .* reviewer/i, code: "conflict" },
+  { match: /reason is required|reason of at least/i, code: "validation" },
   { match: /already responded|duplicate|already used|already exists|already linked|pending staff invitation/i, code: "duplicate" },
   { match: /not the .* owner|not authorized|role and aal2 required|cannot decide their own|cannot publish|does not match|not bound|not granted|not linked|active guardian account required/i, code: "forbidden" },
   { match: /expired|revoked|no longer valid/i, code: "conflict" },
@@ -174,9 +176,49 @@ export function admissionListMine(supabase: SupabaseClient<Database>) {
     const { data, error } = await supabase
       .from("admission_applications")
       .select(
-        "id, reference, academic_year_id, grade_id, current_status, student_name, parent_name, parent_contact, version, submitted_at, created_at, academic_years(label, starts_on, ends_on, status), grades(label), admission_drafts(draft, schema_version, expires_at, updated_at), admission_application_versions(id, version, snapshot, schema_version, created_at), admission_events(event_type, visible_to_applicant, copy, created_at), admission_reviews(officer_account_id, created_at), admission_offers(id, grade_id, academic_year_id, conditions, expires_at, fee_required, admission_invoice_ref, response, responded_at, decided_by_account_id, version)",
+        "id, reference, academic_year_id, grade_id, current_status, student_name, parent_name, parent_contact, version, submitted_at, created_at, academic_years(label, starts_on, ends_on, status), grades(label), admission_drafts(draft, schema_version, expires_at, updated_at), admission_application_versions(id, version, snapshot, schema_version, created_at), admission_events(event_type, visible_to_applicant, copy, created_at), admission_reviews(officer_account_id, created_at, action, visible_reason, private_note), admission_offers(id, grade_id, academic_year_id, conditions, expires_at, fee_required, admission_invoice_ref, response, responded_at, version), admission_documents(requirement_code, documents(reference, safe_filename, category, scan_status, mime_type, size_bytes, created_at, finalized_at)), admission_duplicate_reviews(status, candidate_student_id, reference, reason, reviewed_at, students(reference, people(display_name)))",
       )
       .order("created_at", { ascending: false });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+/** Single staff-safe application read: excludes unsubmitted drafts and never
+ * returns the whole in-scope cohort for one detail page. */
+export function admissionGetStaffApplication(supabase: SupabaseClient<Database>, reference: string) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("admission_applications")
+      .select(
+        "id, reference, academic_year_id, grade_id, current_status, student_name, parent_name, parent_contact, version, submitted_at, created_at, academic_years(label, starts_on, ends_on, status), grades(label), admission_drafts(draft, schema_version, expires_at, updated_at), admission_application_versions(id, version, snapshot, schema_version, created_at), admission_events(event_type, visible_to_applicant, copy, created_at), admission_reviews(officer_account_id, created_at, action, visible_reason, private_note), admission_offers(id, grade_id, academic_year_id, conditions, expires_at, fee_required, admission_invoice_ref, response, responded_at, version), admission_documents(requirement_code, documents(reference, safe_filename, category, scan_status, mime_type, size_bytes, created_at, finalized_at)), admission_duplicate_reviews(status, candidate_student_id, reference, reason, reviewed_at, students(reference, people(display_name)))",
+      )
+      .eq("reference", reference)
+      .not("current_status", "eq", "draft")
+      .maybeSingle();
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+/** Reviewer display names for one application's review rows. The staff
+ * projection carries officer account ids only, and the workspace must never
+ * render an id, so names resolve through this scope-gated directory. */
+export function admissionReviewerDirectory(supabase: SupabaseClient<Database>, applicationId: string) {
+  return result<Json[]>(async () => {
+    const { data, error } = await callAppRpc<Json[]>(supabase, "admission_reviewer_directory", {
+      p_application_id: applicationId,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data ?? [];
+  });
+}
+
+/** Public student/enrollment/link references created by conversion, for the
+ * owning applicant or authorized admissions staff. Null before conversion. */
+export function admissionEnrollmentReference(supabase: SupabaseClient<Database>, applicationId: string) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json | null>(supabase, "admission_enrollment_reference", { p_application_id: applicationId });
     if (error !== null) throw mapRpcError(error);
     return data;
   });
@@ -200,13 +242,14 @@ export function admissionSubmit(
 
 export function admissionRequestChanges(
   supabase: SupabaseClient<Database>,
-  input: { applicationId: string; visibleReason: string; privateNote?: string | null },
+  input: { applicationId: string; visibleReason: string; privateNote?: string | null; expectedVersion?: number | null },
 ) {
   return result(async () => {
-    const { error } = await callAppRpc<null>(supabase, "admissions_request_changes", {
+    const { error } = await callAppRpc<null>(supabase, "admissions_request_changes_v2", {
       p_application_id: input.applicationId,
       p_visible_reason: input.visibleReason,
       p_private_note: input.privateNote ?? null,
+      p_expected_version: input.expectedVersion ?? null,
     });
     if (error !== null) throw mapRpcError(error);
     return { ok: true };
@@ -215,14 +258,15 @@ export function admissionRequestChanges(
 
 export function admissionReviewAdvance(
   supabase: SupabaseClient<Database>,
-  input: { applicationId: string; action: "under_review" | "assessment"; visibleReason?: string | null; privateNote?: string | null },
+  input: { applicationId: string; action: "under_review" | "assessment"; visibleReason?: string | null; privateNote?: string | null; expectedVersion?: number | null },
 ) {
   return result(async () => {
-    const { error } = await callAppRpc<null>(supabase, "admissions_review_advance", {
+    const { error } = await callAppRpc<null>(supabase, "admissions_review_advance_v2", {
       p_application_id: input.applicationId,
       p_action: input.action,
       p_visible_reason: input.visibleReason ?? null,
       p_private_note: input.privateNote ?? null,
+      p_expected_version: input.expectedVersion ?? null,
     });
     if (error !== null) throw mapRpcError(error);
     return { ok: true };
@@ -253,6 +297,36 @@ export function admissionDecide(
     });
     if (error !== null) throw mapRpcError(error);
     return { ok: true };
+  });
+}
+
+/** Approver resolution of a duplicate-identity review. Approving returns the
+ * application to `submitted`; rejecting declines it. Evidence and reason are
+ * recorded; the candidate student is supplied by the staff projection. */
+export function admissionResolveDuplicateReview(
+  supabase: SupabaseClient<Database>,
+  input: {
+    applicationId: string;
+    candidateStudentId: string;
+    outcome: "approved" | "rejected";
+    evidenceType: string;
+    evidenceReference?: string | null;
+    reason: string;
+    expectedVersion?: number | null;
+  },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "admissions_duplicate_review_resolve", {
+      p_application_id: input.applicationId,
+      p_candidate_student_id: input.candidateStudentId,
+      p_outcome: input.outcome,
+      p_evidence_type: input.evidenceType,
+      p_evidence_reference: input.evidenceReference ?? null,
+      p_reason: input.reason,
+      p_expected_version: input.expectedVersion ?? null,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "duplicate review") as unknown as Json;
   });
 }
 
@@ -288,10 +362,15 @@ export function admissionWithdraw(
 
 export function admissionListStaffQueue(supabase: SupabaseClient<Database>) {
   return result(async () => {
+    /* Queue projection: immutable submitted snapshots are deliberately not
+       embedded here. A queue at school scale carries one row per application
+       and full snapshots multiplied the payload by every submitted version;
+       the single-application read (`admissionGetStaffApplication`) keeps them
+       for the field-level compare. */
     const { data, error } = await supabase
       .from("admission_applications")
       .select(
-        "id, reference, academic_year_id, grade_id, current_status, student_name, parent_name, parent_contact, version, submitted_at, created_at, academic_years(label, starts_on, ends_on, status), grades(label), admission_drafts(draft, schema_version, expires_at, updated_at), admission_application_versions(id, version, snapshot, schema_version, created_at), admission_events(event_type, visible_to_applicant, copy, created_at), admission_reviews(officer_account_id, created_at), admission_offers(id, grade_id, academic_year_id, conditions, expires_at, fee_required, admission_invoice_ref, response, responded_at, decided_by_account_id, version)",
+        "id, reference, academic_year_id, grade_id, current_status, student_name, parent_name, parent_contact, version, submitted_at, created_at, academic_years(label, starts_on, ends_on, status), grades(label), admission_drafts(draft, schema_version, expires_at, updated_at), admission_application_versions(id, version, schema_version, created_at), admission_events(event_type, visible_to_applicant, copy, created_at), admission_reviews(officer_account_id, created_at, action, visible_reason, private_note), admission_offers(id, grade_id, academic_year_id, conditions, expires_at, fee_required, admission_invoice_ref, response, responded_at, decided_by_account_id, version)",
       )
       .not("current_status", "eq", "draft")
       .order("created_at", { ascending: false });
@@ -326,20 +405,67 @@ export function admissionPublicConfiguration(supabase: SupabaseClient<Database>)
 /* Finance                                                              */
 /* ------------------------------------------------------------------ */
 
+const INVOICE_REGISTER_SELECT =
+  "id, reference, student_id, academic_year_id, schedule_version_id, applicant_ref, term, status, issue_date, due_date, version, students(people(display_name)), invoice_items(label, amount_paise, kind), ledger_entries(reference, entry_type, amount_paise, reason, created_by_account_id, created_at), payment_allocations(amount_paise, payments(id, reference, amount_paise, provider_txn_id, attempt_id, paid_at, created_at, payment_attempts(method, provider_order_ref))), receipts(reference, issued_at, payment_id)";
+
 export function financeListMyInvoices(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
       .from("invoices")
-      .select(
-        "id, reference, student_id, academic_year_id, schedule_version_id, applicant_ref, term, status, issue_date, due_date, version, students(people(display_name)), invoice_items(label, amount_paise, kind), ledger_entries(reference, entry_type, amount_paise, reason, created_by_account_id, created_at), payment_allocations(amount_paise, payments(id, reference, amount_paise, provider_txn_id, attempt_id, paid_at, created_at, payment_attempts(method, provider_order_ref))), receipts(reference, issued_at, payment_id)",
-      )
+      .select(INVOICE_REGISTER_SELECT)
       .order("issue_date", { ascending: false });
     if (error !== null) throw mapRpcError(error);
     return data;
   });
 }
 
+/** One bounded page of the invoice register with an exact total, so large
+ *  registers render a page and a count instead of every nested projection. */
+export function financeListInvoicesPage(
+  supabase: SupabaseClient<Database>,
+  input: { from: number; to: number },
+) {
+  return result(async () => {
+    const { data, count, error } = await supabase
+      .from("invoices")
+      .select(INVOICE_REGISTER_SELECT, { count: "exact" })
+      .order("issue_date", { ascending: false })
+      .order("id", { ascending: true })
+      .range(input.from, input.to);
+    if (error !== null) throw mapRpcError(error);
+    return { rows: data ?? [], total: count ?? 0 };
+  });
+}
+
+/** Attempts that belong to a page's invoices. Bounded by the page size, so a
+ *  register view never loads every attempt in the school. */
+export function financeListAttemptsForInvoices(supabase: SupabaseClient<Database>, invoiceIds: string[]) {
+  return result(async () => {
+    if (invoiceIds.length === 0) return [] as FinanceAttemptProjectionRow[];
+    const { data, error } = await supabase
+      .from("payment_attempts")
+      .select("id, reference, amount_paise, method, status, failure_reason, provider_order_ref, provider_code, idempotency_key, created_at, updated_at, invoices(reference, student_id, academic_year_id, students(people(display_name)))")
+      .in("invoice_id", invoiceIds)
+      .order("created_at", { ascending: false });
+    if (error !== null) throw mapRpcError(error);
+    return (data ?? []) as unknown as FinanceAttemptProjectionRow[];
+  });
+}
+
 export function financeListMyReceipts(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("receipts")
+      .select("id, reference, payment_id, invoice_id, issued_at, payments(amount_paise, payment_attempts(method)), invoices(reference, student_id)")
+      .order("issued_at", { ascending: false });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+/** Staff receipt register: RLS staff_read_receipts scopes the same projection
+ * the guardian ledger reads, so staff and families see identical amounts. */
+export function financeListAllReceipts(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
       .from("receipts")
@@ -778,6 +904,21 @@ export function linksRestrict(
   });
 }
 
+export function linksRestore(
+  supabase: SupabaseClient<Database>,
+  input: { linkId: string; reason: string; expectedVersion: number },
+) {
+  return result(async () => {
+    const { error } = await callAppRpc<null>(supabase, "links_restore", {
+      p_link_id: input.linkId,
+      p_reason: input.reason,
+      p_expected_version: input.expectedVersion,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return { ok: true };
+  });
+}
+
 export function linksRevoke(
   supabase: SupabaseClient<Database>,
   input: { linkId: string; reason: string; expectedVersion: number },
@@ -812,9 +953,11 @@ export type ServerLinkSummary = {
   link: GuardianStudentLink;
   guardianName: string;
   studentName: string;
+  /** Public student reference; never the internal id. */
+  studentRef: string;
 };
 
-function mapServerLinkRow(row: {
+export function mapServerLinkRow(row: {
   id: string;
   reference: string;
   guardian_id: string;
@@ -825,6 +968,8 @@ function mapServerLinkRow(row: {
   approved_at: string | null;
   effective_from: string | null;
   effective_to: string | null;
+  /** Creation instant of the row; pending links carry no effective_from yet. */
+  created_at?: string | null;
   restriction_reason: string | null;
   rejection_reason: string | null;
   contact_priority: number;
@@ -833,6 +978,7 @@ function mapServerLinkRow(row: {
   version: number;
   guardian_name?: string | null;
   student_name?: string | null;
+  student_reference?: string | null;
   guardian_link_capabilities?: Array<{ capability: string }> | null;
 }): ServerLinkSummary {
   return {
@@ -846,7 +992,10 @@ function mapServerLinkRow(row: {
       verificationSource: row.verification_source as GuardianStudentLink["verificationSource"],
       approvedByPersonId: null,
       approvedAtIso: row.approved_at,
-      effectiveFromIso: row.effective_from ?? new Date(0).toISOString(),
+      /* A pending link has no effective_from yet (it is set at approval).
+         Fall back to the row's creation instant so the queue shows the real
+         request date instead of the epoch. */
+      effectiveFromIso: row.effective_from ?? row.created_at ?? new Date(0).toISOString(),
       effectiveToIso: row.effective_to,
       restrictionReason: row.restriction_reason,
       rejectionReason: row.rejection_reason,
@@ -856,32 +1005,75 @@ function mapServerLinkRow(row: {
       capabilities: (row.guardian_link_capabilities ?? []).map((value) => value.capability as FamilyCapability),
       version: row.version,
     },
-    guardianName: row.guardian_name ?? "Unknown guardian",
-    studentName: row.student_name ?? "Unknown student",
+    guardianName: row.guardian_name?.trim() ? row.guardian_name : "Unnamed guardian",
+    studentName: row.student_name?.trim() ? row.student_name : "Unnamed student",
+    studentRef: row.student_reference ?? "",
   };
 }
 
-export function linksList(supabase: SupabaseClient<Database>, status: "pending_verification" | "active") {
-  return result<ServerLinkSummary[]>(async () => {
-    const { data, error } = await supabase
-      .from("guardian_student_links")
-      .select("id, reference, guardian_id, student_id, relationship_label, status, verification_source, approved_at, effective_from, effective_to, restriction_reason, rejection_reason, contact_priority, is_emergency_contact, is_billing_contact, version, guardian_link_capabilities(capability), guardians(people(display_name)), students(people(display_name))")
-      .eq("status", status)
-      .order("created_at", { ascending: true });
+export type ServerLinkSummaryPage = {
+  rows: ServerLinkSummary[];
+  /** Exact count of the status queue for the staff read scope (never a page size). */
+  total: number;
+  nextOffset: number | null;
+};
+
+/**
+ * Paged staff queue read (`app.guardian_link_requests_list_paginated`, 000114):
+ * the same projection `linksList` returned, bounded to a page with an exact
+ * total and the next offset. The old unbounded table read is retired for the
+ * staff queues; the guardian-owned read keeps `links.listMine`.
+ */
+export function linksListPage(
+  supabase: SupabaseClient<Database>,
+  input: { status: "pending_verification" | "active" | "restricted"; limit?: number; offset?: number },
+) {
+  return result<ServerLinkSummaryPage>(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "guardian_link_requests_list_paginated", {
+      p_status: input.status,
+      p_limit: input.limit ?? 50,
+      p_offset: input.offset ?? 0,
+    });
     if (error !== null) throw mapRpcError(error);
-    const rows = (data ?? []) as unknown as Array<Parameters<typeof mapServerLinkRow>[0] & { guardians?: { people: { display_name: string } | null } | null; students?: { people: { display_name: string } | null } | null }>;
-    return rows.map((row) => mapServerLinkRow({ ...row, guardian_name: row.guardians?.people?.display_name, student_name: row.students?.people?.display_name }));
+    return mapServerLinkSummaryPage(data);
   });
 }
 
-export function linksListMine(supabase: SupabaseClient<Database>) {
-  return result<GuardianStudentLink[]>(async () => {
-    const { data, error } = await supabase
-      .from("guardian_student_links")
-      .select("id, reference, guardian_id, student_id, relationship_label, status, verification_source, approved_at, effective_from, effective_to, restriction_reason, rejection_reason, contact_priority, is_emergency_contact, is_billing_contact, version, guardian_link_capabilities(capability)")
-      .eq("status", "pending_verification");
+function mapServerLinkSummaryPage(value: Record<string, unknown> | null): ServerLinkSummaryPage {
+  const rawRows = Array.isArray(value?.rows) ? (value.rows as unknown as Array<Parameters<typeof mapServerLinkRow>[0]>) : [];
+  const rows = rawRows.map((row) => mapServerLinkRow(row));
+  const total = typeof value?.total === "number" ? value.total : rows.length;
+  const nextOffset = typeof value?.nextOffset === "number" ? value.nextOffset : null;
+  return { rows, total, nextOffset };
+}
+
+/** One link by id, through the same staff read boundary as the queue pages. */
+export function linksGet(supabase: SupabaseClient<Database>, linkId: string) {
+  return result<ServerLinkSummary | null>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "guardian_link_get", { p_link_id: linkId });
     if (error !== null) throw mapRpcError(error);
-    return ((data ?? []) as unknown as Array<Parameters<typeof mapServerLinkRow>[0]>).map((row) => mapServerLinkRow(row).link);
+    if (data === null || typeof data !== "object") return null;
+    return mapServerLinkRow(data as unknown as Parameters<typeof mapServerLinkRow>[0]);
+  });
+}
+
+/**
+ * The signed-in guardian's own link rows (`app.guardian_links_mine`, 000119):
+ * a definer projection so a pending request still carries the student's
+ * public reference and display name while the student row itself stays
+ * invisible under guardian RLS. The queue on `/portal/link-child` shows
+ * pending requests, so the existing pending-only read scope is preserved.
+ */
+export function linksListMine(supabase: SupabaseClient<Database>) {
+  return result<ServerLinkSummary[]>(async () => {
+    const { data, error } = await callAppRpc<Json[]>(supabase, "guardian_links_mine", {});
+    if (error !== null) throw mapRpcError(error);
+    const rows = Array.isArray(data)
+      ? (data as unknown as Array<Parameters<typeof mapServerLinkRow>[0]>)
+      : [];
+    return rows
+      .filter((row) => row.status === "pending_verification")
+      .map((row) => mapServerLinkRow(row));
   });
 }
 
@@ -975,11 +1167,11 @@ export function resolveFamilyContext(
       displayName = account?.people?.display_name ?? "Guardian";
     }
 
-    const [linksResult, enrollmentsResult, guardianResult, preferenceResult] = await Promise.all([
+    const [linksResult, enrollmentsResult, guardianResult] = await Promise.all([
       supabase
         .from("guardian_student_links")
         .select(
-          "id, reference, guardian_id, student_id, relationship_label, status, verification_source, approved_at, effective_from, effective_to, restriction_reason, rejection_reason, contact_priority, is_emergency_contact, is_billing_contact, version, students(id, reference, status, people(display_name)), guardian_link_capabilities(capability)",
+          "id, reference, guardian_id, student_id, relationship_label, status, verification_source, approved_at, effective_from, effective_to, restriction_reason, rejection_reason, contact_priority, is_emergency_contact, is_billing_contact, version, students(id, reference, person_id, status, people(display_name)), guardian_link_capabilities(capability)",
         )
         .eq("status", "active"),
       supabase
@@ -989,13 +1181,6 @@ export function resolveFamilyContext(
       personId
         ? supabase.from("guardians").select("id").eq("person_id", personId).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
-      accountId
-        ? supabase
-            .from("account_context_preferences")
-            .select("active_student_id")
-            .eq("account_id", accountId)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
     ]);
     const { data: links, error } = linksResult;
     if (error !== null) throw mapRpcError(error);
@@ -1003,10 +1188,17 @@ export function resolveFamilyContext(
     if (enrollmentError !== null) throw mapRpcError(enrollmentError);
     const guardian = guardianResult.data;
 
-    /* The HttpOnly selection cookie is only a cache hint. The account-owned
-     * preference is the durable default and is revalidated against the active
-     * link below on every request. */
-    const preference = preferenceResult.data;
+    /* The guardian-keyed preference is the durable active child (000076); the
+     * HttpOnly selection cookie remains only a cache hint. It is revalidated
+     * against the active links below on every request. */
+    const preferenceResult = guardian?.id
+      ? await supabase
+          .from("guardian_preferences")
+          .select("active_student_id, version")
+          .eq("guardian_id", guardian.id)
+          .maybeSingle()
+      : { data: null, error: null };
+    const preference = preferenceResult.data as { active_student_id: string | null } | null;
 
     type RawLink = {
       id: string;
@@ -1025,7 +1217,7 @@ export function resolveFamilyContext(
       is_emergency_contact: boolean;
       is_billing_contact: boolean;
       version: number;
-      students: { id: string; reference: string; status: string; people: { display_name: string } | null } | null;
+      students: { id: string; reference: string; person_id: string; status: string; people: { display_name: string } | null } | null;
       guardian_link_capabilities: Array<{ capability: string }>;
     };
     type RawEnrollment = {
@@ -1042,11 +1234,12 @@ export function resolveFamilyContext(
     };
     const rawLinks = (links ?? []) as unknown as RawLink[];
     const rawEnrollments = (enrollments ?? []) as unknown as RawEnrollment[];
+    const enrollmentByStudent = new Map(rawEnrollments.map((candidate) => [candidate.student_id, candidate] as const));
     const contexts = rawLinks.flatMap((link) => {
-      const enrollment = rawEnrollments.find((candidate) => candidate.student_id === link.student_id);
-      if (enrollment === null || enrollment === undefined || link.students === null || enrollment.grade_sections === null || enrollment.academic_years === null) return [];
+      const enrollment = enrollmentByStudent.get(link.student_id);
+      if (enrollment === undefined || link.students === null || enrollment.grade_sections === null || enrollment.academic_years === null) return [];
       return [{
-        student: { id: link.students.id, ref: link.students.reference, personId: link.students.id, status: "active" as const, displayName: link.students.people?.display_name ?? "Student" },
+        student: { id: link.students.id, ref: link.students.reference, personId: link.students.person_id, status: link.students.status === "active" ? "active" as const : "withdrawn" as const, displayName: link.students.people?.display_name ?? "Student" },
         link: {
           id: link.id, ref: link.reference, guardianId: link.guardian_id, studentId: link.student_id,
           relationshipLabel: link.relationship_label, status: "active" as const, verificationSource: link.verification_source as GuardianStudentLink["verificationSource"],
@@ -1135,6 +1328,19 @@ export function schoolConfigRead(
       grades: { code: string; label: string; sort_order: number } | null;
     }>;
     const policyRow = (policyResult.data?.[0] ?? null) as { version: number; status: string; policy: Json } | null;
+    const assignmentRows = (assignmentsResult.data ?? []) as unknown as Array<{ id: string; reference: string; grade_section_id: string | null; subject_id: string | null; staff_members: { people: { display_name: string } | null } | null }>;
+    /* Teacher names come from a definer projection: the people embed is
+       hidden under RLS for non-admin staff, and the editor must never show
+       the assignment reference as the teacher's name. */
+    const teacherNames: Record<string, string> = {};
+    if (assignmentRows.length > 0) {
+      const lookup = await callAppRpc<Record<string, string>>(supabase, "teaching_assignment_teacher_names", { p_assignment_ids: assignmentRows.map((row) => row.id) });
+      if (lookup.error === null) Object.assign(teacherNames, lookup.data ?? {});
+    }
+    for (const row of assignmentRows) {
+      const display = row.staff_members?.people?.display_name;
+      if (typeof display === "string" && display.length > 0) teacherNames[row.id] = display;
+    }
     return {
       academicYears: years,
       grades: (gradesResult.data ?? []).map((grade) => ({
@@ -1165,7 +1371,7 @@ export function schoolConfigRead(
           startsAt: period.starts_at,
           endsAt: period.ends_at,
         })),
-      assignments: ((assignmentsResult.data ?? []) as unknown as Array<{ id: string; reference: string; grade_section_id: string | null; subject_id: string | null; staff_members: { people: { display_name: string } | null } | null }>).map((assignment) => ({ id: assignment.id, ref: assignment.reference, gradeSectionId: assignment.grade_section_id, subjectId: assignment.subject_id, teacherName: assignment.staff_members?.people?.display_name ?? assignment.reference })),
+      assignments: assignmentRows.map((assignment) => ({ id: assignment.id, ref: assignment.reference, gradeSectionId: assignment.grade_section_id, subjectId: assignment.subject_id, teacherName: teacherNames[assignment.id] ?? assignment.reference })),
       rooms: (roomsResult.data ?? []).map((room) => ({ id: room.id, code: room.code, label: room.label })),
       policy: policyRow === null
         ? null
@@ -1188,6 +1394,16 @@ export function schoolConfigRead(
  * server-only rows; browser contracts use the mapped service shapes below. */
 export type ResultEntrySheetProjection = Record<string, unknown>;
 export type ResultReportReleaseProjection = Record<string, unknown>;
+/** Exam-definition selection rows returned by migration 000094. */
+export type ResultExamDefinitionProjection = Record<string, unknown>;
+
+export function resultsListExamDefinitions(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json[]>(supabase, "results_exam_definition_list", {});
+    if (error !== null) throw mapRpcError(error);
+    return (data ?? []) as unknown as ResultExamDefinitionProjection[];
+  });
+}
 
 export function resultsListEntrySheets(supabase: SupabaseClient<Database>) {
   return result(async () => {
@@ -1327,6 +1543,29 @@ export function resultsReportReleasePublish(
   });
 }
 
+export function resultsListReportReleaseCandidates(supabase: SupabaseClient<Database>, sheetId: string) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json[]>(supabase, "results_report_release_candidates", { p_sheet_id: sheetId });
+    if (error !== null) throw mapRpcError(error);
+    return (data ?? []) as unknown as ResultReportReleaseProjection[];
+  });
+}
+
+export function resultsPublishReportReleaseBatch(
+  supabase: SupabaseClient<Database>,
+  input: { sheetId: string; studentIds?: string[] | null; idempotencyKey?: string | null },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "results_report_release_publish_batch", {
+      p_sheet_id: input.sheetId,
+      p_student_ids: input.studentIds ?? null,
+      p_idempotency_key: input.idempotencyKey ?? null,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "report release batch") as unknown as ResultReportReleaseProjection;
+  });
+}
+
 export function resultsRequestCorrection(
   supabase: SupabaseClient<Database>,
   input: { releaseId: string; publicationId: string; reason: string; idempotencyKey?: string },
@@ -1396,13 +1635,99 @@ export function resultsListPublications(supabase: SupabaseClient<Database>, stud
   return result(async () => {
     let query = supabase
       .from("result_publications")
-      .select("id, reference, batch_id, version, status, published_at, withdrawn_at, withdrawal_reason, result_publication_items(student_id, snapshot)")
+      .select("id, reference, batch_id, source_entry_sheet_id, version, status, published_at, withdrawn_at, withdrawal_reason, result_publication_items(student_id, snapshot)")
       .neq("status", "withdrawn")
       .order("published_at", { ascending: false });
     if (studentId !== undefined) query = query.eq("result_publication_items.student_id", studentId);
     const { data, error } = await query;
     if (error !== null) throw mapRpcError(error);
     return data;
+  });
+}
+
+export type PendingCorrectionProjection = {
+  id: string;
+  publication_id: string;
+  release_id: string | null;
+  source_entry_sheet_id: string | null;
+  reason: string;
+  status: string;
+  version: number;
+  created_at: string;
+  requested_by_account_id: string;
+  release_reference: string | null;
+  sheet_reference: string | null;
+  subject_name: string | null;
+  term: string | null;
+  section_label: string | null;
+  grade_label: string | null;
+};
+
+/** Pending correction requests visible to the caller (RLS scopes them to the
+ * entry sheet / publication scope). The sheet projection is joined separately
+ * so a missing embed never blanks the whole review queue. */
+export function resultsListPendingCorrections(supabase: SupabaseClient<Database>, sheetId?: string) {
+  return result(async () => {
+    let query = supabase
+      .from("result_correction_requests")
+      .select("id, publication_id, release_id, source_entry_sheet_id, reason, status, version, created_at, requested_by_account_id")
+      .eq("status", "requested")
+      .order("created_at", { ascending: false });
+    if (sheetId !== undefined) query = query.eq("source_entry_sheet_id", sheetId);
+    const { data, error } = await query;
+    if (error !== null) throw mapRpcError(error);
+    const rows = data ?? [];
+    const sheetIds = [...new Set(rows.map((row) => row.source_entry_sheet_id).filter((value): value is string => value !== null))];
+    const releaseIds = [...new Set(rows.map((row) => row.release_id).filter((value): value is string => value !== null))];
+    const sheets = new Map<string, { reference: string; subjectName: string | null; term: string | null; sectionLabel: string | null; gradeLabel: string | null }>();
+    const releases = new Map<string, string>();
+    if (sheetIds.length > 0) {
+      const { data: sheetRows, error: sheetError } = await supabase
+        .from("result_entry_sheets")
+        .select("id, reference, subjects(name), exam_definitions(term, grade_sections(section_label, grades(label)))")
+        .in("id", sheetIds);
+      if (sheetError !== null) throw mapRpcError(sheetError);
+      for (const row of sheetRows ?? []) {
+        const exam = Array.isArray(row.exam_definitions) ? row.exam_definitions[0] : row.exam_definitions;
+        const section = exam === null || exam === undefined ? null : (Array.isArray(exam.grade_sections) ? exam.grade_sections[0] : exam.grade_sections);
+        const grade = section === null || section === undefined ? null : (Array.isArray(section.grades) ? section.grades[0] : section.grades);
+        sheets.set(row.id, {
+          reference: row.reference,
+          subjectName: row.subjects?.name ?? null,
+          term: exam?.term ?? null,
+          sectionLabel: section?.section_label ?? null,
+          gradeLabel: grade?.label ?? null,
+        });
+      }
+    }
+    if (releaseIds.length > 0) {
+      const { data: releaseRows, error: releaseError } = await supabase
+        .from("result_report_releases")
+        .select("id, reference")
+        .in("id", releaseIds);
+      if (releaseError !== null) throw mapRpcError(releaseError);
+      for (const row of releaseRows ?? []) releases.set(row.id, row.reference);
+    }
+    return rows.map((row) => {
+      const sheet = row.source_entry_sheet_id === null ? undefined : sheets.get(row.source_entry_sheet_id);
+      return {
+        id: row.id,
+        publication_id: row.publication_id,
+        release_id: row.release_id,
+        source_entry_sheet_id: row.source_entry_sheet_id,
+        reason: row.reason,
+        status: row.status,
+        version: row.version,
+        created_at: row.created_at,
+        requested_by_account_id: row.requested_by_account_id,
+        release_reference: row.release_id === null ? null : (releases.get(row.release_id) ?? null),
+        sheet_reference: sheet?.reference ?? null,
+        subject_name: sheet?.subjectName ?? null,
+        term: sheet?.term ?? null,
+        section_label: sheet?.sectionLabel ?? null,
+        grade_label: sheet?.gradeLabel ?? null,
+      } satisfies PendingCorrectionProjection;
+    });
   });
 }
 
@@ -1529,6 +1854,8 @@ export type TimetableOverrideProjection = {
   room_id: string | null;
   substitute_teacher_assignment_id: string | null;
   substitute_teaching_assignment_id: string | null;
+  /** Resolved by `timetableListOverrides` through the definer projection. */
+  substitute_teacher_name?: string | null;
   note: string | null;
   created_at: string;
   created_by_account_id?: string | null;
@@ -1575,9 +1902,31 @@ export function timetableListVersions(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
       .from("timetable_versions")
-      .select("id, reference, grade_section_id, status, version, revision, effective_from, effective_to, created_at, updated_at, timetable_periods(id, day_of_week, period_number, starts_at, ends_at, subject_id, teacher_assignment_id, teaching_assignment_id, room_id, kind, subjects(name), teaching_assignments(staff_members(people(display_name))), staff_assignments(staff_members(people(display_name))), rooms(label)), timetable_publications(reference, published_at, note)");
+      .select("id, reference, grade_section_id, status, version, revision, effective_from, effective_to, created_at, updated_at, timetable_periods(id, day_of_week, period_number, starts_at, ends_at, subject_id, teacher_assignment_id, teaching_assignment_id, room_id, kind, subjects(name), teaching_assignments(staff_members(people(display_name))), staff_assignments(staff_members(people(display_name))), rooms(label)), timetable_publications(reference, published_at, note)")
+      .order("version", { ascending: false });
     if (error !== null) throw mapRpcError(error);
-    return data;
+    const rows = (data ?? []) as unknown as Array<{ id: string; timetable_periods?: Array<{ id: string; teacher_name?: string | null }> }>;
+    if (rows.length > 0) {
+      const names = await timetableTeacherNames(supabase, rows.map((row) => row.id));
+      if (names.ok) {
+        for (const row of rows) {
+          for (const period of row.timetable_periods ?? []) period.teacher_name = names.value[period.id] ?? null;
+        }
+      }
+    }
+    return rows;
+  });
+}
+
+/** Teacher display names keyed by timetable period id. Staff tables are not
+ * readable under family RLS, so the name comes from a definer projection; a
+ * failed lookup must never fall back to an internal id. */
+export function timetableTeacherNames(supabase: SupabaseClient<Database>, versionIds: string[]) {
+  return result(async () => {
+    if (versionIds.length === 0) return {} as Record<string, string>;
+    const { data, error } = await callAppRpc<Record<string, string>>(supabase, "timetable_teacher_names", { p_version_ids: versionIds });
+    if (error !== null) throw mapRpcError(error);
+    return data ?? {};
   });
 }
 
@@ -1592,7 +1941,14 @@ export function timetableGetEffective(supabase: SupabaseClient<Database>, gradeS
       .limit(1)
       .maybeSingle();
     if (error !== null) throw mapRpcError(error);
-    return data;
+    const row = data as unknown as { id: string; timetable_periods?: Array<{ id: string; teacher_name?: string | null }> } | null;
+    if (row !== null) {
+      const names = await timetableTeacherNames(supabase, [row.id]);
+      if (names.ok) {
+        for (const period of row.timetable_periods ?? []) period.teacher_name = names.value[period.id] ?? null;
+      }
+    }
+    return row;
   });
 }
 
@@ -1603,13 +1959,33 @@ export function timetableListOverrides(supabase: SupabaseClient<Database>, grade
   return result(async () => {
     const { data, error } = await supabase
       .from("timetable_overrides")
-      .select("id, reference, grade_section_id, override_date, day_of_week, period_number, kind, subject_id, room_id, substitute_teacher_assignment_id, substitute_teaching_assignment_id, note, created_at, created_by_account_id, updated_at, version, revoked_at, revoked_by_account_id, revocation_reason, subjects(name), rooms(label), teaching_assignments(reference, staff_members(people(display_name))), staff_assignments(reference, staff_members(people(display_name)))")
+      .select("id, reference, grade_section_id, override_date, day_of_week, period_number, kind, subject_id, room_id, substitute_teacher_assignment_id, substitute_teaching_assignment_id, note, created_at, created_by_account_id, updated_at, version, revoked_at, revoked_by_account_id, revocation_reason, subjects(name), rooms(label), teaching_assignments!timetable_overrides_substitute_teaching_assignment_id_fkey(reference, staff_members(people(display_name))), staff_assignments!timetable_overrides_substitute_teacher_assignment_id_fkey(reference, staff_members(people(display_name)))")
       .eq("grade_section_id", gradeSectionId)
       .order("override_date", { ascending: true })
       .order("period_number", { ascending: true })
       .order("created_at", { ascending: true });
     if (error !== null) throw mapRpcError(error);
-    return (data ?? []) as unknown as TimetableOverrideProjection[];
+    const rows = (data ?? []) as unknown as TimetableOverrideProjection[];
+    /* staff_members/people are staff-scoped under RLS, so the embedded teacher
+       name on a substitute row is null for guardians and non-admin staff.
+       Resolve the canonical teaching-assignment display names through the
+       definer projection the config read already uses; the mapper falls back
+       to the config assignment when a name is unavailable. */
+    const assignmentIds = [...new Set(rows
+      .map((row) => row.substitute_teaching_assignment_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0))];
+    if (assignmentIds.length > 0) {
+      const names = await callAppRpc<Record<string, string>>(supabase, "teaching_assignment_teacher_names", { p_assignment_ids: assignmentIds });
+      if (names.error === null && names.data !== null) {
+        for (const row of rows) {
+          const id = row.substitute_teaching_assignment_id;
+          if (typeof id === "string" && id.length > 0 && typeof names.data[id] === "string") {
+            row.substitute_teacher_name = names.data[id];
+          }
+        }
+      }
+    }
+    return rows;
   });
 }
 
@@ -1784,9 +2160,14 @@ export function resolveStaffContext(
     const { data: grants, error: grantsError } = grantsResult;
     if (grantsError !== null) throw mapRpcError(grantsError);
     const requestedRoleGrantId = roleGrantId ?? preference?.active_role_grant_id ?? undefined;
-    const selectedGrant = requestedRoleGrantId === undefined
-      ? grants?.[0]
-      : grants?.find((grant) => grant.id === requestedRoleGrantId);
+    /* A revoked workspace grant leaves the stored preference (or an old
+       active-workspace cookie) pointing at a grant that is no longer active.
+       Fall back to the account's first active grant so the staff member keeps
+       access to a workspace they genuinely hold instead of being denied their
+       whole portal; authorization still evaluates only active grants. */
+    const selectedGrant = (requestedRoleGrantId === undefined
+      ? undefined
+      : grants?.find((grant) => grant.id === requestedRoleGrantId)) ?? grants?.[0];
     if (selectedGrant === undefined) throw new DomainError("forbidden", "That staff workspace is not granted to this account");
     const { data: assignments } = await supabase
       .from("staff_assignments")
@@ -2112,6 +2493,27 @@ export function staffProfileChange(
   });
 }
 
+/**
+ * Version-checked adoption for a legacy staff account with no profile marker
+ * (migration 000056 §4). The server confirms the account's active grants are
+ * exactly the target profile bundle (or empty) before stamping the marker, so
+ * the same "Change profile" control works for review-required accounts.
+ */
+export function staffProfileAdopt(
+  supabase: SupabaseClient<Database>,
+  input: { accountId: string; profileCode: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "staff_profile_adopt", {
+      p_account_id: input.accountId,
+      p_profile_code: input.profileCode,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "staff profile adoption");
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Teaching staff (non-login records, migration 000043)                 */
 /* ------------------------------------------------------------------ */
@@ -2296,26 +2698,33 @@ export function dataImportReport(supabase: SupabaseClient<Database>, batchId: st
   });
 }
 
-export function dataImportListBatches(supabase: SupabaseClient<Database>) {
+export function dataImportListBatchesPaginated(
+  supabase: SupabaseClient<Database>,
+  input: { limit?: number; offset?: number },
+) {
   return result(async () => {
-    const { data, error } = await callAppRpc<Json>(supabase, "data_import_list_batches", {});
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_list_batches_paginated", {
+      p_limit: input.limit ?? 50,
+      p_offset: input.offset ?? 0,
+    });
     if (error !== null) throw mapRpcError(error);
-    return Array.isArray(data) ? (data as unknown as Record<string, unknown>[]) : [];
+    return requireRow(data, "import batch page");
   });
 }
 
-export function dataImportListIssues(
+export function dataImportListIssuesPaginated(
   supabase: SupabaseClient<Database>,
-  batchId: string,
-  severity?: "error" | "warning",
+  input: { batchId: string; severity?: "error" | "warning"; limit?: number; offset?: number },
 ) {
   return result(async () => {
-    const { data, error } = await callAppRpc<Json>(supabase, "data_import_list_issues", {
-      p_batch_id: batchId,
-      p_severity: severity ?? null,
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_list_issues_paginated", {
+      p_batch_id: input.batchId,
+      p_severity: input.severity ?? null,
+      p_limit: input.limit ?? 100,
+      p_offset: input.offset ?? 0,
     });
     if (error !== null) throw mapRpcError(error);
-    return Array.isArray(data) ? (data as unknown as Record<string, unknown>[]) : [];
+    return requireRow(data, "import issue page");
   });
 }
 
@@ -2397,23 +2806,58 @@ export function dataImportResolveIssue(
   },
 ) {
   return result(async () => {
-    const { data: account } = await supabase.auth.getUser();
-    if (account.user === null) throw new Error("Not authenticated.");
-    const { data, error } = await supabase
-      .from("data_import_resolutions")
-      .insert({
-        batch_id: input.batchId,
-        row_id: input.rowId,
-        issue_id: input.issueId,
-        resolution: input.resolution,
-        resolved_value: (input.resolvedValue ?? null) as unknown as Json,
-        note: input.note ?? null,
-        resolved_by_account_id: account.user.id,
-      })
-      .select("*")
-      .single();
+    /* 000086: the transactional command marks the issue resolved and applies
+     * the row effect. The previous browser-side insert left `resolved_at`
+     * null, so a batch with errors could never commit. */
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_resolve_issue", {
+      p_batch_id: input.batchId,
+      p_row_id: input.rowId,
+      p_issue_id: input.issueId,
+      p_resolution: input.resolution,
+      p_resolved_value: input.resolvedValue ?? null,
+      p_note: input.note ?? null,
+    });
     if (error !== null) throw mapRpcError(error);
-    return data;
+    return requireRow(data, "import issue resolution");
+  });
+}
+
+export function dataImportApplyValidation(
+  supabase: SupabaseClient<Database>,
+  input: { batchId: string; rows: unknown[]; issues: unknown[] },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_apply_validation", {
+      p_batch_id: input.batchId,
+      p_rows: input.rows,
+      p_issues: input.issues,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import validation");
+  });
+}
+
+export function dataImportFinishValidation(
+  supabase: SupabaseClient<Database>,
+  input: { batchId: string; expectedVersion: number },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_finish_validation", {
+      p_batch_id: input.batchId,
+      p_expected_version: input.expectedVersion,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import validation finish");
+  });
+}
+
+export function dataImportGetBatch(supabase: SupabaseClient<Database>, batchId: string) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_import_get_batch", {
+      p_batch_id: batchId,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "import batch detail");
   });
 }
 
@@ -2468,6 +2912,37 @@ export function dataExportCancel(
   });
 }
 
+export function dataExportRetry(
+  supabase: SupabaseClient<Database>,
+  input: { requestReference: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_export_retry", {
+      p_request_reference: input.requestReference,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "export retry");
+  });
+}
+
+/** Release a stale `generating` export whose worker died at the queue layer
+ * (000116). Requires the administrator profile, AAL2, a failed generation
+ * record, and an expired worker lease; re-queues generation exactly once. */
+export function dataExportRecover(
+  supabase: SupabaseClient<Database>,
+  input: { requestId: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_export_recover", {
+      p_request_id: input.requestId,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "export recovery");
+  });
+}
+
 export function dataExportListCatalog(supabase: SupabaseClient<Database>) {
   return result(async () => {
     const { data, error } = await supabase
@@ -2491,19 +2966,6 @@ export function dataExportListPaginated(
     });
     if (error !== null) throw mapRpcError(error);
     return requireRow(data, "export list paginated");
-  });
-}
-
-export function dataExportCreateSignedDownload(
-  supabase: SupabaseClient<Database>,
-  input: { requestReference: string },
-) {
-  return result(async () => {
-    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "data_export_create_signed_download", {
-      p_request_reference: input.requestReference,
-    });
-    if (error !== null) throw mapRpcError(error);
-    return requireRow(data, "export signed download");
   });
 }
 
@@ -2585,6 +3047,20 @@ export function accountHasStaffGrant(supabase: SupabaseClient<Database>) {
     const { data, error } = await callAppRpc<boolean>(supabase, "account_has_staff_grant", {});
     if (error !== null) throw mapRpcError(error);
     return data === true;
+  });
+}
+
+/** True when the signed-in account holds an active applicant identity, so
+ * post-verification routing can send it to its application workspace. */
+export function accountHasApplicantIdentity(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await supabase
+      .from("applicant_identities")
+      .select("id")
+      .eq("status", "active")
+      .limit(1);
+    if (error !== null) throw mapRpcError(error);
+    return (data ?? []).length > 0;
   });
 }
 
@@ -2760,6 +3236,8 @@ export function financeRefreshAttempt(supabase: SupabaseClient<Database>, attemp
 export type PublishedVacancy = {
   vacancyId: string;
   versionId: string;
+  /** Immutable published version number; the public intake requires it. */
+  version: number;
   reference: string;
   title: string;
   department: string | null;
@@ -2780,6 +3258,7 @@ export function jobsListPublishedVacancies(supabase: SupabaseClient<Database>) {
       const row: PublishedVacancy = {
         vacancyId: vacancy.id,
         versionId: latest.id,
+        version: latest.version,
         reference: vacancy.reference,
         title: vacancy.title,
         department: vacancy.department,
@@ -2837,11 +3316,19 @@ export function jobsListMine(supabase: SupabaseClient<Database>) {
 
 export function jobsListStaffQueue(supabase: SupabaseClient<Database>) {
   return result(async () => {
+    /* The staff queue renders only the latest submitted snapshot (candidate
+       name and interview fallback) and the applicant timeline; embedding the
+       full `job_application_versions` history ships every snapshot for every
+       application. PostgREST applies the referenced-table order+limit inside
+       the embed (a lateral per application), so the queue carries one
+       snapshot while the applicant `jobsListMine` read keeps full history. */
     const { data, error } = await supabase
       .from("job_applications")
-      .select("id, reference, applicant_name, owner_account_id, vacancy_id, current_status, version, created_at, job_vacancies(title, reference), job_application_drafts(draft, schema_version, expires_at, updated_at), job_application_versions(version, snapshot), job_events(event_type, visible_to_applicant, copy, created_at), job_interviews(scheduled_at, notes, outcome), job_review_assignments(reviewer_account_id, status, assigned_at), job_scorecards(score, notes, created_by_account_id, created_at)")
+      .select("id, reference, applicant_name, applicant_email, applicant_phone, owner_account_id, vacancy_id, current_status, version, created_at, job_vacancies(title, reference), job_application_drafts(draft, schema_version, expires_at, updated_at), job_application_versions(version, snapshot), job_events(event_type, visible_to_applicant, copy, created_at), job_interviews(scheduled_at, notes, outcome), job_review_assignments(reviewer_account_id, status, created_at), job_scorecards(score, notes, reviewer_account_id, created_at), job_documents(requirement_code, documents(reference, safe_filename, category, scan_status, mime_type, size_bytes, created_at))")
       .not("current_status", "eq", "draft")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("version", { referencedTable: "job_application_versions", ascending: false })
+      .limit(1, { referencedTable: "job_application_versions" });
     if (error !== null) throw mapRpcError(error);
     return data;
   });
@@ -2907,7 +3394,7 @@ export function jobsDecideV2(supabase: SupabaseClient<Database>, input: { applic
 
 export function contentList(supabase: SupabaseClient<Database>, scope: "public" | "staff" | "family" = "public") {
   return result(async () => {
-    const query = supabase.from("content_items").select("id, reference, kind, slug, current_status, version, current_version_id, updated_at, content_versions(id, version, title, body, review_status, published_at, created_at, author_account_id, reviewed_by_account_id, approved_at), notices(id, reference, category, urgent, status, published_at, expires_at, scheduled_at, starts_at, unpublished_at, notice_audiences(audience, role_code, academic_year_id, grade_section_id, student_id))");
+    const query = supabase.from("content_items").select("id, reference, kind, slug, current_status, scheduled_at, version, current_version_id, updated_at, content_versions(id, version, title, body, review_status, published_at, created_at, author_account_id, reviewed_by_account_id, approved_at), notices(id, reference, category, urgent, pinned, status, published_at, expires_at, review_due, scheduled_at, starts_at, unpublished_at, notice_audiences(audience, role_code, academic_year_id, grade_section_id, student_id))");
     const { data, error } = scope === "public" ? await query.in("current_status", ["published", "expired"]) : await query;
     if (error !== null) throw mapRpcError(error);
     return (data ?? []) as unknown as Array<Record<string, unknown>>;
@@ -2938,9 +3425,9 @@ export function contentPublishVersion(supabase: SupabaseClient<Database>, versio
   });
 }
 
-export function contentUnpublish(supabase: SupabaseClient<Database>, input: { contentItemId: string; reason: string }) {
+export function contentUnpublish(supabase: SupabaseClient<Database>, input: { contentItemId: string; reason: string; expectedVersion?: number; idempotencyKey?: string }) {
   return result(async () => {
-    const { data, error } = await callAppRpc<Json>(supabase, "content_unpublish_v2", { p_content_item_id: input.contentItemId, p_reason: input.reason, p_expected_version: (input as typeof input & { expectedVersion?: number }).expectedVersion ?? null });
+    const { data, error } = await callAppRpc<Json>(supabase, "content_unpublish_v3", { p_content_item_id: input.contentItemId, p_reason: input.reason, p_expected_version: input.expectedVersion ?? null, p_idempotency_key: input.idempotencyKey ?? null });
     if (error !== null) throw mapRpcError(error);
     return requireRow(data, "unpublished content");
   });
@@ -2970,8 +3457,88 @@ export function contentPublishVersionV2(supabase: SupabaseClient<Database>, inpu
   });
 }
 
+/** Anonymous public projection. `notice_audiences` is deliberately not
+ * embedded: anon holds no SELECT privilege on recipient definitions (000008)
+ * and PostgREST embeds every requested relation, so the audience is derived
+ * from immutable version metadata instead. Only the current immutable version
+ * travels per item; older versions stay on the staff projection. Used only by
+ * anonymous server loaders; the authenticated adapter keeps the full
+ * `content.list` scope. */
 export function contentListPublic(supabase: SupabaseClient<Database>) {
-  return contentList(supabase, "public");
+  return result(async () => {
+    const { data: items, error } = await supabase
+      .from("content_items")
+      .select("id, reference, kind, slug, current_status, version, current_version_id, updated_at, notices(id, reference, category, urgent, pinned, status, published_at, expires_at, review_due, scheduled_at, starts_at, unpublished_at)")
+      .in("current_status", ["published", "expired"]);
+    if (error !== null) throw mapRpcError(error);
+    const rows = (items ?? []) as unknown as Array<Record<string, unknown> & { current_version_id: string | null }>;
+    const versionIds = [...new Set(rows.flatMap((row) => (row.current_version_id === null ? [] : [row.current_version_id])))];
+    const versionsById = new Map<string, Record<string, unknown>>();
+    if (versionIds.length > 0) {
+      const { data: versions, error: versionsError } = await supabase
+        .from("content_versions")
+        .select("id, content_item_id, version, title, body, review_status, published_at, created_at, author_account_id, reviewed_by_account_id, approved_at")
+        .in("id", versionIds);
+      if (versionsError !== null) throw mapRpcError(versionsError);
+      for (const version of (versions ?? []) as unknown as Array<Record<string, unknown> & { id: string }>) {
+        versionsById.set(version.id, version);
+      }
+    }
+    return rows.map((row) => {
+      const current = row.current_version_id === null ? undefined : versionsById.get(row.current_version_id);
+      return { ...row, content_versions: current === undefined ? [] : [current] };
+    });
+  });
+}
+
+export type PublicDownloadRow = {
+  reference: string;
+  safe_filename: string;
+  category: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+  finalized_at: string | null;
+};
+
+type PublicDownloadQueryRow = PublicDownloadRow & {
+  retention_until: string | null;
+  legal_hold_until: string | null;
+};
+
+/**
+ * Anonymous-safe public download register. Only documents the school has
+ * explicitly approved (`visibility='public_approved'`) that are clean and
+ * finalized are returned. Object keys, buckets, checksums, and owner
+ * identifiers never enter the projection; retention columns are read only to
+ * gate expired rows and are stripped before returning. RLS guarantees anon
+ * and authenticated sessions see exactly these rows.
+ */
+export function contentListPublicDownloads(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    /* Anonymous reads go through a SECURITY DEFINER projection so the table
+       grant never exposes storage keys, checksums, or owner identifiers. */
+    const { data, error } = await callAppRpc<unknown>(supabase, "documents_public_register", {});
+    if (error !== null) throw mapRpcError(error);
+    const now = Date.now();
+    return (Array.isArray(data) ? (data as unknown as PublicDownloadQueryRow[]) : [])
+      .filter((row) => {
+        const retention = row.retention_until;
+        if (retention === null) return true;
+        if (new Date(retention).getTime() > now) return true;
+        const hold = row.legal_hold_until;
+        return hold !== null && new Date(hold).getTime() > now;
+      })
+      .map((row): PublicDownloadRow => ({
+        reference: row.reference,
+        safe_filename: row.safe_filename,
+        category: row.category,
+        mime_type: row.mime_type,
+        size_bytes: row.size_bytes,
+        created_at: row.created_at,
+        finalized_at: row.finalized_at,
+      }));
+  });
 }
 
 export function supportCreate(supabase: SupabaseClient<Database>, input: { category: string; subject: string; body: string; priority?: string }) {
@@ -3071,11 +3638,39 @@ export function auditListPage(supabase: SupabaseClient<Database>, input: { limit
   });
 }
 
-export function notificationsList(supabase: SupabaseClient<Database>) {
+/**
+ * Resolve an account UUID to the staff-visible label used across the
+ * workspace (display name, then verified contact, then a safe generic).
+ * Existing rows that stored a raw account id can therefore be rendered
+ * without ever showing a UUID. Backed by the existing
+ * `app.audit_account_reference` projection; null when the row is gone.
+ */
+export function accountReferenceLabel(supabase: SupabaseClient<Database>, accountId: string) {
   return result(async () => {
-    const { data, error } = await supabase.from("in_app_notifications").select("id, version, kind, title, body, target_type, target_reference, read_at, created_at, source_event_id").order("created_at", { ascending: false });
+    const { data, error } = await callAppRpc<string | null>(supabase, "audit_account_reference", { p_account_id: accountId });
+    if (error !== null) throw mapRpcError(error);
+    return typeof data === "string" && data.trim() !== "" ? data : null;
+  });
+}
+
+const NOTIFICATIONS_PAGE_DEFAULT = 25;
+const NOTIFICATIONS_PAGE_MAX = 50;
+
+export function notificationsList(supabase: SupabaseClient<Database>, input: { limit?: number } = {}) {
+  return result(async () => {
+    const requested = Number.isFinite(input.limit) ? Math.trunc(input.limit as number) : NOTIFICATIONS_PAGE_DEFAULT;
+    const limit = Math.min(Math.max(requested, 1), NOTIFICATIONS_PAGE_MAX);
+    const { data, error } = await supabase.from("in_app_notifications").select("id, version, kind, title, body, target_type, target_reference, read_at, created_at, source_event_id").is("dismissed_at", null).order("created_at", { ascending: false }).limit(limit);
     if (error !== null) throw mapRpcError(error);
     return data;
+  });
+}
+
+export function notificationsUnreadCount(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { count, error } = await supabase.from("in_app_notifications").select("id", { count: "exact", head: true }).is("read_at", null).is("dismissed_at", null);
+    if (error !== null) throw mapRpcError(error);
+    return count ?? 0;
   });
 }
 
@@ -3095,10 +3690,166 @@ export function notificationsMarkAll(supabase: SupabaseClient<Database>, expecte
   });
 }
 
+export function notificationDismiss(supabase: SupabaseClient<Database>, notificationId: string, expectedVersion = 1) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "notifications_dismiss", { p_notification_id: notificationId, p_expected_version: expectedVersion });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "notification");
+  });
+}
+
+export function notificationsDismissAll(supabase: SupabaseClient<Database>) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<number>(supabase, "notifications_dismiss_all", {});
+    if (error !== null) throw mapRpcError(error);
+    return { count: data ?? 0 };
+  });
+}
+
 export function documentsList(supabase: SupabaseClient<Database>, ownerDomain?: string, ownerRecordId?: string) {
   return result(async () => {
     const { data, error } = await callAppRpc<Json[]>(supabase, "documents_projection_list", { p_owner_domain: ownerDomain ?? null, p_owner_record_id: ownerRecordId ?? null });
     if (error !== null) throw mapRpcError(error);
     return (data ?? []).map((row) => row as Record<string, unknown>);
+  });
+}
+
+export type ServerDocumentPage = {
+  rows: Array<Record<string, unknown>>;
+  /** Exact count of the authorized projection, bounded by the owner filter when given. */
+  total: number;
+  nextOffset: number | null;
+};
+
+/**
+ * Paged staff document projection (`app.documents_projection_list_paginated`,
+ * 000114). The unbounded `documents_projection_list` stays for owner-scoped
+ * reads (a handful of rows per student/invoice); the staff register pages with
+ * an exact total and loads further pages on demand.
+ */
+export function documentsListPage(
+  supabase: SupabaseClient<Database>,
+  input: { ownerDomain?: string; ownerRecordId?: string; limit?: number; offset?: number },
+) {
+  return result<ServerDocumentPage>(async () => {
+    const { data, error } = await callAppRpc<Record<string, unknown>>(supabase, "documents_projection_list_paginated", {
+      p_owner_domain: input.ownerDomain ?? null,
+      p_owner_record_id: input.ownerRecordId ?? null,
+      p_limit: input.limit ?? 50,
+      p_offset: input.offset ?? 0,
+    });
+    if (error !== null) throw mapRpcError(error);
+    const rows = Array.isArray(data?.rows) ? (data.rows as Array<Record<string, unknown>>) : [];
+    return {
+      rows,
+      total: typeof data?.total === "number" ? data.total : rows.length,
+      nextOffset: typeof data?.nextOffset === "number" ? data.nextOffset : null,
+    };
+  });
+}
+
+/** One projected document by reference, through the same access predicate. */
+export function documentsGet(supabase: SupabaseClient<Database>, reference: string) {
+  return result<Record<string, unknown> | null>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "documents_projection_get", { p_reference: reference });
+    if (error !== null) throw mapRpcError(error);
+    return data !== null && typeof data === "object" ? (data as Record<string, unknown>) : null;
+  });
+}
+
+export type DocumentVisibilityChange = "private" | "public_approved";
+
+/**
+ * The staff projection row (`documents_projection_list`) carries every field
+ * the readiness pre-check needs. It is the same SECURITY DEFINER boundary the
+ * documents workspace lists through (`app.document_actor_allowed`), so every
+ * document visible on the page is resolvable here. Reading `public.documents`
+ * directly was narrower (`scope_documents_read` →
+ * `app.document_staff_allowed`), which excludes the `data_import_batch` and
+ * `data_export` artifacts the register shows and made approve/withdraw fail
+ * with a false "not found".
+ */
+type DocumentVisibilityProjectionRow = {
+  id?: unknown;
+  reference?: unknown;
+  ownerDomain?: unknown;
+  visibility?: unknown;
+  status?: unknown;
+  scanState?: unknown;
+  finalizationState?: unknown;
+  checksumVerified?: unknown;
+  finalizedAt?: unknown;
+};
+
+type DocumentVisibilityCommandRow = {
+  documentId?: unknown;
+  reference?: unknown;
+  visibility?: unknown;
+};
+
+/** Why this projected document may not enter the public register, or null when it may. */
+export function publicApprovalRefusal(row: DocumentVisibilityProjectionRow): string | null {
+  const status = typeof row.status === "string" ? row.status : "";
+  const scanState = typeof row.scanState === "string" ? row.scanState : status;
+  /* The public downloads register is for school-level documents only.
+     Per-student report cards, applicant evidence, and import artifacts are
+     private records; approving one would serve personal data anonymously
+     from the register page. Fail closed when the projection carries no
+     owner domain at all. */
+  if (row.ownerDomain !== "school_document") {
+    return "Only school documents can be approved for the public downloads register. Student, applicant, staff, and import records stay private.";
+  }
+  /* The projection normalizes deleted/retention-reached rows to `expired`. */
+  if (status === "expired") return "This document was deleted or is past its retention period and cannot be approved for public view.";
+  if (scanState === "quarantined") return "This document is quarantined. Resolve the scan finding before approving it for public view.";
+  if (scanState === "failed") return "This document failed scanning and cannot be approved for public view.";
+  if (scanState === "ready" || scanState === "clean") {
+    return row.finalizationState === "verified" && row.checksumVerified === true && typeof row.finalizedAt === "string"
+      ? null
+      : "This document has not finished byte verification and cannot be approved for public view yet.";
+  }
+  return "This document is still being processed and cannot be approved for public view yet.";
+}
+
+/**
+ * Staff command: approve a clean, finalized document for the public register,
+ * or withdraw it. The `app.documents_set_public_visibility` RPC is the single
+ * authority: it requires `content_publisher` + AAL2 (matching the UI's
+ * `content.publish` gate), locks the row, enforces readiness, and records the
+ * audit row. The local readiness pre-check preserves the honest refusal
+ * messages the workspace shows; withdrawal is always allowed.
+ */
+export function documentsSetPublicVisibility(
+  supabase: SupabaseClient<Database>,
+  input: { reference: string; visibility: DocumentVisibilityChange; reason?: string },
+) {
+  return result(async () => {
+    /* One authorized row by reference: the full projection read is unbounded
+       at school scale, and the command only needs the target document. */
+    const { data: currentRow, error } = await callAppRpc<Json>(supabase, "documents_projection_get", {
+      p_reference: input.reference,
+    });
+    if (error !== null) throw mapRpcError(error);
+    const current = (currentRow ?? null) as unknown as DocumentVisibilityProjectionRow | null;
+    if (current === null) throw new DomainError("not-found", "The document was not found.");
+    if (typeof current.id !== "string" || current.id.length === 0) {
+      throw new DomainError("unavailable", "The document visibility could not be changed.");
+    }
+    if (input.visibility === "public_approved") {
+      const refusal = publicApprovalRefusal(current);
+      if (refusal !== null) throw new DomainError("conflict", refusal);
+    }
+    const { data: updated, error: commandError } = await callAppRpc<Json>(supabase, "documents_set_public_visibility", {
+      p_document_id: current.id,
+      p_public: input.visibility === "public_approved",
+      p_reason: input.reason ?? null,
+    });
+    if (commandError !== null) throw mapRpcError(commandError, "conflict");
+    if (updated === null) throw new DomainError("unavailable", "The document visibility could not be changed.");
+    const updatedRow = updated as unknown as DocumentVisibilityCommandRow;
+    return {
+      reference: typeof updatedRow.reference === "string" ? updatedRow.reference : input.reference,
+      visibility: updatedRow.visibility === "public_approved" ? ("public_approved" as const) : ("private" as const),
+    };
   });
 }

@@ -14,13 +14,13 @@
 }
 
 .closed {
-  max-width: 1200px;
+  max-width: var(--wrap);
   margin: 0 auto;
-  padding: clamp(64px, 10vw, 120px) clamp(24px, 6vw, 96px);
+  padding: clamp(44px, 6vw, 84px) clamp(16px, 4vw, 40px);
 }
 
 .closedTitle {
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-family: var(--serif);
   font-size: clamp(2rem, 4vw, 3rem);
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -29,9 +29,9 @@
 }
 
 .closedDeck {
-  color: var(--ink-soft);
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: 18px;
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 1.1rem;
   font-style: italic;
   line-height: 1.55;
   margin: 14px 0 28px;

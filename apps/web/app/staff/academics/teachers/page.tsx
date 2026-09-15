@@ -90,7 +90,7 @@ export default function TeachingStaffWorkspace() {
       setDisplayName("");
       setTitle("");
       setReason("");
-      announce(`Teaching record ${created.ref} created — no login account was issued.`);
+      announce(`Teaching record ${created.ref} created · no login account was issued.`);
       await refresh();
     } catch (error) {
       setErrors({ reason: error instanceof Error ? error.message : "The record could not be created." });
@@ -150,7 +150,7 @@ export default function TeachingStaffWorkspace() {
       });
       setEndingId(null);
       setEndReason("");
-      announce("Assignment ended — history is preserved.");
+      announce("Assignment ended · history is preserved.");
       await refresh();
     } catch (error) {
       announce(error instanceof Error ? error.message : "The assignment could not be ended.");
@@ -161,24 +161,24 @@ export default function TeachingStaffWorkspace() {
 
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Principal · Academics</p>
-        <h1 className="workspace-title">Teaching staff</h1>
-        <p className="workspace-intro">
-          Non-login teacher records for timetable attribution and conflict checks. These records never receive a
-          portal account or role grant.
-        </p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1>Teaching staff</h1>
+          <p className="ph-sub">
+            Non-login teacher records for timetable attribution and conflict checks. These records never receive a
+            portal account or role grant.
+          </p>
+        </div>
+        <div className="ph-actions">
+          <Button variant="primary" onClick={() => { setCreateOpen(true); setErrors({}); }} disabled={!canManage}>
+            Add teaching record
+          </Button>
+          {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
+        </div>
+      </div>
 
       {loadError ? <p className={styles.errorNote} role="alert">{loadError}</p> : null}
       {notice ? <p className={styles.liveNote} role="status" aria-live="polite">{notice}</p> : null}
-
-      <div className={styles.actions}>
-        <Button variant="primary" onClick={() => { setCreateOpen(true); setErrors({}); }} disabled={!canManage}>
-          Add teaching record
-        </Button>
-        {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
-      </div>
 
       {createOpen && (
         <form className={styles.form} onSubmit={handleCreate} noValidate>
@@ -222,7 +222,10 @@ export default function TeachingStaffWorkspace() {
             <p className="workspace-state-note">Add a non-login teaching record to build the timetable roster.</p>
           </div>
         ) : (
-          <table className={`table ${styles.table}`}>
+          <section className="panel">
+            <div className="pn-head"><h2>Teaching records</h2></div>
+            <div className="pn-body flush">
+          <table className={`ledger ${styles.table}`}>
             <caption className="sr-only">Non-login teaching staff with their class and subject assignments</caption>
             <thead>
               <tr>
@@ -323,13 +326,18 @@ export default function TeachingStaffWorkspace() {
               ))}
             </tbody>
           </table>
+            </div>
+          </section>
         )}
       </div>
 
-      <p className={styles.note}>
-        Teaching records are school data only: no sign-in identity is created and no role grant is issued. Timetable
-        periods and conflict checks reference these assignments; historical legacy assignments remain on file.
-      </p>
+      <div className="callout">
+        <span className="msym" aria-hidden="true">person_off</span>
+        <span className="small">
+          Teaching records are school data only: no sign-in identity is created and no role grant is issued. Timetable
+          periods and conflict checks reference these assignments; historical legacy assignments remain on file.
+        </span>
+      </div>
     </div>
   );
 }

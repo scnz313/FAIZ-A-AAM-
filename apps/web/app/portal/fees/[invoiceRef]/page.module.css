@@ -6,10 +6,10 @@
 
 .title {
   font-family: var(--serif);
-  font-size: clamp(30px, 4vw, 38px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
   margin: 0;
 }
 
@@ -36,7 +36,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 12px 0 0;
 }
 
@@ -46,7 +46,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 14px 0 0;
 }
 
@@ -82,8 +82,8 @@
 }
 
 .totals dt {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   margin: 0 0 6px;
@@ -92,13 +92,13 @@
 
 .totals dd {
   font-family: var(--serif);
-  font-size: 24px;
-  font-weight: 500;
+  font-size: 1.5rem;
+  font-weight: 580;
   margin: 0;
 }
 
 .totals .balanceCell dd {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
 }
 
 /* Payments ------------------------------------------------------------------- */
@@ -119,25 +119,25 @@
 }
 
 .paymentRef {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .paymentDesc strong {
   display: block;
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
 .paymentDesc small {
   color: var(--muted);
   display: block;
-  font-size: 11px;
+  font-size: 0.72rem;
   margin-top: 3px;
 }
 
 .paymentAmount {
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 600;
   text-align: right;
 }
@@ -155,40 +155,40 @@
 
 .attemptDesc strong {
   display: block;
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
 .attemptDesc small {
   color: var(--muted);
   display: block;
-  font-size: 11px;
+  font-size: 0.72rem;
   margin-top: 3px;
 }
 
 .failureReason {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
 }
 
 .emptyState {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 0;
 }
 
 .policyNote {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 14px 0 0;
 }
 
 .receiptRecovery {
   align-items: center;
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
   display: inline-flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 0.78rem;
   gap: 6px;
 }
 
@@ -196,7 +196,7 @@
 
 .checkingNote {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
   line-height: 1.5;
   margin: 0 0 26px;
 }
@@ -204,6 +204,7 @@
 .contextPanel {
   background: var(--chalk);
   border: 1px solid var(--line);
+  border-radius: var(--r);
   display: grid;
   gap: 10px;
   margin: 0 0 26px;
@@ -212,14 +213,14 @@
 
 .contextPanelTitle {
   font-family: var(--serif);
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 1.1rem;
+  font-weight: 580;
   margin: 0;
 }
 
 .contextPanelNote {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.55;
   margin: 0;
   max-width: 60ch;
@@ -246,7 +247,7 @@
 }
 
 .paidText {
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 0;
 }
 
@@ -261,7 +262,7 @@
 
 .notFoundText {
   color: var(--muted);
-  font-size: 15px;
+  font-size: 0.92rem;
   line-height: 1.6;
   margin: 0 0 8px;
   max-width: 48ch;
@@ -312,7 +313,20 @@
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
+  .totals {
+    grid-template-columns: 1fr;
+  }
+
+  .totals > div {
+    padding: 12px 0;
+  }
+
+  .totals > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
   .paymentRow {
     gap: 10px;
     grid-template-columns: minmax(0, 1fr) auto auto;

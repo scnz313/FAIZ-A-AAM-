@@ -31,7 +31,7 @@
 
 .countLine {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 0;
 }
 
@@ -40,7 +40,7 @@
   border: 0;
   color: var(--ink);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.78rem;
   font-weight: 600;
   outline: none;
   padding: 0;
@@ -63,7 +63,7 @@
 }
 
 .rowSelectable:hover td {
-  background: var(--cream);
+  background: var(--chalk);
 }
 
 .rowSelected td {
@@ -101,7 +101,7 @@
 
 .detailRef {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.88rem;
 }
 
 .detailGrid {
@@ -117,7 +117,7 @@
 }
 
 .detailCell dt {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -126,7 +126,7 @@
 }
 
 .detailCell dd {
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 0;
 }
 
@@ -140,7 +140,7 @@
 
 .currentValue {
   font-family: var(--serif);
-  font-size: 30px;
+  font-size: 1.85rem;
   font-weight: 500;
   letter-spacing: -0.02em;
   margin: 0;
@@ -148,13 +148,13 @@
 
 .currentBand {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 0;
 }
 
 .loadingNote {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 0;
 }
 
@@ -169,7 +169,7 @@
   max-width: 640px;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .field {
     min-width: 100%;
   }

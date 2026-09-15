@@ -17,11 +17,15 @@ describe("bounded CSV parser", () => {
     expect(() => parseCsv(new TextEncoder().encode(""))).toThrow(CsvParseError);
   });
 
-  it("marks oversized input as truncated instead of exhausting memory", () => {
+  it("rejects oversized input instead of silently truncating school data", () => {
     const rows = Array.from({ length: 12_000 }, (_, index) => `key-${index},name\r\n`).join("");
-    const parsed = parseCsv(new TextEncoder().encode(`student_key,given_name\r\n${rows}`));
-    expect(parsed.truncated).toBe(true);
-    expect(parsed.rows.length).toBeLessThanOrEqual(10_000);
+    expect(() => parseCsv(new TextEncoder().encode(`student_key,given_name\r\n${rows}`))).toThrow(/row limit/i);
+  });
+
+  it("rejects blank or duplicate headers and unclosed quotes", () => {
+    expect(() => parseCsv(new TextEncoder().encode("name,,grade\nA,,8"))).toThrow(/blank header/i);
+    expect(() => parseCsv(new TextEncoder().encode("name,Name\nA,B"))).toThrow(/duplicate headers/i);
+    expect(() => parseCsv(new TextEncoder().encode('name,grade\n"A,8'))).toThrow(/unclosed quoted field/i);
   });
 
   it("normalizes Indian mobile numbers to E.164 deterministically", () => {

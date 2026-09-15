@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { StatusTone } from "@/components/ui/StatusBadge";
+import { RegisterPager } from "@/components/staff/RegisterPager";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { FINANCE_DEMO_NOTE, formatINR, type PaymentMethod } from "@/modules/services/finance";
 import { financeService } from "@/modules/services/finance";
 import { dataAdapter } from "@/lib/supabase/env";
-import { loadServerInvoices, loadServerPaymentAttempts } from "@/lib/supabase/server-loaders";
+import { loadServerInvoiceRegister, loadServerPaymentAttemptsForInvoices, loadServerProfileCode } from "@/lib/supabase/server-loaders";
+import { parseFinanceRegisterPage } from "@/modules/services/finance-register";
 import { formatKolkata } from "@/modules/iot/domain";
 import { mergePaymentRegisterRows } from "@/modules/services/finance-server-map";
 
@@ -40,9 +43,12 @@ const STATUS_META: Record<PaymentStatus, { label: string; tone: StatusTone }> = 
   failed: { label: "Failed", tone: "alert" },
 };
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const supabaseMode = dataAdapter() === "supabase";
-  const views = supabaseMode ? await loadServerInvoices() : await financeService.listAllInvoices();
+  const { page: pageParam } = supabaseMode ? await searchParams : { page: undefined };
+  const invoiceRegister = supabaseMode ? await loadServerInvoiceRegister(parseFinanceRegisterPage(pageParam)) : null;
+  const views = invoiceRegister === null ? await financeService.listAllInvoices() : invoiceRegister.views;
+  const profileCode = supabaseMode ? await loadServerProfileCode() : null;
 
   // Verified ledger payments derived from the service views, so the register
   // always agrees with the guardian portal ledgers.
@@ -63,7 +69,7 @@ export default async function PaymentsPage() {
   const invoiceByRef = new Map(views.map((view) => [view.invoice.ref, view] as const));
 
   const authoritativeAttempts: PaymentRow[] = supabaseMode
-    ? (await loadServerPaymentAttempts()).map((attempt) => {
+    ? (await loadServerPaymentAttemptsForInvoices(invoiceRegister?.invoiceIds ?? [])).map((attempt) => {
         const invoiceRef = attempt.invoices?.reference ?? "—";
         return {
           ref: attempt.reference,
@@ -125,7 +131,7 @@ export default async function PaymentsPage() {
           </h2>
           <span className="demo-badge">{supabaseMode ? "Live projection" : "Demo data"}</span>
         </div>
-        <div className="table--scroll">
+        <div className="table--scroll" role="region" aria-label="Payment register table" tabIndex={0}>
           {paymentRows.length === 0 ? (
             <p className={styles.ruleNote}>No payments in the register.</p>
           ) : (
@@ -161,9 +167,17 @@ export default async function PaymentsPage() {
                   </td>
                   <td>
                     {payment.receiptRef ? (
-                      <Link prefetch={false} className="link-arrow" href={`/portal/receipts/${payment.receiptRef}`}>
-                        {payment.receiptRef}
-                      </Link>
+                      supabaseMode ? (
+                        <Link
+                          prefetch={false}
+                          className={`num ${styles.receiptLink}`}
+                          href={canonicalStaffUrl(profileCode, `/finance/receipts/${payment.receiptRef}`)}
+                        >
+                          {payment.receiptRef}
+                        </Link>
+                      ) : (
+                        <span className="num" title="Demo receipt · live detail reads the finance projection">{payment.receiptRef}</span>
+                      )
                     ) : (
                       "—"
                     )}
@@ -174,10 +188,21 @@ export default async function PaymentsPage() {
           </table>
           )}
         </div>
+        {invoiceRegister !== null && invoiceRegister.total > 0 ? (
+          <RegisterPager
+            basePath={canonicalStaffUrl(profileCode, "/finance/payments")}
+            page={invoiceRegister.page}
+            pageCount={invoiceRegister.pageCount}
+            shownFrom={invoiceRegister.shownFrom}
+            shownTo={invoiceRegister.shownTo}
+            total={invoiceRegister.total}
+            label="invoices"
+          />
+        ) : null}
       </section>
 
       <div className={styles.ruleNote}>
-        <p>Browser redirects are never proof of payment — only verified events post to the ledger.</p>
+        <p>Browser redirects are never proof of payment · only verified events post to the ledger.</p>
         {!supabaseMode ? <p>{FINANCE_DEMO_NOTE}</p> : <p>Payment attempts are the local sandbox projection; no browser return is treated as settlement.</p>}
       </div>
     </div>

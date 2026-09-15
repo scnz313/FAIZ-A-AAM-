@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { setDemoNow } from "@/modules/demo/clock";
-import { CAREERS_SESSION_KEYS, careersService, type JobDraft } from "@/modules/services/careers";
+import { CAREERS_SESSION_KEYS, careersService, mapServerJob, type JobDraft, type ServerJobRow } from "@/modules/services/careers";
 import { sessionRemove } from "@/modules/services/session";
 
 const PINNED = new Date("2026-08-05T09:30:00Z");
@@ -27,7 +27,8 @@ const DRAFT: JobDraft = {
   institution: "Demo College of Education",
   experience: "3 years — classes 8 to 10",
   currentRole: "Mathematics teacher",
-  documents: {},
+  location: "Srinagar",
+  message: "Available from April.",
   consent: true,
 };
 
@@ -245,6 +246,23 @@ describe("careersService staff audit recording", () => {
   });
 });
 
+describe("careers version + maker/checker hardening (S4 extension)", () => {
+  it("rejects stale shortlist writes and denies the shortlister from offering", async () => {
+    const ACTOR_A = "00000000-0000-4000-8000-000000000203";
+    const ACTOR_B = "00000000-0000-4000-8000-000000000205";
+    await expect(careersService.staffShortlist("JOB-2026-0114", "Stale.", undefined, 999)).rejects.toThrow(
+      /Stale write for JOB-2026-0114/,
+    );
+    await careersService.staffShortlist("JOB-2026-0114", "Shortlist by A.", ACTOR_A);
+    await careersService.staffRequestInterview("JOB-2026-0114", "Panel slot.");
+    await expect(careersService.staffOffer("JOB-2026-0114", "Self offer.", ACTOR_A)).rejects.toThrow(
+      /cannot offer its own shortlist/,
+    );
+    const offered = await careersService.staffOffer("JOB-2026-0114", "Approver offer.", ACTOR_B);
+    expect(offered.status).toBe("Offered");
+  });
+});
+
 describe("careersService reviewer assignment and scorecards", () => {
   it("assigns a reviewer and persists it on the record", async () => {
     const updated = await careersService.assignReviewer("JOB-2026-0114", "00000000-0000-4000-8000-000000000204");
@@ -264,5 +282,165 @@ describe("careersService reviewer assignment and scorecards", () => {
 
     const reloaded = await careersService.getApplication("JOB-2026-0114");
     expect(reloaded?.scorecards).toHaveLength(1);
+  });
+});
+
+describe("mapServerJob timeline labels (Supabase projection)", () => {
+  const serverRow = (
+    events: Array<{ event_type: string; visible_to_applicant: boolean; copy: string; created_at: string }>,
+  ): ServerJobRow => ({
+    id: "00000000-0000-4000-8000-00000000f201",
+    reference: "JOB-2026-0200",
+    current_status: "offered",
+    version: 5,
+    created_at: "2026-08-01T05:00:00.000Z",
+    job_application_versions: [{ version: 1, snapshot: { fullName: "Live Candidate" } }],
+    job_events: events,
+  });
+
+  const serverEvent = (eventType: string, day: number, copy: string) => ({
+    event_type: eventType,
+    visible_to_applicant: true,
+    copy,
+    created_at: `2026-08-0${day}T05:00:00.000Z`,
+  });
+
+  it("labels each decision event from its own event type, never the Submitted fallback", () => {
+    const record = mapServerJob(
+      serverRow([
+        serverEvent("submitted", 1, "Application submitted"),
+        serverEvent("shortlist", 2, "Strong record"),
+        serverEvent("interview", 3, "Panel interview"),
+        serverEvent("offer", 4, "Offer extended"),
+      ]),
+    );
+
+    expect(record.timeline.map((event) => event.status)).toEqual([
+      "Submitted",
+      "Shortlisted",
+      "Interview",
+      "Offered",
+    ]);
+    expect(record.timeline.map((event) => event.actor)).toEqual([
+      "Applicant",
+      "HR office",
+      "HR office",
+      "HR office",
+    ]);
+    expect(record.timeline.map((event) => event.note)).toEqual([
+      "Application submitted",
+      "Strong record",
+      "Panel interview",
+      "Offer extended",
+    ]);
+  });
+
+  it("keeps the legacy shortlisted/offered event vocabulary and not-selected mapping", () => {
+    const record = mapServerJob(
+      serverRow([
+        serverEvent("shortlisted", 2, "Shortlisted"),
+        serverEvent("offered", 4, "Offer extended"),
+        serverEvent("not_selected", 5, "Application closed"),
+      ]),
+    );
+
+    expect(record.timeline.map((event) => event.status)).toEqual(["Shortlisted", "Offered", "Not selected"]);
+  });
+
+  it("omits events that are not visible to the applicant", () => {
+    const record = mapServerJob(
+      serverRow([
+        serverEvent("submitted", 1, "Application submitted"),
+        { ...serverEvent("shortlist", 2, "Internal note"), visible_to_applicant: false },
+      ]),
+    );
+
+    expect(record.timeline).toHaveLength(1);
+  });
+});
+
+describe("mapServerJob linked documents (public intake photo projection)", () => {
+  const rowWithDocuments = (documents: ServerJobRow["job_documents"]): ServerJobRow => ({
+    id: "00000000-0000-4000-8000-00000000f202",
+    reference: "JOB-2026-0300",
+    applicant_name: "Public Applicant",
+    owner_account_id: undefined,
+    current_status: "submitted",
+    version: 1,
+    created_at: "2026-09-15T02:00:00.000Z",
+    job_application_versions: [{ version: 1, snapshot: { source: "public_intake" } }],
+    job_events: [{ event_type: "submitted", visible_to_applicant: true, copy: "Application submitted", created_at: "2026-09-15T02:00:00.000Z" }],
+    job_documents: documents,
+  });
+
+  it("maps the readable linked document into the staff record", () => {
+    const record = mapServerJob(
+      rowWithDocuments([
+        {
+          requirement_code: "profile_photo",
+          documents: {
+            reference: "DOC-2026-6187D7",
+            safe_filename: "pi-profile-photo.png",
+            category: "profile_photo",
+            scan_status: "ready",
+            mime_type: "image/png",
+            size_bytes: 89,
+            created_at: "2026-09-15T02:04:50.978Z",
+          },
+        },
+      ]),
+    );
+
+    expect(record.attachedDocuments).toEqual([
+      {
+        requirementCode: "profile_photo",
+        reference: "DOC-2026-6187D7",
+        filename: "pi-profile-photo.png",
+        category: "profile_photo",
+        scanStatus: "ready",
+        mimeType: "image/png",
+        sizeBytes: 89,
+        uploadedAtIso: "2026-09-15T02:04:50.978Z",
+      },
+    ]);
+  });
+
+  it("drops a link whose document row was withheld by RLS (scan pending)", () => {
+    const record = mapServerJob(rowWithDocuments([{ requirement_code: "profile_photo", documents: null }]));
+
+    expect(record.attachedDocuments).toEqual([]);
+  });
+
+  it("maps a record without links to an empty list, never undefined output", () => {
+    expect(mapServerJob(rowWithDocuments(null)).attachedDocuments).toEqual([]);
+    expect(mapServerJob(rowWithDocuments(undefined)).attachedDocuments).toEqual([]);
+  });
+});
+
+describe("mapServerJob contact identity (anonymous public intake)", () => {
+  const row = (applicant_email: string | null, applicant_phone: string | null): ServerJobRow => ({
+    id: "00000000-0000-4000-8000-00000000f203",
+    reference: "JOB-2026-F01291",
+    applicant_name: "Zareen Fictional Applicant",
+    applicant_email,
+    applicant_phone,
+    current_status: "submitted",
+    version: 1,
+    created_at: "2026-09-15T02:00:00.000Z",
+    job_application_versions: [{ version: 1, snapshot: { source: "public_intake" } }],
+    job_events: [{ event_type: "submitted", visible_to_applicant: true, copy: "Application submitted", created_at: "2026-09-15T02:00:00.000Z" }],
+  });
+
+  it("carries the recorded email and phone so HR can contact an anonymous applicant", () => {
+    const record = mapServerJob(row("zareen@example.test", "+91 90000 12345"));
+
+    expect(record.contactEmail).toBe("zareen@example.test");
+    expect(record.contactPhone).toBe("+91 90000 12345");
+  });
+
+  it("omits blank or absent contact values instead of rendering empty identity rows", () => {
+    expect(mapServerJob(row(null, null)).contactEmail).toBeUndefined();
+    expect(mapServerJob(row("   ", "")).contactPhone).toBeUndefined();
+    expect(mapServerJob(row("   ", "")).contactEmail).toBeUndefined();
   });
 });

@@ -52,8 +52,8 @@ export default function AcceptSeat({
       <div className={styles.acceptedBlock} role="status">
         <p className={styles.acceptedTitle}>Seat accepted</p>
         <p className={styles.acceptedNote}>
-          You have accepted the offer for {grade}, session {session}. The admission amount is now due below —
-          enrollment completes once it is recorded.
+          You have accepted the offer for {grade}, session {session}. The admission amount is now due below.
+          Enrollment completes once it is recorded.
         </p>
       </div>
     );
@@ -72,7 +72,7 @@ export default function AcceptSeat({
             </Button>
           </div>
           <p className={styles.acceptHint}>
-            Accepting does not confirm enrollment — the admission amount is due after acceptance.
+            Accepting does not confirm enrollment · the admission amount is due after acceptance.
           </p>
         </>
       ) : (
@@ -86,9 +86,20 @@ export default function AcceptSeat({
             <p className={styles.declineHint}>Declining releases the seat to the next candidate. This cannot be undone.</p>
           ) : (
             <p className={styles.declineHint}>
-              On confirmation, the admission amount of{" "}
-              <strong className="num">{formatINR(admissionFeePaise)}</strong> falls due on your fee ledger — payable
-              by {formatKolkata(acceptByIso, { format: "day" })}. Enrollment completes only once it is recorded.
+              {admissionFeePaise > 0 ? (
+                <>
+                  On confirmation, the admission amount of{" "}
+                  <strong className="num">{formatINR(admissionFeePaise)}</strong> falls due on your fee ledger ·
+                  payable by {formatKolkata(acceptByIso, { format: "day" })}. Enrollment completes only once it is
+                  recorded.
+                </>
+              ) : (
+                <>
+                  On confirmation, the admission amount confirmed by the school office falls due on your fee ledger ·
+                  payable by {formatKolkata(acceptByIso, { format: "day" })}. Enrollment completes only once it is
+                  recorded.
+                </>
+              )}
             </p>
           )}
           <label className={styles.noteLabel} htmlFor="offer-note">

@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { PublicFooter } from "@/components/layouts/PublicFooter";
-import { PublicHeader } from "@/components/layouts/PublicHeader";
-import DevelopmentAccountSwitcher from "@/components/identity/DevelopmentAccountSwitcher";
+import { AuthFrame } from "@/components/identity/AuthFrame";
+import AuthHashHandler from "@/components/identity/AuthHashHandler";
 import SignInForm from "@/components/identity/SignInForm";
-import PageIntro from "@/components/public/PageIntro";
 import { dataAdapter, developmentAuthEnabled, totpRequired } from "@/lib/supabase/env";
-
-import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -16,13 +13,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Family-portal sign-in. A plain app/ route outside the (public) group, so it
- * composes its own public frame (light header + footer) around the editorial
- * PageIntro and the sign-in card. With the Supabase adapter active the card
- * runs the real email-OTP flow; in demo mode it keeps the honest prototype
- * flow (nothing is protected yet). `?error=auth` comes back from the auth
- * callback when an email link has expired or was already used — the page
- * says so honestly and points at the restart path below.
+ * Family-portal sign-in. Uses the V14 AuthFrame — a minimal brand-only
+ * header with a centered identity card. With the Supabase adapter active
+ * the card runs the real email-OTP flow; in demo mode it keeps the honest
+ * prototype flow (nothing is protected yet). `?error=auth` comes back from
+ * the auth callback when an email link has expired or was already used.
  */
 export default async function SignInPage({
   searchParams,
@@ -36,57 +31,52 @@ export default async function SignInPage({
   const mfaRequired = totpRequired();
   const authLinkExpired = params.error === "auth";
   const passwordReset = params.reset === "complete";
+  const next = Array.isArray(params.next) ? params.next[0] : params.next;
+
   return (
-    <div className={styles.page}>
-      <PublicHeader tone="light" />
-      <main id="main" tabIndex={-1} className={styles.main}>
-        {supabaseLive ? (
-          <p className={`alert-strip alert-strip--notice ${styles.alertStrip}`}>
-            {quickSignIn
-              ? "Local development — real Supabase data with one-click test accounts; email verification remains on for production."
-              : "Email-OTP sign-in is live for this environment — codes are sent by the school."}
-          </p>
-        ) : (
-          <p className={`alert-strip alert-strip--warning ${styles.alertStrip}`}>
-            UI demo — authentication arrives with the backend. No data is protected.
-          </p>
-        )}
-        {authLinkExpired ? (
-          <p className={`alert-strip alert-strip--warning ${styles.alertStrip}`} role="alert">
-            That sign-in link has expired or was already used. Start again below — enter your email and request a
-            fresh code. Your account is safe; nothing needs to be fixed first.
-          </p>
-        ) : null}
-        {passwordReset ? (
-          <p className={`alert-strip alert-strip--notice ${styles.alertStrip}`} role="status">
-            Your password has been updated and all sessions were closed. Staff can sign in with the new password.
-          </p>
-        ) : null}
-        <div className={styles.frame}>
-          <PageIntro
-            eyebrow="Family portal"
-            title="Sign in"
-            deck={quickSignIn ? "Choose a local test account to open real Supabase-backed data." : "Guardian accounts, once verified by the school."}
-          />
-          <section className={styles.section} aria-label="Sign in">
-            <div className={`panel ${styles.card}`}>
-              {quickSignIn ? <DevelopmentAccountSwitcher audience="family" /> : null}
-              <SignInForm
-                adapter={adapter}
-                totpRequired={mfaRequired}
-                developmentPasswordAuth={quickSignIn}
-              />
-            </div>
-            {supabaseLive ? null : (
-              <p className={styles.demoNote}>
-                <span className="demo-badge">UI demo</span>
-                <span>This screen previews the sign-in flow — it is not real authentication.</span>
-              </p>
-            )}
-          </section>
-        </div>
-      </main>
-      <PublicFooter />
-    </div>
+    <AuthFrame
+      title="Sign in"
+      sub="Guardians, applicants and staff sign in here. New admission applicant? Create an account first."
+      foot={<span>Use of this portal is logged for security. Account help: contact the office.</span>}
+    >
+      <AuthHashHandler next={next ?? null} />
+      {supabaseLive ? (
+        <p className={`alert-strip alert-strip--notice`} style={{ marginBottom: 16 }}>
+          {quickSignIn
+            ? "Password sign-in is live for this environment · account help: contact the school office."
+            : "Email-OTP sign-in is live for this environment · codes are sent by the school."}
+        </p>
+      ) : (
+        <p className={`alert-strip alert-strip--warning`} style={{ marginBottom: 16 }}>
+          UI demo — authentication arrives with the backend. No data is protected.
+        </p>
+      )}
+      {authLinkExpired ? (
+        <p className={`alert-strip alert-strip--warning`} role="alert" style={{ marginBottom: 16 }}>
+          That sign-in link has expired or was already used. Start again below — enter your email and request a
+          fresh code. Your account is safe; nothing needs to be fixed first.
+        </p>
+      ) : null}
+      {passwordReset ? (
+        <p className={`alert-strip alert-strip--notice`} role="status" style={{ marginBottom: 16 }}>
+          Your password has been updated and all sessions were closed. Staff can sign in with the new password.
+        </p>
+      ) : null}
+      <SignInForm
+        adapter={adapter}
+        totpRequired={mfaRequired}
+        developmentPasswordAuth={quickSignIn}
+      />
+      <hr className="rule" style={{ margin: "18px 0 14px" }} />
+      <div className="row-between" style={{ flexWrap: "wrap", gap: 10 }}>
+        <Link className="underline-link small" href="/register/applicant">Create applicant account</Link>
+        <Link className="underline-link small" href="/sign-in/staff">Staff sign-in</Link>
+      </div>
+      {supabaseLive ? null : (
+        <p className="tiny muted" style={{ textAlign: "center", marginTop: 12 }}>
+          <span className="demo-badge">UI demo</span> This screen previews the sign-in flow — it is not real authentication.
+        </p>
+      )}
+    </AuthFrame>
   );
 }

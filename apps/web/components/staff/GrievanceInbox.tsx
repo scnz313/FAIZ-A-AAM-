@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import Button from "@/components/ui/Button";
+import { ErrorPanel, LoadingSkeleton } from "@/components/ui/AsyncStates";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { canAnyRole } from "@/modules/services/staff-profiles";
@@ -68,6 +69,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
   const supabaseMode = clientAdapterMode() === "supabase";
   const [items, setItems] = useState<Grievance[]>(initialItems ?? []);
   const [loading, setLoading] = useState(initialItems === undefined);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [selectedRef, setSelectedRef] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -84,25 +86,24 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
   /* Send/reopen may replace the response area — land focus after re-render. */
   const focusTarget = useRef<"heading" | "textarea" | null>(null);
 
+  const loadGrievances = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setLoadFailed(false);
+    try {
+      const list = await supportService.listGrievances();
+      setItems(list);
+    } catch {
+      /* Surface the failure instead of showing a fabricated empty inbox. */
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (initialItems !== undefined) return;
-    /* Load the authorized support projection once. */
-    let cancelled = false;
-    supportService
-      .listGrievances()
-      .then((list) => {
-        if (cancelled) return;
-        setItems(list);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [initialItems]);
+    void loadGrievances();
+  }, [initialItems, loadGrievances]);
 
   /* Default selection: the most recent grievance, in arrival order. */
   useEffect(() => {
@@ -160,6 +161,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
       return;
     }
     setSending(true);
+    setError(null);
     try {
       const updated = privateNote
         ? await supportService.addPrivateNote(selected.ref, text, RESPONSE_AUTHOR)
@@ -168,9 +170,11 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
       setDraft("");
       setResolveAfterSend(false);
       setPrivateNote(false);
-      setError(null);
-      setLiveMessage(`Response recorded${supabaseMode ? "" : " (demo)"} — ${updated.ref}`);
+      setLiveMessage(`Response recorded${supabaseMode ? "" : " (demo)"} · ${updated.ref}`);
       focusTarget.current = resolveAfterSend ? "heading" : "textarea";
+    } catch {
+      /* The draft is kept: sending is idempotent-safe to retry once the cause is fixed. */
+      setError("The response could not be recorded. The draft is kept · check the connection and try again.");
     } finally {
       setSending(false);
     }
@@ -179,11 +183,14 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
   async function handleReopen() {
     if (selected === null) return;
     setSending(true);
+    setError(null);
     try {
       const updated = await supportService.reopen(selected.ref, RESPONSE_AUTHOR);
       setItems((prev) => prev.map((item) => (item.ref === updated.ref ? updated : item)));
       setLiveMessage(`${updated.ref} reopened as New${supabaseMode ? "" : " (demo)"}`);
       focusTarget.current = "textarea";
+    } catch {
+      setError("The grievance could not be reopened. Nothing changed · try again.");
     } finally {
       setSending(false);
     }
@@ -195,8 +202,20 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
         <p className={styles.live} role="status" aria-live="polite">
           Loading grievances…
         </p>
-        <div className={`panel ${styles.loading}`}>Reading the grievance register…</div>
+        <div className={`panel ${styles.loading}`}>
+          <LoadingSkeleton lines={5} label="Loading the grievance register" />
+        </div>
       </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <ErrorPanel title="Grievances could not be loaded" note="The support service did not respond. No request was changed.">
+        <Button variant="quiet" type="button" onClick={() => void loadGrievances()}>
+          Try again
+        </Button>
+      </ErrorPanel>
     );
   }
 
@@ -348,7 +367,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
                         setDraft(event.target.value);
                         if (error !== null) setError(null);
                       }}
-                      placeholder="What the applicant will see — factual and within school policy"
+                      placeholder="What the applicant will see · factual and within school policy"
                       required
                       aria-invalid={error !== null}
                       aria-describedby={error !== null ? "grievance-response-error" : undefined}
@@ -390,7 +409,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
                 <div className={styles.response}>
                   <h3 className={styles.responseHeading}>Response</h3>
                   <p className={styles.reopenHint}>
-                    Read only — responding to grievances requires the Support officer workspace.
+                    Read only · responding to grievances requires the Support officer workspace.
                   </p>
                   {selected.thread.some((event) => event.kind === "response") ? (
                     <ResponseThread events={selected.thread} />

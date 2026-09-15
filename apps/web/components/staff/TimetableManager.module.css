@@ -1,9 +1,12 @@
 .sectionHead {
   align-items: baseline;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   justify-content: space-between;
   margin-bottom: 14px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .sectionHead h2 {
@@ -11,13 +14,14 @@
 }
 
 .versionLine {
-  font-size: 15px;
+  font-size: 0.92rem;
   margin: 0 0 22px;
 }
 
 .classSelector {
   margin: 0 0 18px;
   max-width: 240px;
+  min-width: 0;
 }
 
 .versionLine strong {
@@ -25,8 +29,8 @@
 }
 
 .changeHeading {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   margin: 18px 0 10px;
@@ -43,23 +47,25 @@
 .changeRow {
   border-bottom: 1px solid var(--line);
   display: flex;
-  font-size: 13px;
+  font-size: 0.82rem;
   gap: 14px;
+  max-width: 100%;
+  min-width: 0;
   padding: 10px 2px;
 }
 
 .changeVersion {
-  color: var(--ink-soft);
+  color: var(--muted);
   flex: none;
-  font-size: 12px;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   min-width: 32px;
 }
 
 .conflictIntro {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
   margin: 0 0 14px;
   max-width: 70ch;
@@ -68,8 +74,11 @@
 .conflictStrip {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px 20px;
   justify-content: space-between;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .conflictStrip + .conflictStrip {
@@ -77,13 +86,13 @@
 }
 
 .conflictCopy {
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 600;
   margin: 0;
 }
 
 .conflictMeta {
-  font-size: 11px;
+  font-size: 0.72rem;
   letter-spacing: 0.08em;
   margin: 3px 0 0;
   opacity: 0.85;
@@ -92,32 +101,34 @@
 
 .none {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 0;
 }
 
 .resolvePanel {
   border: 1px solid var(--line-strong);
-  border-left: 3px solid var(--saffron);
+  border-top: 3px solid var(--saffron);
   margin-top: 16px;
+  max-width: 100%;
+  min-width: 0;
   padding: 14px 16px;
 }
 
 .resolveWhy {
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.55;
   margin: 8px 0;
   max-width: 70ch;
 }
 
 .resolveAssignment {
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 0 0 8px;
 }
 
 .resolveRule {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.5;
   margin: 0 0 12px;
   max-width: 70ch;
@@ -126,16 +137,19 @@
 .resolveActions {
   display: grid;
   gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .reasonLabel {
-  font-size: 12px;
+  font-size: 0.78rem;
   font-weight: 600;
   margin-top: 6px;
 }
 
 .required {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -144,10 +158,10 @@
 .reasonInput {
   background: var(--chalk);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 0.82rem;
   padding: 8px 10px;
   resize: vertical;
   width: 100%;
@@ -161,8 +175,8 @@
 }
 
 .editorIntro {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
   margin: 0;
   max-width: 70ch;
@@ -175,34 +189,38 @@
   flex-wrap: wrap;
   gap: 12px 20px;
   margin-top: 18px;
+  max-width: 100%;
+  min-width: 0;
   padding-top: 16px;
 }
 
 .publishPanel {
   border: 1px solid var(--line-strong);
-  border-left: 3px solid var(--saffron);
+  border-top: 3px solid var(--saffron);
   margin-top: 16px;
+  max-width: 100%;
+  min-width: 0;
   padding: 14px 16px;
 }
 
 .publishWhy {
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.55;
   margin: 8px 0 12px;
   max-width: 70ch;
 }
 
 .live {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   margin: 0;
   min-height: 1.4em;
 }
 
 .readOnlyNote {
   margin: 14px 0 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
   max-width: 60ch;
 }
@@ -218,14 +236,9 @@
   flex-wrap: wrap;
   gap: 12px 20px;
   margin-top: 18px;
+  max-width: 100%;
+  min-width: 0;
   padding-top: 16px;
-}
-
-@media (max-width: 700px) {
-  .conflictStrip {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 /* Whole-cell numerics align right so columns of figures compare. */
@@ -237,11 +250,181 @@
 /* Override form fields lay out in a grid so day/period/kind read together. */
 .overrideFields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   gap: 14px 18px;
   margin-top: 14px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .overrideNoteField {
   grid-column: 1 / -1;
+}
+
+/* Staged exam dates sit between the published table and the add form. */
+.stagedBlock {
+  margin-top: 18px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.stagedBlock .changeRow {
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.stagedBlock .changeRow > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Exam-date form fields lay out in a grid so the paper reads together. */
+.examDateFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+  gap: 6px 18px;
+  margin-top: 14px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.examDateReasonField {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1023px) {
+  .sectionHead {
+    gap: 12px;
+  }
+
+  .overrideFields {
+    grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  }
+
+  .examDateFields {
+    grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  }
+
+  .actionRow,
+  .publishRow {
+    gap: 10px 16px;
+  }
+}
+
+@media (max-width: 719px) {
+  .conflictStrip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sectionHead {
+    gap: 10px;
+  }
+
+  .classSelector {
+    max-width: none;
+    width: 100%;
+  }
+
+  .classSelector select {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .changeRow {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .overrideFields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .overrideFields input,
+  .overrideFields select,
+  .overrideFields textarea {
+    font-size: 1rem;
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .examDateFields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .examDateFields input,
+  .examDateFields select,
+  .examDateFields textarea {
+    font-size: 1rem;
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .reasonInput {
+    font-size: 1rem;
+    min-height: 44px;
+  }
+
+  .resolveButtons {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resolveButtons > * {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .actionRow,
+  .publishRow {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .actionRow > *,
+  .publishRow > * {
+    min-height: 44px;
+  }
+
+  /* Exam date sheet keeps its min-width and scrolls inside .table--scroll. */
+  .dateSheetTable {
+    min-width: 620px;
+  }
+
+  .dateSheetTable th:first-child,
+  .dateSheetTable td:first-child {
+    background: var(--chalk, #fffdf8);
+    left: 0;
+    position: sticky;
+    z-index: 1;
+  }
+}
+
+@media (max-width: 479px) {
+  .sectionHead {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .versionLine {
+    margin-bottom: 16px;
+  }
+
+  .resolvePanel,
+  .publishPanel {
+    padding: 12px;
+  }
+
+  .actionRow > *,
+  .publishRow > *,
+  .resolveButtons > * {
+    width: 100%;
+  }
+
+  .changeRow {
+    padding: 8px 2px;
+  }
 }

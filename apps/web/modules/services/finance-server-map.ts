@@ -26,6 +26,7 @@ type ServerStudentRelation = {
 };
 
 export type ServerInvoiceRow = {
+  id?: string;
   reference: string;
   student_id: string | null;
   /** Optional denormalized/name relations supported by server projections. */

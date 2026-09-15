@@ -3,22 +3,26 @@ import type { NextRequest } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { acceptStaffInvitation, consumeAuthRateLimit, isSameOrigin } from "@/lib/auth/identity-server";
+import { readJsonBounded, SMALL_JSON_MAX_BYTES } from "@/lib/http/request-body";
 import { dataAdapter } from "@/lib/supabase/env";
 import { statusForServiceResult, withCorrelation } from "@/app/api/adapter/registry";
 
 export async function POST(request: NextRequest) {
   const correlationRef = request.headers.get("x-correlation-id") ?? crypto.randomUUID();
   const headers = { "Cache-Control": "no-store", "X-Correlation-Id": correlationRef };
-  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"))) {
+  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"), request.headers.get("sec-fetch-site"))) {
     return NextResponse.json({ ok: false, errors: [{ code: "forbidden", message: "Cross-origin requests are not accepted.", field: null }], correlationRef }, { status: 403, headers });
   }
   if (dataAdapter() !== "supabase") {
     return NextResponse.json({ ok: false, errors: [{ code: "unavailable", message: "The Supabase adapter is not active.", field: null }], correlationRef }, { status: 503, headers });
   }
-  let body: unknown;
-  try { body = await request.json(); } catch {
-    return NextResponse.json({ ok: false, errors: [{ code: "validation", message: "Invalid invitation payload.", field: null }], correlationRef }, { status: 400, headers });
+  const read = await readJsonBounded(request, SMALL_JSON_MAX_BYTES);
+  if (!read.ok) {
+    return read.reason === "too_large"
+      ? NextResponse.json({ ok: false, errors: [{ code: "validation", message: "The invitation request is too large to accept.", field: null }], correlationRef }, { status: 413, headers })
+      : NextResponse.json({ ok: false, errors: [{ code: "validation", message: "Invalid invitation payload.", field: null }], correlationRef }, { status: 400, headers });
   }
+  const body = read.value;
   if (typeof body !== "object" || body === null) {
     return NextResponse.json({ ok: false, errors: [{ code: "validation", message: "Invalid invitation payload.", field: null }], correlationRef }, { status: 400, headers });
   }

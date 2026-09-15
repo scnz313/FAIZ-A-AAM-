@@ -6,16 +6,16 @@
 .title {
   margin: var(--space-2) 0 var(--space-3);
   font-family: var(--serif);
-  font-size: 28px;
-  font-weight: 500;
+  font-size: 1.75rem;
+  font-weight: 540;
   line-height: 1.25;
   letter-spacing: -0.01em;
 }
 
 .line {
   margin: var(--space-2) 0 0;
-  color: var(--ink-soft);
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
   line-height: 1.6;
 }
 

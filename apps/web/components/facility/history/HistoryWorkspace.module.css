@@ -63,7 +63,7 @@
 
 .loadingNote {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 12px 0 0;
 }
 

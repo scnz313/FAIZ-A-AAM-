@@ -10,6 +10,7 @@ import {
   financeIssueAdmissionInvoice,
   financeListAdjustments,
   financeListAllAttempts,
+  financeListAllReceipts,
   financeListAttempts,
   financeListMyInvoices,
   financeListMyReceipts,
@@ -32,6 +33,7 @@ export const financeModule: AdapterModule = {
   operations: [
     operation("finance.listInvoices", emptyPayload, ({ supabase }) => financeListMyInvoices(supabase)),
     operation("finance.listReceipts", emptyPayload, ({ supabase }) => financeListMyReceipts(supabase)),
+    operation("finance.listAllReceipts", emptyPayload, ({ supabase }) => financeListAllReceipts(supabase)),
     operation("finance.listAdjustments", emptyPayload, ({ supabase }) => financeListAdjustments(supabase)),
     operation("finance.listRefunds", emptyPayload, ({ supabase }) => financeListRefunds(supabase)),
     operation(

@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
 
-import { PublicFooter } from "@/components/layouts/PublicFooter";
-import { PublicHeader } from "@/components/layouts/PublicHeader";
+import { ApplicantShell } from "@/components/layouts/ApplicantShell";
 import ApplicationStatusView from "@/components/applicant/ApplicationStatusView";
 import { dataAdapter } from "@/lib/supabase/env";
 import { loadServerAdmissionByRef } from "@/lib/supabase/server-loaders";
-
-import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Application status",
@@ -23,12 +20,8 @@ export default async function ApplicationStatusDetailPage({
   const initial = dataAdapter() === "supabase" ? await loadServerAdmissionByRef(applicationRef) : undefined;
 
   return (
-    <div className={styles.page}>
-      <PublicHeader tone="light" />
-      <main id="main" tabIndex={-1}>
-        <ApplicationStatusView applicationRef={applicationRef} initial={initial} />
-      </main>
-      <PublicFooter />
-    </div>
+    <ApplicantShell>
+      <ApplicationStatusView applicationRef={applicationRef} initial={initial} />
+    </ApplicantShell>
   );
 }

@@ -43,7 +43,7 @@ export default function Reveal({ children, delay = 0, className }: RevealProps) 
     <div
       ref={ref}
       className={`reveal ${visible ? "reveal--visible" : ""} ${className ?? ""}`}
-      style={delay ? { transitionDelay: `${delay}ms` } : undefined}
+      style={delay ? { transitionDelay: `${delay}ms`, animationDelay: `${delay}ms` } : undefined}
     >
       {children}
     </div>

@@ -53,7 +53,7 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
       if (next === null) {
         setLive(`The admission invoice ${invoiceRef} could not be resolved.`);
       } else if (next.balancePaise === 0) {
-        setLive("Admission fee paid — enrollment can now be completed.");
+        setLive("Admission fee paid · enrollment can now be completed.");
       }
     } catch {
       setInvoiceError(true);
@@ -83,7 +83,7 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
 
   async function handleSettled(receiptRef: string): Promise<void> {
     settledRef.current = receiptRef;
-    setLive(`Payment recorded — receipt ${receiptRef}. Enrollment can now be completed.`);
+    setLive(`Payment recorded · receipt ${receiptRef}. Enrollment can now be completed.`);
     await refreshInvoice();
   }
 
@@ -97,14 +97,14 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
       setConverted(result);
       setLive(
         result.portalAvailable
-          ? `Enrollment complete — ${result.matchedExisting ? "existing student record" : "permanent student record"} ${result.studentRef} is on the school register and linked to the family portal.`
-          : `Enrollment complete — permanent student record ${result.studentRef} is on the school register. The school will invite the guardian to link it.`,
+          ? `Enrollment complete · ${result.matchedExisting ? "existing student record" : "permanent student record"} ${result.studentRef} is on the school register and linked to the family portal.`
+          : `Enrollment complete · permanent student record ${result.studentRef} is on the school register. The school will invite the guardian to link it.`,
       );
     } catch (error) {
       const message =
         error instanceof EnrollmentConversionError
           ? error.message
-          : "Enrollment could not be completed right now. Please try again — a retry is safe and never duplicates records.";
+          : "Enrollment could not be completed right now. Please try again · a retry is safe and never duplicates records.";
       setConversionError(message);
       setLive(message);
     } finally {
@@ -113,9 +113,12 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
   }
 
   const balancePaise = invoice?.balancePaise ?? 0;
-  /* PayFlow stays mounted until conversion completes so its success panel
-     (and the receipt link) remains visible after the ledger posts. */
-  const showPayFlow = invoice !== null && !invoiceError && converted === null;
+  /* The guardian portal only becomes a real destination once conversion has
+     linked the child; before that, every success action stays on this page. */
+  const portalReady = converted?.portalAvailable === true;
+  /* PayFlow renders while the invoice still carries a balance; its success
+     panel offers applicant-safe destinations, never an unlinked portal. */
+  const showPayFlow = invoice !== null && !invoiceError && converted === null && balancePaise > 0;
   const showConvert = invoice !== null && !invoiceError && balancePaise === 0 && converted === null;
 
   return (
@@ -137,7 +140,7 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
         Pay {formatINR(invoice?.totalPaise ?? 0)}
       </h3>
       <p className={styles.dueLine}>
-        Due by <span className="num">{formatKolkata(acceptByIso, { format: "day" })}</span> — the seat is held only
+        Due by <span className="num">{formatKolkata(acceptByIso, { format: "day" })}</span> · the seat is held only
         until this date. Invoice <span className="num">{invoiceRef}</span> is issued on the fee ledger.
       </p>
 
@@ -163,6 +166,9 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
             amountPaise={balancePaise}
             balanceAfterPaise={0}
             onSettled={(receiptRef) => void handleSettled(receiptRef)}
+            receiptHref={portalReady ? undefined : null}
+            feesHref={portalReady ? undefined : `/apply/student/${encodeURIComponent(applicationRef)}/status`}
+            portalPending={!portalReady}
           />
         </div>
       ) : null}
@@ -170,17 +176,17 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
       {showConvert ? (
         <div className={styles.success}>
           <p className={styles.successMark} aria-hidden="true">
-            ✓
+            <span className="msym">check</span>
           </p>
           <p className={styles.successTitle}>Admission fee paid</p>
           <p className={styles.successNote}>
             {settledRef.current !== null ? (
               <>
-                Receipt <span className="num">{settledRef.current}</span> recorded on the fee ledger — enrollment can
+                Receipt <span className="num">{settledRef.current}</span> recorded on the fee ledger · enrollment can
                 now be completed.
               </>
             ) : (
-              "The paid admission fee is recorded on the fee ledger — enrollment can now be completed."
+              "The paid admission fee is recorded on the fee ledger · enrollment can now be completed."
             )}
           </p>
           <div className={styles.convertActions}>
@@ -197,35 +203,54 @@ export default function AdmissionFeeStep({ applicationRef, invoiceRef, acceptByI
       ) : null}
 
       {converted !== null ? (
-        <div className={styles.converted} role="status">
-          <p className={styles.successMark} aria-hidden="true">
-            ✓
-          </p>
-          <p className={styles.successTitle}>Enrollment complete</p>
-          <dl className={styles.convertedRows}>
-            <div>
-              <dt>Permanent student reference</dt>
-              <dd className="num">{converted.studentRef}</dd>
-            </div>
-            <div>
-              <dt>Enrollment reference</dt>
-              <dd className="num">{converted.enrollmentRef}</dd>
-            </div>
-          </dl>
-          <p className={styles.successNote}>
-            {converted.portalAvailable
-              ? "The child is now linked to the guardian's family portal — fees, results, timetable, and notices appear under the linked child."
-              : "The child is enrolled. The school will invite the guardian to link the child to a family portal account."}
-          </p>
-          {converted.portalAvailable ? (
-            <div className={styles.convertActions}>
-              <Button href="/portal" variant="primary">
-                Open family portal →
-              </Button>
-            </div>
-          ) : null}
-          <p className={styles.successNote}>Retrying this step is safe — enrollment never duplicates records.</p>
-        </div>
+        converted.manualReviewRequired || converted.status === "manual_review_required" || converted.status === "manual_review_rejected" ? (
+          <div className={styles.success} role="status">
+            <p className={styles.successTitle}>
+              {converted.status === "manual_review_rejected" ? "Identity review found a conflict" : "Enrollment is under identity review"}
+            </p>
+            <p className={styles.successNote}>
+              {converted.status === "manual_review_rejected"
+                ? "The school could not safely match this application to a student record. The admissions office will contact you with the next step. No duplicate record was created."
+                : "The fee is received. Before the permanent student record is created, the school office verifies the guardian identity. You will be contacted when verification completes; nothing else is needed from you right now."}
+            </p>
+            {converted.duplicateReviewRef !== undefined ? (
+              <p className={styles.successNote}>
+                Review reference <span className="num">{converted.duplicateReviewRef}</span>
+              </p>
+            ) : null}
+            <p className={styles.successNote}>Retrying this step is safe · enrollment never duplicates records.</p>
+          </div>
+        ) : (
+          <div className={styles.converted} role="status">
+            <p className={styles.successMark} aria-hidden="true">
+              <span className="msym">check</span>
+            </p>
+            <p className={styles.successTitle}>Enrollment complete</p>
+            <dl className={styles.convertedRows}>
+              <div>
+                <dt>Permanent student reference</dt>
+                <dd className="num">{converted.studentRef || "Pending"}</dd>
+              </div>
+              <div>
+                <dt>Enrollment reference</dt>
+                <dd className="num">{converted.enrollmentRef || "Pending"}</dd>
+              </div>
+            </dl>
+            <p className={styles.successNote}>
+              {converted.portalAvailable
+                ? "The child is now linked to the guardian's family portal · fees, results, timetable, and notices appear under the linked child."
+                : "The child is enrolled. The school will invite the guardian to link the child to a family portal account."}
+            </p>
+            {converted.portalAvailable ? (
+              <div className={styles.convertActions}>
+                <Button href="/portal" variant="primary">
+                  Open family portal →
+                </Button>
+              </div>
+            ) : null}
+            <p className={styles.successNote}>Retrying this step is safe · enrollment never duplicates records.</p>
+          </div>
+        )
       ) : null}
     </section>
   );

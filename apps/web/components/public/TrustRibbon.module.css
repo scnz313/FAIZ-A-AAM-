@@ -1,19 +1,20 @@
+/* V14 trust ribbon — paper hero, ink/muted text */
 .ribbon {
   margin: 26px 0 0;
-  font-size: 12px;
+  font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
 }
 
 .link {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--ink-2);
   text-decoration: underline;
   text-decoration-color: var(--saffron);
   text-underline-offset: 3px;
 }
 
 .link:hover {
-  color: var(--saffron-bright, #d1844d);
+  color: var(--saffron-ink);
 }

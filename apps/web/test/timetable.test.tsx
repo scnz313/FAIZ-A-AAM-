@@ -6,8 +6,9 @@
  * reflects, and a resolve without a change is rejected.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { RoleGrant, StaffRole } from "@fass/contracts";
 import { setDemoNow } from "@/modules/demo/clock";
 import { timetableByDay, weekDays } from "@/modules/academics/demo";
 import { sessionRemove } from "@/modules/services/session";
@@ -20,18 +21,23 @@ import {
   deriveEditedKeys,
   effectiveTimetable,
   fixtureVersion,
+  getDateSheetState,
   getTimetableVersion,
   getTimetableVersionList,
   initialOpenConflicts,
   publishTimetable,
   suggestedResolve,
+  timetableService,
   validateDraft,
   validateResolve,
 } from "@/modules/services/timetable";
 import { FamilyContextProvider } from "@/components/portal/FamilyContextProvider";
 import { TimetablePageClient } from "@/components/portal/TimetablePageClient";
+import { StaffContextProvider, type StaffContextInitialState } from "@/components/staff/StaffContextProvider";
 import { TimetableEditor } from "@/components/staff/TimetableEditor";
+import { TimetableManager } from "@/components/staff/TimetableManager";
 import { DEMO_GUARDIAN_ACCOUNT_ID, familyContextService } from "@/modules/services/family-context";
+import { roleLabel } from "@/modules/services/staff-context";
 
 const PINNED_NOW = new Date("2026-08-04T06:30:00Z");
 
@@ -374,9 +380,10 @@ describe("Supabase portal timetable projection", () => {
       </FamilyContextProvider>,
     );
 
-    const examTab = await screen.findByRole("button", { name: "Exam date sheet" });
+    const examTab = await screen.findByRole("tab", { name: "Exam date sheet" });
     await user.click(examTab);
-    await waitFor(() => expect(screen.getByText("Tue 06 Oct")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("06 Oct")).toBeInTheDocument());
+    expect(screen.getByText("Tue")).toBeInTheDocument();
     expect(screen.getByText("Biology")).toBeInTheDocument();
     expect(screen.getByText("v3 · published")).toBeInTheDocument();
     expect(document.querySelector(".demo-badge")).toBeNull();
@@ -426,5 +433,218 @@ describe("TimetableEditor", () => {
     const subjectSelect = screen.getByLabelText("Monday 09:30 subject");
     await user.selectOptions(subjectSelect, "Urdu");
     expect(onEdit).toHaveBeenCalledWith("Monday", "09:30", "subject", "Urdu");
+  });
+});
+
+describe("TimetableManager exam date authoring", () => {
+  const MANAGER_ACCOUNT_ID = "00000000-0000-4000-8000-000000000204";
+
+  function managerInitialState(): StaffContextInitialState {
+    const role: StaffRole = "timetable_manager";
+    const grant: RoleGrant = {
+      id: "00000000-0000-4000-8000-000000000901",
+      ref: "RGR-2026-0901",
+      accountId: MANAGER_ACCOUNT_ID,
+      role,
+      status: "active",
+      grantedByPersonId: null,
+      reason: "Fictional timetable workspace test grant",
+      scope: { academicYearIds: [], gradeSectionIds: [], subjectIds: [] },
+      effectiveFromIso: "2026-04-01T00:00:00.000Z",
+      effectiveToIso: null,
+    };
+    return {
+      identityId: MANAGER_ACCOUNT_ID,
+      workspaces: [grant],
+      summary: {
+        accountId: MANAGER_ACCOUNT_ID,
+        staffMemberId: "00000000-0000-4000-8000-000000000104",
+        personId: "00000000-0000-4000-8000-000000000004",
+        displayName: "Danish Mir",
+        title: "Timetable manager",
+        profileCode: null,
+        profileLabel: null,
+        activeRoleGrantId: grant.id,
+        role,
+        roleLabel: roleLabel(role),
+        roles: [role],
+        academicYearLabel: "2026–27",
+        assignmentLabel: null,
+        grantedWorkspaceCount: 1,
+      },
+    };
+  }
+
+  function renderTimetableManager() {
+    return render(
+      <StaffContextProvider initialState={managerInitialState()}>
+        <TimetableManager dateSheet={[]} />
+      </StaffContextProvider>,
+    );
+  }
+
+  async function fillExamDateForm(
+    overrides: Partial<{ date: string; subject: string; room: string; start: string; end: string; reason: string }> = {},
+  ) {
+    const values = {
+      date: "2026-09-16",
+      subject: "Mathematics",
+      room: "Lab 1",
+      start: "09:00",
+      end: "10:30",
+      reason: "Mid-term Mathematics paper scheduled by the examination office.",
+      ...overrides,
+    };
+    fireEvent.change(screen.getByLabelText("Exam date"), { target: { value: values.date } });
+    if (values.subject !== "") {
+      const subjectSelect = screen.getByLabelText("Exam subject");
+      await within(subjectSelect).findByRole("option", { name: values.subject });
+      fireEvent.change(subjectSelect, { target: { value: values.subject } });
+    }
+    if (values.room !== "") {
+      const roomSelect = screen.getByLabelText("Exam room");
+      await within(roomSelect).findByRole("option", { name: values.room });
+      fireEvent.change(roomSelect, { target: { value: values.room } });
+    }
+    fireEvent.change(screen.getByLabelText("Start time"), { target: { value: values.start } });
+    fireEvent.change(screen.getByLabelText("End time"), { target: { value: values.end } });
+    fireEvent.change(screen.getByLabelText(/Exam reason/), { target: { value: values.reason } });
+  }
+
+  it("stages an added exam date and removes it again", async () => {
+    const user = userEvent.setup();
+    renderTimetableManager();
+
+    await fillExamDateForm();
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+
+    const staged = screen.getByRole("list", { name: "Staged exam dates" });
+    expect(within(staged).getByText("Mathematics")).toBeInTheDocument();
+    expect(within(staged).getByText(/09:00 – 10:30/)).toBeInTheDocument();
+    expect(within(staged).getByText(/Mid-term Mathematics paper scheduled/)).toBeInTheDocument();
+
+    await user.click(within(staged).getByRole("button", { name: "Remove" }));
+    expect(screen.queryByRole("list", { name: "Staged exam dates" })).not.toBeInTheDocument();
+  });
+
+  it("clears staged rows when the class changes", async () => {
+    const user = userEvent.setup();
+    renderTimetableManager();
+
+    await fillExamDateForm();
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+    expect(screen.getByRole("list", { name: "Staged exam dates" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Class"), { target: { value: "10-A" } });
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Staged exam dates" })).not.toBeInTheDocument());
+  });
+
+  it("reports missing fields, end-before-start, and duplicate staged papers inline with focus", async () => {
+    const user = userEvent.setup();
+    renderTimetableManager();
+
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+    expect(screen.getByText("Choose the exam date.")).toBeInTheDocument();
+    expect(screen.getByText("Choose the exam subject.")).toBeInTheDocument();
+    expect(screen.getByText("Choose the exam room.")).toBeInTheDocument();
+    expect(screen.getByText("Enter the start time.")).toBeInTheDocument();
+    expect(screen.getByText("Enter the end time.")).toBeInTheDocument();
+    expect(screen.getByText("Record a reason of at least 10 characters.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Exam date")).toHaveFocus();
+    expect(screen.queryByRole("list", { name: "Staged exam dates" })).not.toBeInTheDocument();
+
+    await fillExamDateForm({ start: "10:00", end: "09:30" });
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+    expect(screen.getByText("The end time must be after the start time.")).toBeInTheDocument();
+    expect(screen.getByLabelText("End time")).toHaveFocus();
+    expect(screen.queryByRole("list", { name: "Staged exam dates" })).not.toBeInTheDocument();
+
+    await fillExamDateForm({ start: "10:00", end: "11:30" });
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+    expect(screen.getByRole("list", { name: "Staged exam dates" })).toBeInTheDocument();
+
+    /* The same date and subject may only be staged once; a correction has to
+       replace its own staged row rather than duplicate it. */
+    await fillExamDateForm({ start: "12:00", end: "13:30" });
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+    expect(screen.getByText(/already exists/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Exam subject")).toHaveFocus();
+    expect(within(screen.getByRole("list", { name: "Staged exam dates" })).getAllByRole("listitem")).toHaveLength(1);
+  });
+
+  it("publishes the staged paper with the ExamSlot time range and re-enables publish for a correction", async () => {
+    const user = userEvent.setup();
+    const publishSpy = vi.spyOn(timetableService, "publishDateSheet");
+    renderTimetableManager();
+
+    await fillExamDateForm();
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+    await user.click(screen.getByRole("button", { name: "Publish date sheet" }));
+
+    await waitFor(() => expect(publishSpy).toHaveBeenCalledTimes(1));
+    expect(publishSpy.mock.calls[0]?.[0]).toBe(TIMETABLE_CLASS);
+    expect(publishSpy.mock.calls[0]?.[1]).toEqual([
+      {
+        dateIso: "2026-09-16",
+        dayLabel: "Wed",
+        dateLabel: "16 Sept",
+        subject: "Mathematics",
+        time: "09:00 – 10:30",
+        room: "Lab 1",
+      },
+    ]);
+    expect(publishSpy.mock.calls[0]?.[2]).toBe("Mid-term Mathematics paper scheduled by the examination office.");
+    await waitFor(() => expect(screen.getByText(/Date sheet v1 published/)).toBeInTheDocument());
+    expect(screen.queryByRole("list", { name: "Staged exam dates" })).not.toBeInTheDocument();
+    expect(screen.getByText("16 Sept")).toBeInTheDocument();
+
+    const published = await getDateSheetState();
+    expect(published?.entries[0]?.time).toBe("09:00 – 10:30");
+
+    /* Correction: the same date and subject with a changed time. */
+    await fillExamDateForm({
+      start: "09:30",
+      end: "11:00",
+      reason: "Correction after the assembly moved the paper to 09:30.",
+    });
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+    const correction = screen.getByRole("button", { name: "Publish correction" });
+    expect(correction).toBeEnabled();
+    expect(screen.getByText(/replaces the published 09:00 – 10:30 paper/)).toBeInTheDocument();
+    await user.click(correction);
+
+    await waitFor(() => expect(publishSpy).toHaveBeenCalledTimes(2));
+    expect(publishSpy.mock.calls[1]?.[1]).toEqual([
+      {
+        dateIso: "2026-09-16",
+        dayLabel: "Wed",
+        dateLabel: "16 Sept",
+        subject: "Mathematics",
+        time: "09:30 – 11:00",
+        room: "Lab 1",
+      },
+    ]);
+    const corrected = await getDateSheetState();
+    expect(corrected?.version).toBe(2);
+    expect(corrected?.entries[0]?.time).toBe("09:30 – 11:00");
+  });
+
+  it("keeps staged rows and shows the service error when publish fails", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(timetableService, "publishDateSheet").mockRejectedValueOnce(
+      new Error("The examination service is unavailable."),
+    );
+    renderTimetableManager();
+
+    await fillExamDateForm();
+    await user.click(screen.getByRole("button", { name: "Add exam date" }));
+    await user.click(screen.getByRole("button", { name: "Publish date sheet" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Date sheet not published: The examination service is unavailable\./)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/your staged rows are kept so you can retry/)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Staged exam dates" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish date sheet" })).toBeEnabled();
   });
 });

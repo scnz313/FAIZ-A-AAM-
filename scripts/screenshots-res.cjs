@@ -15,7 +15,7 @@ const shots = [
   { path: "84-home-390.png", url: "/", width: 390, height: 844, fullPage: true },
   { path: "85-home-320.png", url: "/", width: 320, height: 568, fullPage: true },
   { path: "86-fees-390.png", url: "/portal/fees", width: 390, height: 844, fullPage: true },
-  { path: "87-staff-320.png", url: "/staff", width: 320, height: 568, fullPage: true },
+  { path: "87-administrator-320.png", url: "/administrator", width: 320, height: 568, fullPage: true },
 ];
 
 (async () => {

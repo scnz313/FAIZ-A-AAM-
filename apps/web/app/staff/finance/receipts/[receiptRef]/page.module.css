@@ -1,0 +1,14 @@
+.page {
+  display: grid;
+  gap: 18px;
+}
+
+.back {
+  margin: 0;
+}
+
+@media (max-width: 719px) {
+  .page {
+    gap: 14px;
+  }
+}

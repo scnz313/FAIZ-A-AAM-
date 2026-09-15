@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import Button from "@/components/ui/Button";
+import { EmptyState, ErrorPanel, LoadingSkeleton } from "@/components/ui/AsyncStates";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
@@ -39,6 +40,15 @@ const NOTICE_STATUS_TONE: Record<NoticeStatus, "good" | "neutral" | "alert"> = {
   archived: "neutral",
 };
 
+/** Same display casing as the notices register (no raw enum values in UI). */
+const NOTICE_STATUS_LABEL: Record<NoticeStatus, string> = {
+  published: "Published",
+  scheduled: "Scheduled",
+  draft: "Draft",
+  expired: "Expired",
+  archived: "Archived",
+};
+
 const AUDIENCE_LABEL: Record<ContentNotice["audience"], string> = {
   public: "Public",
   family: "Family",
@@ -46,17 +56,150 @@ const AUDIENCE_LABEL: Record<ContentNotice["audience"], string> = {
 
 type PageAction = { next: PublicPageReviewStatus; label: string };
 
-function pageAction(row: PublicPageRow, canDraft: boolean, canPublish: boolean): PageAction | null {
+/** Scheduled pages show the effective instant as quiet supporting copy. */
+function pageScheduleNote(iso: string | null): string | null {
+  if (iso === null || iso === "") return null;
+  try {
+    return formatKolkata(iso, { format: "full" });
+  } catch {
+    return null;
+  }
+}
+
+function pageActions(row: PublicPageRow, canDraft: boolean, canPublish: boolean): PageAction[] {
   if (row.reviewStatus === "draft" && row.currentStatus === "draft" && canDraft) {
-    return { next: "In review", label: "Request review" };
+    return [{ next: "In review", label: "Request review" }];
   }
   if (row.reviewStatus === "in_review" && canPublish) {
-    return { next: "Approved", label: "Approve" };
+    return [{ next: "Approved", label: "Approve" }];
   }
   if (row.reviewStatus === "approved" && row.currentStatus === "draft" && canPublish) {
-    return { next: "Published", label: "Publish" };
+    return [
+      { next: "Published", label: "Publish" },
+      { next: "Scheduled", label: "Schedule" },
+    ];
   }
-  return null;
+  return [];
+}
+
+type DraftPreviewBody = {
+  title: string;
+  body: string[];
+  updatedAtIso: string | null;
+};
+
+/* Read-only draft preview. It renders the stored draft through the public
+   typography (serif title, ruled meta, lede plus body) so publishers see
+   what approval would release. It never writes, never publishes, and never
+   links to a public route. Focus is trapped by the modal dialog, Escape
+   closes via onCancel, and closing returns focus to the invoking button. */
+function DraftPreviewDialog({
+  row,
+  body,
+  loading,
+  error,
+  trigger,
+  onClose,
+}: {
+  row: PublicPageRow;
+  body: DraftPreviewBody | null;
+  loading: boolean;
+  error: string | null;
+  trigger: HTMLButtonElement | null;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    closeRef.current?.focus();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  function closeDialog() {
+    const dialog = dialogRef.current;
+    if (dialog?.open) dialog.close();
+    onClose();
+    trigger?.focus();
+  }
+
+  const paragraphs = body?.body ?? [];
+  const [lede, ...rest] = paragraphs;
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className={styles.previewDialog}
+      aria-labelledby="page-draft-preview-title"
+      aria-describedby="page-draft-preview-guard"
+      onCancel={(event) => {
+        event.preventDefault();
+        closeDialog();
+      }}
+    >
+      <div className={styles.previewContent}>
+        <div className={styles.previewHeader}>
+          <div>
+            <p className="section-label">Draft preview · not published</p>
+            <h2 id="page-draft-preview-title" className={styles.previewTitle}>
+              {body?.title ?? row.label}
+            </h2>
+          </div>
+          <button ref={closeRef} type="button" className="btn btn-quiet" onClick={closeDialog}>
+            <span className="msym" aria-hidden="true" style={{ fontSize: 16 }}>close</span>Close
+          </button>
+        </div>
+
+        <p className={styles.previewMeta}>
+          <span className="num">/{row.key}</span>
+          <span>{row.status}</span>
+          <span>{row.owner}</span>
+          <span className="num">Last reviewed {row.lastReviewed}</span>
+        </p>
+
+        <hr className={styles.previewRule} />
+
+        {loading ? (
+          <div role="status" aria-live="polite" aria-busy="true">
+            <span className="sr-only">Loading draft preview…</span>
+            <span className="skeleton-rule" aria-hidden="true" />
+            <span className="skeleton-bar" style={{ width: "72%" }} aria-hidden="true" />
+            <span className="skeleton-bar" style={{ width: "88%" }} aria-hidden="true" />
+            <span className="skeleton-bar" style={{ width: "61%" }} aria-hidden="true" />
+          </div>
+        ) : error !== null ? (
+          <p className={styles.previewError} role="alert">{error}</p>
+        ) : paragraphs.length === 0 ? (
+          <p className={styles.previewError} role="status">No draft paragraphs are stored for this page yet.</p>
+        ) : (
+          <div>
+            {lede !== undefined ? <p className={styles.previewLede}>{lede}</p> : null}
+            <div className={styles.previewProse}>
+              {rest.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {row.publishNote ? (
+          <div className={styles.previewReviewNote}>
+            <p className="section-label">Review note · not published</p>
+            <p>{row.publishNote}</p>
+          </div>
+        ) : null}
+
+        <p id="page-draft-preview-guard" className={styles.previewGuard}>
+          Draft preview only · this view never publishes and never appears on public routes. Approve and publish from the workflow table.
+        </p>
+      </div>
+    </dialog>
+  );
 }
 
 export default function ContentPage() {
@@ -64,7 +207,12 @@ export default function ContentPage() {
   const [notices, setNotices] = useState<ContentNotice[] | null>(null);
   const [announcement, setAnnouncement] = useState<{ key: number; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [busy, setBusy] = useState(false);
+  /* Inline page scheduling: the approved page row opens a datetime field;
+     nothing publishes until the publisher confirms. */
+  const [scheduleKey, setScheduleKey] = useState<string | null>(null);
+  const [scheduleAt, setScheduleAt] = useState("");
   const { summary } = useStaffContext();
   const actor: ContentActor | null = summary
     ? { accountId: summary.accountId, displayName: summary.displayName, role: summary.role }
@@ -83,27 +231,41 @@ export default function ContentPage() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [pageSaving, setPageSaving] = useState(false);
 
+  /* Draft preview state — read-only; opening a preview never publishes. */
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const [previewBody, setPreviewBody] = useState<DraftPreviewBody | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewTrigger, setPreviewTrigger] = useState<HTMLButtonElement | null>(null);
+
   /* Both tables read through the content service — the notice rows include
-     draft and expired states alongside the published list. */
+     draft and expired states alongside the published list. A failed read is
+     surfaced with a retry that repeats the same load, never a silent empty. */
   useEffect(() => {
     let cancelled = false;
+    setPages(null);
+    setNotices(null);
+    setLoadError(null);
     void Promise.all([contentService.listPublicPages(), contentService.listForStaff()])
       .then(([pageRows, noticeRows]) => {
         if (cancelled) return;
         setPages(pageRows);
         setNotices(noticeRows);
-        setLoadError(null);
       })
       .catch(() => {
         if (cancelled) return;
         setPages([]);
         setNotices([]);
-        setLoadError("Content could not be loaded. Reload this page to try again.");
+        setLoadError("Content could not be loaded.");
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadToken]);
+
+  function retryLoad() {
+    setReloadToken((token) => token + 1);
+  }
 
   function announce(text: string) {
     setAnnouncement((prev) => ({ key: (prev?.key ?? 0) + 1, text }));
@@ -111,15 +273,28 @@ export default function ContentPage() {
 
   async function advancePage(row: PublicPageRow, action: PageAction) {
     if (pages === null || busy || actor === null) return;
+    let scheduledForIso: string | null = null;
+    if (action.next === "Scheduled") {
+      if (scheduleAt === "") {
+        announce("Choose a future date and time to schedule this page.");
+        return;
+      }
+      scheduledForIso = `${scheduleAt}:00+05:30`;
+    }
     setBusy(true);
     try {
       const result = await contentService.setPublicPageStatus(row.key, action.next, actor, {
         expectedVersion: row.version,
+        scheduledForIso,
       });
       if (result.ok) {
         setPages((previous) =>
           previous ? previous.map((candidate) => (candidate.key === row.key ? result.value : candidate)) : previous,
         );
+        if (action.next === "Scheduled") {
+          setScheduleKey(null);
+          setScheduleAt("");
+        }
         announce(`Page "${row.label}" advanced to ${action.next.toLowerCase()}${isDemo ? " in this demo session" : ""}.`);
       } else {
         announce(result.message);
@@ -229,13 +404,46 @@ export default function ContentPage() {
     setPageError(null);
   }
 
+  /* Preview reads the stored draft through the existing body loader. It
+     never writes, so it cannot publish or leak the draft anywhere. */
+  async function openPreview(row: PublicPageRow, trigger: HTMLButtonElement | null) {
+    setPreviewKey(row.key);
+    setPreviewTrigger(trigger);
+    setPreviewBody(null);
+    setPreviewError(null);
+    setPreviewLoading(true);
+    try {
+      const result = await contentService.getPublicPageBody(row.key);
+      if (result === null) {
+        setPreviewError("No draft body is stored for this page yet. The published record is unchanged.");
+      } else {
+        setPreviewBody(result);
+        announce(`Draft preview opened for "${result.title}". This preview does not publish.`);
+      }
+    } catch {
+      setPreviewError("The draft body could not be loaded. Try again.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function closePreview() {
+    setPreviewKey(null);
+    setPreviewBody(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
+  }
+
+  const previewRow = previewKey === null ? null : (pages?.find((candidate) => candidate.key === previewKey) ?? null);
+
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Content</p>
-        <h1 className="workspace-title">Content</h1>
-        <p className="workspace-intro">Public pages and their review status; notice publishing states.</p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Content</h1>
+          <p className="ph-sub">Public pages and their review status; notice publishing states.</p>
+        </div>
+      </div>
 
       <section className="panel" aria-labelledby="content-list-heading">
         <div className={styles.panelHead}>
@@ -323,7 +531,13 @@ export default function ContentPage() {
           </div>
         ) : null}
 
-        {loadError ? <p className={styles.liveNote} role="alert">{loadError}</p> : null}
+        {loadError !== null ? (
+          <ErrorPanel title="Content could not be loaded." note={`${loadError} No content was changed.`}>
+            <Button variant="quiet" disabled={busy} onClick={retryLoad}>
+              Try again
+            </Button>
+          </ErrorPanel>
+        ) : null}
 
         {announcement && (
           <p key={announcement.key} className={styles.liveNote} aria-live="polite">
@@ -332,11 +546,14 @@ export default function ContentPage() {
         )}
 
         {pages === null ? (
-          <p className={styles.loading} role="status">
-            Loading content…
-          </p>
-        ) : (
-          <div className="table--scroll">
+          <LoadingSkeleton lines={4} label="Loading public pages…" />
+        ) : pages.length === 0 && loadError === null ? (
+          <EmptyState
+            title="No public pages"
+            note="Pages appear here once the first draft is created. Archived pages stay in this list; nothing is hard-deleted."
+          />
+        ) : pages.length > 0 ? (
+          <div className={`table--scroll ${styles.tableShell}`} role="region" aria-label="Public pages table" tabIndex={0}>
             <table className={`table ${styles.table}`}>
               <caption className="sr-only">Public pages with status, last review and owner</caption>
               <thead>
@@ -352,12 +569,14 @@ export default function ContentPage() {
               </thead>
               <tbody>
                 {pages.map((row) => {
-                  const action = pageAction(row, canDraft, canPublish);
-                  const requiresDifferentPublisher =
-                    action !== null &&
-                    action.next !== "In review" &&
-                    row.authorAccountId !== null &&
-                    row.authorAccountId === actor?.accountId;
+                  const actions = pageActions(row, canDraft, canPublish);
+                  const scheduleNote = pageScheduleNote(row.scheduledForIso);
+                  const draftAction = actions.find((action) => action.next === "In review") ?? null;
+                  const publisherActions = actions.filter((action) => action.next !== "In review");
+                  const selfAuthored = row.authorAccountId !== null && row.authorAccountId === actor?.accountId;
+                  const canEditRow =
+                    canDraft &&
+                    (row.reviewStatus === "draft" || row.currentStatus === "archived" || row.currentStatus === "expired");
                   return (
                     <tr key={row.key}>
                       <td>
@@ -367,23 +586,89 @@ export default function ContentPage() {
                       </td>
                       <td>
                         <StatusBadge tone={PAGE_STATUS_TONE[row.status]}>{row.status}</StatusBadge>
+                        {scheduleNote !== null ? <span className={styles.scheduleNote}>{scheduleNote}</span> : null}
                       </td>
                       <td className="num">{row.lastReviewed}</td>
                       <td>{row.owner}</td>
                       <td className={styles.cellAction}>
-                        {requiresDifferentPublisher ? (
-                          <span>A different publisher is required</span>
-                        ) : action !== null ? (
-                          <Button variant="quiet" disabled={busy} onClick={() => void advancePage(row, action)}>
-                            {action.label}
+                        <button
+                          type="button"
+                          className="btn btn-quiet"
+                          disabled={busy || pageSaving}
+                          onClick={(event) => void openPreview(row, event.currentTarget)}
+                        >
+                          <span className="msym" aria-hidden="true" style={{ fontSize: 16 }}>visibility</span>Preview
+                        </button>
+                        {draftAction !== null ? (
+                          <Button variant="quiet" disabled={busy} onClick={() => void advancePage(row, draftAction)}>
+                            {draftAction.label}
                           </Button>
-                        ) : (
-                          <span aria-label="No action available">—</span>
-                        )}
-                        {canDraft && (row.reviewStatus === "draft" || row.currentStatus === "archived" || row.currentStatus === "expired") ? (
+                        ) : null}
+                        {publisherActions.length > 0 ? (
+                          selfAuthored ? (
+                            <span>A different publisher is required</span>
+                          ) : (
+                            publisherActions.map((action) =>
+                              action.next === "Scheduled" ? (
+                                scheduleKey === row.key ? (
+                                  <span key="page-schedule" className={styles.scheduleForm}>
+                                    <label className="sr-only" htmlFor={`page-schedule-${row.key}`}>
+                                      Schedule publication for {row.label}
+                                    </label>
+                                    <input
+                                      id={`page-schedule-${row.key}`}
+                                      className="input"
+                                      type="datetime-local"
+                                      value={scheduleAt}
+                                      onChange={(event) => setScheduleAt(event.target.value)}
+                                      disabled={busy}
+                                    />
+                                    <Button
+                                      variant="quiet"
+                                      disabled={busy || scheduleAt === ""}
+                                      onClick={() => void advancePage(row, action)}
+                                    >
+                                      Set schedule
+                                    </Button>
+                                    <Button
+                                      variant="quiet"
+                                      disabled={busy}
+                                      onClick={() => {
+                                        setScheduleKey(null);
+                                        setScheduleAt("");
+                                      }}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </span>
+                                ) : (
+                                  <Button
+                                    key="page-schedule-open"
+                                    variant="quiet"
+                                    disabled={busy}
+                                    onClick={() => {
+                                      setScheduleKey(row.key);
+                                      setScheduleAt("");
+                                    }}
+                                  >
+                                    Schedule
+                                  </Button>
+                                )
+                              ) : (
+                                <Button key={action.label} variant="quiet" disabled={busy} onClick={() => void advancePage(row, action)}>
+                                  {action.label}
+                                </Button>
+                              ),
+                            )
+                          )
+                        ) : null}
+                        {canEditRow ? (
                           <Button variant="quiet" disabled={busy || pageSaving} onClick={() => void openEditPage(row)}>
                             Edit
                           </Button>
+                        ) : null}
+                        {actions.length === 0 && !canEditRow ? (
+                          <span aria-label="No action available">—</span>
                         ) : null}
                       </td>
                     </tr>
@@ -392,7 +677,7 @@ export default function ContentPage() {
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </section>
 
       <section className="panel" aria-labelledby="notice-status-heading">
@@ -404,24 +689,28 @@ export default function ContentPage() {
         </div>
 
         {notices === null ? (
-          <p className={styles.loading} role="status">
-            Loading notice status…
-          </p>
-        ) : (
-          <div className="table--scroll">
+          <LoadingSkeleton lines={4} label="Loading notice status…" />
+        ) : notices.length === 0 && loadError === null ? (
+          <EmptyState
+            title="No notices"
+            note="Published, scheduled and draft notices appear here with their audiences and versions. Archived notices remain in this list; nothing is hard-deleted."
+          />
+        ) : notices.length > 0 ? (
+          <div className={`table--scroll ${styles.tableShell}`} role="region" aria-label="Notice status table" tabIndex={0}>
             <table className={`table ${styles.table}`}>
-              <caption className="sr-only">Notices with status, audience, version and review due date</caption>
+              <caption className="sr-only">Notices with pinned state, status, audience, version and review due date</caption>
               <thead>
                 <tr>
                   <th scope="col">Title</th>
-                  <th scope="col">Category</th>
+                  <th scope="col" className={styles.colMore}>Category</th>
                   <th scope="col">Audience</th>
                   <th scope="col">Status</th>
-                  <th scope="col" className="num">
+                  <th scope="col" className={styles.colMore}>Pinned</th>
+                  <th scope="col" className={`num ${styles.colMore}`}>
                     Version
                   </th>
                   <th scope="col" className="num">Published</th>
-                  <th scope="col" className="num">Review due</th>
+                  <th scope="col" className={`num ${styles.colOptional}`}>Review due</th>
                 </tr>
               </thead>
               <tbody>
@@ -430,29 +719,40 @@ export default function ContentPage() {
                     <td>
                       <strong>{notice.title}</strong>
                     </td>
-                    <td>{notice.category}</td>
+                    <td className={styles.colMore}>{notice.category}</td>
                     <td>{AUDIENCE_LABEL[notice.audience]}</td>
                     <td>
-                      <StatusBadge tone={NOTICE_STATUS_TONE[notice.status]}>{notice.status}</StatusBadge>
+                      <StatusBadge tone={NOTICE_STATUS_TONE[notice.status]}>{NOTICE_STATUS_LABEL[notice.status]}</StatusBadge>
                     </td>
-                    <td className="num">{notice.version}</td>
+                    <td className={styles.colMore}>{notice.pinned ? "Pinned" : "—"}</td>
+                    <td className={`num ${styles.colMore}`}>{notice.version}</td>
                     <td className="num">
                       {notice.status === "published" ? formatKolkata(notice.dateIso, { format: "day" }) : "—"}
                     </td>
-                    <td className="num">{notice.reviewDue}</td>
+                    <td className={`num ${styles.colOptional}`}>{notice.reviewDue}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </section>
 
-      <p className={styles.note}>Content changes are versioned; public pages show only published current content.</p>
+      <p className={styles.note}>Content changes are versioned; public pages show only published current content. Archiving and unpublishing are terminal · nothing is hard-deleted.</p>
       {isDemo ? (
         <p className="demo-note">
           <span className="demo-badge">Demo data</span> {CONTENT_DEMO_NOTE}
         </p>
+      ) : null}
+      {previewRow !== null ? (
+        <DraftPreviewDialog
+          row={previewRow}
+          body={previewBody}
+          loading={previewLoading}
+          error={previewError}
+          trigger={previewTrigger}
+          onClose={closePreview}
+        />
       ) : null}
     </div>
   );

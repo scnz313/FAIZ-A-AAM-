@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
+import { DEFAULT_STAFF_PORTAL, isStaffPath } from "@/lib/auth/portal-routes";
 import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { adapterCall } from "@/modules/services/adapter-client";
@@ -56,7 +57,7 @@ export default function SignInForm({
   developmentPasswordAuth = false,
 }: SignInFormProps) {
   const router = useRouter();
-  const [safeNext, setSafeNext] = useState(audience === "staff" ? "/staff" : "/portal");
+  const [safeNext, setSafeNext] = useState(audience === "staff" ? DEFAULT_STAFF_PORTAL : "/portal");
   const supabaseMode = adapter === "supabase";
   const staffPasswordMode = supabaseMode && audience === "staff";
   const passwordMode = staffPasswordMode || (supabaseMode && developmentPasswordAuth);
@@ -74,7 +75,7 @@ export default function SignInForm({
   const statusRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const fallback = audience === "staff" ? "/staff" : "/portal";
+    const fallback = audience === "staff" ? DEFAULT_STAFF_PORTAL : "/portal";
     setSafeNext(safeAuthRedirect(new URLSearchParams(window.location.search).get("next"), fallback));
   }, [audience]);
 
@@ -156,7 +157,7 @@ export default function SignInForm({
       setRejected(error.status === 429 ? "Too many sign-in attempts. Wait before trying again." : "Sign-in could not be accepted. Check your details and try again.");
       return;
     }
-    const staffDestination = safeNext.startsWith("/staff") ? safeNext : "/staff";
+    const staffDestination = isStaffPath(safeNext.split("?", 1)[0] ?? "") ? safeNext : DEFAULT_STAFF_PORTAL;
     const destination = audience === "staff" ? staffDestination : safeNext;
     if (audience === "staff" && !totpRequired) {
       /* Dev auto-elevation: programmatically enroll+verify TOTP so the
@@ -169,13 +170,24 @@ export default function SignInForm({
         });
         if (!res.ok) throw new Error("elevation failed");
       } catch {
-        setRejected("Sign-in succeeded but dev MFA elevation failed — try again.");
+        setRejected("Sign-in succeeded but dev MFA elevation failed · try again.");
         return;
       }
     }
     const next = audience === "staff" && totpRequired
       ? `/sign-in/totp?next=${encodeURIComponent(destination)}`
       : destination;
+    /* Applicants have no family access; the portal guard would only bounce
+       them back to sign-in. Their workspace is the application they
+       registered to start, exactly as in the verified-code path. */
+    if (audience !== "staff" && next === "/portal" && supabaseMode) {
+      const applicantCheck = await adapterCall<boolean>("identity.hasApplicant").catch(() => null);
+      if (applicantCheck?.ok && applicantCheck.value) {
+        if (navigate) navigate("/apply/student");
+        else window.location.assign("/apply/student");
+        return;
+      }
+    }
     if (navigate) navigate(next);
     else window.location.assign(next);
   }
@@ -188,7 +200,7 @@ export default function SignInForm({
       type: "email",
     });
     if (error !== null) {
-      setRejected("That code is not right — check it and try again.");
+      setRejected("That code is not right · check it and try again.");
       return;
     }
     await adapterCall("identity.recordAuthEvent", { event: "signed_in" }).catch(() => null);
@@ -206,6 +218,13 @@ export default function SignInForm({
             }).catch(() => null);
           }
           router.push(totpRequired ? `/sign-in/totp?next=${encodeURIComponent(safeNext)}` : safeNext);
+          return;
+        }
+        /* Applicants have no guardian role until conversion completes; their
+           workspace is the application they registered to start. */
+        const applicantCheck = await adapterCall<boolean>("identity.hasApplicant");
+        if (applicantCheck.ok && applicantCheck.value && safeNext === "/portal") {
+          router.push("/apply/student");
           return;
         }
         router.push(safeNext);
@@ -262,11 +281,11 @@ export default function SignInForm({
               : "If an account exists, a 6-digit code has been sent to your email. Enter it below."
             : passwordMode
               ? audience === "staff"
-                ? "Staff sign-in form — email and password."
-                : "Local development sign-in form — email and password."
+                ? "Staff sign-in form · email and password."
+                : "Guardian sign-in form · email and password."
               : supabaseMode
-                ? "Sign-in form — a code is sent to your email."
-                : "Sign-in form — demo account only."}
+                ? "Sign-in form · a code is sent to your email."
+                : "Sign-in form · demo account only."}
       </p>
 
       {nextStep ? (
@@ -279,7 +298,7 @@ export default function SignInForm({
         >
           <p className="section-label">Next step</p>
           <p className={styles.successLine}>
-            Sign-in accepted — a verification code is on the next screen. <span className="demo-badge">Demo</span>
+            Sign-in accepted · a verification code is on the next screen. <span className="demo-badge">Demo</span>
           </p>
         </section>
       ) : (
@@ -300,7 +319,7 @@ export default function SignInForm({
                 <p className={styles.demoLine}>
                   <span className="demo-badge">Demo</span>
                   <span>
-                    Demo account: {DEMO_PHONE}, any password of 6+ characters — real accounts arrive with the
+                    Demo account: {DEMO_PHONE}, any password of 6+ characters · real accounts arrive with the
                     backend.
                   </span>
                 </p>
@@ -390,7 +409,7 @@ export default function SignInForm({
                 <p className={styles.actionNote}>
                   {resendIn > 0
                     ? "You can request a fresh code when the countdown ends."
-                    : "No email yet? Request a new code — the newest one replaces the old."}
+                    : "No email yet? Request a new code · the newest one replaces the old."}
                 </p>
               </div>
             </div>
@@ -432,7 +451,7 @@ export default function SignInForm({
             {staffPasswordMode ? "Family or applicant sign in →" : "Staff sign in →"}
           </Link>
         ) : (
-          <Link className="link-arrow" prefetch={false} href="/staff">
+          <Link className="link-arrow" prefetch={false} href={DEFAULT_STAFF_PORTAL}>
             Demo staff access →
           </Link>
         )}

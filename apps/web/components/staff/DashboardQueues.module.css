@@ -1,8 +1,13 @@
 .queues {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-5);
   margin-top: var(--space-8);
+  min-width: 0;
+}
+
+.queues > * {
+  min-width: 0;
 }
 
 .sectionHead {
@@ -16,8 +21,8 @@
 }
 
 .count {
-  font-size: 12px;
-  color: var(--ink-soft);
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .list {
@@ -45,7 +50,7 @@
 }
 
 .rowLink:hover {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
 }
 
 .rowMain {
@@ -55,29 +60,29 @@
 }
 
 .rowMain strong {
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 .muted {
-  font-size: 12px;
-  color: var(--ink-soft);
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 /* Flagged rows are named in text — no colour-only bar. */
 .flag {
-  font-size: 11px;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
 }
 
 .asOf {
   margin: var(--space-2) 0 var(--space-3);
-  font-size: 12px;
-  color: var(--ink-soft);
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1023px) {
   .queues {
     grid-template-columns: 1fr;
   }

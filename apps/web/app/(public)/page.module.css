@@ -1,74 +1,189 @@
-/* Homepage composition styles (learning stages + section rhythm). */
+/* Homepage composition styles — V15 aligned */
+/* Section padding/backgrounds/borders handled by .sec + .wrap in globals.css */
 
-.stages {
-  padding: clamp(72px, 9vw, 120px) clamp(48px, 8vw, 96px);
-  background: var(--chalk);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+/* Urgent-notice slot above the hero. The empty row disappears when the
+   caller resolves no alert, so no gap is left behind. */
+.alertSlot {
+  margin-top: clamp(16px, 2.5vw, 26px);
 }
 
-.stagesHead {
-  max-width: 720px;
-  margin-bottom: clamp(40px, 5vw, 64px);
+.alertSlot:empty {
+  display: none;
 }
 
-.stagesHeading {
-  margin: 0;
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: clamp(32px, 3.6vw, 48px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.08;
-}
-
+/* V15 stages — 4-column grid with ink top border */
 .stageList {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 2px solid var(--ink);
 }
 
 .stageRow {
-  display: grid;
-  grid-template-columns: minmax(220px, 5fr) 7fr;
-  align-items: baseline;
-  gap: 32px;
-  padding: 26px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 22px 26px;
+  border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
+  min-height: 200px;
 }
 
 .stageRow:last-child {
-  border-bottom: 0;
+  border-right: 0;
+}
+
+.stageGrade {
+  margin: 0 0 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--saffron-ink);
 }
 
 .stageName {
-  margin: 0;
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: 24px;
-  font-weight: 500;
-}
-
-.stageClasses {
-  display: block;
-  margin-top: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-soft, rgba(11, 28, 42, 0.72));
+  margin: 0 0 8px;
+  font-family: var(--serif);
+  font-size: 1.3rem;
+  font-weight: 620;
+  color: var(--ink);
 }
 
 .stageLine {
-  max-width: 560px;
   margin: 0;
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--ink-soft, rgba(11, 28, 42, 0.8));
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--muted);
 }
 
-@media (max-width: 700px) {
-  .stageRow {
+/* V15 CTA band — ink ground with paper buttons */
+.ctaBand {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--r);
+  padding: clamp(30px, 4.5vw, 54px);
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) auto;
+  gap: 28px;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.ctaHeading {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.6vw, 2.15rem);
+  line-height: 1.18;
+  font-weight: 540;
+  max-width: 22ch;
+  color: var(--paper);
+}
+
+.ctaSub {
+  margin: 10px 0 0;
+  color: #B9C2C9;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  max-width: 52ch;
+}
+
+.ctaActions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 220px;
+}
+
+.ctaPaper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 26px;
+  border-radius: var(--r);
+  font-weight: 650;
+  font-size: 1rem;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.ctaPaper:hover {
+  background: #fff;
+}
+
+.ctaOutline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: var(--r);
+  font-weight: 650;
+  font-size: 0.92rem;
+  line-height: 1.2;
+  border: 1px solid rgba(244, 239, 229, 0.4);
+  background: transparent;
+  color: var(--paper);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.ctaOutline:hover {
+  background: rgba(244, 239, 229, 0.08);
+}
+
+/* Responsive ---------------------------------------------------------- */
+@media (max-width: 1023px) {
+  .stageList {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stageRow:nth-child(2) {
+    border-right: 0;
+  }
+
+  .stageRow:nth-child(1),
+  .stageRow:nth-child(2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .ctaBand {
     grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 22px 0;
+  }
+
+  .ctaActions {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 719px) {
+  .stageList {
+    grid-template-columns: 1fr;
+  }
+
+  .stageRow {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .stageRow:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 479px) {
+  .ctaPaper,
+  .ctaOutline {
+    width: 100%;
   }
 }

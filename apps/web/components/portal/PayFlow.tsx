@@ -42,7 +42,7 @@ type FlowStep =
 type ErrorKind = "create" | "confirm";
 
 const METHODS: ReadonlyArray<{ key: CheckoutMethod; label: string; helper: string }> = [
-  { key: "UPI", label: "UPI", helper: "UPI Intent / QR — pay from any UPI app." },
+  { key: "UPI", label: "UPI", helper: "UPI Intent / QR · pay from any UPI app." },
   { key: "Card", label: "Card", helper: "Credit or debit card, processed by the gateway." },
   { key: "Net banking", label: "Net banking", helper: "Bank accounts supported by the gateway." },
 ];
@@ -68,6 +68,21 @@ type PayFlowProps = {
   balanceAfterPaise: number;
   /** Fired once with the NEW receipt reference — the page refreshes the ledger. */
   onSettled: (receiptRef: string) => void;
+  /**
+   * Success-panel receipt destination. Omitted preserves the guardian portal
+   * receipt route; null or "" omits the link and shows the ledger notice.
+   */
+  receiptHref?: string | null;
+  /**
+   * Success-panel secondary destination. Omitted preserves the guardian portal
+   * fee ledger; null or "" omits the link.
+   */
+  feesHref?: string | null;
+  /**
+   * Applicant context before conversion: no guardian link exists yet, so the
+   * success copy never implies the receipt is already in a family portal.
+   */
+  portalPending?: boolean;
 };
 
 /**
@@ -79,7 +94,16 @@ type PayFlowProps = {
  * which the success step links to. In production the server creates the
  * gateway order, verifies the signed webhook and posts to the ledger.
  */
-export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSettled }: PayFlowProps) {
+export function PayFlow({
+  invoiceRef,
+  term,
+  amountPaise,
+  balanceAfterPaise,
+  onSettled,
+  receiptHref,
+  feesHref,
+  portalPending = false,
+}: PayFlowProps) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<FlowStep>("method");
   const [method, setMethod] = useState<CheckoutMethod>("UPI");
@@ -219,23 +243,34 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
       case "gateway":
         return supabaseMode ? "Handing off to the local sandbox…" : "Handing off to the Demo gateway…";
       case "processing":
-        return supabaseMode ? "Processing with the local sandbox — this takes a few seconds." : "Processing with the Demo gateway — this takes a few seconds.";
+        return supabaseMode ? "Processing with the local sandbox · this takes a few seconds." : "Processing with the Demo gateway · this takes a few seconds.";
       case "delayed":
-        return "The gateway has not confirmed the payment — we will confirm shortly.";
+        return "The gateway has not confirmed the payment · we will confirm shortly.";
       case "failed":
-        return `Payment failed — ${attempt?.failureReason ?? "the gateway declined the transaction"}.`;
+        return `Payment failed · ${attempt?.failureReason ?? "the gateway declined the transaction"}.`;
       case "cancelled":
-        return "Payment cancelled — you left the gateway before it was confirmed.";
+        return "Payment cancelled · you left the gateway before it was confirmed.";
       case "error":
         return errorMessage;
       case "confirming":
         return "Recording the payment with the school server…";
       case "success":
-        return receipt ? `Payment recorded — receipt ${receipt.ref}.` : "Payment recorded.";
+        return receipt ? `Payment recorded · receipt ${receipt.ref}.` : "Payment recorded.";
       default:
         return "";
     }
   })();
+
+  /* The success panel defaults to the guardian portal links. Applicant call
+     sites pass explicit destinations, or null to suppress a link before a
+     guardian link exists. */
+  const successReceiptHref =
+    receiptHref === undefined
+      ? receipt
+        ? `/portal/receipts/${receipt.ref}`
+        : null
+      : receiptHref;
+  const successFeesHref = feesHref === undefined ? "/portal/fees" : feesHref;
 
   if (!open) {
     return (
@@ -311,7 +346,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
           </div> : null}
 
           <p className={styles.flowNote}>
-            The school never stores card or UPI credentials — the gateway handles the payment.
+            The school never stores card or UPI credentials · the gateway handles the payment.
           </p>
           <div className={styles.actions}>
             <Button variant="primary" onClick={() => void startCheckout()}>
@@ -332,7 +367,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
           <p className={styles.processingNote}>
             {step === "creating"
               ? supabaseMode ? "Creating a payment attempt in the local sandbox." : "Creating a payment attempt with the Demo gateway."
-              : "The school server is posting the payment and issuing the receipt — this happens exactly once."}
+              : "The school server is posting the payment and issuing the receipt · this happens exactly once."}
           </p>
         </div>
       ) : null}
@@ -344,7 +379,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
           </p>
           <p className={styles.processingNote}>
             {step === "gateway"
-              ? supabaseMode ? "Your payment is with the local sandbox. Keep this window open — the result is confirmed here." : "Your payment is with the Demo gateway. Keep this window open — the result is confirmed here."
+              ? supabaseMode ? "Your payment is with the local sandbox. Keep this window open · the result is confirmed here." : "Your payment is with the Demo gateway. Keep this window open · the result is confirmed here."
               : "Your payment is confirmed only when the school server verifies it with the gateway."}
           </p>
         </div>
@@ -354,7 +389,7 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
         <div className={styles.stateBlock}>
           <p className={styles.stateTitle}>Payment delayed</p>
           <p className={styles.stateText}>
-            The gateway has not confirmed your payment yet. We will confirm shortly — nothing is posted to the
+            The gateway has not confirmed your payment yet. We will confirm shortly · nothing is posted to the
             ledger until it does.
           </p>
           <div className={styles.actions}>
@@ -409,8 +444,8 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
           <p className={styles.stateText}>{errorMessage}</p>
           <p className={styles.stateText}>
             {errorKind === "create"
-              ? "No payment attempt was created — nothing was charged."
-              : "The attempt itself was not duplicated — checking again is safe."}
+              ? "No payment attempt was created · nothing was charged."
+              : "The attempt itself was not duplicated · checking again is safe."}
           </p>
           <div className={styles.actions}>
             <Button variant="primary" onClick={retry}>
@@ -426,9 +461,9 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
       {step === "success" && receipt ? (
         <div className={styles.success}>
           <p className={styles.successMark} aria-hidden="true">
-            ✓
+            <span className="msym">check</span>
           </p>
-          <p className={styles.successTitle}>Payment recorded{!supabaseMode ? " — demo" : ""}</p>
+          <p className={styles.successTitle}>Payment recorded{!supabaseMode ? " · demo" : ""}</p>
           <dl className={styles.successMeta}>
             <div>
               <dt>Payment</dt>
@@ -456,16 +491,30 @@ export function PayFlow({ invoiceRef, term, amountPaise, balanceAfterPaise, onSe
             </div>
           </dl>
           <p className={styles.flowNote}>
-            {supabaseMode ? "Local sandbox evidence is recorded by the server; the gateway provider remains deferred." : "Demo — in production this redirects to the gateway and verifies the signed webhook before posting to the ledger exactly once."}
+            {supabaseMode ? "Local sandbox evidence is recorded by the server; the gateway provider remains deferred." : "Demo · in production this redirects to the gateway and verifies the signed webhook before posting to the ledger exactly once."}
           </p>
-          <p className={styles.successLinks}>
-            <Link prefetch={false} className="link-arrow" href={`/portal/receipts/${receipt.ref}`}>
-              View receipt {receipt.ref} →
-            </Link>
-            <Link prefetch={false} className="link-arrow" href="/portal/fees">
-              Back to the fee ledger →
-            </Link>
-          </p>
+          {successReceiptHref || successFeesHref ? (
+            <p className={styles.successLinks}>
+              {successReceiptHref ? (
+                <Link prefetch={false} className="link-arrow" href={successReceiptHref}>
+                  View receipt {receipt.ref} →
+                </Link>
+              ) : null}
+              {successFeesHref ? (
+                <Link prefetch={false} className="link-arrow" href={successFeesHref}>
+                  {portalPending ? "Back to application status →" : "Back to the fee ledger →"}
+                </Link>
+              ) : null}
+            </p>
+          ) : null}
+          {!successReceiptHref ? (
+            <p className={styles.flowNote}>
+              Receipt <span className="num">{receipt.ref}</span> is recorded on the fee ledger.
+              {portalPending
+                ? " It appears in the family portal once the guardian account is linked."
+                : ""}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>

@@ -221,7 +221,7 @@ export function TimeSeriesChart({
         new Date(samples[0]?.takenAt ?? 0).getTime()) /
       3_600_000;
     const useDayLabel = spanHours > 30;
-    const labelCount = width < 480 ? 4 : 6;
+    const labelCount = width <= 479 ? 4 : 6;
     const xLabels = Array.from({ length: labelCount }, (_, i) => {
       const index = Math.round((i / (labelCount - 1)) * (samples.length - 1));
       const sample = samples[index];

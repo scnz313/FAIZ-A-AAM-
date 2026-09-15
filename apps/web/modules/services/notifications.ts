@@ -25,6 +25,9 @@ export { DEMO_STAFF_ACCOUNT_ID };
 /** Session key holding per-account read state: `{ [accountId]: string[] }`. */
 export const NOTIFICATIONS_SESSION_KEY = sessionKey("notifications");
 
+/** Session key holding per-account cleared ids: `{ [accountId]: string[] }`. */
+export const NOTIFICATIONS_DISMISSED_SESSION_KEY = sessionKey("notifications.dismissed");
+
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
@@ -40,7 +43,10 @@ export type ServerNotificationRow = {
   created_at: string;
 };
 
-const NOTIFICATION_KINDS = new Set<NotificationKind>(["Fee", "Result", "Notice", "Alert", "Admissions", "Finance", "Results", "Timetable", "Careers", "Support", "Security", "Enrollment", "Environment"]);
+const NOTIFICATION_KINDS = new Set<NotificationKind>(["Fee", "Result", "Notice", "Alert", "Admissions", "Finance", "Results", "Timetable", "Careers", "Support", "Security", "Enrollment", "Environment", "Update"]);
+
+/** Default page size requested from the paginated server list. */
+export const NOTIFICATIONS_PAGE_SIZE = 25;
 
 export function notificationKind(row: Pick<ServerNotificationRow, "kind" | "target_type">): NotificationKind {
   if (NOTIFICATION_KINDS.has(row.kind as NotificationKind)) return row.kind as NotificationKind;
@@ -53,23 +59,39 @@ export function notificationKind(row: Pick<ServerNotificationRow, "kind" | "targ
   if (target.includes("notice") || target.includes("content")) return "Notice";
   if (target.includes("support")) return "Support";
   if (target.includes("enrollment")) return "Enrollment";
-  return "Security";
+  /* Unknown targets are general updates, never mislabelled as Security. */
+  return "Update";
 }
 
-export function notificationHref(row: Pick<ServerNotificationRow, "target_type" | "target_reference">): string | undefined {
+export type NotificationAudience = "staff" | "family";
+
+/**
+ * Deep link for a notification target, resolved for the portal the viewer is
+ * actually in. Staff targets never link into `/portal` and family targets
+ * never link into `/administrator`; the staff layout canonicalizes the
+ * Administrator prefix to the viewer's profile when needed.
+ */
+export function notificationHref(
+  row: Pick<ServerNotificationRow, "target_type" | "target_reference">,
+  audience: NotificationAudience = "family",
+): string | undefined {
   const target = row.target_type ?? "";
   const reference = row.target_reference ?? "";
-  if (target.includes("admission") && reference) return `/apply/student/${encodeURIComponent(reference)}/status`;
-  if (target.includes("job_application") && reference) return `/apply/job/${encodeURIComponent(reference)}/status`;
-  if (target.includes("receipt") && reference) return `/portal/receipts/${encodeURIComponent(reference)}`;
-  if (target.includes("invoice") && reference) return `/portal/fees/${encodeURIComponent(reference)}`;
-  if (target.includes("refund") || target.includes("payment")) return "/portal/fees";
-  if (target.includes("result_entry") || target.includes("result_batch")) return reference ? `/staff/results/${encodeURIComponent(reference)}` : "/staff/results";
-  if (target.includes("result")) return "/portal/results";
-  if (target.includes("timetable") || target.includes("exam_schedule")) return "/portal/timetable";
-  if (target.includes("notice") || target.includes("content")) return "/portal/notices";
-  if (target.includes("support")) return "/portal/support";
-  if (target.includes("student") || target.includes("enrollment")) return "/portal";
+  const staff = audience === "staff";
+  if (target.includes("admission") && reference) return staff ? `/administrator/admissions/${encodeURIComponent(reference)}` : `/apply/student/${encodeURIComponent(reference)}/status`;
+  /* Job applications are email-only (owner instruction): there is no
+     applicant portal or status route, so a family-side notification must not
+     link anywhere. Staff keep the review workspace link. */
+  if (target.includes("job_application") && reference) return staff ? `/administrator/careers/${encodeURIComponent(reference)}` : undefined;
+  if (target.includes("receipt") && reference) return staff ? "/administrator/finance/payments" : `/portal/receipts/${encodeURIComponent(reference)}`;
+  if (target.includes("invoice") && reference) return staff ? "/administrator/finance/invoices" : `/portal/fees/${encodeURIComponent(reference)}`;
+  if (target.includes("refund") || target.includes("payment")) return staff ? "/administrator/finance/payments" : "/portal/fees";
+  if (target.includes("result_entry") || target.includes("result_batch")) return staff ? (reference ? `/administrator/results/${encodeURIComponent(reference)}` : "/administrator/results") : "/portal/results";
+  if (target.includes("result")) return staff ? "/administrator/results" : "/portal/results";
+  if (target.includes("timetable") || target.includes("exam_schedule")) return staff ? "/administrator/timetables" : "/portal/timetable";
+  if (target.includes("notice") || target.includes("content")) return staff ? "/administrator/notices" : "/portal/notices";
+  if (target.includes("support")) return staff ? "/administrator/support" : "/portal/support";
+  if (target.includes("student") || target.includes("enrollment")) return staff ? undefined : "/portal";
   if (target.includes("user_account") || target.includes("staff_assignment") || target.includes("account_invitation")) return "/sign-in";
   return undefined;
 }
@@ -114,52 +136,77 @@ function saveReadState(state: Record<string, string[]>): void {
   sessionSet(NOTIFICATIONS_SESSION_KEY, state);
 }
 
-/** Materialize seeds with deterministic timestamps and per-account read state. */
-function materialize(seeds: readonly NotificationSeed[], readIds: readonly string[]): NotificationItem[] {
+function loadDismissedState(): Record<string, string[]> {
+  return sessionGet<Record<string, string[]>>(NOTIFICATIONS_DISMISSED_SESSION_KEY) ?? {};
+}
+
+function saveDismissedState(state: Record<string, string[]>): void {
+  sessionSet(NOTIFICATIONS_DISMISSED_SESSION_KEY, state);
+}
+
+/** Materialize seeds with deterministic timestamps, read state, and cleared ids. */
+function materialize(seeds: readonly NotificationSeed[], readIds: readonly string[], dismissedIds: readonly string[] = []): NotificationItem[] {
   const nowMs = demoNow().getTime();
-  return seeds.map((seed) => ({
-    id: seed.id,
-    kind: seed.kind,
-    text: seed.text,
-    atIso: new Date(nowMs - seed.offsetMs).toISOString(),
-    unread: seed.unread && !readIds.includes(seed.id),
-  }));
+  return seeds
+    .filter((seed) => !dismissedIds.includes(seed.id))
+    .map((seed) => ({
+      id: seed.id,
+      kind: seed.kind,
+      text: seed.text,
+      atIso: new Date(nowMs - seed.offsetMs).toISOString(),
+      unread: seed.unread && !readIds.includes(seed.id),
+    }));
 }
 
 export interface NotificationsService {
   /** The account's notification list with its read state applied. */
-  listForAccount(accountId: string): Promise<NotificationItem[]>;
+  listForAccount(accountId: string, audience?: NotificationAudience): Promise<NotificationItem[]>;
   /** Synchronous variant for module-level consumers (shell topbar props). */
   listForAccountSync(accountId: string): NotificationItem[];
+  /** Exact unread count for the account (server count in Supabase mode). */
+  unreadCount(accountId: string): Promise<number>;
   /** Mark one item read for the account; returns the refreshed list. */
-  markRead(accountId: string, notificationId: string): Promise<NotificationItem[]>;
+  markRead(accountId: string, notificationId: string, audience?: NotificationAudience): Promise<NotificationItem[]>;
   /** Mark every item read for the account; returns the refreshed list. */
-  markAllRead(accountId: string): Promise<NotificationItem[]>;
+  markAllRead(accountId: string, audience?: NotificationAudience): Promise<NotificationItem[]>;
+  /** Clear one item from the account's list; returns the refreshed list. */
+  dismiss(accountId: string, notificationId: string, audience?: NotificationAudience): Promise<NotificationItem[]>;
+  /** Clear every item from the account's list; returns the refreshed list. */
+  dismissAll(accountId: string, audience?: NotificationAudience): Promise<NotificationItem[]>;
 }
 
 export const notificationsService: NotificationsService = {
-  async listForAccount(accountId) {
+  async listForAccount(accountId, audience = "family") {
     if (clientAdapterMode() === "supabase") {
-      const response = await adapterCall<ServerNotificationRow[]>("notifications.list", {});
+      const response = await adapterCall<ServerNotificationRow[]>("notifications.list", { limit: NOTIFICATIONS_PAGE_SIZE });
       if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notifications are unavailable.");
-      return response.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: notificationKind(item), text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null, href: notificationHref(item) }));
+      return response.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: notificationKind(item), text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null, href: notificationHref(item, audience) }));
     }
     return notificationsService.listForAccountSync(accountId);
   },
 
   listForAccountSync(accountId) {
     if (clientAdapterMode() === "supabase") throw new Error("Supabase notifications require the server-seeded account projection.");
-    const readIds = loadReadState()[accountId] ?? [];
-    return materialize(seedsForAccount(accountId), readIds);
+    const state = loadReadState();
+    return materialize(seedsForAccount(accountId), state[accountId] ?? [], loadDismissedState()[accountId] ?? []);
   },
 
-  async markRead(accountId, notificationId) {
+  async unreadCount(accountId) {
     if (clientAdapterMode() === "supabase") {
-      const current = await notificationsService.listForAccount(accountId);
+      const response = await adapterCall<number>("notifications.unreadCount", {});
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "The unread count is unavailable.");
+      return response.value;
+    }
+    return notificationsService.listForAccountSync(accountId).filter((item) => item.unread).length;
+  },
+
+  async markRead(accountId, notificationId, audience = "family") {
+    if (clientAdapterMode() === "supabase") {
+      const current = await notificationsService.listForAccount(accountId, audience);
       const version = current.find((item) => item.id === notificationId)?.version ?? 1;
       const response = await adapterCall("notifications.markRead", { notificationId, expectedVersion: version });
       if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notification could not be marked read.");
-      return notificationsService.listForAccount(accountId);
+      return notificationsService.listForAccount(accountId, audience);
     }
     const state = loadReadState();
     const readIds = state[accountId] ?? [];
@@ -170,15 +217,44 @@ export const notificationsService: NotificationsService = {
     return notificationsService.listForAccountSync(accountId);
   },
 
-  async markAllRead(accountId) {
+  async markAllRead(accountId, audience = "family") {
     if (clientAdapterMode() === "supabase") {
       const response = await adapterCall<{ count: number }>("notifications.markAll", {});
       if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notifications could not be marked read.");
-      return notificationsService.listForAccount(accountId);
+      return notificationsService.listForAccount(accountId, audience);
     }
     const state = loadReadState();
     state[accountId] = seedsForAccount(accountId).map((seed) => seed.id);
     saveReadState(state);
+    return notificationsService.listForAccountSync(accountId);
+  },
+
+  async dismiss(accountId, notificationId, audience = "family") {
+    if (clientAdapterMode() === "supabase") {
+      const current = await notificationsService.listForAccount(accountId, audience);
+      const version = current.find((item) => item.id === notificationId)?.version ?? 1;
+      const response = await adapterCall("notifications.dismiss", { notificationId, expectedVersion: version });
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notification could not be cleared.");
+      return notificationsService.listForAccount(accountId, audience);
+    }
+    const state = loadDismissedState();
+    const dismissedIds = state[accountId] ?? [];
+    if (!dismissedIds.includes(notificationId)) {
+      state[accountId] = [...dismissedIds, notificationId];
+      saveDismissedState(state);
+    }
+    return notificationsService.listForAccountSync(accountId);
+  },
+
+  async dismissAll(accountId, audience = "family") {
+    if (clientAdapterMode() === "supabase") {
+      const response = await adapterCall<{ count: number }>("notifications.dismissAll", {});
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "Notifications could not be cleared.");
+      return notificationsService.listForAccount(accountId, audience);
+    }
+    const state = loadDismissedState();
+    state[accountId] = seedsForAccount(accountId).map((seed) => seed.id);
+    saveDismissedState(state);
     return notificationsService.listForAccountSync(accountId);
   },
 };

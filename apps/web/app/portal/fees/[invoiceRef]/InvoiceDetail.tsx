@@ -78,7 +78,9 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
       void financeService.listAttempts(invoiceRef).then(setAttempts).catch(() => {});
       return;
     }
-    void refresh();
+    /* The server initial stays authoritative if this refresh fails; the
+       failure must not surface as an unhandled rejection. */
+    void refresh().catch(() => {});
   }, [initial, invoiceRef, refresh, supabaseMode]);
 
   /* Classify the invoice's owning student against the family account. The
@@ -102,11 +104,17 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
 
   function handleSettled(receiptRef: string): void {
     setSettledRef(receiptRef);
-    void refresh();
+    /* The success panel already confirmed the receipt; a failed ledger
+       refresh must not surface as an unhandled rejection. */
+    void refresh().catch(() => {});
   }
 
   function printInvoice(): void {
-    setPrintNotice("Print dialog opened for the demo invoice. The browser can save this view as a PDF.");
+    setPrintNotice(
+      supabaseMode
+        ? "Print dialog opened for this invoice. The browser can save this view as a PDF."
+        : "Print dialog opened for the demo invoice. The browser can save this view as a PDF.",
+    );
     window.print();
   }
 
@@ -118,10 +126,10 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
       const nextView = await refresh();
       const resolved = Boolean(receipt && nextView?.receipts.some((item) => item.ref === receiptRef));
       setReceiptNotice(
-        resolved ? `Receipt ${receiptRef} is available.` : "Receipt unavailable — retry",
+        resolved ? `Receipt ${receiptRef} is available.` : "Receipt unavailable · retry",
       );
     } catch {
-      setReceiptNotice("Receipt unavailable — retry");
+      setReceiptNotice("Receipt unavailable · retry");
     } finally {
       setReceiptRetrying(null);
     }
@@ -154,7 +162,10 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
         <div className="workspace-state" role="alert">
           <p className="workspace-state-title">Family context unavailable</p>
           <p className="workspace-state-note">
-            {errorMessage ?? "The demo family context could not be loaded. Retry to continue."}
+            {errorMessage ??
+              (supabaseMode
+                ? "Your family context could not be loaded. Retry to continue."
+                : "The demo family context could not be loaded. Retry to continue.")}
           </p>
           <button type="button" className="button button--quiet button--small" onClick={retry}>
             Try again
@@ -180,7 +191,7 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
               </p>
               <p className={styles.contextPanelNote}>
                 {owningStudent.student.displayName} is in {gradeSectionLabel(owningStudent.gradeSection)}. This
-                record is theirs — switch the active child to view and manage it under their ledger.
+                record is theirs · switch the active child to view and manage it under their ledger.
               </p>
               <div className={styles.contextPanelActions}>
                 <button
@@ -218,7 +229,7 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
             </p>
             <div className={styles.headerActions}>
               <Button variant="quiet" onClick={printInvoice} aria-describedby="invoice-print-note">
-                Print invoice{!supabaseMode ? " — demo" : ""}
+                Print invoice{!supabaseMode ? " · demo" : ""}
               </Button>
               <span id="invoice-print-note" className="sr-only">
                 Opens the browser print dialog for the visible {supabaseMode ? "ledger projection" : "demo invoice"} details. No file is generated here.
@@ -285,8 +296,8 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
                   ))}
                 </ul>
                 <p className={styles.policyNote}>
-                  Concessions, adjustments, and refunds are posted ledger entries — the original invoice items and
-                  payment history are never rewritten (demo policy marker).
+                  Concessions, adjustments, and refunds are posted ledger entries · the original invoice items and
+                  payment history are never rewritten{supabaseMode ? "." : " (demo policy marker)."}
                 </p>
               </section>
             ) : null}
@@ -315,7 +326,7 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
                         </Link>
                       ) : (
                         <span className={styles.receiptRecovery}>
-                          Receipt unavailable —{" "}
+                          Receipt unavailable ·{" "}
                           <button
                             type="button"
                             className="button button--quiet button--small"
@@ -365,7 +376,9 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
                 ))}
               </ul>
               <p className={styles.policyNote}>
-                Attempts are demo gateway records — only succeeded attempts post to the ledger.
+                {supabaseMode
+                  ? "Only succeeded attempts post to the ledger."
+                  : "Attempts are demo gateway records · only succeeded attempts post to the ledger."}
               </p>
             </section>
           ) : null}
@@ -383,14 +396,14 @@ export function InvoiceDetail({ invoiceRef, initial }: InvoiceDetailProps) {
               <div className={styles.paidBox}>
                 <StatusBadge tone="good">Paid</StatusBadge>
                 <p className={styles.paidText}>
-                  This invoice is fully paid{receiptHref || firstPayment ? " — " : "."}
+                  This invoice is fully paid{receiptHref || firstPayment ? " · " : "."}
                   {receiptHref ? (
                     <Link prefetch={false} className="link-arrow" href={receiptHref}>
                       view receipt →
                     </Link>
                   ) : firstPayment ? (
                     <span className={styles.receiptRecovery}>
-                      Receipt unavailable —{" "}
+                      Receipt unavailable ·{" "}
                       <button
                         type="button"
                         className="button button--quiet button--small"

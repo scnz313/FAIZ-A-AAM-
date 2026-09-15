@@ -53,12 +53,12 @@ function documentHelp(requirement: AdmissionDocumentRequirement): string {
 
 const CONDITIONS: readonly { key: string; label: string }[] = [
   { key: "asthma", label: "Asthma or a respiratory condition" },
-  { key: "allergies", label: "Allergies — food, medicine, or environmental" },
+  { key: "allergies", label: "Allergies · food, medicine, or environmental" },
   { key: "diabetes", label: "Diabetes" },
   { key: "epilepsy", label: "Epilepsy or seizure disorder" },
   { key: "vision", label: "Vision or hearing difficulty" },
   { key: "mobility", label: "Mobility or physical support needs" },
-  { key: "none", label: "None — nothing to declare" },
+  { key: "none", label: "None · nothing to declare" },
 ];
 
 const CONDITION_LABELS: Record<string, string> = Object.fromEntries(CONDITIONS.map((c) => [c.key, c.label]));
@@ -112,6 +112,9 @@ type Draft = {
   savedAtIso?: string;
 };
 
+type ServerSaveResult = { savedAtIso: string; draftRef?: string };
+type ServerSaveWaiter = { resolve: (result: ServerSaveResult) => void; reject: (error: unknown) => void };
+
 const TEXT_FIELDS = [
   "session",
   "grade",
@@ -157,6 +160,37 @@ function emptyDraft(): Draft {
     documents: {},
     consent: false,
   };
+}
+
+/** Configuration labels ("2026–27", "Class 8") and draft values ("2026-27")
+ * must compare across dash styles and spacing. */
+function normalizedConfigurationLabel(value: string): string {
+  return value.replace(/[–—]/g, "-").replace(/\s+/g, "").toLowerCase();
+}
+
+/**
+ * Document requirements belong to the admission window for the chosen grade
+ * and session. Without this scope, every window's identical requirement codes
+ * render as duplicate file inputs. Exported for the scoping regression test.
+ */
+export function selectAdmissionWindowRequirements(
+  configuration: AdmissionConfiguration | null,
+  grade: string,
+  session: string,
+): AdmissionDocumentRequirement[] {
+  if (configuration === null || session.trim() === "" || grade.trim() === "") return [];
+  const year = configuration.academicYears.find((candidate) => normalizedConfigurationLabel(candidate.label) === normalizedConfigurationLabel(session));
+  const selectedGrade = configuration.grades.find((candidate) => normalizedConfigurationLabel(candidate.label) === normalizedConfigurationLabel(grade));
+  if (year === undefined || selectedGrade === undefined) return [];
+  const window = configuration.windows.find(
+    (candidate) => candidate.academicYearId === year.id
+      && candidate.gradeId === selectedGrade.id
+      && (candidate.status === "open" || candidate.status === "planned"),
+  );
+  if (window === undefined) return [];
+  return configuration.documentRequirements.filter(
+    (requirement) => requirement.status === "active" && requirement.windowId === window.id,
+  );
 }
 
 /** Keep only known fields when restoring a draft, so corrupted or foreign data never loads. */
@@ -313,6 +347,15 @@ function validateStep(
   return errors;
 }
 
+/** Resume a saved draft on the first section that still needs an answer; when
+ * every earlier section is complete, land on the documents or review step. */
+function resumeStep(draft: Draft): number {
+  for (let index = 0; index < 6; index += 1) {
+    if (Object.keys(validateStep(index, draft, [])).length > 0) return index;
+  }
+  return Object.keys(draft.documents).length > 0 ? APPLICATION_STEPS.length - 1 : 6;
+}
+
 /** aria-describedby for an input wired to its help/error text. */
 function describedBy(id: string, error?: string, help?: string): string | undefined {
   const ids = [error ? `${id}-error` : null, help ? `${id}-help` : null].filter(Boolean);
@@ -427,17 +470,43 @@ export type ApplicationFormProps = {
 };
 
 /**
- * Prefill for requested-change editing when no saved draft exists: the
- * submitted record's fields carry over; consent and documents stay empty
- * so the applicant re-confirms them before re-submitting.
+ * Prefill for requested-change editing when no saved draft exists. The
+ * latest submitted snapshot carries the answers and attachments of the last
+ * submission, so the applicant edits the version the school reviewed instead
+ * of re-entering the whole form (and re-uploading every document). Recorded
+ * columns overlay the snapshot so a corrected name or contact still shows.
+ * Consent always starts empty: the applicant re-confirms before resubmitting.
  */
 function draftFromRecord(record: ApplicationRecord): Draft {
-  const draft = emptyDraft();
-  draft.session = record.session;
-  draft.grade = record.grade;
-  draft.studentName = record.studentName;
-  draft.guardianName = record.parentName;
+  const latestSnapshot = record.versions?.at(-1)?.snapshot;
+  const draft =
+    latestSnapshot !== undefined && latestSnapshot !== null && typeof latestSnapshot === "object" && Object.keys(latestSnapshot).length > 0
+      ? sanitizeDraft(latestSnapshot)
+      : emptyDraft();
+  if (record.session.trim() !== "") draft.session = record.session;
+  if (record.grade.trim() !== "") draft.grade = record.grade;
+  if (record.studentName.trim() !== "") draft.studentName = record.studentName;
+  if (record.parentName.trim() !== "") draft.guardianName = record.parentName;
   if (/^\+?[0-9\s-]{10,15}$/.test(record.contact)) draft.phone = record.contact;
+  draft.consent = false;
+  draft.savedAtIso = undefined;
+  return draft;
+}
+
+/**
+ * Overlay a saved draft on a snapshot/record base. Fields the draft leaves
+ * empty fall back to the base (an autosaved partial draft created before the
+ * applicant touched a section must never erase submitted answers), while
+ * attachments merge per requirement so the newest uploaded file wins.
+ */
+export function mergeSavedDraft(saved: unknown, base: Draft): Draft {
+  const restored = sanitizeDraft(saved);
+  const draft: Draft = { ...base, documents: { ...base.documents } };
+  for (const key of TEXT_FIELDS) {
+    if (restored[key] !== "") draft[key] = restored[key];
+  }
+  if (restored.conditions.length > 0) draft.conditions = restored.conditions;
+  if (Object.keys(restored.documents).length > 0) draft.documents = { ...base.documents, ...restored.documents };
   return draft;
 }
 
@@ -468,6 +537,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editingRef, setEditingRef] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState(false);
   /* Local start-over confirmation replaces a browser confirm() so the
      destructive step keeps a visible context and a safe default. */
   const [confirmingReset, setConfirmingReset] = useState(false);
@@ -480,6 +550,16 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
   const firstRender = useRef(true);
   const onStepChangeRef = useRef(onStepChange);
   const onContextChangeRef = useRef(onContextChange);
+  /* Durable save owner and serialized save queue. The resolved application
+     reference lives in a ref (not React state) so a queued or in-flight save
+     always reads the latest value. One save runs at a time; a save requested
+     while another is running replaces any not-yet-started pending save, so a
+     fresh journey creates exactly one server draft. */
+  const serverOwnerRef = useRef<string | null>(null);
+  const serverSaveQueueRef = useRef<{
+    running: boolean;
+    queued: { draft: Draft; waiters: ServerSaveWaiter[] } | null;
+  }>({ running: false, queued: null });
 
   useEffect(() => {
     onStepChangeRef.current = onStepChange;
@@ -506,13 +586,36 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
   }, [supabaseMode]);
 
   const documentRequirements = useMemo(
-    () => admissionConfiguration?.documentRequirements.filter((requirement) => requirement.status === "active") ?? [],
-    [admissionConfiguration],
+    () => selectAdmissionWindowRequirements(admissionConfiguration, draft.grade, draft.session),
+    [admissionConfiguration, draft.grade, draft.session],
   );
   const requiredDocumentRequirements = useMemo(
     () => documentRequirements.filter((requirement) => requirement.required),
     [documentRequirements],
   );
+
+  const refreshDocumentStatus = useCallback(async (key: DocKey, documentRef: string) => {
+    if (!documentRef) return;
+    setUploadStates((current) => ({ ...current, [key]: "checking" }));
+    setUploadErrors((current) => ({ ...current, [key]: "" }));
+    try {
+      const result = await getDocumentUploadStatus(documentRef);
+      const next: UploadState = result.state === "ready"
+        ? "ready"
+        : result.state === "quarantined"
+          ? "quarantined"
+          : result.state === "failed" || result.state === "denied" || result.state === "expired"
+            ? "failed"
+            : "pending";
+      setUploadStates((current) => ({ ...current, [key]: next }));
+    } catch (error) {
+      setUploadStates((current) => ({ ...current, [key]: "failed" }));
+      setUploadErrors((current) => ({
+        ...current,
+        [key]: error instanceof Error ? error.message : "The document status could not be checked.",
+      }));
+    }
+  }, []);
 
   /* Restore a draft on mount: the ?edit=REF param loads the application's
      saved draft (or its recorded fields) for requested-change editing;
@@ -523,24 +626,38 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
 
     if (editRef) {
       void (async () => {
-        try {
-          const saved = await admissionsService.getDraft(editRef);
-          if (cancelled) return;
-          if (saved) {
-            setEditingRef(editRef);
-            setDraft(sanitizeDraft(saved));
-            setSaveMessage("Draft restored for editing");
-            return;
+        const [saved, record] = await Promise.all([
+          admissionsService.getDraft(editRef).catch(() => null),
+          admissionsService.getApplication(editRef).catch(() => null),
+        ]);
+        if (cancelled) return;
+        /* A submitted application is immutable; only a draft or a
+           requested-change record may open the wizard. A bookmarked or
+           historical ?edit= URL goes to the tracking page instead of an
+           editable form the service refuses with a conflict. */
+        if (record !== null && record.status !== "Draft" && record.status !== "Changes requested") {
+          router.replace(`/apply/student/${encodeURIComponent(editRef)}/status`);
+          return;
+        }
+        const isDraft = record === null || record.status === "Draft";
+        if (saved || record) {
+          /* The snapshot/record base keeps the submitted answers available
+             even when the applicant opened the edit page before any draft
+             existed, and a saved draft overlays its newer answers. */
+          const base = record ? draftFromRecord(record) : emptyDraft();
+          const restored = saved ? mergeSavedDraft(saved, base) : base;
+          serverOwnerRef.current = editRef;
+          setEditingRef(editRef);
+          setEditingDraft(isDraft);
+          setDraft(restored);
+          setCurrentStep(resumeStep(restored));
+          for (const [key, documentRef] of Object.entries(restored.documents)) {
+            if (documentRef) void refreshDocumentStatus(key, documentRef);
           }
-          const record = await admissionsService.getApplication(editRef);
-          if (cancelled) return;
-          if (record) {
-            setEditingRef(editRef);
-            setDraft(draftFromRecord(record));
-            setSaveMessage("Details restored from the submitted application");
-          }
-        } catch {
-          /* Adapter unavailable — start with an empty form. */
+          setSaveMessage(
+            isDraft ? "Draft restored for editing" : "Details restored from the submitted application",
+          );
+          return;
         }
       })();
       return () => {
@@ -563,26 +680,73 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     } catch {
       /* Unreadable draft — start fresh. */
     }
-  }, [supabaseMode]);
+  }, [supabaseMode, refreshDocumentStatus, router]);
+
+  /**
+   * Serialize every server save through one queue. Each save reads the owner
+   * ref at execution time — never a stale React state closure — so only the
+   * first save of a fresh journey names "new"; later saves and the document
+   * upload always reuse the reference it returned. A save requested while
+   * another is running replaces any not-yet-started pending save, so rapid
+   * edits coalesce instead of racing.
+   */
+  const enqueueServerSave = useCallback((draftSnapshot: Draft): Promise<ServerSaveResult> => {
+    return new Promise((resolve, reject) => {
+      const queue = serverSaveQueueRef.current;
+      if (queue.running) {
+        if (queue.queued === null) {
+          queue.queued = { draft: draftSnapshot, waiters: [] };
+        } else {
+          queue.queued.draft = draftSnapshot;
+        }
+        queue.queued.waiters.push({ resolve, reject });
+        return;
+      }
+      queue.running = true;
+      let nextDraft = draftSnapshot;
+      let waiters: ServerSaveWaiter[] = [{ resolve, reject }];
+      void (async () => {
+        for (;;) {
+          try {
+            const saved = await admissionsService.saveDraft(serverOwnerRef.current ?? "new", nextDraft);
+            if (serverOwnerRef.current === null && saved.draftRef) {
+              serverOwnerRef.current = saved.draftRef;
+              setEditingRef(saved.draftRef);
+              setEditingDraft(true);
+              window.history.replaceState(null, "", `/apply/student?edit=${encodeURIComponent(saved.draftRef)}`);
+            }
+            setLastSavedIso(new Date().toISOString());
+            setSaveMessage(null);
+            setSaveFailed(false);
+            for (const waiter of waiters) waiter.resolve(saved);
+          } catch (error) {
+            setSaveFailed(true);
+            for (const waiter of waiters) waiter.reject(error);
+          }
+          const queued = serverSaveQueueRef.current.queued;
+          serverSaveQueueRef.current.queued = null;
+          if (queued === null) break;
+          nextDraft = queued.draft;
+          waiters = queued.waiters;
+        }
+        serverSaveQueueRef.current.running = false;
+      })();
+    });
+  }, []);
 
   const persistDraft = useCallback(() => {
-    if (editingRef || supabaseMode) {
-      void admissionsService
-        .saveDraft(editingRef ?? "new", draft)
-        .then((saved) => {
-          if (!editingRef && saved.draftRef) {
-            setEditingRef(saved.draftRef);
-            window.history.replaceState(null, "", `/apply/student?edit=${encodeURIComponent(saved.draftRef)}`);
-          }
-          setLastSavedIso(new Date().toISOString());
-          setSaveMessage(null);
-          setSaveFailed(false);
-        })
-        .catch(() => {
-          setSaveFailed(true);
-        });
+    /* A brand-new server draft requires session, class, student and guardian
+       before the RPC can accept it; autosaving earlier always failed on the
+       first keystroke. Wait until the form can actually be persisted. */
+    const readyForServer = draft.session.trim() !== "" && draft.grade.trim() !== "" && draft.studentName.trim() !== "" && draft.guardianName.trim() !== "";
+    if (editingRef || serverOwnerRef.current || (supabaseMode && readyForServer)) {
+      void enqueueServerSave(draft).catch(() => {
+        /* The queue already set the save-failed indicator; autosave has no
+           other caller to notify. */
+      });
       return;
     }
+    if (supabaseMode) return;
     try {
       const savedAtIso = new Date().toISOString();
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toTabDraft(draft, currentStep, savedAtIso)));
@@ -593,7 +757,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
       /* Storage unavailable — say so honestly instead of a stale "saved". */
       setSaveFailed(true);
     }
-  }, [draft, currentStep, editingRef, supabaseMode]);
+  }, [draft, currentStep, editingRef, supabaseMode, enqueueServerSave]);
 
   /* Autosave (debounced) on every change after the first render. Only
      non-sensitive fields plus section progress are persisted, and only to
@@ -637,13 +801,12 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     setUploadStates((current) => ({ ...current, [key]: "uploading" }));
     setUploadErrors((current) => ({ ...current, [key]: "" }));
     try {
-      /* The upload owner is durable before the browser requests a signed URL.
-       * The returned public application reference is reused for every later
-       * autosave/submit; no UUID is sent from this component. */
-      const saved = await admissionsService.saveDraft(editingRef ?? "new", draft);
-      const ownerRef = saved.draftRef ?? editingRef;
+      /* The upload owner is durable before the browser requests a signed URL:
+       * the serialized save waits for any in-flight save, then names the
+       * resolved application reference. No UUID is sent from this component. */
+      const saved = await enqueueServerSave(draft);
+      const ownerRef = saved.draftRef ?? serverOwnerRef.current;
       if (!ownerRef) throw new Error("Save the application draft before uploading a document.");
-      if (!editingRef) setEditingRef(ownerRef);
       const result = await uploadDocumentFile({
         ownerDomain: "admission_application",
         ownerRecordRef: ownerRef,
@@ -655,7 +818,12 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
       setDoc(key, result.documentRef);
       setUploadStates((current) => ({ ...current, [key]: result.status === "ready" ? "ready" : "pending" }));
     } catch (error) {
-      setUploadStates((current) => ({ ...current, [key]: "failed" }));
+      setUploadStates((current) => {
+        const next = { ...current };
+        if (draft.documents[key]) delete next[key];
+        else next[key] = "failed";
+        return next;
+      });
       setUploadErrors((current) => ({
         ...current,
         [key]: error instanceof Error ? error.message : "The upload failed. Choose the file and try again.",
@@ -663,29 +831,6 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     }
   }
 
-  async function refreshDocumentStatus(key: DocKey) {
-    const documentRef = draft.documents[key];
-    if (!documentRef) return;
-    setUploadStates((current) => ({ ...current, [key]: "checking" }));
-    setUploadErrors((current) => ({ ...current, [key]: "" }));
-    try {
-      const result = await getDocumentUploadStatus(documentRef);
-      const next: UploadState = result.state === "ready"
-        ? "ready"
-        : result.state === "quarantined"
-          ? "quarantined"
-          : result.state === "failed" || result.state === "denied" || result.state === "expired"
-            ? "failed"
-            : "pending";
-      setUploadStates((current) => ({ ...current, [key]: next }));
-    } catch (error) {
-      setUploadStates((current) => ({ ...current, [key]: "failed" }));
-      setUploadErrors((current) => ({
-        ...current,
-        [key]: error instanceof Error ? error.message : "The document status could not be checked.",
-      }));
-    }
-  }
 
   function toggleCondition(key: string) {
     setDraft((current) => {
@@ -780,8 +925,8 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const saved = await admissionsService.saveDraft(editingRef ?? "new", draft);
-      const { ref } = await admissionsService.submitApplication(draft, saved.draftRef ?? editingRef ?? undefined);
+      const saved = await enqueueServerSave(draft);
+      const { ref } = await admissionsService.submitApplication(draft, saved.draftRef ?? serverOwnerRef.current ?? undefined);
       if (!supabaseMode) {
         try {
           window.sessionStorage.removeItem(STORAGE_KEY);
@@ -793,7 +938,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
     } catch {
       setSubmitting(false);
       setSubmitError(
-        "We could not submit your application right now. Your answers are still here — please try again.",
+        "We could not submit your application right now. Your answers are still here · please try again.",
       );
     }
   }
@@ -826,8 +971,16 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
           </div>
         {editingRef ? (
             <p className={styles.editNote} role="status">
-              Editing application <strong>{editingRef}</strong> — your changes will be re-submitted for
-              review after you submit them.
+              {editingDraft ? (
+                <>
+                  Editing draft <strong>{editingRef}</strong> · your answers save to your account as you go.
+                </>
+              ) : (
+                <>
+                  Editing application <strong>{editingRef}</strong> · your changes will be re-submitted for review
+                  after you submit them.
+                </>
+              )}
             </p>
           ) : null}
         </div>
@@ -859,7 +1012,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
             <ul>
               {errorItems.map(([id, message]) => (
                 <li key={id}>
-                  <strong>{ERROR_LABELS[id] ?? id}</strong> —{" "}
+                  <strong>{ERROR_LABELS[id] ?? id}</strong> ·{" "}
                   <a href={`#${id}`} aria-label={`${ERROR_LABELS[id] ?? id}: ${message}`}>
                     Review this answer
                   </a>
@@ -1000,7 +1153,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
               <TextField
                 id="occupation"
                 label="Occupation"
-                help="Optional — helps the admissions office understand the family context."
+                help="Optional · helps the admissions office understand the family context."
                 full
                 value={draft.occupation}
                 onChange={(value) => update({ occupation: value })}
@@ -1107,26 +1260,68 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
 
           {currentStep === 6 ? (
             <>
-              {requiredDocumentRequirements.map((doc) => (
-                <Field key={doc.code} id={`doc-${doc.code}`} label={doc.label} required error={errors[`doc-${doc.code}`]} help={documentHelp(doc)}>
-                  <input
-                    id={`doc-${doc.code}`}
-                    className={styles.fileInput}
-                    type="file"
-                    accept={documentAccept(doc)}
-                    onChange={(event) => void handleDocumentFile(doc.code, event.target.files?.[0])}
-                    aria-describedby={describedBy(`doc-${doc.code}`, errors[`doc-${doc.code}`], documentHelp(doc))}
-                    aria-invalid={errors[`doc-${doc.code}`] ? true : undefined}
-                  />
-                  {draft.documents[doc.code] ? (
-                    <p className={styles.fileName} aria-live="polite">
-                      {uploadStates[doc.code] === "uploading" ? "Uploading…" : uploadStates[doc.code] === "failed" ? "Upload failed — choose the file again." : `Attached: ${draft.documents[doc.code]}`}
-                    </p>
-                  ) : null}
-                </Field>
-              ))}
+              {requiredDocumentRequirements.map((doc) => {
+                const documentRef = draft.documents[doc.code];
+                const uploadState = uploadStates[doc.code];
+                const uploadError = uploadErrors[doc.code];
+                const showUploadStatus = documentRef !== undefined || uploadState !== undefined || uploadError !== undefined;
+                const describedByIds = [
+                  errors[`doc-${doc.code}`] ? `doc-${doc.code}-error` : null,
+                  uploadError ? `doc-${doc.code}-upload-error` : null,
+                  `doc-${doc.code}-help`,
+                ].filter(Boolean).join(" ");
+                return (
+                  <Field key={doc.code} id={`doc-${doc.code}`} label={doc.label} required error={errors[`doc-${doc.code}`]} help={documentHelp(doc)}>
+                    <input
+                      id={`doc-${doc.code}`}
+                      className={styles.fileInput}
+                      type="file"
+                      accept={documentAccept(doc)}
+                      onChange={(event) => void handleDocumentFile(doc.code, event.target.files?.[0])}
+                      aria-describedby={describedByIds}
+                      aria-invalid={errors[`doc-${doc.code}`] || uploadError ? true : undefined}
+                    />
+                    {showUploadStatus ? (
+                      <>
+                        {uploadError && uploadState !== "uploading" ? (
+                          <p className="field-error" id={`doc-${doc.code}-upload-error`} role="alert">
+                            {uploadError}
+                          </p>
+                        ) : null}
+                        {uploadState !== "failed" ? (
+                          <p className={styles.fileName} aria-live="polite">
+                            {uploadState === "uploading"
+                              ? "Uploading…"
+                              : uploadState === "checking"
+                                ? "Checking scan status…"
+                                : uploadState === "ready"
+                                  ? "Ready · the scan is complete."
+                                  : uploadState === "quarantined"
+                                    ? "The uploaded file did not pass the security scan. Upload a clean copy."
+                                    : uploadState === "pending"
+                                      ? "Uploaded · awaiting the security scan."
+                                      : documentRef !== undefined
+                                        ? "The earlier upload is still attached. Check the scan status before submitting."
+                                        : null}
+                          </p>
+                        ) : null}
+                        {documentRef !== undefined && uploadState !== "uploading" && uploadState !== "ready" ? (
+                          <Button
+                            variant="quiet"
+                            type="button"
+                            onClick={() => void refreshDocumentStatus(doc.code, documentRef)}
+                            disabled={uploadState === "checking"}
+                          >
+                            {uploadState === "checking" ? "Checking…" : "Check scan status"}
+                          </Button>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </Field>
+                );
+              })}
               <p className={`${styles.fieldFull} field-help`}>
-                {clientAdapterMode() === "demo" ? "Only file names are kept in this demo — no file content is read or transmitted." : "Files are uploaded to private storage and remain pending scan until the server marks them ready."}
+                {clientAdapterMode() === "demo" ? "Only file names are kept in this demo · no file content is read or transmitted." : "Files are uploaded to private storage and remain pending scan until the server marks them ready."}
               </p>
             </>
           ) : null}
@@ -1258,7 +1453,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
                     {requiredDocumentRequirements.map((doc) => (
                       <div className={styles.summaryRow} key={doc.code}>
                         <dt>{doc.label}</dt>
-                        <dd>{draft.documents[doc.code] || "Not attached"}</dd>
+                        <dd>{draft.documents[doc.code] ? `Attached · ${draft.documents[doc.code]}` : "Not attached"}</dd>
                       </div>
                     ))}
                   </dl>
@@ -1316,7 +1511,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
             <p className={styles.actionsNote} aria-live="polite">
               {saveFailed ? (
                 <>
-                  Saving failed —{" "}
+                  Saving failed ·{" "}
                   <button type="button" className={styles.retryLink} onClick={persistDraft}>
                     retry
                   </button>
@@ -1325,7 +1520,7 @@ export default function ApplicationForm({ onStepChange, onContextChange }: Appli
                 saveMessage
               ) : lastSavedIso ? (
                 <>
-                  <span aria-hidden="true">✓</span> Draft saved {formatKolkata(lastSavedIso, { format: "time" })}
+                  <span className="msym" aria-hidden="true">check</span> Draft saved {formatKolkata(lastSavedIso, { format: "time" })}
                 </>
               ) : (
                 "Draft autosaves in this browser"

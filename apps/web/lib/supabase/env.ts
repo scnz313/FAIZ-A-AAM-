@@ -13,6 +13,8 @@
  *   so the demo runtime never requires Supabase credentials.
  */
 
+import { documentScannerReadiness, type ScannerEnvReadiness } from "@/modules/services/document-scanner-config";
+
 export type DataAdapter = "demo" | "supabase";
 
 function parseAdapter(value: string | undefined, name: string, fallback: DataAdapter): DataAdapter {
@@ -107,11 +109,32 @@ export function requireDevelopmentTestPassword(): string {
   return password;
 }
 
-/** Names-only readiness check for server startup/health checks. */
-export function providerEnvReadiness(): { ready: boolean; missing: string[] } {
-  const required = dataAdapter() === "supabase"
-    ? ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "APP_URL", "CRON_SECRET", "RESEND_API_KEY", "EMAIL_FROM", "RESEND_WEBHOOK_SECRET", "DOCUMENT_SCANNER_URL", "DOCUMENT_SCANNER_SECRET"]
-    : ["APP_URL"];
-  const missing = required.filter((name) => !process.env[name]?.trim());
+/** Names-only Resend readiness. The outbox worker must not claim email work
+ *  while the sender cannot be constructed. */
+export function emailProviderReadiness(): { ready: boolean; missing: string[] } {
+  const missing = ["RESEND_API_KEY", "EMAIL_FROM"].filter((name) => !process.env[name]?.trim());
   return { ready: missing.length === 0, missing };
+}
+
+export type { ScannerEnvReadiness } from "@/modules/services/document-scanner-config";
+
+/** Names-only readiness check for server startup/health checks. The document
+ *  scanner requirement depends on `DOCUMENT_SCANNER_PROVIDER`: manual needs
+ *  only the callback secret, http needs URL + secret, clamav needs its host. */
+export function providerEnvReadiness(): {
+  ready: boolean;
+  missing: string[];
+  email: { ready: boolean; missing: string[] };
+  scanner: ScannerEnvReadiness;
+} {
+  const adapter = dataAdapter();
+  const scanner: ScannerEnvReadiness = documentScannerReadiness();
+  const required = adapter === "supabase"
+    ? ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "APP_URL", "CRON_SECRET", "RESEND_API_KEY", "EMAIL_FROM", "RESEND_WEBHOOK_SECRET"]
+    : ["APP_URL"];
+  const missing = [
+    ...required.filter((name) => !process.env[name]?.trim()),
+    ...scanner.missing,
+  ];
+  return { ready: missing.length === 0, missing, email: emailProviderReadiness(), scanner };
 }

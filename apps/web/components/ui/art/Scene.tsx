@@ -18,7 +18,9 @@ export type ArtSceneProps = {
 /**
  * Shared wrapper for all original vector artwork. Server-rendered, flat
  * editorial print style — every scene keeps role="img" and a describing
- * aria-label unless marked decorative.
+ * aria-label unless marked decorative. The inline max-width/height guard
+ * keeps the artwork inside its container even when a page stylesheet has
+ * not applied yet, so an intrinsic 800px scene can never widen the page.
  */
 export function Scene({
   className,
@@ -35,6 +37,7 @@ export function Scene({
       width={width}
       height={height}
       className={className}
+      style={{ maxWidth: "100%", height: "auto" }}
       focusable="false"
       role={ariaHidden ? "presentation" : "img"}
       aria-hidden={ariaHidden || undefined}

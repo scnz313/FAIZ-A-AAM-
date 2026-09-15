@@ -4,7 +4,7 @@
  * or policy text. Official content arrives with the CMS backend.
  */
 
-export const CONTENT_DEMO_NOTE = "Fictional concept content — official details pending verification.";
+export const CONTENT_DEMO_NOTE = "Fictional concept content · official details pending verification.";
 
 /** Folio masthead date used across the public site and both portals. */
 export const FOLIO_TODAY = "MONDAY, 3 AUGUST 2026";
@@ -208,6 +208,9 @@ export type Vacancy = {
   deadlineIso: string;
   status: "open" | "closed";
   description: string;
+  /** Published vacancy identity for the public intake (Supabase mode only). */
+  reference?: string;
+  version?: number;
 };
 
 export const vacancies: Vacancy[] = [
@@ -219,7 +222,7 @@ export const vacancies: Vacancy[] = [
     type: "Teaching",
     qualifications: ["B.Sc. Mathematics with B.Ed.", "Minimum two years of teaching experience", "Good spoken English and Urdu"],
     documents: ["Photograph", "Educational certificates", "Experience certificates", "Identity proof"],
-    deadlineIso: "2026-08-20T14:00:00Z",
+    deadlineIso: "2027-03-31T14:00:00Z",
     status: "open",
     description:
       "We are looking for a mathematics teacher for classes 8 to 10. The role includes class teaching, unit test preparation, and participation in the school's examination cycle.",
@@ -232,7 +235,7 @@ export const vacancies: Vacancy[] = [
     type: "Teaching",
     qualifications: ["M.A. English with B.Ed.", "Experience teaching classes 6 to 8", "Familiarity with activity-based learning"],
     documents: ["Photograph", "Educational certificates", "Experience certificates", "Identity proof"],
-    deadlineIso: "2026-08-25T14:00:00Z",
+    deadlineIso: "2027-04-15T14:00:00Z",
     status: "open",
     description:
       "We are looking for an English teacher for the middle section with a strong grounding in reading, writing, and spoken English.",
@@ -285,13 +288,13 @@ export const policies: Record<"privacy" | "accessibility" | "fees-and-refunds" |
         heading: "What the school collects",
         body: [
           "The school collects only the information needed to run admissions, maintain student records, publish results, and manage fees: names, guardian contacts, address, prior-school details, and academic records.",
-          "This page is concept copy. The final privacy notice will follow the school's confirmed policy and applicable law.",
+          "The final privacy notice will follow the school's confirmed policy and applicable law.",
         ],
       },
       {
         heading: "How information is used",
         body: [
-          "Student and family information is used for school operations only — admission decisions, enrollment, fee statements, results, timetables, notices, and safety communication. It is never sold or used for advertising.",
+          "Student and family information is used for school operations only · admission decisions, enrollment, fee statements, results, timetables, notices, and safety communication. It is never sold or used for advertising.",
         ],
       },
       {
@@ -333,7 +336,7 @@ export const policies: Record<"privacy" | "accessibility" | "fees-and-refunds" |
       {
         heading: "Refunds",
         body: [
-          "Refunds follow the school's confirmed policy and are processed by the finance office against the original payment. Refunds never erase a payment's history — the ledger records both.",
+          "Refunds follow the school's confirmed policy and are processed by the finance office against the original payment. Refunds never erase a payment's history · the ledger records both.",
         ],
       },
     ],
@@ -349,9 +352,9 @@ export const policies: Record<"privacy" | "accessibility" | "fees-and-refunds" |
         ],
       },
       {
-        heading: "Demo content",
+        heading: "Accuracy of information",
         body: [
-          "Until the school confirms official content, pages may display clearly-marked concept text and fictional demo data for design and testing.",
+          "Content on this website is provided for informational purposes. Official versions are confirmed by the school office.",
         ],
       },
     ],

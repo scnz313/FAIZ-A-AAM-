@@ -158,9 +158,11 @@ describe("family context", () => {
   });
 
   it("supports deterministic pending-link approval and rejection", async () => {
-    expect((await familyContextService.listPendingLinkRequests()).map((link) => link.id)).toEqual([PENDING_LINK_ID]);
-    expect((await familyContextService.listPendingLinkRequests(NIDA_ACCOUNT_ID)).map((link) => link.id)).toEqual([
-      PENDING_LINK_ID,
+    expect(await familyContextService.listPendingLinkRequests()).toEqual([
+      expect.objectContaining({ ref: "LINK-2026-1103", studentName: expect.any(String) }),
+    ]);
+    expect((await familyContextService.listPendingLinkRequests(NIDA_ACCOUNT_ID)).map((link) => link.ref)).toEqual([
+      "LINK-2026-1103",
     ]);
 
     const approved = await familyContextService.approveLink(PENDING_LINK_ID);
@@ -294,9 +296,11 @@ describe("family context presentation summaries", () => {
   });
 
   it("summarizes the pending link request with guardian and student names", async () => {
-    const summaries = await familyContextService.listLinkRequestSummaries();
-    expect(summaries).toHaveLength(1);
-    expect(summaries[0]).toMatchObject({
+    const page = await familyContextService.listLinkRequestSummaries();
+    expect(page.rows).toHaveLength(1);
+    expect(page.total).toBe(1);
+    expect(page.nextOffset).toBeNull();
+    expect(page.rows[0]).toMatchObject({
       guardianName: "Nida Bhat",
       studentName: "Zoya Khan",
       link: expect.objectContaining({ id: PENDING_LINK_ID, status: "pending_verification" }),

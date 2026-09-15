@@ -1,66 +1,16 @@
 .page {
-  grid-template-columns: minmax(0, 1fr);
   display: grid;
-  gap: 44px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
 }
 
-/* The global workspace-header margin is absorbed by the grid gap. */
-.header {
-  margin-bottom: 0;
-}
-
-.sectionHead {
-  align-items: baseline;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.sectionHead h2 {
-  margin: 0;
-}
-
-.metricValue {
+.title {
   font-family: var(--serif);
-  font-size: 28px;
-  font-weight: 400;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
-  margin: 0;
-}
-
-.metricSub {
-  color: var(--ink-soft);
-  font-size: 12px;
-  margin: 8px 0 0;
-}
-
-.queue {
-  border-top: 1px solid var(--line);
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.queueRow {
-  align-items: baseline;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  padding: 14px 2px;
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.queueRow:hover {
-  color: var(--saffron-deep);
-}
-
-.queueCopy {
-  font-size: 14px;
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
   margin: 0;
 }
 
@@ -72,7 +22,7 @@
 .ruleNote p {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.55;
   margin: 0;
 }
@@ -81,10 +31,73 @@
   margin-top: 8px;
 }
 
-@media (max-width: 700px) {
-  .queueRow {
-    align-items: flex-start;
+/* Responsive — presentation only; desktop composition is unchanged. */
+
+@media (max-width: 1023px) {
+  .page {
+    gap: 16px;
+  }
+
+  .sectionHead {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .page :global(.metric-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 719px) {
+  .page {
+    gap: 14px;
+  }
+
+  .sectionHead {
+    align-items: stretch;
     flex-direction: column;
-    gap: 4px;
+    gap: 10px;
+  }
+
+  .page :global(.metric-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .queue {
+    display: grid;
+    gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .queueRow {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    min-height: 44px;
+  }
+
+  .queueCopy {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .metricValue,
+  .metricSub {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 479px) {
+  .page {
+    gap: 12px;
+  }
+
+  .title {
+    overflow-wrap: anywhere;
   }
 }

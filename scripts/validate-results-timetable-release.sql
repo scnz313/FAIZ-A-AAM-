@@ -118,6 +118,8 @@ declare
   v_enrollment uuid;
   v_sheet jsonb;
   v_new_sheet jsonb;
+  v_list_row jsonb;
+  v_detail jsonb;
   v_save jsonb;
   v_pub jsonb;
   v_release jsonb;
@@ -128,7 +130,10 @@ declare
   v_failed boolean;
   v_old_release uuid;
   v_new_release uuid;
+  v_candidates jsonb;
+  v_batch jsonb;
   v_count int;
+  v_exams jsonb;
 begin
   v_year := current_setting('slice4.year')::uuid;
   v_section := current_setting('slice4.section')::uuid;
@@ -204,11 +209,106 @@ begin
   assert v_new_release is not null and v_new_release <> v_old_release, 'correction creates a new report release';
   assert (select count(*) from public.result_report_release_items where release_id = v_new_release) = 1, 'superseding release preserves exact subject manifest';
 
+  -- 000070: batch release assembly reads candidates and publishes per student.
+  select coalesce(jsonb_agg(value), '[]'::jsonb) into v_candidates
+    from app.results_report_release_candidates((v_approval ->> 'sheetId')::uuid) value;
+  assert jsonb_array_length(v_candidates) >= 1, 'release candidates list the sheet roster';
+  assert exists (
+    select 1 from jsonb_array_elements(v_candidates) candidate
+     where (candidate ->> 'studentId')::uuid = v_student
+       and jsonb_array_length(candidate -> 'publications') >= 1
+       and candidate -> 'release' <> 'null'::jsonb
+  ), 'candidate carries publications and the current release for the corrected student';
+
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000021', false);
+  v_failed := false;
+  begin perform app.results_report_release_publish_batch((v_approval ->> 'sheetId')::uuid, null, 'slice4-batch-denied'); exception when others then v_failed := true; end;
+  assert v_failed, 'exam reviewer cannot assemble report releases';
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000022', false);
+
+  v_batch := app.results_report_release_publish_batch((v_approval ->> 'sheetId')::uuid, null, 'slice4-batch');
+  assert (v_batch ->> 'released')::int >= 1, 'batch assembly releases at least the corrected student: ' || coalesce(v_batch::text, 'null');
+  v_batch := app.results_report_release_publish_batch((v_approval ->> 'sheetId')::uuid, null, 'slice4-batch');
+  assert (v_batch ->> 'released')::int >= 1, 'idempotent batch replay returns the recorded release';
+  assert (select count(*) from public.result_report_releases where academic_year_id = v_year and term = 'final' and status = 'published') >= 1, 'batch assembly stores published release rows';
+
   perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000023', false);
   v_failed := false;
   begin perform app.timetable_save_draft(v_section, null, '[]'::jsonb, 0); exception when others then v_failed := true; end;
   assert v_failed, 'timetable manager scoped to 9-C cannot mutate 8-A';
   assert (app.timetable_save_draft((select id from public.grade_sections where academic_year_id = v_year and section_label = 'C' limit 1), null, '[]'::jsonb, 0) ->> 'status') = 'draft', 'scoped manager can mutate the assigned section';
+
+  -- 000094: exam-definition selection read for the batch creation workspace.
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000020', false);
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+  select coalesce(jsonb_agg(value), '[]'::jsonb) into v_exams from app.results_exam_definition_list() value;
+  assert jsonb_array_length(v_exams) >= 2, 'entry officer lists scoped exam definitions';
+  assert exists (
+    select 1 from jsonb_array_elements(v_exams) exam
+     where (exam ->> 'academicYearId')::uuid = v_year
+       and exam ->> 'term' = 'midterm'
+       and exam ->> 'gradeLabel' = 'Class 8'
+       and exam ->> 'sectionLabel' = 'A'
+       and jsonb_array_length(exam -> 'subjects') >= 1
+  ), 'midterm exam carries section labels and configured subjects';
+
+  perform set_config('request.jwt.claims', '{"aal":"aal1"}', false);
+  assert (select count(*) from app.results_exam_definition_list()) = 0, 'AAL1 cannot list exam definitions';
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000022', false);
+  assert (select count(*) from app.results_exam_definition_list() value where (value ->> 'gradeSectionId')::uuid <> v_section) = 0,
+    'publisher scope excludes exams outside the granted section';
+  assert (select count(*) from app.results_exam_definition_list() value where (value ->> 'gradeSectionId')::uuid = v_section) >= 1,
+    'publisher scope lists the granted section exams';
+
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000024', false);
+  assert (select count(*) from app.results_exam_definition_list()) = 0, 'teacher role cannot list exam definitions';
+
+  perform set_config('request.jwt.claim.sub', '', false);
+  assert (select count(*) from app.results_exam_definition_list()) = 0, 'anonymous session cannot list exam definitions';
+
+  -- 000109: the queue projection ships queue counts, never rosters or marks;
+  -- the detail projection keeps the full sheet read for one id.
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000020', false);
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+  select value into v_list_row from app.results_entry_sheet_list() value
+   where (value ->> 'id')::uuid = (v_sheet ->> 'sheetId')::uuid;
+  assert v_list_row is not null, 'queue projection lists the fixture sheet';
+  assert not (v_list_row ? 'roster') and not (v_list_row ? 'components'),
+    'queue projection carries no roster or component arrays';
+  assert (v_list_row ? 'reference') and (v_list_row ? 'examTerm') and (v_list_row ? 'gradeLabel')
+     and (v_list_row ? 'sectionLabel') and (v_list_row ? 'subjectName') and (v_list_row ? 'state')
+     and (v_list_row ? 'version') and (v_list_row ? 'updatedAt'),
+    'queue projection keeps the reference, class, subject, term, state, and version keys';
+  assert (v_list_row ? 'rosterCount') and (v_list_row ? 'componentCount')
+     and (v_list_row ? 'enteredCount') and (v_list_row ? 'incompleteCount'),
+    'queue projection carries the four counts';
+  assert (v_list_row ->> 'componentCount')::int = 2
+     and (v_list_row ->> 'rosterCount')::int >= 1,
+    'queue counts match the fixture components and roster';
+  assert (v_list_row ->> 'enteredCount')::int = (v_list_row ->> 'rosterCount')::int * 2
+     and (v_list_row ->> 'incompleteCount')::int = 0,
+    'queue counts match the saved marks';
+
+  v_detail := app.results_entry_sheet_get((v_sheet ->> 'sheetId')::uuid);
+  assert v_detail is not null, 'detail projection returns the fixture sheet';
+  assert jsonb_array_length(v_detail -> 'components') = 2, 'detail keeps every component';
+  assert jsonb_array_length(v_detail -> 'roster') = (v_list_row ->> 'rosterCount')::int,
+    'detail keeps the full roster';
+  assert (
+    select count(*) from jsonb_array_elements(v_detail -> 'roster') r
+    cross join lateral jsonb_array_elements(r -> 'marks') m
+  ) = (v_list_row ->> 'enteredCount')::int, 'detail keeps every mark';
+  assert app.results_entry_sheet_get('00000000-0000-4000-8000-0000000000ff'::uuid) is null,
+    'detail projection returns null for an unknown sheet';
+  assert (select prosrc not like '%results_entry_sheet_list()%'
+            from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+           where n.nspname = 'app' and p.proname = 'results_entry_sheet_get'),
+    'detail projection never computes the whole queue';
+
+  -- Restore the scoped timetable-manager session for the RLS assertion below.
+  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000023', false);
 end
 $$;
 

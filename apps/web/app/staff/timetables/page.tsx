@@ -13,17 +13,18 @@ export const metadata: Metadata = {
 export default function TimetablesPage() {
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Timetables</p>
-        <h1 className="workspace-title">Timetables</h1>
-        <p className="workspace-intro">Effective-dated class timetables and exam date sheets.</p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Timetables</h1>
+          <p className="ph-sub">Effective-dated class timetables and exam date sheets.</p>
+        </div>
+      </div>
 
       <TimetableManager dateSheet={dataAdapter() === "supabase" ? [] : getDemoDateSheet()} />
 
       <div className={styles.ruleNote}>
         {dataAdapter() !== "supabase" ? (
-          <p>{ACADEMICS_DEMO_NOTE} The editor, conflicts, and versions are session demo state — nothing is persisted
+          <p>{ACADEMICS_DEMO_NOTE} The editor, conflicts, and versions are session demo state · nothing is persisted
           server-side until the timetable backend connects.</p>
         ) : (
           <p>Timetable versions, conflicts, and overrides are validated and persisted through the school timetable service.</p>

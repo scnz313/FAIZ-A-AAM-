@@ -32,7 +32,7 @@ create role service_role nologin;
 create schema auth;
 create table auth.users (id uuid primary key);
 create or replace function auth.uid() returns uuid language sql as 'select null::uuid';
-create or replace function auth.jwt() returns jsonb language sql as 'select null::jsonb';
+create or replace function auth.jwt() returns jsonb language sql as $fn$ select nullif(current_setting('request.jwt.claims', true), '')::jsonb $fn$;
 SQL
 
 echo "== apply migrations"
@@ -78,6 +78,7 @@ echo "   audit update blocked: OK"
 
 echo "== outbox chain"
 "${PSQL[@]}" -t -c "
+select set_config('request.jwt.claims', '{\"role\":\"service_role\"}', false);
 insert into outbox_events (event_key, kind, target_type, target_reference) values ('pdf.generate:r1:v1','pdf.generate','receipt','RC-2026-T01');
 select 'claim: '||count(*) from app.claim_outbox(10);
 select 'deliver: '||status from app.mark_outbox_delivered('pdf.generate:r1:v1');
@@ -111,5 +112,20 @@ echo "== Slice 6 provider-job integrity suite"
 
 echo "== Consolidation verification suite (000042–000046)"
 "${PSQL[@]}" -q -f supabase/tests/database/consolidation.test.sql
+
+echo "== Phase 11 local authorization repair suite (000066)"
+"${PSQL[@]}" -q -f supabase/tests/database/phase11-local-repairs.test.sql
+
+echo "== Document visibility command suite (000084)"
+"${PSQL[@]}" -q -f supabase/tests/database/document-visibility-command.test.sql
+
+echo "== Outbox due-time scheduling suite"
+"${PSQL[@]}" -q -f scripts/validate-outbox-scheduling.sql
+
+echo "== Security hardening suite (000106–000107)"
+"${PSQL[@]}" -q -f supabase/tests/database/security-hardening.test.sql
+
+echo "== Guardian link-request reference suite (000119)"
+"${PSQL[@]}" -q -f supabase/tests/database/guardian-link-request-reference.test.sql
 
 echo "ALL LOCAL DATABASE CHECKS PASSED"

@@ -37,6 +37,17 @@ export default function PasswordResetForm() {
       const supabase = createSupabaseBrowserClient();
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError !== null) {
+        /* Accounts with an authenticator factor must reach AAL2 before the
+           provider will change a password. A recovery link signs in at AAL1,
+           so send the user through the existing challenge and come straight
+           back here; calling it an invalid link would be dishonest. */
+        const needsSecondFactor =
+          updateError.code === "insufficient_aal" || /aal2/i.test(updateError.message ?? "");
+        if (needsSecondFactor) {
+          setError("Two-step verification is required before changing the password. Enter your authenticator code to continue.");
+          router.replace(`/sign-in/totp?next=${encodeURIComponent("/sign-in/reset-password")}`);
+          return;
+        }
         setError("This recovery link is no longer valid. Request a fresh password reset email.");
         return;
       }

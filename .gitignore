@@ -12,6 +12,18 @@ coverage/
 .DS_Store
 .turbo/
 
+# Local verification and tooling artifacts (pre-push hardening)
+.vercel/
+*.tmp
+*.pid
+tmp/
+shots/
+screenshots/
+test-results/
+playwright-report/
+.eslintcache
+scripts/.demo-*.tmp.mjs
+
 # Supabase CLI local artifacts
 supabase/.temp/
 supabase/.branches/

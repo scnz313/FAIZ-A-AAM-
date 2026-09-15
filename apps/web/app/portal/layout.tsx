@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { FamilyContextProvider } from "@/components/portal/FamilyContextProvider";
@@ -19,24 +20,30 @@ export default async function PortalLayout({ children }: { children: React.React
   let initialState;
   let initialNotifications;
   const quickSignIn = developmentAuthEnabled();
+  /* The middleware preserves the original pathname AND query in
+     x-fass-pathname; sign-in redirects must return the user to that exact
+     URL, not collapse it to /portal. */
+  const headerList = await headers();
+  const returnTo = headerList.get("x-fass-pathname") ?? "/portal";
   if (dataAdapter() === "supabase") {
     const actor = await getServerActor();
     if (actor === null) {
-      redirect(`/sign-in?next=${encodeURIComponent("/portal")}`);
+      redirect(`/sign-in?next=${encodeURIComponent(returnTo)}`);
     }
     if (!actor.roles.includes("guardian")) {
-      if (quickSignIn) redirect(`/sign-in?next=${encodeURIComponent("/portal")}&switch=family`);
+      if (quickSignIn) redirect(`/sign-in?next=${encodeURIComponent(returnTo)}&switch=family`);
       redirect("/access-denied");
     }
     try {
-      const contextPromise = loadServerFamilyContext().then(mapServerFamilyContext);
-      const documentPromise = contextPromise.then((serverContext) => serverContext.context.activeStudentId === null
-        ? []
-        : loadServerDocuments("student", serverContext.context.activeStudentId));
-      const [serverContext, documentMetadata, notifications] = await Promise.all([
-        contextPromise,
-        documentPromise,
-        loadServerNotifications(),
+      const serverContext = mapServerFamilyContext(await loadServerFamilyContext());
+      /* Notifications and document metadata are conveniences, not access
+         gates: a transient failure must not deny the whole family portal.
+         Each page surfaces its own error-with-retry state instead. */
+      const [documentMetadata, notifications] = await Promise.all([
+        serverContext.context.activeStudentId === null
+          ? Promise.resolve([])
+          : loadServerDocuments("student", serverContext.context.activeStudentId).catch(() => []),
+        loadServerNotifications().catch(() => []),
       ]);
       initialState = { ...serverContext, documentMetadata };
       initialNotifications = notifications;

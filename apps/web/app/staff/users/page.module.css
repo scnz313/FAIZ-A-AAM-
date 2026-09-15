@@ -1,7 +1,8 @@
 .page {
-  grid-template-columns: minmax(0, 1fr);
   display: grid;
-  gap: 44px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
 }
 
 /* The global workspace-header margin is absorbed by the grid gap. */
@@ -9,9 +10,18 @@
   margin-bottom: 0;
 }
 
+.title {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+  margin: 0;
+}
+
 .legend {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   letter-spacing: 0.05em;
   margin: 0;
 }
@@ -26,14 +36,14 @@
 
 .panelTitle {
   font-family: var(--serif);
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 1.25rem;
+  font-weight: 650;
   margin: 0;
 }
 
 .liveNote {
-  color: var(--saffron-deep);
-  font-size: 13px;
+  color: var(--saffron-ink);
+  font-size: 0.82rem;
   margin: 0 0 14px;
 }
 
@@ -42,7 +52,7 @@
   border: 1px solid var(--alert-line, #f5c6c6);
   border-radius: 4px;
   color: var(--alert-ink, #8b1a1a);
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 0;
   padding: 12px 16px;
 }
@@ -50,7 +60,7 @@
 .loading {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 0;
 }
 
@@ -77,7 +87,7 @@
 .profileCard {
   background: var(--chalk, #fffdf8);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r);
   cursor: pointer;
   display: grid;
   gap: 6px;
@@ -87,18 +97,18 @@
 
 .profileCard strong {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .profileCard span {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.45;
 }
 
 .profileCard small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   letter-spacing: 0.04em;
   line-height: 1.5;
   text-transform: lowercase;
@@ -106,7 +116,7 @@
 
 .profileCardActive {
   border-color: var(--saffron, #b96832);
-  box-shadow: 0 0 0 1px var(--saffron, #b96832);
+  box-shadow: inset 0 0 0 1px var(--saffron, #b96832);
 }
 
 /* Assignment builder */
@@ -119,13 +129,13 @@
 
 .assignmentHint {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 0;
 }
 
 .noAssignments {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 0;
 }
 
@@ -148,14 +158,14 @@
 .assignmentSummary {
   color: var(--muted);
   display: block;
-  font-size: 11px;
+  font-size: 0.72rem;
   font-weight: 400;
   letter-spacing: 0;
   margin-top: 4px;
   text-transform: none;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1023px) {
   .profileGrid {
     grid-template-columns: 1fr;
   }
@@ -165,7 +175,7 @@
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 479px) {
   .assignmentRow {
     grid-template-columns: 1fr;
   }
@@ -188,7 +198,7 @@
 }
 
 .inviteResultCopy {
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.5;
   margin: 0 0 12px;
 }
@@ -198,7 +208,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 4px;
   font-family: var(--mono, monospace);
-  font-size: 18px;
+  font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   margin: 0 0 12px;
@@ -208,7 +218,7 @@
 
 .inviteResultNote {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 0;
 }
 
@@ -223,25 +233,25 @@
 }
 
 .role {
-  font-size: 12px;
+  font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .email {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .lastActive {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.82rem;
   white-space: nowrap;
 }
 
 .twoFa {
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 /* Expandable detail row */
@@ -260,14 +270,14 @@
 
 .detailHeading {
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 0.92rem;
   font-weight: 600;
   margin: 0;
 }
 
 .noGrants {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 0;
 }
 
@@ -296,17 +306,17 @@
 }
 
 .grantInfo strong {
-  font-size: 14px;
+  font-size: 0.88rem;
 }
 
 .grantInfo .num {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
 }
 
 .grantReason {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 /* Grant form */
@@ -360,13 +370,13 @@
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.5;
   margin: 0;
   padding-top: 18px;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 719px) {
   .inviteFields {
     grid-template-columns: 1fr;
   }
@@ -377,6 +387,36 @@
 
   .grantItem {
     flex-direction: column;
+  }
+
+  .revokeBox {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .detailPanel {
+    padding: 16px;
+  }
+
+  .grantFormActions,
+  .revokeActions,
+  .suspendActions,
+  .inviteActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page button,
+  .page :global(.button) {
+    min-height: 44px;
+  }
+
+  .grantFormActions button,
+  .revokeActions button,
+  .suspendActions button,
+  .inviteActions button {
+    justify-content: center;
+    width: 100%;
   }
 }
 

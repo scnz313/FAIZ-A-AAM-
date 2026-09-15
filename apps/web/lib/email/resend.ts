@@ -12,7 +12,21 @@
  * - Full payloads, addresses, and keys are never logged.
  */
 
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
+import "server-only";
+
+const RESEND_BASE_URL = "https://api.resend.com";
+
+/**
+ * Resend API endpoint. Production leaves `RESEND_API_URL` unset and the
+ * adapter talks to the real provider. Tests may set it to a local base URL
+ * (for example `http://127.0.0.1:4100`) so the HTTP boundary is exercised
+ * against a stub without any test-only branch in the send path.
+ */
+function resendEndpoint(): string {
+  const configured = process.env.RESEND_API_URL?.trim();
+  const base = configured && configured.length > 0 ? configured : RESEND_BASE_URL;
+  return `${base.replace(/\/+$/, "")}/emails`;
+}
 
 export type EmailAddress = string;
 
@@ -40,7 +54,7 @@ export function createResendSender(): EmailSender {
   }
 
   return async (input) => {
-    const response = await fetch(RESEND_ENDPOINT, {
+    const response = await fetch(resendEndpoint(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

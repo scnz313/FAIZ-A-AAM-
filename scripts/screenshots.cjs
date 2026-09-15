@@ -12,10 +12,9 @@ const shots = [
   { path: "70-home.png", url: "/", width: 1440, height: 900, fullPage: true },
   { path: "71-school-life.png", url: "/school-life", width: 1440, height: 900, fullPage: true },
   { path: "72-contact.png", url: "/contact", width: 1440, height: 900, fullPage: true },
-  { path: "73-environment.png", url: "/environment", width: 1440, height: 900, fullPage: true },
   { path: "74-about.png", url: "/about", width: 1440, height: 900, fullPage: true },
   { path: "75-home-mobile.png", url: "/", width: 390, height: 844, fullPage: true },
-  { path: "76-staff-mobile.png", url: "/staff", width: 390, height: 844, fullPage: true },
+  { path: "76-administrator-mobile.png", url: "/administrator", width: 390, height: 844, fullPage: true },
   { path: "78-portal-mobile.png", url: "/portal", width: 390, height: 844, fullPage: true },
 ];
 

@@ -25,16 +25,16 @@
 
 .schoolName {
   font-family: var(--serif);
-  font-size: 24px;
-  font-weight: 500;
+  font-size: 1.5rem;
+  font-weight: 540;
   letter-spacing: -0.01em;
   line-height: 1.15;
   margin: 0;
 }
 
 .sheetLabel {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   margin: 5px 0 0;
@@ -42,8 +42,8 @@
 }
 
 .sheetRef {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   padding-top: 4px;
 }
 
@@ -63,7 +63,7 @@
 }
 
 .fields dt {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -72,7 +72,7 @@
 }
 
 .fields dd {
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.45;
   margin: 0;
 }
@@ -82,7 +82,7 @@
 }
 
 .amountLabel {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -92,7 +92,7 @@
 
 .amount {
   font-family: var(--serif);
-  font-size: 44px;
+  font-size: 2.75rem;
   font-weight: 400;
   letter-spacing: -0.03em;
   line-height: 1;
@@ -105,18 +105,18 @@
 }
 
 .counter {
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 0;
 }
 
 .demoNote {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   line-height: 1.5;
   margin: 8px 0 0;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .sheet {
     padding: 24px 20px;
   }

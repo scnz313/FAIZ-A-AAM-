@@ -44,7 +44,7 @@ export default function ProgressRail({ steps, current, contextTitle, contextSubt
               aria-current={state === "current" ? "step" : undefined}
             >
               <span className={styles.bullet} aria-hidden="true">
-                {state === "done" ? "✓" : step.num}
+                {state === "done" ? <span className="msym">check</span> : step.num}
               </span>
               <span>
                 <strong>{step.label}</strong>

@@ -1,9 +1,9 @@
 /* Application status view — editorial status report layout. */
 
 .shell {
-  max-width: 1200px;
+  max-width: var(--wrap);
   margin: 0 auto;
-  padding: clamp(44px, 6vw, 76px) clamp(24px, 6vw, 96px) clamp(72px, 9vw, 120px);
+  padding: clamp(44px, 6vw, 84px) clamp(16px, 4vw, 40px) clamp(44px, 6vw, 84px);
 }
 
 /* Loading / error states ------------------------------------------------ */
@@ -11,14 +11,14 @@
 .loadingLine {
   margin: 0;
   padding: 40px 0;
-  color: var(--ink-soft);
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .errorLine {
   margin: 0 0 18px;
-  color: var(--brick);
-  font-size: 14px;
+  color: var(--madder);
+  font-size: 0.88rem;
 }
 
 .head {
@@ -29,16 +29,16 @@
 .headTitle {
   margin: 10px 0 0;
   font-family: var(--serif);
-  font-size: clamp(34px, 4.4vw, 52px);
-  font-weight: 500;
-  letter-spacing: -0.025em;
-  line-height: 1.08;
+  font-size: clamp(1.85rem, 3.6vw, 2.75rem);
+  font-weight: 540;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
 }
 
 .headLine {
   margin: 12px 0 0;
-  color: var(--ink-soft);
-  font-size: 15px;
+  color: var(--muted);
+  font-size: 0.92rem;
   line-height: 1.6;
   max-width: 64ch;
 }
@@ -61,8 +61,8 @@
 .sectionTitle {
   margin: 0 0 22px;
   font-family: var(--serif);
-  font-size: 28px;
-  font-weight: 500;
+  font-size: 1.55rem;
+  font-weight: 560;
 }
 
 /* Side details ------------------------------------------------------------ */
@@ -76,6 +76,7 @@
 .panelBlock {
   padding: 22px 24px;
   border: 1px solid var(--line);
+  border-radius: var(--r);
   background: var(--chalk);
 }
 
@@ -97,8 +98,8 @@
 
 .detailRow dt {
   padding-top: 2px;
-  color: var(--ink-faint);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -106,7 +107,7 @@
 
 .detailRow dd {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -121,14 +122,15 @@
   padding: 24px;
   border: 1px solid var(--line);
   border-top: 3px solid var(--saffron);
+  border-radius: var(--r);
   background: var(--chalk);
 }
 
 .offerTitle {
   margin: 8px 0 0;
   font-family: var(--serif);
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 1.4rem;
+  font-weight: 540;
   line-height: 1.25;
 }
 
@@ -138,16 +140,16 @@
 
 .sideNote {
   margin: 14px 0 0;
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.55;
 }
 
 .nextList {
   margin: 12px 0 0;
   padding-left: 16px;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.7;
 }
 
@@ -161,8 +163,9 @@
   position: relative;
   margin-top: 26px;
   padding: 20px 22px;
-  border: 1px solid var(--brick);
-  border-top: 3px solid var(--brick);
+  border: 1px solid var(--madder);
+  border-top: 3px solid var(--madder);
+  border-radius: var(--r);
   background: rgba(162, 59, 46, 0.06);
 }
 
@@ -173,21 +176,21 @@
   left: 22px;
   width: 8px;
   height: 8px;
-  background: var(--brick);
+  background: var(--madder);
 }
 
 .changeTitle {
   margin: 8px 0 0;
   font-family: var(--serif);
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 1.4rem;
+  font-weight: 540;
   line-height: 1.25;
 }
 
 .changeNote {
   margin: 8px 0 0;
-  color: var(--ink-soft);
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
   line-height: 1.55;
   max-width: 64ch;
 }
@@ -201,22 +204,23 @@
 .declinedPanel {
   padding: 24px;
   border: 1px solid var(--line);
-  border-top: 3px solid var(--brick);
+  border-top: 3px solid var(--madder);
+  border-radius: var(--r);
   background: var(--chalk);
 }
 
 .declinedTitle {
   margin: 8px 0 0;
   font-family: var(--serif);
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 1.4rem;
+  font-weight: 540;
   line-height: 1.25;
 }
 
 .declinedNote {
   margin: 8px 0 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 
@@ -224,14 +228,15 @@
   padding: 24px;
   border: 1px solid var(--line);
   border-top: 3px solid var(--willow);
+  border-radius: var(--r);
   background: var(--chalk);
 }
 
 .enrolledTitle {
   margin: 8px 0 0;
   font-family: var(--serif);
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 1.4rem;
+  font-weight: 540;
   line-height: 1.25;
 }
 
@@ -242,7 +247,7 @@
   border-top: 1px solid var(--line);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 719px) {
   .grid {
     grid-template-columns: 1fr;
   }

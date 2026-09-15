@@ -55,8 +55,41 @@ describe("C2.4 Supabase facade contracts", () => {
       return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
     });
     vi.stubGlobal("fetch", fetchMock);
-    await expect(careersService.saveDraft("teacher-mathematics", { fullName: "Test Applicant", phone: "", email: "", qualification: "", subject: "", year: "", institution: "", experience: "", currentRole: "", documents: {}, consent: true })).resolves.toMatchObject({ savedAtIso: expect.any(String) });
+    await expect(careersService.saveDraft("teacher-mathematics", { fullName: "Test Applicant", phone: "", email: "", qualification: "", subject: "", year: "", institution: "", experience: "", currentRole: "", location: "", message: "", consent: true })).resolves.toMatchObject({ savedAtIso: expect.any(String) });
     expect(fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).op)).toContain("jobs.saveDraft");
+  });
+
+  it("creates a draft from the public vacancy version id, never an authenticated vacancy lookup", async () => {
+    const operations: Array<{ op: string; payload: Record<string, unknown> }> = [];
+    let created = false;
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as { op: string; payload: Record<string, unknown> };
+      operations.push(request);
+      if (request.op === "jobs.vacancies") return json({ ok: true, value: [{ vacancyId: VACANCY_ID, versionId: VERSION_ID, reference: "VAC-2026-0101", title: "Teacher - Mathematics", department: "Academics", terms: {} }] });
+      if (request.op === "jobs.listMine") return created ? json({ ok: true, value: [jobRow] }) : json({ ok: true, value: [] });
+      if (request.op === "jobs.createDraft") {
+        created = true;
+        return json({ ok: true, value: { id: APP_ID, ref: JOB_REF, version: 0 } });
+      }
+      if (request.op === "jobs.saveDraft") return json({ ok: true, value: { updatedAt: "2026-08-10T05:10:00.000Z" } });
+      return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
+    }));
+    await careersService.saveDraft("teacher-mathematics", { fullName: "Test Applicant", phone: "", email: "", qualification: "", subject: "", year: "", institution: "", experience: "", currentRole: "", location: "", message: "", consent: true });
+    const create = operations.find((entry) => entry.op === "jobs.createDraft");
+    expect(create?.payload).toMatchObject({ vacancyVersionId: VERSION_ID });
+    expect(create?.payload).not.toHaveProperty("vacancyRef");
+  });
+
+  it("loads the staff detail from the queue projection that carries reviewer and scorecard evidence", async () => {
+    const requestedOps: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+      requestedOps.push(request.op);
+      if (request.op === "jobs.staffQueue") return json({ ok: true, value: [jobRow] });
+      return json({ ok: false, errors: [{ code: "unavailable", message: `unexpected ${request.op}`, field: null }] }, 500);
+    }));
+    await expect(careersService.getApplication(JOB_REF)).resolves.toMatchObject({ ref: JOB_REF });
+    expect(requestedOps).toEqual(["jobs.staffQueue"]);
   });
 
   it("maps settings, notifications, audit, and support projections from the server", async () => {

@@ -12,10 +12,10 @@
 .formNote {
   margin: 0;
   padding: 12px 14px;
-  border-left: 3px solid var(--saffron);
+  border-top: 3px solid var(--saffron);
   background: var(--paper-deep);
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 
@@ -29,8 +29,8 @@
 
 .actionNote {
   margin: 0;
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.5;
 }
 
@@ -49,25 +49,25 @@
 .successTitle {
   margin: 0;
   font-family: var(--serif);
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 1.25rem;
+  font-weight: 650;
   line-height: 1.4;
 }
 
 .successLine {
   margin: 12px 0 0;
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.55;
 }
 
 .successLine strong {
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .successNote {
   margin: 12px 0 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 

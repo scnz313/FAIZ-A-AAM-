@@ -17,6 +17,8 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: [
           "/portal",
+          "/administrator",
+          "/principal",
           "/staff",
           "/apply",
           "/sign-in",

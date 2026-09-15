@@ -9,6 +9,7 @@ import {
   listTimetableOverrides,
   listTimetableOverridesAsync,
   revokeTimetableOverride,
+  saveTimetableOverride,
 } from "@/modules/services/timetable";
 
 const BATCH_ID = "00000000-0000-4000-8000-00000000a101";
@@ -82,6 +83,20 @@ const SERVER_OVERRIDE = {
   staff_assignments: { reference: "SA-BIO-10B", staff_members: { people: { display_name: "Z. Qadri" } } },
   rooms: null,
 };
+const CANONICAL_OVERRIDE_ID = "00000000-0000-4000-8000-00000000c209";
+/* 000113 shape: the canonical teaching-assignment id is carried in
+   substitute_teaching_assignment_id, the legacy column is null, and the RLS
+   embeds are hidden; the name arrives through the definer projection. */
+const CANONICAL_OVERRIDE = {
+  ...SERVER_OVERRIDE,
+  id: CANONICAL_OVERRIDE_ID,
+  reference: "TTO-10B-2",
+  substitute_teacher_assignment_id: null,
+  substitute_teaching_assignment_id: ASSIGNMENT_ID,
+  staff_assignments: null,
+  teaching_assignments: { reference: "TAS-BIO-10B", staff_members: null },
+  substitute_teacher_name: "Z. Qadri",
+};
 const SERVER_DATE_SHEET = {
   id: "00000000-0000-4000-8000-00000000c206",
   reference: "ESV-10B-3",
@@ -152,6 +167,23 @@ describe("results and timetable Supabase facades", () => {
   });
 
   it("maps and submits the complete roster × component result matrix", async () => {
+    /* The queue projection (000109) carries counts only; the full matrix is
+       read through the detail operation. */
+    const queueRow = {
+      id: BATCH_ID,
+      reference: BATCH_REF,
+      status: "draft",
+      state: "draft",
+      version: 2,
+      examTerm: "Mid-term",
+      gradeLabel: "Class 8",
+      sectionLabel: "A",
+      subjectName: "Mathematics",
+      rosterCount: 2,
+      componentCount: 2,
+      enteredCount: 0,
+      incompleteCount: 4,
+    };
     const sheet = {
       id: BATCH_ID,
       reference: BATCH_REF,
@@ -173,7 +205,7 @@ describe("results and timetable Supabase facades", () => {
     let submitted: unknown[] = [];
     vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body ?? "{}")) as { op: string; payload?: { marks?: unknown[] } };
-      if (request.op === "results.listBatches") return json({ ok: true, value: [sheet] });
+      if (request.op === "results.listBatches") return json({ ok: true, value: [queueRow] });
       if (request.op === "results.getBatch") return json({ ok: true, value: sheet });
       if (request.op === "results.saveDraft") {
         submitted = request.payload?.marks ?? [];
@@ -181,7 +213,12 @@ describe("results and timetable Supabase facades", () => {
       }
       return json({ ok: false, errors: [{ code: "unavailable", message: "unexpected operation", field: null }] }, 500);
     }));
-    const [mapped] = await academicsService.listBatches();
+    const [queued] = await academicsService.listBatches();
+    expect(queued?.enteredCount).toBe(0);
+    expect(queued?.totalCount).toBe(4);
+    expect(queued?.rows).toHaveLength(0);
+    expect(queued?.entrySheet).toBeUndefined();
+    const mapped = await academicsService.getBatch(BATCH_REF);
     expect(mapped?.entrySheet?.roster).toHaveLength(2);
     expect(mapped?.entrySheet?.components).toHaveLength(2);
     expect(mapped?.rows).toHaveLength(4);
@@ -232,6 +269,36 @@ describe("results and timetable Supabase facades", () => {
     expect(calls).toContain("timetable.listOverrides");
   });
 
+  it("resolves the canonical substitute teacher through the definer projection when the staff embeds are hidden", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+      if (request.op === "config.read") return json({ ok: true, value: SERVER_CONFIG });
+      if (request.op === "timetable.listOverrides") return json({ ok: true, value: [CANONICAL_OVERRIDE] });
+      if (request.op === "timetable.effective") return json({ ok: true, value: SERVER_TIMETABLE });
+      return json({ ok: false, errors: [{ code: "unavailable", message: "unexpected operation", field: null }] }, 500);
+    }));
+
+    const overrides = await listTimetableOverridesAsync("10-B");
+    expect(overrides).toHaveLength(1);
+    expect(overrides[0]).toMatchObject({ ref: "TTO-10B-2", kind: "substitute", teacher: "Z. Qadri" });
+  });
+
+  it("falls back to the configured teaching assignment when the canonical row carries no resolved name", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+      if (request.op === "config.read") return json({ ok: true, value: SERVER_CONFIG });
+      if (request.op === "timetable.listOverrides") {
+        const { substitute_teacher_name: _ignored, ...withoutName } = CANONICAL_OVERRIDE;
+        return json({ ok: true, value: [withoutName] });
+      }
+      if (request.op === "timetable.effective") return json({ ok: true, value: SERVER_TIMETABLE });
+      return json({ ok: false, errors: [{ code: "unavailable", message: "unexpected operation", field: null }] }, 500);
+    }));
+
+    const overrides = await listTimetableOverridesAsync("10-B");
+    expect(overrides[0]).toMatchObject({ ref: "TTO-10B-2", kind: "substitute", teacher: "Z. Qadri" });
+  });
+
   it("never exposes cached demo overrides when the protected Supabase read is denied", async () => {
     vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
@@ -239,7 +306,9 @@ describe("results and timetable Supabase facades", () => {
       return json({ ok: false, errors: [{ code: "forbidden", message: "revoked guardian link", field: null }] }, 403);
     }));
 
-    await expect(listTimetableOverridesAsync("10-B")).resolves.toEqual([]);
+    /* A denied read rejects so the page shows an error with retry; the cache
+       stays empty and a presenter bridge can never fall back to demo rows. */
+    await expect(listTimetableOverridesAsync("10-B")).rejects.toThrow(/revoked guardian link/);
     expect(listTimetableOverrides("10-B")).toEqual([]);
   });
 
@@ -321,5 +390,71 @@ describe("results and timetable Supabase facades", () => {
       change: true,
     });
     expect(projection.dateSheet[0]).toMatchObject({ subject: "Biology", dateIso: "2026-10-06" });
+  });
+
+  it("resolves a substitute override to the configured subject and teaching assignment", async () => {
+    const requests: Array<{ op: string; payload: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as { op: string; payload: Record<string, unknown> };
+      requests.push(request);
+      if (request.op === "config.read") return json({ ok: true, value: SERVER_CONFIG });
+      if (request.op === "timetable.effective") return json({ ok: true, value: SERVER_TIMETABLE });
+      if (request.op === "timetable.saveOverride") return json({ ok: true, value: { reference: "TTO-10B-2" } });
+      return json({ ok: false, errors: [{ code: "unavailable", message: "unexpected operation", field: null }] }, 500);
+    }));
+
+    const saved = await saveTimetableOverride({
+      dateIso: "2026-09-15",
+      time: "10:30",
+      kind: "substitute",
+      teacher: "Z. Qadri",
+      subject: "Biology",
+      note: "Z. Qadri covers the Biology practical period.",
+    }, "10-B");
+
+    expect(saved.ref).toBe("TTO-10B-2");
+    expect(requests.find((request) => request.op === "timetable.saveOverride")?.payload).toMatchObject({
+      gradeSectionRef: "GS-10-B",
+      overrideDate: "2026-09-15",
+      dayOfWeek: 2,
+      periodNumber: 4,
+      kind: "substitute",
+      subjectId: SUBJECT_ID,
+      substituteTeacherAssignmentId: ASSIGNMENT_ID,
+      note: "Z. Qadri covers the Biology practical period.",
+    });
+  });
+
+  it("refuses a mistyped substitute subject instead of silently recording the effective subject", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+      if (request.op === "config.read") return json({ ok: true, value: SERVER_CONFIG });
+      if (request.op === "timetable.effective") return json({ ok: true, value: SERVER_TIMETABLE });
+      return json({ ok: false, errors: [{ code: "unavailable", message: "unexpected operation", field: null }] }, 500);
+    }));
+
+    await expect(saveTimetableOverride({
+      dateIso: "2026-09-15",
+      time: "10:30",
+      kind: "substitute",
+      teacher: "Z. Qadri",
+      subject: "Biologgy",
+      note: "Z. Qadri covers the Biology practical period.",
+    }, "10-B")).rejects.toThrow(/authorised subject/);
+  });
+
+  it("requires a period before recording any override", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}")) as { op: string };
+      if (request.op === "config.read") return json({ ok: true, value: SERVER_CONFIG });
+      return json({ ok: false, errors: [{ code: "unavailable", message: "unexpected operation", field: null }] }, 500);
+    }));
+
+    await expect(saveTimetableOverride({
+      dateIso: "2026-09-15",
+      time: "",
+      kind: "cancellation",
+      note: "The period is cancelled for the assembly rehearsal.",
+    }, "10-B")).rejects.toThrow(/Choose the period/);
   });
 });

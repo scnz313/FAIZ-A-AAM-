@@ -22,7 +22,7 @@
 }
 
 .rowLink:hover {
-  background: var(--cream);
+  background: var(--chalk);
 }
 
 .rowLink:hover a,
@@ -46,7 +46,7 @@
 .empty {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.6;
   margin: 0;
 }

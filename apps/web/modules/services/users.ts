@@ -26,7 +26,7 @@ import { auditService } from "@/modules/services/audit";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
 
-export type UserStatus = "Active" | "Invited" | "Suspended" | "Expired";
+export type UserStatus = "Active" | "Invited" | "Suspended" | "Expired" | "Revoked" | "Closed";
 
 export type UserRow = {
   key: string;
@@ -41,6 +41,8 @@ export type UserRow = {
   profileLabel?: string | null;
   /** Optimistic profile marker version for profile-change confirmation. */
   profileVersion?: number | null;
+  /** Provider delivery state for an invitation-only row (e.g. "failed"). */
+  invitationProviderState?: string | null;
   email: string;
   status: UserStatus;
   lastActiveLabel: string;
@@ -147,6 +149,8 @@ function toUserStatus(status: string): UserStatus {
   if (status === "suspended") return "Suspended";
   if (status === "invited" || status === "pending") return "Invited";
   if (status === "expired") return "Expired";
+  if (status === "revoked") return "Revoked";
+  if (status === "closed") return "Closed";
   return "Active";
 }
 
@@ -157,12 +161,13 @@ function mapServerUser(row: ServerUserRow): UserRow {
   const name = row.people?.display_name ?? "Invited staff";
   const status = toUserStatus(row.status);
   const invited = row.id === "" || row.status === "invited";
+  const invitationPending = invited && (row.status === "invited" || row.status === "pending");
   const mfaStatus = row.mfa_status === "enrolled" || row.mfa_status === "verified"
     ? "Enabled"
     : row.mfa_status === "required" || row.mfa_status === "pending"
       ? "Pending setup"
       : invited
-        ? "Not applicable until acceptance"
+        ? invitationPending ? "Not applicable until acceptance" : "Not applicable"
         : "Not recorded";
   const member = row.staff_members?.[0] ?? null;
   const profileCode = (member?.access_profile_code ?? invitation?.profile_code ?? null) as StaffProfileCode | null;
@@ -170,6 +175,7 @@ function mapServerUser(row: ServerUserRow): UserRow {
     key: invited ? `invitation-${invitation?.reference ?? name}` : `account-${row.id}`,
     accountId: invited ? "" : row.id,
     invitationRef: invitation?.reference,
+    invitationProviderState: invitation?.provider_state ?? null,
     name,
     role: profileCode !== null && accessProfileLabel(profileCode) !== null
       ? accessProfileLabel(profileCode)!
@@ -196,7 +202,12 @@ function mapServerUser(row: ServerUserRow): UserRow {
 async function serverListUsers(): Promise<UserRow[]> {
   const result = await adapterCall<ServerUserRow[]>("users.list");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Directory unavailable.");
-  return result.value.map(mapServerUser);
+  /* Staff-access surface: invitation-only rows (id "") stay, but accounts
+     with no staff record (guardians, applicants) are not staff and must not
+     be listed as staff accounts. */
+  return result.value
+    .filter((row) => row.id === "" || (row.staff_members?.length ?? 0) > 0)
+    .map(mapServerUser);
 }
 
 function clone<T>(value: T): T {
@@ -205,6 +216,30 @@ function clone<T>(value: T): T {
 
 function isEffective(fromIso: string, toIso: string | null, atIso: string): boolean {
   return fromIso <= atIso && (toIso === null || atIso < toIso);
+}
+
+/**
+ * Last-administrator protection (mirrors migration 000056 §5, whose advisory
+ * lock serializes the same count for staff_profile_change AND
+ * accounts_suspend): true when the account is an effective, active
+ * system_administrator holder and no other active account holds one.
+ * Removing that final holder would leave the platform without an
+ * administrator, so profile moves, grant revokes, and suspensions all refuse.
+ */
+function isLastActiveAdministrator(store: RelationshipDemoStore, accountId: string): boolean {
+  const nowIso = demoNowIso();
+  const holdsActiveAdmin = (candidateId: string): boolean =>
+    store.roleGrants.some(
+      (grant) =>
+        grant.accountId === candidateId &&
+        grant.role === "system_administrator" &&
+        grant.status === "active" &&
+        isEffective(grant.effectiveFromIso, grant.effectiveToIso, nowIso),
+    );
+  if (!holdsActiveAdmin(accountId)) return false;
+  return !store.userAccounts.some(
+    (account) => account.id !== accountId && account.status === "active" && holdsActiveAdmin(account.id),
+  );
 }
 
 /** Fictional email derived from the person's name (the graph stores no contact). */
@@ -678,6 +713,12 @@ export const usersService: UsersService = {
     if (account === undefined) {
       throw new Error("Account not found.");
     }
+    if (account.status === "suspended") {
+      throw new Error("This account is suspended — reactivate it before granting roles.");
+    }
+    if (!GRANTABLE_ROLES.includes(role)) {
+      throw new Error(`The ${roleLabel(role)} role cannot be granted — it is retained for history only.`);
+    }
 
     /* Duplicate-active-grant guard: don't create a second active grant for the same role. */
     const existing = store.roleGrants.find(
@@ -687,8 +728,32 @@ export const usersService: UsersService = {
       throw new Error(`This account already has an active ${roleLabel(role)} grant.`);
     }
 
+    /* One portal profile per account: a grant from a second profile is
+       refused — move the account with changeProfile instead of mixing
+       maker and checker roles on one login. Guardian history and legacy
+       records carry no profile and never block adoption. */
+    const grantNowIso = demoNowIso();
+    const heldProfiles = new Set(
+      store.roleGrants
+        .filter(
+          (grant) =>
+            grant.accountId === accountId &&
+            grant.status === "active" &&
+            isEffective(grant.effectiveFromIso, grant.effectiveToIso, grantNowIso),
+        )
+        .map((grant) => profileForRole(grant.role as StaffRole))
+        .filter((profile): profile is StaffProfileCode => profile !== null),
+    );
+    const incomingProfile = profileForRole(role);
+    if (incomingProfile !== null && heldProfiles.size > 0 && !heldProfiles.has(incomingProfile)) {
+      const current = [...heldProfiles].map((profile) => accessProfileLabel(profile)).join(", ");
+      throw new Error(
+        `This account holds the ${current} profile — grant a ${accessProfileLabel(incomingProfile)} role only after changing the account's profile.`,
+      );
+    }
+
     const grantId = nextId("grant", store.grantCounter);
-    const nowIso = demoNowIso();
+    const nowIso = grantNowIso;
     const grant: RoleGrant = {
       id: grantId,
       ref: nextRef("ROLE", store.grantCounter),
@@ -721,12 +786,24 @@ export const usersService: UsersService = {
 
   async changeProfile({ accountId, profileCode, reason, expectedVersion }) {
     if (isServerMode()) {
-      const result = await adapterCall<unknown>("staff.profileChange", {
-        accountId,
-        profileCode,
-        reason: reason.trim(),
-        expectedVersion,
-      });
+      /* Legacy accounts carry no profile marker: the server exposes a
+         version-checked adoption path for exactly this reconciliation, and
+         staff_profile_change refuses them. Pick the correct command from the
+         current row so the existing Change profile control always works. */
+      const before = await serverListUsers();
+      const target = before.find((candidate) => candidate.accountId === accountId);
+      const adopting = target !== undefined && (target.profileCode === null || target.profileCode === undefined);
+      if (adopting && reason.trim().length < 10) {
+        throw new Error("An adoption reason of at least 10 characters is required for a legacy account.");
+      }
+      const result = adopting
+        ? await adapterCall<unknown>("staff.profileAdopt", { accountId, profileCode, reason: reason.trim() })
+        : await adapterCall<unknown>("staff.profileChange", {
+            accountId,
+            profileCode,
+            reason: reason.trim(),
+            expectedVersion,
+          });
       if (!result.ok) throw new Error(result.errors[0]?.message ?? "Profile change failed.");
       const after = await serverListUsers();
       const updated = after.find((candidate) => candidate.accountId === accountId);
@@ -750,6 +827,13 @@ export const usersService: UsersService = {
     const targetRoles = rolesForProfile(profileCode);
     /* Revoke grants outside the new profile; end their assignments. */
     const nowIso = demoNowIso();
+    /* Last-administrator protection: the final account holding an active
+       system_administrator grant cannot leave the Administrator profile —
+       invite or promote a second administrator first. Mirrors the server
+       staff_profile_change last-admin check. */
+    if (profileCode !== "administrator" && isLastActiveAdministrator(store, accountId)) {
+      throw new Error("This is the last administrator account — invite or promote another administrator before changing its profile.");
+    }
     for (const grant of store.roleGrants) {
       if (grant.accountId === accountId && grant.status === "active" && !targetRoles.includes(grant.role as StaffRole)) {
         grant.status = "revoked";
@@ -926,6 +1010,12 @@ export const usersService: UsersService = {
     if (grant.status === "revoked") {
       throw new Error("This grant is already revoked.");
     }
+    /* Last-administrator protection: revoking the final effective
+       system_administrator grant would leave the platform without an
+       administrator. */
+    if (grant.role === "system_administrator" && isLastActiveAdministrator(store, grant.accountId)) {
+      throw new Error("This is the last administrator account — invite or promote another administrator before revoking its grant.");
+    }
 
     grant.status = "revoked";
     grant.effectiveToIso = demoNowIso();
@@ -967,6 +1057,13 @@ export const usersService: UsersService = {
     }
     if (account.status === "suspended") {
       throw new Error("This account is already suspended.");
+    }
+    /* Last-administrator protection: mirrors the server accounts_suspend
+       count (migration 000056 §5), which shares the advisory lock with
+       staff_profile_change so a demotion+suspension race cannot remove the
+       final administrator. */
+    if (isLastActiveAdministrator(store, accountId)) {
+      throw new Error("This is the last administrator account — invite or promote another administrator before suspending it.");
     }
 
     account.status = "suspended";

@@ -37,7 +37,6 @@ const VERIFY_CODE = "482913";
 /** Demo staff identity ids (staff-authorization DEMO_STAFF_IDENTITIES). */
 const STAFF_IDS = {
   sana: "00000000-0000-4000-8000-000000000203",
-  firdous: "00000000-0000-4000-8000-000000000201",
   aisha: "00000000-0000-4000-8000-000000000204",
   rania: "00000000-0000-4000-8000-000000000205",
   naseer: "00000000-0000-4000-8000-000000000206",
@@ -62,8 +61,10 @@ async function signInGuardian(page, base, { clear = true } = {}) {
   await page.getByLabel("Password").fill(GUARDIAN_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/sign-in\/verify$/, { timeout: 20000 });
-  await page.getByLabel("Verification code").fill(VERIFY_CODE);
-  await page.getByRole("button", { name: "Verify code" }).click();
+  for (let index = 0; index < VERIFY_CODE.length; index += 1) {
+    await page.getByLabel(`Digit ${index + 1}`).fill(VERIFY_CODE[index]);
+  }
+  await page.getByRole("button", { name: "Verify and continue" }).click();
   await page.getByText("Verification complete", { exact: true }).waitFor({ state: "visible", timeout: 20000 });
   await page.getByRole("link", { name: /Open the portal/ }).click();
   await page.waitForURL(/\/portal$/, { timeout: 20000 });
@@ -81,6 +82,17 @@ async function staffAs(page, base, targetPath, { identity = null, workspace = nu
   await page.evaluate(() => sessionStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
+  /* Canonical profile journeys name their intended account explicitly. Do
+     this before evaluating the guard so a profile that can view a route but
+     cannot mutate it (for example Administrator vs Principal) is not used by
+     accident. */
+  if (identity !== null) {
+    const identitySelect = page.getByRole("combobox", { name: "Demo identity" });
+    if ((await identitySelect.count()) > 0 && (await identitySelect.inputValue()) !== identity) {
+      await identitySelect.selectOption(identity);
+      await page.waitForTimeout(1200);
+    }
+  }
   const deny = page.getByText("This workspace cannot open this area", { exact: true });
   if (await deny.count() > 0) {
     if (identity !== null) {

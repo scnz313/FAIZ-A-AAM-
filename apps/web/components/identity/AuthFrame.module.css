@@ -1,0 +1,104 @@
+/* V14 AuthFrame — brand-only header + centered identity card */
+
+.page {
+  background: var(--paper);
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+}
+
+.head {
+  min-width: 0;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.headWrap {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 clamp(16px, 4vw, 40px);
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+}
+
+.brandLock {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brandName {
+  display: block;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 0.98rem;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.brandSub {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.main {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(28px, 6vh, 64px) 20px 120px;
+}
+
+.frame {
+  width: min(440px, 100%);
+}
+
+.frameWide {
+  width: min(560px, 100%);
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: 1.75rem;
+  line-height: 1.15;
+  font-weight: 540;
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+
+.sub {
+  margin: 8px 0 22px;
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.card {
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  padding: 24px;
+}
+
+.foot {
+  margin-top: 16px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.55;
+}
+
+@media (max-width: 479px) {
+  .card {
+    padding: 18px;
+  }
+}

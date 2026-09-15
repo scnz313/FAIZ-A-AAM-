@@ -2,6 +2,7 @@
   grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: 44px;
+  min-width: 0;
 }
 
 /* The global workspace-header margin is absorbed by the grid gap. */
@@ -26,9 +27,9 @@
 }
 
 .cellNote {
-  color: var(--ink-soft);
+  color: var(--muted);
   display: block;
-  font-size: 11px;
+  font-size: 0.72rem;
   margin-top: 3px;
 }
 
@@ -42,8 +43,8 @@
 }
 
 .runResult {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   margin: 0;
   min-height: 1.4em;
 }
@@ -56,7 +57,7 @@
 .ruleNote p {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.55;
   margin: 0;
 }
@@ -96,7 +97,7 @@
 }
 
 .exceptionCopy small {
-  color: var(--ink-soft);
+  color: var(--muted);
 }
 
 .resolveBox {
@@ -106,6 +107,81 @@
 }
 
 .resolving {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* Responsive — presentation only; desktop composition is unchanged.
+   The comparison keeps its min-width and scrolls inside .table--scroll. */
+
+@media (max-width: 1023px) {
+  .page {
+    gap: 32px;
+  }
+
+  .sectionHead {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+}
+
+@media (max-width: 719px) {
+  .page {
+    gap: 24px;
+  }
+
+  .sectionHead {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .runBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .runBar :global(.btn),
+  .runBar button {
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .exceptionRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exceptionCopy {
+    overflow-wrap: anywhere;
+  }
+
+  .resolveBox {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resolveBox :global(.input),
+  .resolveBox input {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .resolveBox :global(.btn),
+  .resolveBox button {
+    justify-content: center;
+    min-height: 44px;
+    width: 100%;
+  }
+}
+
+@media (max-width: 479px) {
+  .page {
+    gap: 20px;
+  }
+
+  .runBar :global(.btn),
+  .runBar button {
+    width: 100%;
+  }
 }

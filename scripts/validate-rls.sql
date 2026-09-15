@@ -143,6 +143,23 @@ select 'invoice', i.id, 'receipt', 'invoice/' || i.id || '/receipt.pdf', 'receip
                          where person_id in ('20000000-0000-4000-8000-000000000003',
                                              '20000000-0000-4000-8000-000000000005'));
 
+-- Public downloads register (000081): clean and provider-'ready' approved
+-- documents are public; a quarantined approved document must stay invisible
+-- to every reader, and a private clean document must never leak to anon.
+insert into public.documents
+  (reference, owner_domain, owner_record_id, category, object_key, safe_filename, mime_type, size_bytes,
+   scan_status, visibility, uploaded_by_account_id, checksum_verified, finalized_at)
+values
+  ('DOC-RLS-PUBLIC', 'school_document', gen_random_uuid(), 'fee_schedule', 'public/rls-fee-schedule.pdf',
+   'fee-schedule.pdf', 'application/pdf', 2048, 'clean', 'public_approved',
+   '10000000-0000-4000-8000-000000000001', true, now()),
+  ('DOC-RLS-READY', 'school_document', gen_random_uuid(), 'academic_calendar', 'public/rls-calendar.pdf',
+   'academic-calendar.pdf', 'application/pdf', 4096, 'ready', 'public_approved',
+   '10000000-0000-4000-8000-000000000001', true, now()),
+  ('DOC-RLS-QUARANTINE', 'school_document', gen_random_uuid(), 'form', 'public/rls-quarantine.pdf',
+   'quarantine.pdf', 'application/pdf', 2048, 'quarantined', 'public_approved',
+   '10000000-0000-4000-8000-000000000001', true, now());
+
 -- 17-role authorization matrix actors. These use a disjoint synthetic UUID
 -- namespace so they cannot collide with the 1000... actors used by the RPC
 -- flow. Every matrix account has exactly one canonical role.
@@ -229,8 +246,19 @@ do $$
 begin
   assert (select count(*) from public.notices where status = 'published') = 1,
     'anon must see exactly the public-audience notice';
-  assert (select count(*) from public.documents) = 0,
-    'anon must never see private documents';
+  assert not has_table_privilege('anon', 'public.documents', 'SELECT'),
+    'anon reads the public register through the projection, not the table';
+  assert jsonb_array_length(app.documents_public_register()) = 2,
+    'the public register returns exactly the clean and ready public-approved documents';
+  assert (select count(*) from jsonb_array_elements(app.documents_public_register()) as d
+          where d ->> 'reference' = 'DOC-RLS-PUBLIC') = 1,
+    'the public register carries the public-approved clean document';
+  assert (select count(*) from jsonb_array_elements(app.documents_public_register()) as d
+          where d ->> 'reference' = 'DOC-RLS-READY') = 1,
+    'the public register carries the public-approved provider-ready document';
+  assert (select count(*) from jsonb_array_elements(app.documents_public_register()) as d
+          where d ->> 'reference' = 'DOC-RLS-QUARANTINE') = 0,
+    'the public register must never carry a quarantined document';
   assert not has_table_privilege('anon', 'public.invoices', 'SELECT'),
     'anon has no privilege on invoices';
   assert not has_table_privilege('anon', 'public.enrollments', 'SELECT'),
@@ -239,6 +267,10 @@ begin
     'anon has no privilege on result batches';
   assert not has_table_privilege('anon', 'public.notice_audiences', 'SELECT'),
     'anon must not read notice audience definitions';
+  assert not has_table_privilege('anon', 'public.admission_applications', 'SELECT'),
+    'anon has no privilege on admission applications';
+  assert not has_table_privilege('anon', 'public.admission_documents', 'SELECT'),
+    'anon has no privilege on admission documents';
 end $$;
 reset role;
 
@@ -258,8 +290,10 @@ begin
     'guardian sees only linked children invoices (Aarif), not Zaid';
   assert (select count(*) from public.invoice_items) = 1,
     'guardian sees invoice items only for linked children';
-  assert (select count(*) from public.documents) = 1,
-    'guardian reads only own children clean documents';
+  assert (select count(*) from public.documents) = 3,
+    'guardian reads own children clean documents plus the public-approved register';
+  assert (select count(*) from public.documents where reference = 'DOC-RLS-QUARANTINE') = 0,
+    'guardian must never see a quarantined public-approved document';
   assert (select count(*) from public.notices where status = 'published') = 2,
     'guardian sees public + 8-A section notices';
 end $$;
@@ -357,6 +391,28 @@ begin
       assert v_finance = 0, 'unrelated finance read leaked to ' || v_codes[i];
     end if;
   end loop;
+end $$;
+
+-- 3d-bis. Wrong-role staff admission reads are denied at RLS level: support
+-- and finance sessions see no applications, events, or documents.
+do $$
+begin
+  perform set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000015', false);
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+  assert (select count(*) from public.admission_applications) = 0,
+    'support officer must not read admission applications';
+  assert (select count(*) from public.admission_events) = 0,
+    'support officer must not read admission events';
+  assert (select count(*) from public.admission_documents) = 0,
+    'support officer must not read admission documents';
+  perform set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000007', false);
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+  assert (select count(*) from public.admission_applications) = 0,
+    'finance officer must not read admission applications';
+  assert (select count(*) from public.admission_events) = 0,
+    'finance officer must not read admission events';
+  assert (select count(*) from public.admission_documents) = 0,
+    'finance officer must not read admission documents';
 end $$;
 
 -- 3e. Guardian capability denial is independent of active-link status.

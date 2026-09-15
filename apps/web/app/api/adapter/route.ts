@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     return responseFor(errorBody("unavailable", "The Supabase adapter is not active.", correlationRef, 503), 503, correlationRef);
   }
 
-  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"))) {
+  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"), request.headers.get("sec-fetch-site"))) {
     return responseFor(errorBody("forbidden", "Cross-origin requests are not accepted.", correlationRef, 403), 403, correlationRef);
   }
 

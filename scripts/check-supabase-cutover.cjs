@@ -144,6 +144,48 @@ function scanProtected(file) {
 
 for (const dir of protectedRoots) for (const file of filesUnder(dir)) scanProtected(file);
 
+/* Canonical portal routes are also a QA contract. A browser journey that
+ * navigates to /staff can stay green while the real Administrator/Principal
+ * URLs are broken, so scan the executable QA surface as well as React files.
+ * Explicit legacy-redirect unit tests live under apps/web/test and are not in
+ * this list. */
+const canonicalRouteFiles = [
+  path.join(root, "app", "access-denied", "page.tsx"),
+  path.join(root, "app", "sign-in", "staff", "page.tsx"),
+  path.join(root, "app", "sign-in", "totp", "page.tsx"),
+  path.join(root, "components", "identity", "SignInForm.tsx"),
+  path.join(root, "components", "identity", "TotpForm.tsx"),
+  path.join(root, "lib", "email", "templates.ts"),
+  path.join(root, "modules", "services", "notifications.ts"),
+  path.resolve(__dirname, "critical-journeys.cjs"),
+  path.resolve(__dirname, "accessibility-check.cjs"),
+  path.resolve(__dirname, "responsive-check.cjs"),
+  path.resolve(__dirname, "link-crawl.mjs"),
+  path.resolve(__dirname, "focus-check.cjs"),
+  ...filesUnder(path.resolve(__dirname, "local-feature-journeys")),
+];
+for (const file of canonicalRouteFiles) {
+  if (!fs.existsSync(file)) continue;
+  const source = fs.readFileSync(file, "utf8");
+  const matches = source.match(/["'`]\/staff(?:\/|[?"'`])/g) ?? [];
+  if (matches.length > 0) {
+    violations.push(`${relative(file)}: executable UI/QA path still targets legacy /staff (${matches.length} occurrence(s))`);
+  }
+}
+
+/* Raw normalized import rows are a server-worker concern. Keep the internal
+ * domain/RPC implementation for the worker, but never expose it through the
+ * browser service or adapter registry. */
+for (const file of [
+  path.join(root, "modules", "services", "data-import.ts"),
+  path.join(root, "app", "api", "adapter", "registry", "data-imports.ts"),
+]) {
+  const source = fs.readFileSync(file, "utf8");
+  if (/\bstoreRows\b|dataImports\.storeRows/.test(source)) {
+    violations.push(`${relative(file)}: browser-exposed internal import operation (storeRows)`);
+  }
+}
+
 /* Server Components must use server-loaders/serverAdapterCall. A direct client
  * adapter import would lose the incoming Auth cookie and silently turn a
  * protected render into an unauthenticated relative fetch. */

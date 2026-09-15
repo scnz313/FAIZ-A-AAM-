@@ -17,12 +17,14 @@ import { cookies } from "next/headers";
 
 import type { Database } from "@/lib/supabase/database.types";
 import { requireSupabasePublicEnv } from "@/lib/supabase/env";
+import { AUTH_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options";
 
 export const createSupabaseServerClient = cache(async () => {
   const { url, publishableKey } = requireSupabasePublicEnv();
   const cookieStore = await cookies();
 
   return createServerClient<Database>(url, publishableKey, {
+    cookieOptions: AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return cookieStore.getAll();

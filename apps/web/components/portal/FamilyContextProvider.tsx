@@ -156,7 +156,7 @@ export function FamilyContextProvider({
          unsaved changes. The consumer shows a save/discard prompt. */
       for (const check of dirtyFormsRef.current.values()) {
         if (check()) {
-          setSwitchError("Unsaved changes — save or discard before switching children.");
+          setSwitchError("Unsaved changes · save or discard before switching children.");
           return;
         }
       }
@@ -188,7 +188,7 @@ export function FamilyContextProvider({
         setSwitchError(
           error instanceof Error
             ? error.message
-            : "Switching children failed — the previous selection is unchanged.",
+            : "Switching children failed · the previous selection is unchanged.",
         );
       } finally {
         setSwitching(false);

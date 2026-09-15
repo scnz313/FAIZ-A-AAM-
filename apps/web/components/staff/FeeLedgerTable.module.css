@@ -25,14 +25,14 @@
 }
 
 .groupCount {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   margin-left: 10px;
 }
 
 .empty {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 24px 0 0;
 }
 

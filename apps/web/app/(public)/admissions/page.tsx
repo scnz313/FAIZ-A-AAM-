@@ -7,7 +7,7 @@ import { ADMISSIONS_DEMO_NOTE } from "@/modules/admissions/demo";
 import { CONTENT_DEMO_NOTE, notices } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
 import { dataAdapter } from "@/lib/supabase/env";
-import { loadServerPublicAdmissionConfiguration } from "@/lib/supabase/server-loaders";
+import { loadServerPublicAdmissionConfiguration, loadServerPublicContent } from "@/lib/supabase/server-loaders";
 import { DEMO_ADMISSION_CONFIGURATION, type AdmissionConfiguration } from "@/modules/services/school-config";
 
 import styles from "./page.module.css";
@@ -15,6 +15,7 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Admissions",
   description: "How to apply to Faiz Aam Secondary School: the admission process, eligibility, documents, and key dates.",
+  alternates: { canonical: "/admissions" },
 };
 
 const STEPS = [
@@ -41,14 +42,26 @@ const STEPS = [
 ];
 
 export default async function AdmissionsPage() {
-  const configuration: AdmissionConfiguration = dataAdapter() === "supabase"
+  const supabaseMode = dataAdapter() === "supabase";
+  const configuration: AdmissionConfiguration = supabaseMode
     ? await loadServerPublicAdmissionConfiguration()
     : DEMO_ADMISSION_CONFIGURATION;
   const currentYear = configuration.academicYears.find((year) => year.status === "current") ?? configuration.academicYears[0];
   const openWindows = configuration.windows.filter((window) => window.status === "open" && window.academicYearId === currentYear?.id);
   const classes = configuration.grades.filter((grade) => openWindows.some((window) => window.gradeId === grade.id)).map((grade) => grade.label);
-  const requirementLabels = configuration.documentRequirements.filter((requirement) => requirement.required && requirement.status === "active").map((requirement) => requirement.label);
-  const admissionNotice = notices.find((notice) => notice.slug === "admissions-open-session-2027") ?? null;
+  /* Requirements are configured per window; the public list names each once. */
+  const requirementLabels = [...new Set(
+    configuration.documentRequirements
+      .filter((requirement) => requirement.required && requirement.status === "active")
+      .map((requirement) => requirement.label),
+  )];
+  /* The dates fallback is a published notice in live mode; the demo fixture
+     is never presented as authoritative. */
+  const admissionNotice = supabaseMode
+    ? (await loadServerPublicContent().catch(() => []))
+        .filter((notice) => notice.status === "published")
+        .sort((left, right) => new Date(right.dateIso).getTime() - new Date(left.dateIso).getTime())[0] ?? null
+    : notices.find((notice) => notice.slug === "admissions-open-session-2027") ?? null;
 
   return (
     <div className={styles.page}>
@@ -121,7 +134,22 @@ export default async function AdmissionsPage() {
               ) : null}
             </div>
           </article>
-        ) : null}
+        ) : (
+          <article className={styles.noticeRow}>
+            <p className={styles.noticeDate}>No open window</p>
+            <div>
+              <h3 className={styles.noticeTitle}>Admissions are closed right now</h3>
+              <p className={styles.noticeExcerpt}>
+                No admission window is currently open. Dates for the next session are published on the notices board.
+              </p>
+              <p className={styles.noticePolicy}>
+                <Link className="link-arrow" href="/notices">
+                  Read the notices board →
+                </Link>
+              </p>
+            </div>
+          </article>
+        )}
       </section>
 
       <section className={`${styles.section} ${styles.band}`} aria-labelledby="cta-heading">

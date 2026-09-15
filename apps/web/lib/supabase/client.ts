@@ -11,6 +11,7 @@ import { createBrowserClient } from "@supabase/ssr";
 
 import type { Database } from "@/lib/supabase/database.types";
 import { requireSupabasePublicEnv } from "@/lib/supabase/env";
+import { AUTH_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options";
 
 let client: ReturnType<typeof createBrowserClient<Database>> | null = null;
 
@@ -18,6 +19,6 @@ let client: ReturnType<typeof createBrowserClient<Database>> | null = null;
 export function createSupabaseBrowserClient() {
   if (client !== null) return client;
   const { url, publishableKey } = requireSupabasePublicEnv();
-  client = createBrowserClient<Database>(url, publishableKey);
+  client = createBrowserClient<Database>(url, publishableKey, { cookieOptions: AUTH_COOKIE_OPTIONS });
   return client;
 }

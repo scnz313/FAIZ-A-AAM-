@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 
 import Button from "@/components/ui/Button";
+import { ErrorPanel } from "@/components/ui/AsyncStates";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import {
@@ -24,6 +25,8 @@ const STATUS_TONE: Record<UserStatus, "good" | "watch" | "alert"> = {
   Invited: "watch",
   Suspended: "alert",
   Expired: "alert",
+  Revoked: "alert",
+  Closed: "alert",
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -36,6 +39,7 @@ export default function UsersPage() {
   const canManage = canAnyRole(summary?.roles ?? [], "users.manage");
   const supabaseMode = clientAdapterMode() === "supabase";
   const [rows, setRows] = useState<UserRow[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteProfile, setInviteProfile] = useState<StaffProfileCode>("principal");
@@ -64,8 +68,14 @@ export default function UsersPage() {
   const profiles = listProfileSummaries();
 
   const refresh = useCallback(async (): Promise<void> => {
-    const list = await usersService.listUsers();
-    setRows(list);
+    try {
+      const list = await usersService.listUsers();
+      setRows(list);
+      setLoadError(false);
+    } catch {
+      /* Keep any previously loaded rows visible and flag the failure. */
+      setLoadError(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -73,10 +83,13 @@ export default function UsersPage() {
     void usersService
       .listUsers()
       .then((list) => {
-        if (!cancelled) setRows(list);
+        if (!cancelled) {
+          setRows(list);
+          setLoadError(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setRows([]);
+        if (!cancelled) setLoadError(true);
       });
     return () => {
       cancelled = true;
@@ -129,7 +142,7 @@ export default function UsersPage() {
       setInviteEmail("");
       setInviteReason("");
       setInviteTitle("");
-      announce(`Invitation sent to ${inviteEmail.trim().toLowerCase()} — the signed invitation path is ready.`);
+      announce(`Invitation sent to ${inviteEmail.trim().toLowerCase()} · the signed invitation path is ready.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invitation failed.");
@@ -151,7 +164,7 @@ export default function UsersPage() {
       await usersService.revokeRole({ grantId, reason: cleanReason });
       setRevokingGrantId(null);
       setRevokeReason("");
-      announce(`Role revoked — access ends immediately.`);
+      announce(`Role revoked · access ends immediately.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Revoke failed.");
@@ -173,7 +186,7 @@ export default function UsersPage() {
       await usersService.suspendAccount({ accountId, reason: cleanReason });
       setSuspendingId(null);
       setSuspendReason("");
-      announce(`Account suspended — all access revoked.`);
+      announce(`Account suspended · all access revoked.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Suspend failed.");
@@ -187,7 +200,7 @@ export default function UsersPage() {
     setError(null);
     try {
       await usersService.reactivateAccount({ accountId });
-      announce(`Account reactivated.`);
+      announce(`Account reactivated · its previous role grants stay revoked. Use Change profile to restore access.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reactivation failed.");
@@ -197,26 +210,36 @@ export default function UsersPage() {
   }
 
   async function handleChangeProfile(accountId: string) {
+    const target = rows?.find((row) => row.accountId === accountId);
+    /* Legacy accounts (no profile marker) go through the server's
+       version-checked adoption path, which requires a longer reason. */
+    const legacy = target?.profileCode === null || target?.profileCode === undefined;
+    const cleanReason = changeReason.trim();
     const next: ChangeErrors = {
-      reason: changeReason.trim() ? undefined : "A reason is required for the audit trail.",
+      reason:
+        cleanReason === ""
+          ? "A reason is required for the audit trail."
+          : legacy && cleanReason.length < 10
+            ? "Enter at least 10 characters for a legacy-account adoption."
+            : undefined,
     };
     setChangeErrors(next);
-    if (Object.values(next).some((value) => value !== undefined)) return;
+    if (next.reason !== undefined) return;
 
     setBusy(true);
     setError(null);
     try {
-      const target = rows?.find((row) => row.accountId === accountId);
       await usersService.changeProfile({
         accountId,
         profileCode: changeProfile,
-        reason: changeReason.trim(),
+        reason: cleanReason,
         expectedVersion: target?.profileVersion ?? 1,
       });
       setChangingId(null);
       setChangeReason("");
       setChangeErrors({});
-      announce(`Profile changed — the account now uses ${changeProfile}.`);
+      const label = profiles.find((profile) => profile.code === changeProfile)?.label ?? changeProfile;
+      announce(`${legacy ? "Profile adopted" : "Profile changed"} · the account now uses the ${label} profile.`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Profile change failed.");
@@ -229,11 +252,12 @@ export default function UsersPage() {
 
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Access</p>
-        <h1 className="workspace-title">Staff access</h1>
-        <p className="workspace-intro">Invite staff by access profile and manage internal grants.</p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Staff access</h1>
+          <p className="ph-sub">Invite staff by access profile and manage internal grants.</p>
+        </div>
+      </div>
 
       <p className={styles.legend}>
         Two access profiles cover the school: Administrator manages accounts, configuration, and final approvals;
@@ -262,7 +286,7 @@ export default function UsersPage() {
             <strong>{inviteResult.userRow.role}</strong>.{" "}
             {supabaseMode
               ? "Supabase Auth has sent a signed invitation to the verified contact."
-              : "Share this one-time reference with the invitee — it is shown only once:"}
+              : "Share this one-time reference with the invitee · it is shown only once:"}
           </p>
           {inviteResult.invitationRef ? (
             <p className={styles.inviteResultCopy}>
@@ -421,7 +445,18 @@ export default function UsersPage() {
         )}
 
         <div className="table--scroll">
-          {rows === null ? (
+          {loadError && rows !== null ? (
+            <p className="small muted" role="status">
+              Staff accounts could not be refreshed. Showing the last loaded records.
+            </p>
+          ) : null}
+          {loadError && rows === null ? (
+            <ErrorPanel title="Staff accounts could not be loaded" note="The access service did not respond. No accounts were changed.">
+              <Button variant="quiet" type="button" onClick={() => void refresh()}>
+                Try again
+              </Button>
+            </ErrorPanel>
+          ) : rows === null ? (
             <p className={styles.loading} role="status">
               Loading staff accounts…
             </p>
@@ -512,7 +547,7 @@ export default function UsersPage() {
       </section>
 
       <p className={styles.note}>
-        Privileged roles require MFA once authentication is live. Accounts are individual and attributable — one person,
+        Privileged roles require MFA once authentication is live. Accounts are individual and attributable · one person,
         one login, exact scope. Profile codes never authorize requests by themselves; active grants, assignments, and
         server checks remain authoritative.
       </p>
@@ -594,7 +629,19 @@ function UserRowItem({
   profiles: ReturnType<typeof listProfileSummaries>;
 }) {
   const awaitingAcceptance = row.accountId === "";
-  const profileBadge = row.profileLabel ?? (row.profileCode ? row.profileCode : "Legacy access — review required");
+  /* Invitation-only rows have no account: the button explains the invitation
+     state instead of pretending the row can be managed. */
+  const invitationActionLabel =
+    row.status === "Invited"
+      ? "Awaiting acceptance"
+      : row.status === "Revoked"
+        ? row.invitationProviderState === "failed"
+          ? "Invitation failed"
+          : "Invitation revoked"
+        : row.status === "Expired"
+          ? "Invitation expired"
+          : "View";
+  const profileBadge = row.profileLabel ?? (row.profileCode ? row.profileCode : "Legacy access · review required");
   return (
     <>
       <tr>
@@ -613,41 +660,55 @@ function UserRowItem({
             onClick={onToggle}
             disabled={!canManage || awaitingAcceptance}
             aria-expanded={expanded}
-            aria-label={expanded ? `Hide details for ${row.name}` : `Show details for ${row.name}`}
+            aria-controls={`user-detail-${row.key}`}
+            aria-label={
+              awaitingAcceptance
+                ? `${invitationActionLabel} · ${row.name}`
+                : expanded
+                  ? `Hide details for ${row.name}`
+                  : `Show details for ${row.name}`
+            }
           >
-            {awaitingAcceptance ? "Awaiting acceptance" : expanded ? "Close" : canManage ? "Manage" : "View"}
+            {awaitingAcceptance ? invitationActionLabel : expanded ? "Close" : canManage ? "Manage" : "View"}
           </button>
         </td>
       </tr>
       {expanded && (
         <tr>
           <td colSpan={7} className={styles.detailCell}>
-            <div className={styles.detailPanel}>
+            <div className={styles.detailPanel} id={`user-detail-${row.key}`}>
               <h3 className={styles.detailHeading}>Access profile</h3>
               <p className={styles.noGrants}>
                 {profileBadge}
                 {row.profileCode === null || row.profileCode === undefined ? (
-                  <span> — this account predates access profiles; review its internal grants below.</span>
+                  <span> · this account predates access profiles; review its internal grants below.</span>
                 ) : null}
               </p>
 
               <h3 className={styles.detailHeading}>Internal role grants</h3>
               {row.profileCode !== null && row.profileCode !== undefined ? (
                 <p className={styles.noGrants}>
-                  This account is provisioned through the <strong>{row.profileLabel}</strong> access profile — its
-                  grants are bundle-locked. Use a profile change above; individual grants/revokes are denied by the
+                  This account is provisioned through the <strong>{row.profileLabel}</strong> access profile · its
+                  grants are bundle-locked. Use Change profile below; individual grants/revokes are denied by the
                   server.
                 </p>
               ) : row.grants.length === 0 ? (
-                <p className={styles.noGrants}>No active role grants.</p>
+                <p className={styles.noGrants}>
+                  No active roles.{" "}
+                  {row.status === "Suspended"
+                    ? "Reactivate the account, then use Change profile to restore access."
+                    : "Use Change profile below to provision access for this account."}
+                </p>
               ) : (
                 <ul className={styles.grantList}>
                   {row.grants.map((grant) => (
                     <li key={grant.id} className={styles.grantItem}>
                       <div className={styles.grantInfo}>
                         <strong>{grant.roleLabel}</strong>
-                        <span className="num">{grant.ref}</span>
-                        <span className={styles.grantReason}>{grant.reason}</span>
+                        <span className="num">Reference {grant.ref}</span>
+                        {grant.reason ? (
+                          <span className={styles.grantReason}>{grant.reason}</span>
+                        ) : null}
                       </div>
                       {revokingGrantId === grant.id ? (
                         <div className={styles.revokeBox}>
@@ -663,9 +724,10 @@ function UserRowItem({
                               }}
                               aria-required="true"
                               aria-invalid={revokeError}
+                              aria-describedby={revokeError ? `revoke-reason-${grant.id}-error` : undefined}
                               placeholder="Why is this role being revoked?"
                             />
-                            {revokeError && <p className="field-error">A reason is required.</p>}
+                            {revokeError && <p className="field-error" id={`revoke-reason-${grant.id}-error`} role="alert">A reason is required.</p>}
                           </div>
                           <div className={styles.revokeActions}>
                             <button
@@ -722,7 +784,11 @@ function UserRowItem({
                     </select>
                   </div>
                   <div className={`field ${changeErrors.reason ? "field--invalid" : ""}`}>
-                    <label htmlFor={`change-reason-${row.accountId}`}>Reason (required)</label>
+                    <label htmlFor={`change-reason-${row.accountId}`}>
+                      {row.profileCode === null || row.profileCode === undefined
+                        ? "Adoption reason (at least 10 characters)"
+                        : "Reason (required)"}
+                    </label>
                     <input
                       id={`change-reason-${row.accountId}`}
                       className="input"
@@ -795,9 +861,10 @@ function UserRowItem({
                         }}
                         aria-required="true"
                         aria-invalid={suspendError}
+                        aria-describedby={suspendError ? `suspend-reason-${row.accountId}-error` : undefined}
                         placeholder="Why is this account being suspended?"
                       />
-                      {suspendError && <p className="field-error">A reason is required.</p>}
+                      {suspendError && <p className="field-error" id={`suspend-reason-${row.accountId}-error`} role="alert">A reason is required.</p>}
                     </div>
                     <div className={styles.suspendActions}>
                       <button

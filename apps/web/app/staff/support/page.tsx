@@ -10,11 +10,12 @@ export default async function SupportPage() {
   const initialItems = supabaseMode ? await loadServerSupport("staff") : undefined;
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Support</p>
-        <h1 className="workspace-title">Grievances</h1>
-        <p className="workspace-intro">Parent and applicant concerns, in order of arrival.</p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Grievances</h1>
+          <p className="ph-sub">Parent and applicant concerns, in order of arrival.</p>
+        </div>
+      </div>
 
       <GrievanceInbox initialItems={initialItems} />
 

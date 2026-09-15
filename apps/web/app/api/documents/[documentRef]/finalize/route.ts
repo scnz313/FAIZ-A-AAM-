@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getServerActor } from "@/lib/auth/actor";
 import { isSameOrigin } from "@/lib/auth/same-origin";
+import { secretsMatch } from "@/lib/auth/secret-equal";
 import { SupabaseStorageProvider } from "@/lib/documents/providers";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
@@ -10,15 +11,9 @@ import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { documentActorCanAccess, type StoredDocumentAccessRecord } from "@/modules/services/document-access.server";
+import { detectContentType } from "@/modules/services/document-providers";
 
 type Params = { params: Promise<{ documentRef: string }> };
-
-function detectMime(bytes: Uint8Array): string | null {
-  if (bytes.length >= 5 && String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-") return "application/pdf";
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (bytes.length >= 8 && bytes.slice(0, 8).every((value, index) => value === [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a][index])) return "image/png";
-  return null;
-}
 
 async function sha256(bytes: Uint8Array): Promise<string> {
   const owned = new Uint8Array(bytes.byteLength);
@@ -30,11 +25,11 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 function serviceAuthorized(request: Request): boolean {
   const expected = process.env.DOCUMENT_SCANNER_SECRET?.trim();
   const authorization = request.headers.get("authorization");
-  return typeof expected === "string" && expected.length >= 16 && authorization === `Bearer ${expected}`;
+  return typeof expected === "string" && expected.length >= 16 && secretsMatch(authorization, `Bearer ${expected}`);
 }
 
 export async function POST(request: Request, { params }: Params) {
-  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"))) {
+  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"), request.headers.get("sec-fetch-site"))) {
     return NextResponse.json({ error: "Cross-origin requests are not accepted." }, { status: 403, headers: { "Cache-Control": "no-store" } });
   }
   if (dataAdapter() !== "supabase") {
@@ -77,7 +72,9 @@ export async function POST(request: Request, { params }: Params) {
   } catch {
     return NextResponse.json({ error: "The uploaded object could not be verified yet." }, { status: 422, headers: { "Cache-Control": "no-store" } });
   }
-  const actualMimeType = detectMime(object.bytes);
+  /* Shared detector: the declared type is still compared against it below,
+   * so a binary file declared as CSV never passes. */
+  const actualMimeType = detectContentType(object.bytes);
   const checksum = await sha256(object.bytes);
   if (!actualMimeType || object.sizeBytes !== doc.size_bytes || actualMimeType !== doc.mime_type) {
     return NextResponse.json({ error: "The uploaded object does not match its authorized type or size." }, { status: 422, headers: { "Cache-Control": "no-store" } });
@@ -95,15 +92,45 @@ export async function POST(request: Request, { params }: Params) {
 
   /* Migration 000030 made byte finalisation idempotent and deliberately
    * separate from attachment linking. Complete the association here so the
-   * owning application readiness check sees exactly this verified document. */
-  const linked = await callAppRpc<{ reference: string; status: string }>(admin, "documents_link_attachment", {
-    p_document_id: doc.id as string,
-    p_owner_domain: doc.owner_domain as string,
-    p_owner_record_id: doc.owner_record_id as string,
-    p_attachment_code: doc.attachment_code as string,
-  });
-  if (linked.error !== null || linked.data === null) {
-    return NextResponse.json({ error: "The upload was verified but could not be linked to its record. Retry finalization." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+   * owning application readiness check sees exactly this verified document.
+   * School documents are owned by the publishing account itself and have no
+   * association table: the register category is already stored on the
+   * document row at intent creation, so there is nothing to link. */
+  if ((doc.owner_domain as string) !== "school_document") {
+    const linked = await callAppRpc<{ reference: string; status: string }>(admin, "documents_link_attachment", {
+      p_document_id: doc.id as string,
+      p_owner_domain: doc.owner_domain as string,
+      p_owner_record_id: doc.owner_record_id as string,
+      p_attachment_code: doc.attachment_code as string,
+    });
+    if (linked.error !== null || linked.data === null) {
+      return NextResponse.json({ error: "The upload was verified but could not be linked to its record. Retry finalization." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    }
+    /* The storage.finalize worker may have scanned this document before the
+     * browser's finalization linked it to the import batch. The state guard
+     * only advances a batch when the document's scan_status changes after
+     * linking, so a scan that finished first would leave the batch in
+     * `uploaded` forever. Complete the transition with the uploader's own
+     * session; the scan-status route also reconciles this case on refresh. */
+    if (
+      !trustedService
+      && doc.owner_domain === "data_import_batch"
+      && (linked.data.status === "ready" || linked.data.status === "clean")
+    ) {
+      const { data: batch } = await admin
+        .from("data_import_batches")
+        .select("id, state, version")
+        .eq("id", doc.owner_record_id as string)
+        .maybeSingle();
+      if (batch !== null && batch.state === "uploaded") {
+        const userClient = await createSupabaseServerClient();
+        await callAppRpc(userClient, "data_import_set_state", {
+          p_batch_id: batch.id as string,
+          p_new_state: "scanning",
+          p_expected_version: batch.version as number,
+        });
+      }
+    }
   }
 
   return NextResponse.json(

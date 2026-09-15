@@ -11,7 +11,7 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Fees · Portal",
-  description: "Fee ledger for the linked student — invoices, payments, and balance.",
+  description: "Fee ledger for the linked student · invoices, payments, and balance.",
 };
 
 export default async function FeesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
@@ -22,18 +22,18 @@ export default async function FeesPage({ searchParams }: { searchParams: Promise
 
   return (
     <div className={styles.page}>
-      <header>
-        <p className="eyebrow">Portal · Fees</p>
-        <h1 className={styles.title}>Fees</h1>
-        <p className={styles.intro}>
-          Term-wise invoices and payments for the linked student. Partial payments appear against each invoice as
-          they are made.
-        </p>
-        <ActiveChildLine />
-        <p className={styles.demoLine}>
-          <span className="demo-badge">{supabaseMode ? "Live ledger projection" : "Demo data"}</span>{supabaseMode ? " Authoritative invoice and payment records." : ` ${FINANCE_DEMO_NOTE}`}
-        </p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Fees</h1>
+          <p className="ph-sub">
+            Invoices and payments for the active child.
+          </p>
+          <ActiveChildLine />
+          <p className={styles.demoLine}>
+            <span className="demo-badge">{supabaseMode ? "Live ledger projection" : "Demo data"}</span>{supabaseMode ? " Authoritative invoice and payment records." : ` ${FINANCE_DEMO_NOTE}`}
+          </p>
+        </div>
+      </div>
 
       <FeeLedger initial={initial} initialFilter={filter} />
     </div>

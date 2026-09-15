@@ -72,6 +72,7 @@ describe("provider and operations route contracts", () => {
   it("protected Server Components dispatch adapter operations in process", () => {
     const loaders = source("lib/supabase/server-loaders.ts");
     const portalTimetable = source("app/portal/timetable/page.tsx");
+    const portalTimetableClient = source("components/portal/TimetablePageClient.tsx");
     const adapter = source("lib/supabase/adapter-server.ts");
     expect(loaders).toContain("serverAdapterOperation");
     expect(loaders).not.toContain("serverAdapterCall");
@@ -81,8 +82,13 @@ describe("provider and operations route contracts", () => {
     expect(loaders).toContain("result.value.map(mapServerAuditEvent)");
     expect(loaders).not.toContain("studentRef: studentId");
     expect(loaders).not.toContain("gradeSectionRef: gradeSectionId");
-    expect(portalTimetable).toContain("loadServerTimetable(active.gradeSection.id)");
-    expect(portalTimetable).not.toContain("classKeyForGradeSection");
+    /* The timetable page delegates to one active-child client projection; the
+       server page only supplies the live "today" instant. */
+    expect(portalTimetable).toContain("TimetablePageClient");
+    expect(portalTimetable).toContain("todayIso");
+    expect(portalTimetable).not.toContain("loadServerTimetable");
+    expect(portalTimetableClient).toContain("getTimetablePortalProjection");
+    expect(portalTimetableClient).toContain("classKeyForGradeSection");
     expect(adapter).toContain("parsed.operation.handle");
     expect(adapter).toContain("resolveAdapterReferences");
   });

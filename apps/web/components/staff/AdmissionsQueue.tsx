@@ -6,7 +6,6 @@ import Link from "next/link";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
-import { formatKolkata } from "@/modules/iot/domain";
 import type { ApplicationStatus } from "@/modules/admissions/demo";
 import { admissionsService, type StaffQueueRecord } from "@/modules/services/admissions";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
@@ -26,7 +25,7 @@ const STATUS_TONE: Record<ApplicationStatus, StatusTone> = {
   Withdrawn: "neutral",
 };
 
-const FILTERS: ReadonlyArray<{ key: "all" | ApplicationStatus; label: string }> = [
+const STAGES: ReadonlyArray<{ key: "all" | ApplicationStatus; label: string }> = [
   { key: "all", label: "All" },
   { key: "Submitted", label: "Submitted" },
   { key: "Under review", label: "Under review" },
@@ -40,25 +39,40 @@ const FILTERS: ReadonlyArray<{ key: "all" | ApplicationStatus; label: string }> 
 ];
 
 /**
- * Staff admissions queue. The server renders the initial rows; in demo mode
- * the component refreshes from the admissions service on mount so decisions
- * recorded earlier in the session (and applications submitted by applicants
- * in the same session) show here with their real status.
+ * Staff admissions queue — V14 aligned. Uses a toolbar with seg filter +
+ * search, then a Panel with flush q-head + q-row items. Each q-row has:
+ * application (ref + name + grade), stage, status, and a Review action.
+ * The server renders the initial rows; in demo mode the component
+ * refreshes from the admissions service on mount so decisions recorded
+ * earlier in the session show here with their real status.
  */
 export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
   const { summary } = useStaffContext();
   const profileCode = summary?.profileCode ?? null;
   const supabaseMode = clientAdapterMode() === "supabase";
-  const [filter, setFilter] = useState<"all" | ApplicationStatus>("all");
+  const [stage, setStage] = useState<"all" | ApplicationStatus>("all");
+  const [search, setSearch] = useState("");
   const [liveRows, setLiveRows] = useState<StaffQueueRecord[]>(rows);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (supabaseMode) {
-      setLiveRows(rows);
-      return;
-    }
     let cancelled = false;
+    if (supabaseMode) {
+      /* The SSR rows paint first; one silent re-read then replaces them so a
+         decision recorded in another tab appears. A failed refresh keeps the
+         current rows and intentionally shows no error banner. */
+      admissionsService
+        .listStaffRecords()
+        .then((records) => {
+          if (!cancelled) setLiveRows(records);
+        })
+        .catch(() => {
+          /* Freshness only — the SSR rows stay on screen. */
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
     setRefreshing(true);
     admissionsService
       .listStaffRecords()
@@ -76,59 +90,44 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
     };
   }, [rows, supabaseMode]);
 
-  const visible = filter === "all" ? liveRows : liveRows.filter((row) => row.status === filter);
-
-  /* Live metrics derived from the service data so session decisions and new
-     submissions are reflected immediately. */
-  const counts = {
-    submitted: liveRows.filter((r) => r.status === "Submitted" || r.status === "Under review").length,
-    assessment: liveRows.filter((r) => r.status === "Assessment").length,
-    offers: liveRows.filter((r) => r.status === "Offered").length,
-    flagged: liveRows.filter((r) => r.flagged).length,
-  };
+  const stageFiltered = stage === "all" ? liveRows : liveRows.filter((row) => row.status === stage);
+  const searchLower = search.trim().toLowerCase();
+  const visible = searchLower === ""
+    ? stageFiltered
+    : stageFiltered.filter((row) =>
+        row.ref.toLowerCase().includes(searchLower) ||
+        row.studentName.toLowerCase().includes(searchLower) ||
+        row.grade.toLowerCase().includes(searchLower)
+      );
 
   return (
     <>
-      <div className={styles.metrics}>
-        <p className={styles.metric}>
-          <span className="section-label">Submitted</span>
-          <strong className={`num ${styles.metricNum}`}>{counts.submitted}</strong>
-        </p>
-        <p className={styles.metric}>
-          <span className="section-label">Assessment</span>
-          <strong className={`num ${styles.metricNum}`}>{counts.assessment}</strong>
-        </p>
-        <p className={styles.metric}>
-          <span className="section-label">Offers</span>
-          <strong className={`num ${styles.metricNum}`}>{counts.offers}</strong>
-        </p>
-        <p className={styles.metric}>
-          <span className="section-label">Flagged</span>
-          <strong className={`num ${styles.metricNum}`}>{counts.flagged}</strong>
-        </p>
-      </div>
-
-      <section aria-labelledby="queue-heading">
-      <div className={styles.sectionHead}>
-        <h2 id="queue-heading" className="section-label">
-          Application queue
-        </h2>
-        {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
-      </div>
-
-      <div className="tabs" role="group" aria-label="Filter applications by status">
-        {FILTERS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            aria-pressed={filter === tab.key}
-            className={filter === tab.key ? "active" : undefined}
-            onClick={() => setFilter(tab.key)}
-          >
-            {tab.label}
-            <span className={`num ${styles.tabCount}`}>{tab.key === "all" ? liveRows.length : liveRows.filter((r) => r.status === tab.key).length}</span>
-          </button>
-        ))}
+      {/* V14 toolbar: seg filter + search */}
+      <div className="toolbar">
+        <div className="seg" role="tablist" aria-label="Stage filter">
+          {STAGES.map((s) => (
+            <button
+              key={s.key}
+              role="tab"
+              aria-selected={stage === s.key}
+              className={stage === s.key ? "on" : undefined}
+              onClick={() => setStage(s.key)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <div className="spacer" />
+        <div className="search">
+          <span className="msym" aria-hidden="true" style={{ fontSize: 19, color: "var(--muted)" }}>search</span>
+          <input
+            className="input"
+            placeholder="Reference, student, grade…"
+            aria-label="Search applications"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       {refreshing ? (
@@ -137,44 +136,65 @@ export function AdmissionsQueue({ rows }: { rows: StaffQueueRecord[] }) {
         </p>
       ) : null}
 
-      <div className="table--scroll">
-        <table className={`table ${styles.queueTable}`}>
-          <thead>
-            <tr>
-              <th scope="col">Ref</th>
-              <th scope="col">Student</th>
-              <th scope="col">Grade</th>
-              <th scope="col" className="num">Submitted</th>
-              <th scope="col">Status</th>
-              <th scope="col">Reviewer</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((row) => (
-              <tr key={row.ref} className={row.flagged ? styles.flaggedRow : undefined}>
-                <td>
-                  <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/admissions/${row.ref}`)}>
-                    <strong className="num">{row.ref}</strong>
-                  </Link>
-                </td>
-                <td>
-                  {row.studentName}
-                  {row.flagged ? <span className={styles.flag}> · flagged</span> : null}
-                </td>
-                <td>{row.grade}</td>
-                <td className="num">{formatKolkata(row.submittedAtIso, { format: "day" })}</td>
-                <td>
-                  <StatusBadge tone={STATUS_TONE[row.status]}>{row.status}</StatusBadge>
-                </td>
-                <td>{row.reviewer ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {visible.length === 0 ? <p className={styles.empty}>No applications in this view.</p> : null}
-    </section>
+      {visible.length === 0 ? (
+        <section className="panel">
+          <div className="pn-body">
+            <div style={{ textAlign: "center", padding: "42px 18px" }}>
+              <div className="empty-ill" style={{ margin: "0 auto 12px" }}>
+                <span className="msym" style={{ fontSize: 26 }}>filter_alt</span>
+              </div>
+              <div className="strong" style={{ fontSize: "1.02rem" }}>Nothing in this stage right now</div>
+              <p className="muted small" style={{ margin: "6px auto 14px", maxWidth: 340 }}>
+                Applications move through stages; this one is empty at the moment.
+              </p>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setStage("all"); setSearch(""); }}>
+                Show all stages
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="panel">
+          <div className="pn-body flush">
+            {/* V14 q-head */}
+            <div className={styles.qHead}>
+              <span>Application</span>
+              <span>Stage</span>
+              <span>Status</span>
+              <span style={{ textAlign: "right" }}>Action</span>
+            </div>
+            {/* V14 queue with q-row items */}
+            <div className={styles.queue}>
+              {visible.map((row) => (
+                <div key={row.ref} className={styles.qRow}>
+                  <div>
+                    <div className={`q-t num ${styles.qTitle}`}>
+                      {row.ref} · {row.studentName}
+                    </div>
+                    <div className={`q-s ${styles.qSub}`}>
+                      {row.grade} · session {row.session}
+                      {row.flagged ? " · flagged" : ""}
+                    </div>
+                  </div>
+                  <div className={`q-m ${styles.qStage}`}>{row.status}</div>
+                  <div>
+                    <StatusBadge tone={STATUS_TONE[row.status]}>{row.status}</StatusBadge>
+                  </div>
+                  <div className={styles.qAct}>
+                    <Link
+                      prefetch={false}
+                      className="btn btn-ghost btn-sm"
+                      href={canonicalStaffUrl(profileCode, `/admissions/${row.ref}`)}
+                    >
+                      Review
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
     </>
   );
 }

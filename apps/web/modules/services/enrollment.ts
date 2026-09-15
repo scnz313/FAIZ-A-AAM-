@@ -246,6 +246,27 @@ export async function getEnrollmentReadiness(applicationRef: string): Promise<En
   };
 }
 
+/* In-process serialization for the demo store: conversion bodies chain per
+   application reference so two overlapping submits cannot both pass the
+   readiness gates and consume the same counters. The Supabase path relies on
+   the server transaction instead. */
+const conversionTails = new Map<string, Promise<void>>();
+
+function withConversionLock<T>(applicationRef: string, task: () => Promise<T>): Promise<T> {
+  const previous = conversionTails.get(applicationRef) ?? Promise.resolve();
+  const result = previous.then(task);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  conversionTails.set(applicationRef, tail);
+  /* Drop the chain entry once this call is the tail — keeps the map bounded. */
+  void tail.then(() => {
+    if (conversionTails.get(applicationRef) === tail) conversionTails.delete(applicationRef);
+  });
+  return result;
+}
+
 /**
  * Convert an accepted, fee-paid application into the permanent student,
  * enrollment, and (when a guardian matches) guardian link. Idempotent: the
@@ -277,7 +298,25 @@ export async function convertApplication(applicationRef: string): Promise<Enroll
   const existing = loadConversions()[applicationRef];
   if (existing !== undefined) return clone(existing);
 
+  /* Serialize concurrent conversions for the same application: overlapping
+     submits queue behind each other, so the later call observes the first
+     call's stored result instead of racing it. */
+  return withConversionLock(applicationRef, () => convertApplicationDemoLocked(applicationRef));
+}
+
+/**
+ * Demo conversion body — runs under the per-application lock above. The
+ * re-checks stay because a retry may have stored the result while readiness
+ * was being read or before the lock was acquired.
+ */
+async function convertApplicationDemoLocked(applicationRef: string): Promise<EnrollmentConversionResult> {
+  const existing = loadConversions()[applicationRef];
+  if (existing !== undefined) return clone(existing);
   const readiness = await getEnrollmentReadiness(applicationRef);
+  /* Double-submit guard: a concurrent retry may have stored the result while
+     readiness was being read — return it instead of creating duplicates. */
+  const raced = loadConversions()[applicationRef];
+  if (raced !== undefined) return clone(raced);
   if (!readiness.offered) {
     throw new EnrollmentConversionError("not-offered", "Enrollment requires an offered seat.");
   }
@@ -292,6 +331,8 @@ export async function convertApplication(applicationRef: string): Promise<Enroll
   }
 
   const record = (await admissionsService.getApplication(applicationRef))!;
+  const rechecked = loadConversions()[applicationRef];
+  if (rechecked !== undefined) return clone(rechecked);
   const sectionId = GRADE_SECTION_BY_GRADE[record.grade];
   if (sectionId === undefined) {
     throw new EnrollmentConversionError(

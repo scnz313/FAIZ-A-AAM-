@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { timetableByDay } from "@/modules/academics/demo";
 import { setDemoNow } from "@/modules/demo/clock";
+import { auditService } from "@/modules/services/audit";
 import { sessionGet, sessionKey, sessionRemove } from "@/modules/services/session";
 import {
   classKeyForGradeSection,
@@ -348,6 +349,13 @@ describe("date-specific overrides", () => {
 
     await expect(timetableService.saveTimetableOverride({
       dateIso: "2026-08-04",
+      time: "",
+      kind: "cancellation",
+      note: "A reasoned cancellation without choosing the period.",
+    })).rejects.toThrow(/Choose the period/);
+
+    await expect(timetableService.saveTimetableOverride({
+      dateIso: "2026-08-04",
       time: "14:15",
       kind: "substitute",
       note: "A substitute override without naming a covering teacher.",
@@ -431,6 +439,47 @@ describe("exam date-sheet publish state", () => {
 
     const second = await timetableService.publishDateSheet();
     expect(second.version).toBe(2);
+  });
+
+  it("stores authored entries with the time range string and publishes a correction as the next version", async () => {
+    const entries = [
+      {
+        dateIso: "2026-09-16",
+        dayLabel: "Wed",
+        dateLabel: "16 Sep",
+        subject: "Mathematics",
+        time: "09:00 – 10:30",
+        room: "Hall A",
+      },
+    ];
+    const state = await timetableService.publishDateSheet(
+      TIMETABLE_CLASS,
+      entries,
+      "Mid-term Mathematics paper scheduled by the examination office.",
+    );
+
+    expect(state.version).toBe(1);
+    expect(state.entries).toEqual(entries);
+
+    /* A correction carries the same date and subject with a changed time and
+       creates the next version; the earlier version is not overwritten. */
+    const corrected = [{ ...entries[0]!, time: "09:30 – 11:00" }];
+    const second = await timetableService.publishDateSheet(
+      TIMETABLE_CLASS,
+      corrected,
+      "Correction after the assembly moved the paper to 09:30.",
+    );
+
+    expect(second.version).toBe(2);
+    expect(second.entries).toEqual(corrected);
+    expect(second.entries[0]?.time).toBe("09:30 – 11:00");
+
+    /* The manager's reason is the recorded audit reason (append-only trail). */
+    const events = await auditService.listEvents();
+    const recorded = events.filter((event) => event.target === `Exam date sheet · ${TIMETABLE_CLASS}`);
+    expect(recorded.map((event) => event.reason)).toContain(
+      "Correction after the assembly moved the paper to 09:30.",
+    );
   });
 
   it("getDateSheetState returns null before any publish", async () => {

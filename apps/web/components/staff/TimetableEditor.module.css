@@ -1,9 +1,13 @@
 .editor {
   margin-top: 18px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .dayTabs {
   margin-bottom: 16px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .meta {
@@ -12,32 +16,36 @@
   flex-wrap: wrap;
   gap: 8px 18px;
   margin-bottom: 10px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .editedCount {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   margin: 0;
 }
 
 .previewNote {
-  color: var(--saffron-deep);
-  font-size: 12px;
+  color: var(--saffron-ink);
+  font-size: 0.78rem;
   margin: 0;
 }
 
 .blockedStrip {
   margin-bottom: 12px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .blockedMessage {
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 600;
   margin: 0;
 }
 
 .blockedDetail {
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 4px 0 0;
   opacity: 0.85;
 }
@@ -47,8 +55,8 @@
 }
 
 .editorTable th[scope="row"] {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   white-space: nowrap;
@@ -66,7 +74,7 @@
 
 .kindRow td,
 .kindRow th {
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 .changedRow {
@@ -74,7 +82,7 @@
 }
 
 .changedNote {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -83,25 +91,90 @@
 }
 
 .statusCell {
-  color: var(--ink-faint);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   white-space: nowrap;
 }
 
 .fieldError {
-  color: var(--brick-deep);
+  color: var(--madder-ink);
   display: block;
-  font-size: 11px;
+  font-size: 0.72rem;
   line-height: 1.4;
   margin-top: 4px;
 }
 
 .invalid {
-  border-color: var(--brick) !important;
+  border-color: var(--madder) !important;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 1023px) {
+  .dayTabs {
+    max-width: 100%;
+  }
+
+  .meta {
+    gap: 6px 14px;
+  }
+
+  .blockedStrip {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 719px) {
+  .editor {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .dayTabs button {
+    min-height: 44px;
+  }
+
+  .meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .blockedStrip {
+    overflow-wrap: anywhere;
+  }
+
   .editorTable {
     min-width: 620px;
+  }
+
+  /* Period identifier stays visible while the dense grid scrolls inside .table--scroll. */
+  .editorTable th[scope="row"] {
+    background: var(--chalk, #fffdf8);
+    left: 0;
+    position: sticky;
+    z-index: 1;
+  }
+
+  .editorTable input[type="text"],
+  .editorTable select {
+    font-size: 1rem;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 479px) {
+  .editor {
+    margin-top: 14px;
+  }
+
+  .dayTabs {
+    margin-bottom: 12px;
+  }
+
+  .blockedMessage {
+    font-size: 0.8rem;
+  }
+
+  .blockedDetail {
+    font-size: 0.76rem;
   }
 }

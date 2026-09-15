@@ -1,16 +1,29 @@
 .page {
   max-width: 860px;
+  min-width: 0;
+  width: 100%;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+  margin: 0;
 }
 
 .demoLine {
   margin: var(--space-2) 0 var(--space-6);
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .rows {
   display: grid;
   gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
 }
 
 .row {
@@ -20,12 +33,15 @@
   justify-content: space-between;
   gap: var(--space-4);
   border: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  max-width: 100%;
+  min-width: 0;
   padding: var(--space-4);
 }
 
 .rowMain {
-  min-width: min(100%, 320px);
+  min-width: 0;
   flex: 1 1 320px;
+  max-width: 100%;
 }
 
 .rowTitle {
@@ -34,7 +50,10 @@
   align-items: center;
   gap: 0.5em;
   margin: 0 0 var(--space-2);
-  font-size: 16px;
+  font-size: 1rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rowTitle strong {
@@ -46,8 +65,11 @@
   flex-wrap: wrap;
   gap: 0.4em;
   margin: 0;
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rowActions {
@@ -55,16 +77,27 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .confirmCopy {
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.readOnlyHint {
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .rejectBox {
   flex: 1 1 100%;
   border-top: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  max-width: 100%;
+  min-width: 0;
   padding-top: var(--space-3);
 }
 
@@ -75,21 +108,155 @@
   margin-top: var(--space-2);
 }
 
+.reasonBox {
+  flex: 1 1 100%;
+  border-top: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  max-width: 100%;
+  min-width: 0;
+  padding-top: var(--space-3);
+}
+
+.reasonActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.sectionNote {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 0 0 var(--space-3);
+  max-width: 72ch;
+}
+
+.rowModules {
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+.modulesBox {
+  flex: 1 1 100%;
+  border-top: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  max-width: 100%;
+  min-width: 0;
+  padding-top: var(--space-3);
+}
+
+.modulesFieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.modulesLegend {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.modulesGrid {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.moduleOption {
+  align-items: flex-start;
+  background: var(--chalk);
+  border: 1px solid var(--rule, rgba(11, 28, 42, 0.18));
+  border-radius: var(--r-s);
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2);
+  padding: 10px 12px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.moduleOption:hover {
+  border-color: var(--ink-3);
+}
+
+.moduleOption input {
+  accent-color: var(--saffron);
+  flex: none;
+  margin: 3px 0 0;
+}
+
+.moduleText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.moduleLabel {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.moduleRequired {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-s);
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-left: 8px;
+  padding: 1px 6px;
+  text-transform: uppercase;
+}
+
+.moduleHint {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.modulesNote {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: var(--space-3) 0 0;
+  max-width: 72ch;
+}
+
+.modulesWarning {
+  background: var(--madder-soft);
+  border: 1px solid var(--madder-line);
+  color: var(--madder-ink);
+  font-size: 0.82rem;
+  margin: var(--space-2) 0 0;
+  padding: 8px 10px;
+}
+
+.modulesActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
 .notice {
   min-height: 1.4em;
   margin: var(--space-4) 0 0;
-  font-size: 14px;
+  font-size: 0.88rem;
   font-weight: 600;
   color: var(--ink);
 }
 
 .subHeading {
   margin: var(--space-6) 0 var(--space-3);
-  font-size: 13px;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--muted);
 }
 
 .demoNote {
@@ -97,6 +264,104 @@
   gap: var(--space-2);
   align-items: baseline;
   margin-top: var(--space-6);
-  font-size: 13px;
-  color: var(--ink-soft);
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1023px) {
+  .page {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 719px) {
+  .rows {
+    gap: 12px;
+  }
+
+  .row {
+    align-items: stretch;
+    flex-direction: column;
+    /* A wrapped column flex container resolves its height against the first
+       item and pushes later items into an off-screen second column; the
+       stacked row must never wrap. */
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .rowMain {
+    flex: 1 1 100%;
+  }
+
+  .rowActions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .rowActions > :global(.btn),
+  .rowActions > :global(.button) {
+    min-height: 44px;
+  }
+
+  .rejectActions,
+  .reasonActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rejectActions > :global(.btn),
+  .rejectActions > :global(.button),
+  .reasonActions > :global(.btn),
+  .reasonActions > :global(.button) {
+    min-height: 44px;
+  }
+
+  .modulesGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .modulesActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .modulesActions > :global(.btn),
+  .modulesActions > :global(.button) {
+    min-height: 44px;
+  }
+
+  .demoNote {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 479px) {
+  .row {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .rowTitle {
+    font-size: 0.95rem;
+  }
+
+  .confirmCopy {
+    width: 100%;
+  }
+
+  .rowActions > :global(.btn),
+  .rowActions > :global(.button),
+  .rejectActions > :global(.btn),
+  .rejectActions > :global(.button),
+  .reasonActions > :global(.btn),
+  .reasonActions > :global(.button),
+  .modulesActions > :global(.btn),
+  .modulesActions > :global(.button) {
+    justify-content: center;
+    width: 100%;
+  }
 }

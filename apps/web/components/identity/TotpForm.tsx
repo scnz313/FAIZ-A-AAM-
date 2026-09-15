@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
+import { DEFAULT_STAFF_PORTAL } from "@/lib/auth/portal-routes";
 import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -26,7 +27,7 @@ const CODE_PATTERN = /^\d{6}$/;
 export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "demo" | "supabase"; totpRequired?: boolean }) {
   const router = useRouter();
   const demoMode = adapter !== "supabase";
-  const [safeNext, setSafeNext] = useState("/staff");
+  const [safeNext, setSafeNext] = useState<string>(DEFAULT_STAFF_PORTAL);
   const [phase, setPhase] = useState<Phase>("checking");
   const [factorId, setFactorId] = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
@@ -39,7 +40,7 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
   const codeRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    setSafeNext(safeAuthRedirect(new URLSearchParams(window.location.search).get("next"), "/staff"));
+    setSafeNext(safeAuthRedirect(new URLSearchParams(window.location.search).get("next"), DEFAULT_STAFF_PORTAL));
   }, []);
 
   /* Dev auto-elevation: when TOTP is not required, call the server endpoint
@@ -59,7 +60,7 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
         window.location.assign(safeNext);
       } catch {
         if (!cancelled) {
-          setFatal("Dev MFA elevation failed — restart sign-in and try again.");
+          setFatal("Dev MFA elevation failed · restart sign-in and try again.");
           setPhase("error");
         }
       }
@@ -90,7 +91,7 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
         });
         if (cancelled) return;
         if (error !== null || enrolled === null) {
-          setFatal("Setup could not start — restart sign-in and try again.");
+          setFatal("Setup could not start · restart sign-in and try again.");
           setPhase("error");
           return;
         }
@@ -100,7 +101,7 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
         setPhase("enroll");
       } catch {
         if (!cancelled) {
-          setFatal("Sign-in state could not be read — restart sign-in.");
+          setFatal("Sign-in state could not be read · restart sign-in.");
           setPhase("error");
         }
       }
@@ -124,7 +125,7 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
       if (challengeError !== null || challenge === null) throw new Error("challenge failed");
       const { error } = await supabase.auth.mfa.verify({ factorId, challengeId: challenge.id, code: trimmed });
       if (error !== null) {
-        setRejected("That code is not right — check your authenticator and try again.");
+        setRejected("That code is not right · check your authenticator and try again.");
         setCode("");
         codeRef.current?.focus();
         return;
@@ -136,7 +137,7 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
       if (!recorded.ok) throw new Error("MFA record failed");
       window.location.assign(safeNext);
     } catch {
-      setRejected("Verification could not complete — try again in a moment.");
+      setRejected("Verification could not complete · try again in a moment.");
     } finally {
       setBusy(false);
     }
@@ -147,7 +148,7 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
       <div>
         <p className={styles.stepNote}>
           <span className="section-label">Demo sign-in</span>
-          Two-step verification is part of the school sign-in service. Demo identities sign in directly — pick a
+          Two-step verification is part of the school sign-in service. Demo identities sign in directly · pick a
           demo guardian or staff identity from the sign-in screen instead.
         </p>
         <p className={styles.back}>
@@ -242,7 +243,7 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
           <Button variant="primary" type="submit" disabled={busy || !CODE_PATTERN.test(code.trim())}>
             {busy ? "Verifying…" : phase === "enroll" ? "Finish setup and continue" : "Verify and continue"}
           </Button>
-          <p className="field-help">Each code works once — a fresh one appears in your app every 30 seconds.</p>
+          <p className="field-help">Each code works once · a fresh one appears in your app every 30 seconds.</p>
         </div>
       </form>
 

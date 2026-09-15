@@ -18,11 +18,16 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { vacancySlug } = await params;
+  const canonical = `/careers/${vacancySlug}`;
   const records = dataAdapter() === "supabase" ? await loadServerVacancies() : vacancies;
   const vacancy = records.find((v) => v.slug === vacancySlug);
+  if (!vacancy) {
+    return { title: "Vacancy not found", robots: { index: false, follow: true }, alternates: { canonical } };
+  }
   return {
-    title: vacancy ? vacancy.title : "Vacancy",
-    description: vacancy?.description,
+    title: vacancy.title,
+    description: vacancy.description,
+    alternates: { canonical },
   };
 }
 
@@ -61,29 +66,26 @@ export default async function VacancyDetailPage({ params }: Props) {
             What the role requires.
           </h2>
         </div>
-        <ul className={styles.ruledList}>
-          {vacancy.qualifications.map((q) => (
-            <li className={styles.ruledItem} key={q}>
-              {q}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className={styles.section} aria-labelledby="documents-heading">
-        <div className={styles.head}>
-          <p className="section-label">Documents required</p>
-          <h2 className={styles.heading} id="documents-heading">
-            Please have these ready.
-          </h2>
+        <div className={styles.ruledGrid}>
+          <ul className={styles.ruledList}>
+            {vacancy.qualifications.map((q) => (
+              <li className={styles.ruledItem} key={q}>
+                {q}
+              </li>
+            ))}
+          </ul>
+          <ul className={styles.ruledList}>
+            {vacancy.documents.map((d) => (
+              <li className={styles.ruledItem} key={d}>
+                {d}
+              </li>
+            ))}
+          </ul>
         </div>
-        <ul className={styles.ruledList}>
-          {vacancy.documents.map((d) => (
-            <li className={styles.ruledItem} key={d}>
-              {d}
-            </li>
-          ))}
-        </ul>
+        <p className={styles.requirementsNote}>
+          Documents are not uploaded with the online application. The HR office asks shortlisted candidates for these
+          before an interview.
+        </p>
       </section>
 
       <section className={styles.section} aria-labelledby="deadline-heading">
@@ -108,7 +110,8 @@ export default async function VacancyDetailPage({ params }: Props) {
               Apply for this position →
             </Button>
             <p className={styles.ctaNote}>
-              Applications are tracked by reference. Keep the reference you receive after submitting.
+              Applications are acknowledged by email. Keep the reference you receive after submitting; every update
+              arrives by email.
             </p>
           </div>
         ) : (

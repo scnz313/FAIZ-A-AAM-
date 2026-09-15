@@ -34,13 +34,12 @@ const routes = [
   "/portal/fees",
   "/portal/results",
   "/portal/timetable",
-  "/staff",
-  "/staff/admissions",
-  "/staff/finance",
-  "/staff/link-requests",
-  "/staff/support",
+  "/administrator",
+  "/principal/admissions",
+  "/principal/finance",
+  "/administrator/link-requests",
+  "/principal/support",
   "/sign-in/invite",
-  "/ui-states",
 ];
 
 (async () => {

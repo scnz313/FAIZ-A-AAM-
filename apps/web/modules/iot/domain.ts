@@ -246,6 +246,10 @@ function kolkataParts(iso: string): Record<string, string> {
  * Presets: "time" → 08:30 · "day" → Mon 03 Aug · "full" → Mon, 03 Aug 2026 · 08:30 IST · "short" → 03 Aug · 08:30
  */
 export function formatKolkata(iso: string, opts: { format?: KolkataFormat } = {}): string {
+  /* Defensive: lifecycle states without an effective timestamp (for example a
+     policy-pending settings version) pass an empty value; formatting it
+     would throw RangeError and blank the whole page. */
+  if (typeof iso !== "string" || iso.trim() === "" || Number.isNaN(new Date(iso).getTime())) return "";
   const p = kolkataParts(iso);
   const weekday = p.weekday ?? "";
   const day = p.day ?? "";

@@ -1,11 +1,85 @@
-/* School life page composition. */
+/* School life page — V14 life-index rows + facilities grid + gallery */
 
 .page {
   background: var(--paper);
 }
 
-/* Gallery — hairline-ruled plate of framed artwork tiles. */
+/* V14 life-index — ruled rows with icon, title, description */
+.lifeIndex {
+  border-top: 2px solid var(--ink);
+}
 
+.lifeRow {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 4fr) minmax(0, 5fr);
+  gap: 18px;
+  align-items: center;
+  padding: 19px 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.lifeRow:hover {
+  background: var(--ink-soft-tint);
+}
+
+.lifeIcon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--willow-ink);
+  flex: none;
+}
+
+.lifeTitle {
+  margin: 0;
+  font-size: 1.04rem;
+  font-weight: 650;
+  font-family: var(--sans);
+}
+
+.lifeLine {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* V14 facilities grid — auto-fit cells with ink top rule */
+.facilitiesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 28px;
+}
+
+.facilityCell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.facilityTop {
+  border-top: 2px solid var(--ink);
+  padding-top: 12px;
+}
+
+.facilityTitle {
+  font-weight: 650;
+  font-size: 1rem;
+  padding-top: 12px;
+}
+
+.facilityLine {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Gallery — hairline-ruled plate of framed artwork tiles */
 .gallery {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -31,8 +105,8 @@
   margin: 0;
   padding: 14px 16px 16px;
   border-top: 1px solid var(--line);
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   line-height: 1.4;
@@ -41,11 +115,20 @@
 
 .galleryNote {
   margin: var(--space-5) 0 0;
-  font-size: 12px;
-  color: var(--ink-soft);
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
+  .lifeRow {
+    grid-template-columns: 44px minmax(0, 1fr);
+    row-gap: 8px;
+  }
+
+  .lifeLine {
+    grid-column: 2;
+  }
+
   .gallery {
     grid-template-columns: 1fr;
   }

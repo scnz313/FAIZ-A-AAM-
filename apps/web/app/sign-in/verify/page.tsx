@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { PublicFooter } from "@/components/layouts/PublicFooter";
-import { PublicHeader } from "@/components/layouts/PublicHeader";
+import { AuthFrame } from "@/components/identity/AuthFrame";
 import VerifyForm from "@/components/identity/VerifyForm";
-import PageIntro from "@/components/public/PageIntro";
 import { dataAdapter } from "@/lib/supabase/env";
-
-import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Verify sign-in",
@@ -17,32 +13,19 @@ export const metadata: Metadata = {
 
 /**
  * Sign-in verification step — the code screen after a successful sign-in.
- * Composes the public frame like the other plain identity routes.
+ * Uses the V14 AuthFrame with brand-only header and centered card.
  */
 export default function VerifyPage() {
   if (dataAdapter() === "supabase") redirect("/sign-in");
   return (
-    <div className={styles.page}>
-      <PublicHeader tone="light" />
-      <main id="main" tabIndex={-1} className={styles.main}>
-        <div className={styles.frame}>
-          <PageIntro
-            eyebrow="Family portal"
-            title="Verify sign-in"
-            deck="Enter the 6-digit code sent to the phone or email you signed in with."
-          />
-          <section className={styles.section} aria-label="Verify sign-in">
-            <div className={`panel ${styles.card}`}>
-              <VerifyForm />
-            </div>
-            <p className={styles.demoNote}>
-              <span className="demo-badge">UI demo</span>
-              <span>The code is shown on this screen — a real backend sends it by SMS.</span>
-            </p>
-          </section>
-        </div>
-      </main>
-      <PublicFooter />
-    </div>
+    <AuthFrame
+      title="Verify it's you"
+      sub="We sent a 6-digit code by SMS to the phone ending 34. It expires in ten minutes."
+    >
+      <VerifyForm />
+      <p className="tiny muted" style={{ textAlign: "center", marginTop: 14 }}>
+        Prototype: enter any six digits. The demo code is shown above.
+      </p>
+    </AuthFrame>
   );
 }

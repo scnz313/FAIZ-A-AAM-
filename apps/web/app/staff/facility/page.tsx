@@ -63,13 +63,14 @@ export default async function FacilityOverviewPage() {
 
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Facility · Overview</p>
-        <h1 className="workspace-title">Overview</h1>
-        <p className="workspace-intro">
-          Live environmental readings across the campus — outdoor air, indoor comfort and the device fleet.
-        </p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Overview</h1>
+          <p className="ph-sub">
+            Live environmental readings across the campus · outdoor air, indoor comfort and the device fleet.
+          </p>
+        </div>
+      </div>
 
       <AlertStrip alerts={alerts} profileCode={profileCode} />
 

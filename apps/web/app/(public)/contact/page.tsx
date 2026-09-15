@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: "Contact",
   description:
     "Address, phone, email, and office hours for Faiz Aam Secondary School, Bandipora.",
+  alternates: { canonical: "/contact" },
 };
 
 const OFFICE_HOURS = [
@@ -66,15 +67,11 @@ export default function ContactPage() {
           <figure className={`panel ${styles.mapPanel}`}>
             <MapScene ariaHidden className={styles.mapArt} />
             <figcaption className={styles.mapCaption}>
-              Illustrated map — official location pending verification.
+              Illustrated map · official location pending verification.
             </figcaption>
           </figure>
         </div>
       </PageSection>
-
-      <div className="ornament-rule ornament-rule--tight" aria-hidden="true">
-        <i className="ornament-rule__diamond" />
-      </div>
 
       <PageSection label="Hours" heading="Office hours" headingId="hours-heading">
         <div className={`panel ${styles.hoursPanel}`}>
@@ -96,15 +93,7 @@ export default function ContactPage() {
             </tbody>
           </table>
         </div>
-        <p className={styles.hoursNote}>
-          Hours apply on school days and are concept copy pending
-          confirmation of the academic calendar.
-        </p>
       </PageSection>
-
-      <div className="ornament-rule ornament-rule--tight" aria-hidden="true">
-        <i className="ornament-rule__diamond" />
-      </div>
 
       <PageSection label="Concern" heading="Raise a concern" headingId="grievance-heading">
         <GrievanceForm />

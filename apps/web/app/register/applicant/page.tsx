@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { PublicFooter } from "@/components/layouts/PublicFooter";
-import { PublicHeader } from "@/components/layouts/PublicHeader";
+import { AuthFrame } from "@/components/identity/AuthFrame";
 import ApplicantRegistrationForm from "@/components/identity/ApplicantRegistrationForm";
-import PageIntro from "@/components/public/PageIntro";
 import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { dataAdapter } from "@/lib/supabase/env";
 
@@ -25,15 +24,19 @@ export default async function ApplicantRegistrationPage({
   const requestedNext = Array.isArray(params.next) ? params.next[0] : params.next;
   const next = safeAuthRedirect(requestedNext, "/apply/student");
   return (
-    <div>
-      <PublicHeader tone="light" />
-      <main id="main" tabIndex={-1} className="page-frame">
-        <PageIntro eyebrow={purpose === "job_application" ? "Careers" : "Admissions"} title="Create an applicant account" deck={`Use an email you can verify to save and resume your ${purpose === "job_application" ? "job" : "student"} application across devices.`} />
-        <section className="panel" aria-label="Create applicant account">
-          {active ? <ApplicantRegistrationForm purpose={purpose} next={next} /> : <p className="demo-note">Applicant registration is available when the Supabase adapter is enabled.</p>}
-        </section>
-      </main>
-      <PublicFooter />
-    </div>
+    <AuthFrame
+      wide
+      title="Create applicant account"
+      sub="One account handles admission applications, job applications and (after enrolment) your guardian portal."
+      foot={
+        <span>Already registered? <Link className="underline-link" href="/sign-in">Sign in</Link></span>
+      }
+    >
+      {active ? (
+        <ApplicantRegistrationForm purpose={purpose} next={next} />
+      ) : (
+        <p className="demo-note">Applicant registration is available when the Supabase adapter is enabled.</p>
+      )}
+    </AuthFrame>
   );
 }

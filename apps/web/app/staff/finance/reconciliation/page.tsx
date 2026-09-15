@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { StatusTone } from "@/components/ui/StatusBadge";
-import { FINANCE_DEMO_NOTE, formatINR, type PaymentMethod } from "@/modules/services/finance";
+import { FINANCE_DEMO_NOTE, formatINR } from "@/modules/services/finance";
 import { financeService } from "@/modules/services/finance";
 import { dataAdapter } from "@/lib/supabase/env";
 import { loadServerInvoices, loadServerReconciliationProjection } from "@/lib/supabase/server-loaders";
@@ -16,7 +16,8 @@ export const metadata: Metadata = {
 
 type ReconRow = {
   payRef: string;
-  method: PaymentMethod;
+  /** Display-only method label; authoritative evidence carries no method, rendered as Unknown. */
+  method: string;
   amountPaise: number;
   gateway: string;
   ledger: string;
@@ -53,7 +54,7 @@ const demoGatewayEvents: ReconRow[] = [
     amountPaise: 120000,
     gateway: "Refunded",
     ledger: "Refund entry appended",
-    matchLabel: "Refunded — appended",
+    matchLabel: "Refunded · appended",
     matchTone: "good",
   },
 ];
@@ -92,7 +93,9 @@ export default async function ReconciliationPage() {
       const resolved = exception?.status === "resolved";
       authoritativeRows.push({
         payRef,
-        method: "Challan",
+        /* The reconciliation evidence carries no payment-method field: render
+           Unknown rather than fabricating one. */
+        method: "Unknown",
         amountPaise: evidence.amount_paise,
         gateway: evidence.state,
         ledger: matched ? "Posted" : resolved ? "Exception resolved" : "Exception",
@@ -120,9 +123,9 @@ export default async function ReconciliationPage() {
           </h2>
           <span className="demo-badge">{supabaseMode ? "Live projection" : "Demo data"}</span>
         </div>
-        <div className="table--scroll">
+        <div className="table--scroll" role="region" aria-label="Gateway and ledger comparison table" tabIndex={0}>
           {reconRows.length === 0 ? (
-            <p className={styles.ruleNote}>No reconciliation rows — the ledger and gateway are in sync.</p>
+            <p className={styles.ruleNote}>No reconciliation rows · the ledger and gateway are in sync.</p>
           ) : (
           <table className={`table ${styles.reconTable}`}>
             <thead>
@@ -164,7 +167,7 @@ export default async function ReconciliationPage() {
         initialRuns={projection.map(mapServerReconciliationRun)}
         matchedCount={reconRows.filter((r) => r.matchLabel === "Matched").length}
         discrepancyCount={reconRows.filter((r) => r.matchLabel === "Discrepancy").length}
-        pendingCount={reconRows.filter((r) => r.matchLabel === "Pending" || r.matchLabel === "Refunded — appended").length}
+        pendingCount={reconRows.filter((r) => r.matchLabel === "Pending" || r.matchLabel === "Refunded · appended").length}
       />
 
       <div className={styles.ruleNote}>

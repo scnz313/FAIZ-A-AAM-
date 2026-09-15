@@ -3,11 +3,15 @@ import { z } from "zod";
 import {
   admissionCreateDraft,
   admissionDecide,
+  admissionEnrollmentReference,
+  admissionGetStaffApplication,
   admissionListMine,
   admissionListStaffQueue,
   admissionRequestChanges,
+  admissionResolveDuplicateReview,
   admissionRespondOffer,
   admissionReviewAdvance,
+  admissionReviewerDirectory,
   admissionSaveDraft,
   admissionSubmit,
   admissionWithdraw,
@@ -34,6 +38,9 @@ export const admissionsModule: AdapterModule = {
   operations: [
     operation("admissions.listMine", emptyPayload, ({ supabase }) => admissionListMine(supabase)),
     operation("admissions.staffQueue", emptyPayload, ({ supabase }) => admissionListStaffQueue(supabase)),
+    operation("admissions.staffByRef", z.object({ applicationRef: publicReference }), ({ supabase }, payload) => admissionGetStaffApplication(supabase, payload.applicationRef)),
+    operation("admissions.enrollmentReference", target, ({ supabase }, payload) => admissionEnrollmentReference(supabase, payload.applicationId!)),
+    operation("admissions.reviewerDirectory", target, ({ supabase }, payload) => admissionReviewerDirectory(supabase, payload.applicationId!)),
     operation(
       "admissions.saveDraft",
       z.object({
@@ -42,7 +49,8 @@ export const admissionsModule: AdapterModule = {
         academicYearId: uuid.nullable().optional(),
         academicYearRef: publicReference.optional(),
         gradeId: uuid.nullable().optional(),
-        gradeRef: publicReference.optional(),
+        /* Grade codes are short ("6"–"10"); the resolver maps them by code, not the reference pattern. */
+        gradeRef: z.string().min(1).max(40).optional(),
         studentName: z.string().nullable().optional(),
         parentName: z.string().nullable().optional(),
         parentContact: z.string().nullable().optional(),
@@ -59,7 +67,8 @@ export const admissionsModule: AdapterModule = {
         academicYearId: uuid.optional(),
         academicYearRef: publicReference.optional(),
         gradeId: uuid.optional(),
-        gradeRef: publicReference.optional(),
+        /* Grade codes are short ("6"–"10"); the resolver maps them by code, not the reference pattern. */
+        gradeRef: z.string().min(1).max(40).optional(),
         studentName: z.string().min(1),
         parentName: z.string().min(1),
         parentContact: z.string().nullable().optional(),
@@ -96,6 +105,18 @@ export const admissionsModule: AdapterModule = {
       ({ supabase }, payload) => admissionDecide(supabase, payload as Parameters<typeof admissionDecide>[1]),
     ),
     operation(
+      "admissions.resolveDuplicateReview",
+      applicationTarget({
+        candidateStudentId: uuid,
+        outcome: z.enum(["approved", "rejected"]),
+        evidenceType: z.string().min(1),
+        evidenceReference: z.string().nullable().optional(),
+        reason: z.string().min(3),
+        expectedVersion: z.number().int().nonnegative().nullable().optional(),
+      }),
+      ({ supabase }, payload) => admissionResolveDuplicateReview(supabase, payload as Parameters<typeof admissionResolveDuplicateReview>[1]),
+    ),
+    operation(
       "admissions.respondOffer",
       applicationTarget({ response: z.enum(["accepted", "declined"]), offerVersion: z.number().int().positive() }),
       ({ supabase }, payload) => admissionRespondOffer(supabase, payload as Parameters<typeof admissionRespondOffer>[1]),
@@ -119,6 +140,11 @@ export const admissionsModule: AdapterModule = {
       "context.family",
       z.object({ studentId: uuid.optional(), studentRef: publicReference.optional() }),
       async ({ supabase, actor, selection }, payload) => {
+        /* Family context is guardian-only: staff roles must not receive a
+           family's children, links, or enrollment projections. */
+        if (!actor.roles.includes("guardian")) {
+          return { ok: false as const, errors: [{ code: "forbidden" as const, message: "A guardian account is required for family context.", field: null }] };
+        }
         if (payload.studentId !== undefined) {
           const persisted = await contextFamilySelect(supabase, { studentId: payload.studentId });
           if (!persisted.ok) return persisted;

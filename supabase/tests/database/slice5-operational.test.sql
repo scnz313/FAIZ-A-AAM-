@@ -78,6 +78,24 @@ begin
   perform set_config('slice5.scheduled_item',v_item::text,false);
   assert (v_scheduled->>'status')='scheduled', 'publisher schedules an approved content version';
   assert (select current_status from public.content_items where id=v_item)='scheduled', 'scheduled content remains scheduled until due';
+  assert exists (select 1 from public.notice_audiences where notice_id=(select id from public.notices where content_item_id=v_item) and audience='public'), 'default draft writes a public audience row';
+  assert (select id from public.notices where content_item_id=v_item)=any(app.public_notice_ids()), 'public notice id is exposed through app.public_notice_ids()';
+end
+$$;
+-- Audience mapping: a version whose metadata selects 'family' writes a
+-- role/guardian row only and stays out of app.public_notice_ids().
+select set_config('request.jwt.claim.sub','30000000-0000-4000-8000-000000000003',false);
+select set_config('request.jwt.claims','{"aal":"aal2"}',false);
+do $$
+declare v_draft jsonb; v_item uuid; v_notice uuid;
+begin
+  v_draft:=app.content_save_draft_v2(null,'notice','slice5-family-audience','Slice 5 family audience','{"blocks":[{"type":"paragraph","text":"Family test"}],"metadata":{"audience":"family"}}'::jsonb,null,'slice5-family-draft');
+  v_item:=(v_draft->>'id')::uuid;
+  select id into v_notice from public.notices where content_item_id=v_item;
+  assert exists (select 1 from public.notice_audiences where notice_id=v_notice and audience='role' and role_code='guardian'), 'family metadata writes a role/guardian audience row';
+  assert not exists (select 1 from public.notice_audiences where notice_id=v_notice and audience='public'), 'family metadata never writes a public audience row';
+  assert not (v_notice=any(app.public_notice_ids())), 'family notice id is not exposed through app.public_notice_ids()';
+  perform set_config('slice5.family_item',v_item::text,false);
 end
 $$;
 do $$
@@ -95,6 +113,33 @@ update public.notices set scheduled_at=now()-interval '1 minute' where content_i
 set role service_role;
 select app.content_publish_due();
 select app.content_expire_due();
+reset role;
+
+-- Owner fixture: a public-audience scheduled notice that anonymous readers
+-- must still be denied (the anon policies require published status).
+insert into public.content_items (kind, slug, current_status) values ('notice','slice5-anon-scheduled','scheduled') on conflict (slug) do nothing;
+insert into public.notices (content_item_id, status) select id,'scheduled' from public.content_items where slug='slice5-anon-scheduled' on conflict (content_item_id) do nothing;
+insert into public.notice_audiences (notice_id, audience)
+select n.id,'public' from public.notices n join public.content_items ci on ci.id=n.content_item_id
+ where ci.slug='slice5-anon-scheduled'
+   and not exists (select 1 from public.notice_audiences na where na.notice_id=n.id);
+
+-- Anonymous readers see the published public notice and its immutable version
+-- body, but neither a family-audience notice nor any draft/scheduled content.
+set role anon;
+do $$
+declare v_public uuid:=current_setting('slice5.scheduled_item')::uuid; v_family uuid:=current_setting('slice5.family_item')::uuid;
+begin
+  assert (select count(*) from public.content_items where id=v_public)=1, 'anon reads the published public notice item';
+  assert (select count(*) from public.content_versions where content_item_id=v_public)>=1, 'anon reads the published public notice version body';
+  assert (select count(*) from public.notices where content_item_id=v_public)=1, 'anon reads the published public notice row';
+  assert (select count(*) from public.content_items where id=v_family)=0, 'anon cannot read a family-audience notice item';
+  assert (select count(*) from public.content_versions where content_item_id=v_family)=0, 'anon cannot read a family-audience version body';
+  assert (select count(*) from public.notices where content_item_id=v_family)=0, 'anon cannot read a family-audience notice row';
+  assert (select count(*) from public.content_items where slug='slice5-review-state')=0, 'anon cannot read a draft notice item';
+  assert (select count(*) from public.content_items where slug='slice5-anon-scheduled')=0, 'anon cannot read a scheduled notice item even with a public audience row';
+end
+$$;
 reset role;
 
 -- Refund and reconciliation idempotency keys are durable and reject
@@ -344,7 +389,13 @@ begin
   assert not exists (select 1 from public.in_app_notifications n join public.role_grants rg on rg.account_id=n.recipient_account_id and rg.status='active' and rg.role_code='guardian' where n.source_event_id=v_event), 'unpublished result entry is not projected to guardians';
   assert to_regprocedure('app.enrollment_convert(uuid,text)') is null, 'unintended enrollment conversion overload is removed';
   assert to_regprocedure('app.enrollment_convert(uuid)') is not null, 'canonical enrollment conversion remains';
-  assert exists (select 1 from public.audit_events where action='Login' and target_reference='30000000-0000-4000-8000-000000000007'), 'login audit is recorded';
+  assert exists (
+    select 1 from public.audit_events ae
+    join public.user_accounts ua on ua.id = '30000000-0000-4000-8000-000000000007'
+    join public.people p on p.id = ua.person_id
+    where ae.action='Login'
+      and ae.target_reference = coalesce(p.display_name, ua.verified_contact, 'Staff account')
+  ), 'login audit records a readable account reference';
   assert exists (select 1 from public.audit_events where action='Recovery requested' and target_reference='30000000-0000-4000-8000-000000000007'), 'recovery audit is recorded';
 end
 $$;

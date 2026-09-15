@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ContentPage from "@/app/staff/content/page";
 import { NoticePublisher } from "@/components/staff/NoticePublisher";
@@ -14,6 +14,7 @@ import { RELATIONSHIPS_SESSION_KEY } from "@/modules/services/family-context";
 import {
   CONTENT_INTENTS_SESSION_KEY,
   CONTENT_SESSION_KEY,
+  contentService,
   PUBLIC_PAGES_SESSION_KEY,
   type ContentNotice,
   type PublicPageRow,
@@ -48,6 +49,7 @@ const NOTICES: ContentNotice[] = [
     version: 1,
     publishNote: "Demo publish note.",
     reviewDue: "2026-09-01",
+    pinned: false,
     scheduledForIso: null,
   },
   {
@@ -67,6 +69,7 @@ const NOTICES: ContentNotice[] = [
     version: 2,
     publishNote: "Ready for publisher review.",
     reviewDue: "2026-09-15",
+    pinned: false,
     scheduledForIso: null,
   },
   {
@@ -86,6 +89,7 @@ const NOTICES: ContentNotice[] = [
     version: 3,
     publishNote: "Approved and ready to publish.",
     reviewDue: "2026-09-20",
+    pinned: false,
     scheduledForIso: null,
   },
 ];
@@ -140,6 +144,10 @@ beforeEach(() => {
   sessionRemove(RELATIONSHIPS_SESSION_KEY);
   sessionRemove(STAFF_SESSION_KEYS.identity);
   sessionRemove(PUBLIC_PAGES_SESSION_KEY);
+  /* NoticePublisher hydrates from contentService.listForStaff(), which reads
+     the session store — seed it with the test notices so the gating probe
+     sees the approved/in-review rows instead of the default demo seed. */
+  sessionSet(CONTENT_SESSION_KEY, NOTICES.map((notice) => ({ ...notice, body: [...notice.body] })));
   setDemoNow(PINNED);
 });
 
@@ -193,8 +201,56 @@ describe("NoticePublisher role gating (content.draft vs content.publish)", () =>
   });
 });
 
-describe("staff content page maker/checker actions", () => {
-  it("lets a different publisher approve and then publish the exact in-review page version", async () => {
+describe("NoticePublisher archive confirmation", () => {
+  it("asks for confirmation before archiving a published notice", async () => {
+    const user = userEvent.setup();
+    const unpublish = vi.spyOn(contentService, "unpublishNotice");
+    render(
+      <StaffContextProvider>
+        <Probe />
+      </StaffContextProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("content_publisher"));
+
+    await user.click(screen.getByRole("button", { name: "Unpublish" }));
+
+    expect(unpublish).not.toHaveBeenCalled();
+    expect(screen.getByText(/Unpublish and archive this notice\?/)).toBeTruthy();
+    /* The safe choice takes focus, and cancelling returns it to the trigger. */
+    expect(screen.getByRole("button", { name: "Keep published" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Keep published" }));
+
+    expect(screen.queryByText(/Unpublish and archive this notice\?/)).toBeNull();
+    expect(unpublish).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Unpublish" })).toHaveFocus();
+  });
+
+  it("archives only after the publisher confirms the destructive action", async () => {
+    const user = userEvent.setup();
+    const unpublish = vi.spyOn(contentService, "unpublishNotice");
+    render(
+      <StaffContextProvider>
+        <Probe />
+      </StaffContextProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("role")).toHaveTextContent("content_publisher"));
+
+    await user.click(screen.getByRole("button", { name: "Unpublish" }));
+    await user.click(screen.getByRole("button", { name: "Unpublish" }));
+
+    await waitFor(() =>
+      expect(unpublish).toHaveBeenCalledWith(
+        "demo-photography-day",
+        expect.objectContaining({ reason: "Archived from the notices workspace." }),
+      ),
+    );
+  });
+});
+
+describe("staff content page maker/checker actions", () => {  it("lets a different publisher approve and then publish the exact in-review page version", async () => {
     sessionSet(PUBLIC_PAGES_SESSION_KEY, [{ ...IN_REVIEW_PAGE }]);
     const user = userEvent.setup();
     render(

@@ -1,121 +1,117 @@
-.section {
-  padding: clamp(72px, 9vw, 120px) clamp(48px, 8vw, 96px);
-  background: var(--paper);
-}
+/* Section background/padding/borders handled by .sec.sec-chalk + .wrap in globals.css */
 
 .head {
-  max-width: 720px;
-  margin-bottom: clamp(40px, 5vw, 64px);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: clamp(24px, 3.4vw, 44px);
 }
 
 .heading {
   margin: 0;
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: clamp(32px, 3.6vw, 48px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.08;
+  font-family: var(--serif);
+  font-size: clamp(1.55rem, 2.7vw, 2.25rem);
+  font-weight: 560;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+  max-width: 24ch;
 }
 
-.grid {
+/* V14 life-index — ruled rows with icon, title, description, chevron */
+.lifeIndex {
+  border-top: 2px solid var(--ink);
+}
+
+.lifeRow {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  grid-auto-rows: 1fr;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.cell {
-  display: contents;
-}
-
-/* Framing is scoped here (hairline plate with collapsed seams); the
-   shared .tile-link provides typography, padding and hover. */
-.tile {
-  position: relative;
-  border: 1px solid var(--line);
-  background: var(--chalk);
+  grid-template-columns: 52px minmax(0, 4fr) minmax(0, 5fr) 30px;
+  gap: 18px;
+  align-items: center;
+  padding: 19px 4px;
+  border-bottom: 1px solid var(--line-soft);
   text-decoration: none;
+  color: var(--ink);
+  transition: background 0.15s ease;
 }
 
-/* Quiet 36px programme mark in the tile corner, opposite the numeral.
-   The marks hardcode their fills, so no color is inherited here. */
-.mark {
-  position: absolute;
-  top: var(--space-5);
-  right: var(--space-5);
-  width: 36px;
-  height: 36px;
+.lifeRow:hover {
+  background: var(--ink-soft-tint);
 }
 
-.tile :global(.tile-link__num) {
-  color: var(--saffron-deep);
+.lifeIcon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--willow-ink);
+  flex: none;
 }
 
-/* 5 columns — one row; collapse the vertical seam between neighbours. */
-.tile:nth-child(n + 2) {
-  margin-left: -1px;
+.lifeTitle {
+  margin: 0;
+  font-size: 1.04rem;
+  font-weight: 650;
+  font-family: var(--sans);
 }
 
-@media (max-width: 1080px) {
-  .grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .tile:nth-child(n + 2) {
-    margin-left: 0;
-  }
-
-  .tile:nth-child(3n + 2),
-  .tile:nth-child(3n + 3) {
-    margin-left: -1px;
-  }
-
-  .tile:nth-child(n + 4) {
-    margin-top: -1px;
-  }
+.lifeLine {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
-@media (max-width: 860px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
+.lifeChev {
+  color: var(--muted);
+  text-align: right;
+}
+
+/* Tablet — stack title above description, keep icon + chevron */
+@media (max-width: 1023px) {
+  .lifeRow {
+    grid-template-columns: 52px minmax(0, 1fr) 30px;
+    gap: 14px;
   }
 
-  .tile:nth-child(3n + 2),
-  .tile:nth-child(3n + 3) {
-    margin-left: 0;
+  .lifeTitle {
+    grid-column: 2;
+    grid-row: 1;
   }
 
-  .tile:nth-child(n + 4) {
-    margin-top: 0;
+  .lifeLine {
+    grid-column: 2;
+    grid-row: 2;
   }
 
-  .tile:nth-child(2n) {
-    margin-left: -1px;
-  }
-
-  .tile:nth-child(n + 3) {
-    margin-top: -1px;
+  .lifeChev {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    align-self: center;
   }
 }
 
-@media (max-width: 700px) {
-  .grid {
-    grid-template-columns: 1fr;
+@media (max-width: 719px) {
+  .lifeRow {
+    grid-template-columns: 44px minmax(0, 1fr);
+    row-gap: 8px;
   }
 
-  .tile:nth-child(2n) {
-    margin-left: 0;
+  .lifeLine {
+    grid-column: 2;
   }
 
-  .tile:nth-child(n + 3) {
-    margin-top: 0;
+  .lifeChev {
+    display: none;
   }
 }
 
 .note {
   margin: 28px 0 0;
-  font-size: 12px;
-  color: var(--ink-soft, rgba(11, 28, 42, 0.72));
+  font-size: 0.78rem;
+  color: var(--muted);
 }

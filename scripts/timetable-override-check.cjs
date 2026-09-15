@@ -14,7 +14,7 @@ const TIMEOUT = 20000;
   };
 
   try {
-    await page.goto(`${BASE}/staff/timetables`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/principal/timetables`, { waitUntil: "networkidle" });
     await page.evaluate(() => sessionStorage.clear());
     await page.reload({ waitUntil: "networkidle" });
 
@@ -55,7 +55,7 @@ const TIMEOUT = 20000;
     check("portal Monday has no override notice", mondayOverride === 0);
 
     /* Revoke from staff side restores the base. */
-    await page.goto(`${BASE}/staff/timetables`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/principal/timetables`, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Revoke", exact: true }).click();
     await page.getByText(/OVR-2026-001 revoked/).waitFor({ state: "visible", timeout: TIMEOUT });
     check("staff revokes override", true);

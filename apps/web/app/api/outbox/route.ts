@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { processOutboxBatch } from "@/lib/supabase/outbox-worker";
 import { providerLog } from "@/lib/observability/log";
+import { secretsMatch } from "@/lib/auth/secret-equal";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ export const runtime = "nodejs";
  * domain records never change because a delivery failed.
  */
 function authorized(request: NextRequest, secret: string): boolean {
-  return request.headers.get("authorization") === `Bearer ${secret}`;
+  return secretsMatch(request.headers.get("authorization"), `Bearer ${secret}`);
 }
 
 async function run(request: NextRequest) {

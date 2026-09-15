@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 
 import PageIntro from "@/components/public/PageIntro";
 import PageSection from "@/components/public/pages/PageSection";
-import RuledList from "@/components/public/pages/RuledList";
 import ConceptNote from "@/components/public/pages/ConceptNote";
 import {
   AssemblyScene,
@@ -18,82 +17,92 @@ export const metadata: Metadata = {
   title: "School Life",
   description:
     "Sports, arts, service, assemblies, trips, and facilities at Faiz Aam Secondary School, Bandipora.",
+  alternates: { canonical: "/school-life" },
 };
 
-const DOMAINS = [
+const PROGRAMMES = [
   {
-    num: "01",
-    term: "Sports",
-    detail:
-      "Games and athletics run through the week, and the annual sports meet is held on the school ground in August. On poor-air days, outdoor events move indoors.",
+    icon: "sports_cricket",
+    title: "Sports",
+    line: "Cricket and football lead the year with inter-house leagues; athletics day closes the first term. Evening coaching runs twice a week for the senior squads.",
   },
   {
-    num: "02",
-    term: "Arts",
-    detail:
-      "Drawing, craft, and music are part of the regular week. The annual cultural programme gives every class a chance to perform.",
+    icon: "palette",
+    title: "Arts & crafts",
+    line: "Calligraphy on Fridays; watercolour and craft through the term. The corridor gallery changes every month with each class taking its turn.",
   },
   {
-    num: "03",
-    term: "Service",
-    detail:
-      "Cleanliness drives, tree planting, and community reading days connect the school to the town. Service is treated as part of character, not as an extra.",
+    icon: "volunteer_activism",
+    title: "Service",
+    line: "Library duty, cleanliness rosters and the winter clothing collection run by the senior classes for the town's needs.",
   },
   {
-    num: "04",
-    term: "Assemblies",
-    detail:
-      "Morning assembly opens the day with the thought of the day, announcements, and a quiet start. It is where the school gathers as one body.",
+    icon: "record_voice_over",
+    title: "Assemblies",
+    line: "Eight minutes every morning: recitation, the day's news read by a student, and one class presenting each Friday.",
   },
   {
-    num: "05",
-    term: "Trips",
-    detail:
-      "Field visits and study tours are planned with parent consent and announced well in advance. Every trip is a lesson with a destination.",
+    icon: "map",
+    title: "Trips",
+    line: "One day trip per class each year to the Wular fringe, the old town of Srinagar, and a senior excursion further afield in autumn.",
+  },
+  {
+    icon: "science",
+    title: "Clubs & laboratory",
+    line: "A science club that keeps the laboratory honest, a quiz circle in winter, and reading hour for the middle school.",
   },
 ] as const;
 
 const FACILITIES = [
-  { term: "Library", detail: "Reading hours, borrowing, and a quiet place for study." },
-  { term: "Laboratories", detail: "Science practicals for the middle and secondary sections." },
-  { term: "Computer lab", detail: "Introductory computer periods for the secondary classes." },
-  { term: "Playground", detail: "Games, athletics, and the annual sports meet." },
-  { term: "Assembly hall", detail: "Indoor assembly, examinations, and the cultural programme." },
+  { title: "Science laboratory", line: "One combined lab for physics, chemistry and biology practicals, capped at sensible group sizes." },
+  { title: "Library", line: "Reading room with Urdu, Kashmiri and English collections; extended hours before assessments." },
+  { title: "Computer room", line: "Twenty working stations on a filtered connection, timetabled for every class weekly." },
+  { title: "Covered courtyard", line: "Winter assembly, indoor games and a place to eat when the cold sets in." },
 ] as const;
 
 const GALLERY = [
-  { Art: ReadScene, caption: "Reading hour under the chinar — concept art" },
-  { Art: PlayScene, caption: "Playground, winter sun — concept art" },
-  { Art: AssemblyScene, caption: "Morning assembly — concept art" },
-  { Art: LakeScene, caption: "Wular lake from the school road — concept art" },
-  { Art: CampusScene, caption: "The main block — concept art" },
-  { Art: ChinarBranch, caption: "Chinar in autumn — concept art" },
+  { Art: ReadScene, caption: "Reading hour under the chinar · concept art" },
+  { Art: PlayScene, caption: "Playground, winter sun · concept art" },
+  { Art: AssemblyScene, caption: "Morning assembly · concept art" },
+  { Art: LakeScene, caption: "Wular lake from the school road · concept art" },
+  { Art: CampusScene, caption: "The main block · concept art" },
+  { Art: ChinarBranch, caption: "Chinar in autumn · concept art" },
 ] as const;
 
 export default function SchoolLifePage() {
   return (
     <div className={styles.page}>
       <PageIntro
-        eyebrow="Life at school"
-        title="School life"
-        deck="Beyond the classroom."
+        eyebrow="School life"
+        title="The timetable is honest: play, art and service are on it."
+        deck="Sports, arts, assemblies, trips and service rotate through the week and the year as scheduled parts of growing up, with the same standing as any lesson."
       />
 
-      <PageSection label="Programmes" heading="The five domains" headingId="domains-heading">
-        <RuledList rows={DOMAINS} />
+      <PageSection label="Programmes" heading="What the week holds" headingId="programmes-heading">
+        <div className={styles.lifeIndex}>
+          {PROGRAMMES.map((p) => (
+            <div className={styles.lifeRow} key={p.title}>
+              <span className={styles.lifeIcon} aria-hidden="true">
+                <span className="msym" style={{ fontSize: 21 }}>{p.icon}</span>
+              </span>
+              <h3 className={styles.lifeTitle}>{p.title}</h3>
+              <p className={styles.lifeLine}>{p.line}</p>
+            </div>
+          ))}
+        </div>
       </PageSection>
 
-      <div className="ornament-rule ornament-rule--tight" aria-hidden="true">
-        <i className="ornament-rule__diamond" />
-      </div>
-
-      <PageSection label="Facilities" heading="Facilities" headingId="facilities-heading">
-        <RuledList rows={FACILITIES} />
+      <PageSection label="Facilities" heading="Facilities, plainly stated." headingId="facilities-heading">
+        <div className={styles.facilitiesGrid}>
+          {FACILITIES.map((f) => (
+            <div className={styles.facilityCell} key={f.title}>
+              <div className={styles.facilityTop} />
+              <div className={styles.facilityTitle}>{f.title}</div>
+              <p className={styles.facilityLine}>{f.line}</p>
+            </div>
+          ))}
+        </div>
       </PageSection>
-
-      <div className="ornament-rule ornament-rule--tight" aria-hidden="true">
-        <i className="ornament-rule__diamond" />
-      </div>
 
       <PageSection label="Gallery" heading="Scenes from the school." headingId="gallery-heading">
         <div className={styles.gallery}>
@@ -104,15 +113,11 @@ export default function SchoolLifePage() {
             </figure>
           ))}
         </div>
-        <p className={styles.galleryNote}>
-          All artwork is original concept art — no school photography has been
-          used.
-        </p>
       </PageSection>
 
       <ConceptNote>
         Programme and facility descriptions are concept copy pending the
-        school’s confirmation.
+        school&apos;s confirmation.
       </ConceptNote>
     </div>
   );

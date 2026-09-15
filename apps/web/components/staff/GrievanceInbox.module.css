@@ -1,8 +1,8 @@
 /* Grievance inbox: summary strip, status filters, ruled list and panel. */
 
 .live {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.5;
   margin: 0 0 14px;
   min-height: 18px;
@@ -24,8 +24,8 @@
 }
 
 .summaryWord {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   line-height: 1.2;
@@ -35,8 +35,8 @@
 
 .summaryCount {
   color: var(--ink);
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 1.4rem;
+  font-weight: 540;
   line-height: 1.1;
   margin: 3px 0 0;
 }
@@ -46,8 +46,8 @@
 }
 
 .tabCount {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   margin-left: var(--space-1);
 }
 
@@ -58,7 +58,7 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1023px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -116,18 +116,18 @@
 }
 
 .rowRef {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
 
 .rowSelected .rowRef {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
 }
 
 .rowCategory {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -136,8 +136,8 @@
 
 .rowSubject {
   font-family: var(--serif);
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 650;
   line-height: 1.35;
   margin: 2px 0 0;
 }
@@ -156,23 +156,23 @@
 
 .rowContact {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
 }
 
 .rowDay {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
 }
 
 .empty {
-  color: var(--ink-soft);
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
   margin: var(--space-5) 0;
 }
 
 .loading {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 0.88rem;
 }
 
 .detail {
@@ -187,15 +187,15 @@
 }
 
 .detailRef {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.03em;
 }
 
 .detailCategory {
   border-left: 1px solid var(--line-strong);
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -205,8 +205,8 @@
 
 .detailTitle {
   font-family: var(--serif);
-  font-size: 24px;
-  font-weight: 500;
+  font-size: 1.5rem;
+  font-weight: 540;
   letter-spacing: -0.01em;
   line-height: 1.2;
   margin: 12px 0 0;
@@ -221,7 +221,7 @@
 .detailMessage {
   color: var(--ink);
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 0.92rem;
   line-height: 1.6;
   margin: 14px 0 0;
   max-width: 64ch;
@@ -242,8 +242,8 @@
 }
 
 .detailMetaRow dt {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   padding-top: 3px;
@@ -251,7 +251,7 @@
 }
 
 .detailMetaRow dd {
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -263,8 +263,8 @@
 }
 
 .responseHeading {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   margin: 0 0 12px;
@@ -278,7 +278,7 @@
 .checkRow {
   align-items: center;
   display: flex;
-  font-size: 14px;
+  font-size: 0.88rem;
   gap: 8px;
   margin: 12px 0 14px;
 }
@@ -298,7 +298,7 @@
 
 .actionHint {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
   line-height: 1.5;
   max-width: 36ch;
 }
@@ -316,7 +316,7 @@
 
 .threadText {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.55;
   margin: 0;
 }
@@ -326,12 +326,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 6px 0 0;
 }
 
 .threadBy {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-weight: 500;
 }
 
@@ -345,7 +345,7 @@
 
 .reopenHint {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
 }
 
 .panelNote {
@@ -354,7 +354,7 @@
   color: var(--muted);
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 0.78rem;
   gap: 10px;
   line-height: 1.55;
   margin: 0;

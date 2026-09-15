@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
 
 import Button from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import { CONTENT_DEMO_NOTE } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
 import { canAnyRole } from "@/modules/services/staff-profiles";
+import { usersService } from "@/modules/services/users";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 import {
   applicationReviewer,
@@ -35,11 +36,11 @@ const TERMINAL_STATUSES: ReadonlySet<JobApplicationStatus> = new Set(["Offered",
 
 /** Minimal fictional qualification detail, keyed by application ref. */
 const QUALIFICATION_LINES: Record<string, { qualification: string; experience: string }> = {
-  "JOB-2026-0112": { qualification: "B.Sc. Mathematics · B.Ed.", experience: "4 years — classes 8 to 10" },
-  "JOB-2026-0113": { qualification: "B.Sc. Mathematics · B.Ed.", experience: "2 years — school and tuition" },
-  "JOB-2026-0114": { qualification: "M.A. English · B.Ed.", experience: "3 years — middle section" },
-  "JOB-2026-0115": { qualification: "M.A. English · B.Ed.", experience: "1 year — student teaching" },
-  "JOB-2026-0108": { qualification: "B.Sc. Physics", experience: "5 years — school laboratory" },
+  "JOB-2026-0112": { qualification: "B.Sc. Mathematics · B.Ed.", experience: "4 years · classes 8 to 10" },
+  "JOB-2026-0113": { qualification: "B.Sc. Mathematics · B.Ed.", experience: "2 years · school and tuition" },
+  "JOB-2026-0114": { qualification: "M.A. English · B.Ed.", experience: "3 years · middle section" },
+  "JOB-2026-0115": { qualification: "M.A. English · B.Ed.", experience: "1 year · student teaching" },
+  "JOB-2026-0108": { qualification: "B.Sc. Physics", experience: "5 years · school laboratory" },
 };
 
 const DOCUMENTS = ["CV", "Certificates", "Identity proof"] as const;
@@ -116,7 +117,7 @@ const DECISIONS: Record<DecisionKind, DecisionMeta> = {
     result: "Shortlisted",
     noteRequired: false,
     noteLabel: "Note (optional)",
-    noteHelp: "Reviewers see this note; applicants only see the stage.",
+    noteHelp: "Optional · recorded in the timeline and included in the applicant's status email.",
     confirmTitle: "Shortlist this candidate?",
     confirmText: "The applicant's status becomes Shortlisted and a timeline event is recorded.",
   },
@@ -125,7 +126,7 @@ const DECISIONS: Record<DecisionKind, DecisionMeta> = {
     result: "Interview",
     noteRequired: false,
     noteLabel: "Note (optional)",
-    noteHelp: "Reviewers see this note; applicants only see the stage.",
+    noteHelp: "Optional · recorded in the timeline and included in the applicant's interview email.",
     confirmTitle: "Request an interview?",
     confirmText: "The applicant's status becomes Interview and a demo slot three days from now is attached.",
   },
@@ -163,7 +164,7 @@ const ACTIONS_BY_STATUS: Record<JobApplicationStatus, readonly DecisionKind[]> =
 const MIN_REASON_LENGTH = 10;
 
 const FILE_STATES: ReadonlyArray<{ value: DemoFileState; label: string }> = [
-  { value: "demo-preview", label: "Demo preview — metadata only" },
+  { value: "demo-preview", label: "Demo preview · metadata only" },
   { value: "missing", label: "Missing file" },
   { value: "access-denied", label: "Access denied" },
 ];
@@ -184,9 +185,9 @@ const STATE_COPY: Record<DemoFileState, { title: string; description: string }> 
 };
 
 const DOWNLOAD_COPY: Record<DemoFileState, string> = {
-  "demo-preview": "Demo file not provided — this preview contains metadata only, so no download started.",
-  missing: "Demo file not provided — this record has no attached file. Ask the candidate to re-upload it.",
-  "access-denied": "Demo download blocked — access denied. No private file was requested or exposed.",
+  "demo-preview": "Demo file not provided · this preview contains metadata only, so no download started.",
+  missing: "Demo file not provided · this record has no attached file. Ask the candidate to re-upload it.",
+  "access-denied": "Demo download blocked · access denied. No private file was requested or exposed.",
 };
 
 type PreviewDocument = DocumentMetadata & {
@@ -288,7 +289,7 @@ function DocumentPreviewDialog({
               </option>
             ))}
           </select>
-          <p className="field-help">State selector for review only — it does not call storage or authorization services.</p>
+          <p className="field-help">State selector for review only · it does not call storage or authorization services.</p>
         </div>
 
         <section
@@ -327,6 +328,157 @@ function DocumentPreviewDialog({
 }
 
 /* ------------------------------------------------------------------ */
+/* Decision confirmation modal                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Decision confirmation modal. Reuses the in-file dialog pattern from
+ * DocumentPreviewDialog. Shows the exact object, the status transition, the
+ * consequences, and the required note. Safe default focus is Close.
+ */
+function DecisionConfirmDialog({
+  applicationRef,
+  candidateName,
+  vacancyTitle,
+  actionLabel,
+  currentStatus,
+  targetStatus,
+  consequences,
+  note,
+  demoMode,
+  processing,
+  error,
+  trigger,
+  onClose,
+  onConfirm,
+}: {
+  applicationRef: string;
+  candidateName: string;
+  vacancyTitle: string;
+  actionLabel: string;
+  currentStatus: string;
+  targetStatus: string;
+  consequences: string;
+  note: string;
+  demoMode: boolean;
+  processing: boolean;
+  error: string | null;
+  trigger: HTMLButtonElement | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    cancelRef.current?.focus();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  function closeDialog() {
+    if (processing) return;
+    const dialog = dialogRef.current;
+    if (dialog?.open) dialog.close();
+    onClose();
+    trigger?.focus();
+  }
+
+  function trapTab(event: KeyboardEvent) {
+    if (event.key !== "Tab") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusable = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
+    if (focusable.length === 0) return;
+    const first = focusable.at(0);
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className={styles.confirmDialog}
+      aria-labelledby="job-decision-confirm-title"
+      aria-describedby="job-decision-confirm-desc"
+      onCancel={(event) => {
+        event.preventDefault();
+        closeDialog();
+      }}
+      onKeyDown={trapTab}
+    >
+      <div className={styles.confirmContent}>
+        <div className={styles.confirmHeader}>
+          <div>
+            <p className="section-label">Confirm decision</p>
+            <h2 id="job-decision-confirm-title" className={styles.confirmTitle}>
+              {actionLabel}?
+            </h2>
+          </div>
+          <button ref={cancelRef} type="button" className="button button--quiet" onClick={closeDialog} disabled={processing}>
+            Close
+          </button>
+        </div>
+        <div id="job-decision-confirm-desc">
+          <div className="facts-ledger">
+            <div className="fl-row">
+              <span className="k">Object</span>
+              <span className="v num">{applicationRef}</span>
+            </div>
+            <div className="fl-row">
+              <span className="k">Candidate</span>
+              <span className="v">{candidateName}</span>
+            </div>
+            <div className="fl-row">
+              <span className="k">Vacancy</span>
+              <span className="v">{vacancyTitle}</span>
+            </div>
+            <div className="fl-row">
+              <span className="k">Transition</span>
+              <span className="v">{currentStatus} to {targetStatus}</span>
+            </div>
+            <div className="fl-row">
+              <span className="k">Note</span>
+              <span className="v">{note}</span>
+            </div>
+          </div>
+          <div className="callout" style={{ marginTop: 14 }}>
+            <span className="msym" aria-hidden="true" style={{ fontSize: 20 }}>
+              info
+            </span>
+            <span className="small">{consequences} Recorded{demoMode ? " in the demo session" : ""} with actor and timestamp. It is not undone here.</span>
+          </div>
+        </div>
+        {error ? (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className={styles.confirmActions}>
+          <Button variant="primary" disabled={processing} onClick={onConfirm}>
+            {processing ? "Recording..." : "Confirm"}
+          </Button>
+          <Button variant="quiet" disabled={processing} onClick={closeDialog}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Timeline derivation                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -342,6 +494,85 @@ function timelineFor(record: JobApplicationRecord): TimelineEvent[] {
       note: event.note,
     };
   });
+}
+
+/**
+ * Resolve a reviewer id to a display name for the loaded record. Account ids
+ * are internal identifiers: when no directory name resolves, a raw id reads
+ * "Assigned reviewer" instead of leaking the identifier into the interface.
+ * Exported for the reviewer-label regression test.
+ */
+export function reviewerDisplayName(
+  value: string | undefined,
+  directory: ReadonlyArray<{ accountId: string; name: string }>,
+): string | null {
+  if (value === undefined || value.trim() === "") return null;
+  const match = directory.find((candidate) => candidate.accountId === value);
+  if (match !== undefined && match.name.trim() !== "") return match.name;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim())
+    ? "Assigned reviewer"
+    : value;
+}
+
+/**
+ * Humanize a document requirement code or category for the staff panel
+ * ("profile_photo" reads "Profile photo"). Exported for the regression test.
+ */
+export function documentLabel(value: string): string {
+  const words = value.replace(/[_-]+/g, " ").trim();
+  if (words === "") return "Document";
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * Merge the immutable snapshot's document map with linked attachment rows
+ * (`job_documents`, e.g. the public intake's profile photo). RLS already
+ * withheld any file the staff may not read, so an absent photo never renders
+ * as an empty attachment. Exported for the regression test.
+ */
+export function mergeAttachedDocuments(
+  snapshot: Record<string, unknown> | undefined,
+  linked: ReadonlyArray<{ requirementCode: string | null; reference: string; filename: string; category: string }>,
+): Array<{ label: string; reference: string; filename?: string }> {
+  const merged: Array<{ label: string; reference: string; filename?: string }> = [];
+  const raw = snapshot?.documents;
+  if (raw !== null && raw !== undefined && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const [label, reference] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof reference === "string" && reference.trim() !== "") merged.push({ label, reference });
+    }
+  }
+  const seen = new Set(merged.map((document) => document.reference));
+  for (const document of linked) {
+    if (seen.has(document.reference)) continue;
+    seen.add(document.reference);
+    merged.push({
+      label: documentLabel(document.requirementCode ?? document.category),
+      reference: document.reference,
+      filename: document.filename,
+    });
+  }
+  return merged;
+}
+
+/**
+ * Display rows for the contact identity recorded on the application. The
+ * public intake writes email/phone onto the application row; account-bound
+ * records keep them on the applicant's account, so absent values are omitted
+ * rather than rendered as an invented placeholder. Exported for the
+ * regression test.
+ */
+export function contactDetailRows(record: {
+  contactEmail?: string;
+  contactPhone?: string;
+}): Array<{ label: string; value: string }> {
+  const rows: Array<{ label: string; value: string }> = [];
+  if (record.contactEmail !== undefined && record.contactEmail.trim() !== "") {
+    rows.push({ label: "Email", value: record.contactEmail });
+  }
+  if (record.contactPhone !== undefined && record.contactPhone.trim() !== "") {
+    rows.push({ label: "Phone", value: record.contactPhone });
+  }
+  return rows;
 }
 
 /**
@@ -381,6 +612,26 @@ export function JobReview({
   const [savingScore, setSavingScore] = useState(false);
   const [scoreError, setScoreError] = useState<string | null>(null);
 
+  const [reviewers, setReviewers] = useState<Array<{ accountId: string; name: string }>>([]);
+  const [reviewerChoice, setReviewerChoice] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  async function handleAssignReviewer() {
+    if (assigning || reviewerChoice === "") return;
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      const updated = await careersService.assignReviewer(applicationRef, reviewerChoice);
+      setRecord(updated);
+      setAnnouncement("Reviewer assigned · the scorecard and shortlist can now be recorded.");
+    } catch (error) {
+      setAssignError(error instanceof Error ? error.message : "The reviewer could not be assigned.");
+    } finally {
+      setAssigning(false);
+    }
+  }
+
   async function handleSaveScorecard() {
     if (savingScore) return;
     const numeric = Number(scoreInput);
@@ -394,7 +645,7 @@ export function JobReview({
       const updated = await careersService.saveScorecard(applicationRef, numeric, scoreNotes);
       setRecord(updated);
       setScoreNotes("");
-      setAnnouncement(`Scorecard saved — ${numeric} / 5.`);
+      setAnnouncement(`Scorecard saved · ${numeric} / 5.`);
     } catch (error) {
       setScoreError(error instanceof Error ? error.message : "The scorecard could not be saved.");
     } finally {
@@ -403,9 +654,9 @@ export function JobReview({
   }
 
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
-  const summaryRef = useRef<HTMLDivElement | null>(null);
   const actionsRef = useRef<HTMLDivElement | null>(null);
   const decisionHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const confirmTriggerRef = useRef<HTMLButtonElement | null>(null);
   const lastRef = useRef(initial.ref);
 
   const load = useCallback(async () => {
@@ -445,10 +696,6 @@ export function JobReview({
     if (draft && !confirming) noteRef.current?.focus();
   }, [draft, confirming]);
 
-  useEffect(() => {
-    if (confirming) summaryRef.current?.focus();
-  }, [confirming]);
-
   function openDocument(file: PreviewDocument, trigger: HTMLButtonElement) {
     previewTriggerRef.current = trigger;
     setPreview(file);
@@ -469,8 +716,16 @@ export function JobReview({
     setNoteError(null);
     setActionError(null);
     setConfirming(false);
-    /* Return focus to the action row once it is rendered again. */
     setTimeout(() => actionsRef.current?.focus(), 0);
+  }
+
+  function cancelConfirmOnly() {
+    setConfirming(false);
+    setActionError(null);
+    requestAnimationFrame(() => {
+      if (confirmTriggerRef.current && document.contains(confirmTriggerRef.current)) confirmTriggerRef.current.focus();
+      else noteRef.current?.focus();
+    });
   }
 
   function handleContinue(event: FormEvent<HTMLFormElement>) {
@@ -478,11 +733,13 @@ export function JobReview({
     if (!draft) return;
     const meta = DECISIONS[draft];
     if (meta.noteRequired && note.trim().length < MIN_REASON_LENGTH) {
-      setNoteError(`Add a reason of at least ${MIN_REASON_LENGTH} characters — the note is recorded with the decision.`);
+      setNoteError(`Add a reason of at least ${MIN_REASON_LENGTH} characters. The note is recorded with the decision.`);
       noteRef.current?.focus();
       return;
     }
     setNoteError(null);
+    const active = document.activeElement;
+    confirmTriggerRef.current = active instanceof HTMLButtonElement ? active : null;
     setConfirming(true);
   }
 
@@ -506,7 +763,7 @@ export function JobReview({
       setDraft(null);
       setConfirming(false);
       setNote("");
-      setAnnouncement(`Decision recorded — ${updated.name} is now ${updated.status}.`);
+      setAnnouncement(`Decision recorded · ${updated.name} is now ${updated.status}.`);
       decisionHeadingRef.current?.focus();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "The decision could not be recorded. Please try again.");
@@ -542,17 +799,51 @@ export function JobReview({
 
   const interviewScore = record.status === "Interview" || record.status === "Offered" ? "4 / 5" : "—";
   const timeline = timelineFor(record);
-  const reviewer = supabaseMode ? (record.reviewerAccountId ?? null) : applicationReviewer(record);
-  const availableActions = ACTIONS_BY_STATUS[record.status];
-  const withdrawn = record.status === "Withdrawn";
-  /* Phase-1 maker/checker split: reviewers score, approvers decide. The
-     careers service records fixture actors, so the account id is not sent
-     to it — the grants are enforced by this UI projection and, later, by
-     the backend adapter. */
+  const attachedDocuments = useMemo(
+    () => mergeAttachedDocuments(record.submittedSnapshot, record.attachedDocuments ?? []),
+    [record.submittedSnapshot, record.attachedDocuments],
+  );
   const { summary } = useStaffContext();
   const profileCode = summary?.profileCode ?? null;
   const canReview = canAnyRole(summary?.roles ?? [], "careers.review");
   const canApprove = canAnyRole(summary?.roles ?? [], "careers.approve");
+  const canDecide = canReview || canApprove;
+  const assignedReviewer = supabaseMode
+    ? reviewerDisplayName(record.reviewerAccountId, reviewers)
+    : applicationReviewer(record);
+  const reviewer = assignedReviewer;
+  /* Decision kinds are capability-gated: the reviewer records
+     shortlist/interview; the approver records offer/not-selected, and only
+     after a separate reviewer decision has advanced the status. */
+  const availableActions = ACTIONS_BY_STATUS[record.status].filter((kind) => {
+    if (kind === "shortlist" || kind === "interview") return canReview;
+    return canApprove && (record.status === "Shortlisted" || record.status === "Interview");
+  });
+  const withdrawn = record.status === "Withdrawn";
+
+  /* Load the eligible HR reviewer directory for the approver's assignment
+     control. A failed or unauthorized read keeps the control honest with the
+     empty state below. */
+  useEffect(() => {
+    if (!canApprove) return;
+    let cancelled = false;
+    usersService
+      .listUsers()
+      .then((rows) => {
+        if (cancelled) return;
+        setReviewers(
+          rows
+            .filter((row) => row.accountId !== "" && row.status === "Active" && row.grants.some((grant) => grant.role === "hr_reviewer"))
+            .map((row) => ({ accountId: row.accountId, name: row.name })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setReviewers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canApprove]);
 
   return (
     <div className={styles.page}>
@@ -614,6 +905,12 @@ export function JobReview({
                 <dt>Submitted</dt>
                 <dd className="num">{formatKolkata(record.submittedAtIso, { format: "day" })}</dd>
               </div>
+              {contactDetailRows(record).map((row) => (
+                <div className={styles.detailRow} key={row.label}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))}
               {record.interview ? (
                 <div className={styles.detailRow}>
                   <dt>Interview slot</dt>
@@ -631,36 +928,120 @@ export function JobReview({
             </dl>
           </section>
 
+          <section className={`panel ${styles.panel}`} aria-labelledby="interview-panel-heading">
+            <div className="pn-head">
+              <div>
+                <h2 id="interview-panel-heading">Interview and panel</h2>
+                <p className="sub">Schedule and reviewer from the loaded record</p>
+              </div>
+            </div>
+            <div className="pn-body">
+              <div className="facts-ledger" aria-label="Interview and panel">
+                <div className="fl-row">
+                  <span className="k">Panel member</span>
+                  <span className="v">{reviewer ?? "No reviewer assigned yet"}</span>
+                </div>
+                <div className="fl-row">
+                  <span className="k">Interview schedule</span>
+                  <span className="v num">{record.interview ? formatKolkata(record.interview.atIso, { format: "full" }) : "Not scheduled"}</span>
+                </div>
+                <div className="fl-row">
+                  <span className="k">Panel note</span>
+                  <span className="v">{record.interview?.note ?? "No panel note recorded"}</span>
+                </div>
+              </div>
+              <div className="callout" style={{ marginTop: 14 }}>
+                <span className="msym" aria-hidden="true" style={{ fontSize: 20 }}>
+                  info
+                </span>
+                <span className="small">Requesting an interview from the decision below attaches the slot through the existing service. Outcome is omitted because the record carries no outcome field. The timeline records the result.</span>
+              </div>
+              {canApprove && !withdrawn ? (
+                <div className={styles.assignRow} style={{ marginTop: 14 }}>
+                  <label htmlFor="job-reviewer">Assign reviewer</label>
+                  <select
+                    id="job-reviewer"
+                    className="select"
+                    value={reviewerChoice}
+                    onChange={(event) => { setReviewerChoice(event.target.value); setAssignError(null); }}
+                    disabled={assigning}
+                  >
+                    <option value="">Choose an HR reviewer…</option>
+                    {reviewers.map((candidate) => (
+                      <option key={candidate.accountId} value={candidate.accountId}>
+                        {candidate.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button variant="quiet" disabled={assigning || reviewerChoice === ""} onClick={() => void handleAssignReviewer()}>
+                    {assigning ? "Assigning…" : "Assign reviewer"}
+                  </Button>
+                  {assignError ? <p className="field-error" role="alert">{assignError}</p> : null}
+                  {reviewers.length === 0 ? (
+                    <p className="field-help">No active staff account currently holds the HR reviewer role.</p>
+                  ) : (
+                    <p className="field-help">The assigned reviewer scores the application and records the shortlist before the final decision.</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </section>
+
           <section className={`panel ${styles.panel}`} aria-labelledby="documents-heading">
             <h2 id="documents-heading" className="section-label">
               Documents
             </h2>
-            <dl className={styles.detailList}>
-              {DOCUMENTS.map((label) => (
-                <div className={`${styles.detailRow} ${styles.documentRow}`} key={label}>
-                  <dt>{label}</dt>
-                  <dd>
-                    <span className={styles.fileName}>{files[label]}</span>
-                    <button
-                      type="button"
-                      className={`button button--quiet ${styles.documentButton}`}
-                      onClick={(event) =>
-                        openDocument(
-                          {
-                            title: label,
-                            fileName: files[label],
-                            ...DOCUMENT_METADATA[label],
-                          },
-                          event.currentTarget,
-                        )
-                      }
-                    >
-                      Preview (demo)
-                    </button>
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            {supabaseMode ? (
+              attachedDocuments.length === 0 ? (
+                <p className={styles.panelNote}>No documents are attached to this application.</p>
+              ) : (
+                <dl className={styles.detailList}>
+                  {attachedDocuments.map((document) => (
+                    <div className={`${styles.detailRow} ${styles.documentRow}`} key={`${document.label}-${document.reference}`}>
+                      <dt>{document.label}</dt>
+                      <dd>
+                        <span className={styles.fileName}>{document.filename ?? document.reference}</span>
+                        <a
+                          className={`button button--small button--quiet ${styles.documentButton}`}
+                          href={`/api/documents/${encodeURIComponent(document.reference)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open file
+                        </a>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )
+            ) : (
+              <dl className={styles.detailList}>
+                {DOCUMENTS.map((label) => (
+                  <div className={`${styles.detailRow} ${styles.documentRow}`} key={label}>
+                    <dt>{label}</dt>
+                    <dd>
+                      <span className={styles.fileName}>{files[label]}</span>
+                      <button
+                        type="button"
+                        className={`button button--quiet ${styles.documentButton}`}
+                        onClick={(event) =>
+                          openDocument(
+                            {
+                              title: label,
+                              fileName: files[label],
+                              ...DOCUMENT_METADATA[label],
+                            },
+                            event.currentTarget,
+                          )
+                        }
+                      >
+                        Preview (demo)
+                      </button>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
           </section>
         </div>
 
@@ -696,7 +1077,7 @@ export function JobReview({
                   record.scorecards.map((card, index) => (
                     <div className={styles.scoreRow} key={`${card.atIso}-${index}`}>
                       <span className={styles.scoreLabel}>
-                        Score {index + 1}
+                        Scorecard {index + 1}
                         {card.notes ? <small className={styles.cellNote}>{card.notes}</small> : null}
                       </span>
                       <span className={`num ${styles.scoreValue}`}>{card.score} / 5</span>
@@ -721,7 +1102,7 @@ export function JobReview({
                   </div>
                 </>
               )}
-              <p className={styles.panelNote}>Scorecards are visible to reviewers only — the service enforces the grant.</p>
+              <p className={styles.panelNote}>Scorecards are visible to reviewers only · the service enforces the grant.</p>
               <div className={styles.scorecardForm}>
                 <div className={styles.scoreField}>
                   <label htmlFor="job-score">Score (1–5)</label>
@@ -758,7 +1139,7 @@ export function JobReview({
                 Scorecard
               </h2>
               <p className={styles.readOnlyNote}>
-                Scorecard review requires the HR reviewer workspace — the service enforces the grant.
+                Scorecard review requires the HR reviewer workspace · the service enforces the grant.
               </p>
             </section>
           )}
@@ -769,46 +1150,12 @@ export function JobReview({
             </h2>
             {withdrawn ? (
               <p className={styles.readOnlyNote}>
-                This application was withdrawn by the applicant — no further decisions can be recorded.
+                This application was withdrawn by the applicant · no further decisions can be recorded.
               </p>
             ) : (
               <>
                 {draft ? (
                   <div className={styles.decisionBox}>
-                    {confirming ? (
-                      <div ref={summaryRef} tabIndex={-1} role="group" aria-label={`Confirm ${DECISIONS[draft].label}`}>
-                        <p className={styles.decisionTitle}>{DECISIONS[draft].confirmTitle}</p>
-                        <p className={styles.decisionText}>{DECISIONS[draft].confirmText}</p>
-                        <dl className={styles.summaryList}>
-                          <div className={styles.summaryRow}>
-                            <dt>Decision</dt>
-                            <dd>{DECISIONS[draft].result}</dd>
-                          </div>
-                          <div className={styles.summaryRow}>
-                            <dt>Note</dt>
-                            <dd>{note.trim() || "Standard note recorded by the service"}</dd>
-                          </div>
-                        </dl>
-                        <div className={styles.actions}>
-                          <Button variant="primary" disabled={processing} onClick={() => void handleDecision(draft)}>
-                            {processing ? "Recording…" : "Confirm"}
-                          </Button>
-                          <Button variant="quiet" disabled={processing} onClick={cancelDecision}>
-                            Cancel
-                          </Button>
-                        </div>
-                        {actionError ? (
-                          <div className={styles.actionErrorBlock}>
-                            <p className="field-error" role="alert">
-                              {actionError}
-                            </p>
-                            <Button variant="quiet" disabled={processing} onClick={() => void handleDecision(draft)}>
-                              Try again
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : (
                       <form className={styles.decisionForm} onSubmit={handleContinue} noValidate>
                         <div className={`field ${noteError ? "field--invalid" : ""}`}>
                           <label htmlFor="decision-note">{DECISIONS[draft].noteLabel}</label>
@@ -846,32 +1193,54 @@ export function JobReview({
                           </Button>
                         </div>
                       </form>
-                    )}
+                    {confirming ? (
+                      <DecisionConfirmDialog
+                        applicationRef={record.ref}
+                        candidateName={record.name}
+                        vacancyTitle={vacancyTitle}
+                        actionLabel={DECISIONS[draft].label}
+                        currentStatus={record.status}
+                        targetStatus={DECISIONS[draft].result}
+                        consequences={DECISIONS[draft].confirmText}
+                        note={note.trim() || "Standard note recorded by the service"}
+                        demoMode={!supabaseMode}
+                        processing={processing}
+                        error={actionError}
+                        trigger={confirmTriggerRef.current}
+                        onClose={cancelConfirmOnly}
+                        onConfirm={() => void handleDecision(draft)}
+                      />
+                    ) : null}
                   </div>
-                ) : canApprove ? (
+                ) : canDecide ? (
                   <>
                     <div className={styles.actions} ref={actionsRef} tabIndex={-1}>
-                      {(Object.keys(DECISIONS) as DecisionKind[]).map((kind) => {
-                        const meta = DECISIONS[kind];
-                        const allowed = availableActions.includes(kind);
-                        const variant =
-                          kind === "not-selected" ? "danger" : kind === "offer" || kind === "shortlist" ? "primary" : "quiet";
-                        return (
-                          <Button
-                            key={kind}
-                            variant={variant}
-                            disabled={!allowed}
-                            onClick={() => openDecision(kind)}
-                          >
-                            {meta.label}
-                          </Button>
-                        );
-                      })}
+                      {(Object.keys(DECISIONS) as DecisionKind[])
+                        .filter((kind) => (kind === "shortlist" || kind === "interview" ? canReview : canApprove))
+                        .map((kind) => {
+                          const meta = DECISIONS[kind];
+                          const allowed = availableActions.includes(kind);
+                          const variant =
+                            kind === "not-selected" ? "danger" : kind === "offer" || kind === "shortlist" ? "primary" : "quiet";
+                          return (
+                            <Button
+                              key={kind}
+                              variant={variant}
+                              disabled={!allowed}
+                              onClick={() => openDecision(kind)}
+                            >
+                              {meta.label}
+                            </Button>
+                          );
+                        })}
                     </div>
                     {availableActions.length === 0 ? (
                       <p className={styles.readOnlyNote}>
-                        This application is closed ({record.status.toLowerCase()}) — no further decisions can be
-                        recorded.
+                        {TERMINAL_STATUSES.has(record.status)
+                          ? `This application is closed (${record.status.toLowerCase()}) · no further decisions can be recorded.`
+                          : canReview
+                            ? "No reviewer decision is available at this stage."
+                            : "A separate HR reviewer decision is required before the final outcome can be recorded."}
                       </p>
                     ) : (
                       <p className={styles.panelNote}>
@@ -886,7 +1255,7 @@ export function JobReview({
                 ) : (
                   <>
                     <p className={styles.readOnlyNote}>
-                      Advance, reject, and offer decisions require the HR approver workspace — the service enforces
+                      Advance, reject, and offer decisions require the HR approver workspace · the service enforces
                       the grant.
                     </p>
                     <p className={styles.liveLine} aria-live="polite">

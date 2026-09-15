@@ -35,8 +35,10 @@ const JOB_TONE: Record<JobApplicationStatus, StatusTone> = {
 };
 
 /** Two ruled queue panels on the staff home: admissions and careers, shown
-    only for roles whose workspace can act on them (I4). */
-export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRecord[]; jobs: JobApplicationRecord[] }) {
+    only for roles whose workspace can act on them (I4). While the first
+    projection is in flight the panels state that loading — an empty list is
+    never rendered as "no applications". */
+export function DashboardQueues({ admissions, jobs, loading = false }: { admissions: StaffQueueRecord[]; jobs: JobApplicationRecord[]; loading?: boolean }) {
   const { summary } = useStaffContext();
   const profileCode = summary?.profileCode ?? null;
   /* Aggregate authorization: profile accounts check every active grant. */
@@ -61,9 +63,12 @@ export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRe
           <h2 id="adm-queue-heading" className="section-label">
             Admissions queue
           </h2>
-          <span className={`num ${styles.count}`}>{admissions.length} queued</span>
+          <span className={`num ${styles.count}`}>{loading ? "Loading…" : `${admissions.length} queued`}</span>
         </div>
-        <ul className={styles.list}>
+        {loading ? (
+          <p className={styles.asOf} role="status">Loading applications…</p>
+        ) : (
+          <ul className={styles.list}>
           {visibleAdmissions.map((row) => (
             <li key={row.ref} className={styles.row}>
               <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/admissions/${row.ref}`)}>
@@ -77,6 +82,7 @@ export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRe
             </li>
           ))}
         </ul>
+        )}
         <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/admissions")}>
           View all applications →
         </Link>
@@ -89,9 +95,13 @@ export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRe
           <h2 id="job-queue-heading" className="section-label">
             Careers queue
           </h2>
-          <span className={`num ${styles.count}`}>{jobsOpen} open</span>
+          <span className={`num ${styles.count}`}>{loading ? "Loading…" : `${jobsOpen} open`}</span>
         </div>
-        <ul className={styles.list}>
+        {loading ? (
+          <p className={styles.asOf} role="status">Loading applications…</p>
+        ) : (
+          <>
+          <ul className={styles.list}>
           {visibleJobs.map((row) => (
             <li key={row.ref} className={styles.row}>
               <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/careers/${row.ref}`)}>
@@ -106,6 +116,8 @@ export function DashboardQueues({ admissions, jobs }: { admissions: StaffQueueRe
           ))}
         </ul>
         <p className={styles.asOf}>{jobs[0]?.submittedAtIso ? `submitted ${formatKolkata(jobs[0].submittedAtIso, { format: "day" })} onwards` : "No career applications in this scope."}</p>
+        </>
+        )}
         <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, "/careers")}>
           View all applications →
         </Link>

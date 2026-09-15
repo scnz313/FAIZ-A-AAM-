@@ -25,7 +25,7 @@ type PreviewDocument = {
 };
 
 const FILE_STATES: ReadonlyArray<{ value: DemoFileState; label: string }> = [
-  { value: "demo-preview", label: "Demo preview — metadata only" },
+  { value: "demo-preview", label: "Demo preview · metadata only" },
   { value: "missing", label: "Missing file" },
   { value: "access-denied", label: "Access denied" },
 ];
@@ -46,9 +46,9 @@ const STATE_COPY: Record<DemoFileState, { title: string; description: string }> 
 };
 
 const DOWNLOAD_COPY: Record<DemoFileState, string> = {
-  "demo-preview": "Demo file not provided — this preview contains metadata only, so no download started.",
-  missing: "Demo file not provided — this record has no attached file. Ask the school office to upload it.",
-  "access-denied": "Demo download blocked — access denied. No private file was requested or exposed.",
+  "demo-preview": "Demo file not provided · this preview contains metadata only, so no download started.",
+  missing: "Demo file not provided · this record has no attached file. Ask the school office to upload it.",
+  "access-denied": "Demo download blocked · access denied. No private file was requested or exposed.",
 };
 
 function DocumentPreviewDialog({
@@ -145,7 +145,7 @@ function DocumentPreviewDialog({
               </option>
             ))}
           </select>
-          <p className="field-help">State selector for review only — it does not call a storage or authorization service.</p>
+          <p className="field-help">State selector for review only · it does not call a storage or authorization service.</p>
         </div>
 
         <section
@@ -201,7 +201,7 @@ export default function DocumentsPage() {
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const { context, activeStudent } = useFamilyContext();
+  const { context, activeStudent, status: contextStatus, errorMessage: contextError, retry: retryContext } = useFamilyContext();
   const supabaseMode = clientAdapterMode() === "supabase";
   const childName = activeStudent ? activeStudent.student.displayName : "the linked student";
 
@@ -235,14 +235,28 @@ export default function DocumentsPage() {
 
   return (
     <div className={styles.page}>
-      <header>
-        <p className="eyebrow">Portal · Documents</p>
-        <h1 className={styles.title}>Documents</h1>
-        <p className={styles.intro}>Reports, receipts, and records for the linked child.</p>
-        <ActiveChildLine />
-      </header>
+      {/* V14 PageHead */}
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Documents</h1>
+          <p className="ph-sub">
+            Report cards, receipts, certificates and school records for {childName}. Private documents are scanned before they appear.
+          </p>
+          <ActiveChildLine />
+        </div>
+      </div>
 
-      {bundleError ? (
+      {contextStatus === "error" ? (
+        <div className="workspace-state" role="alert">
+          <p className="workspace-state-title">Documents unavailable</p>
+          <p className="workspace-state-note">
+            The active child could not be resolved{contextError ? ` · ${contextError}` : "."}
+          </p>
+          <button type="button" className="button button--quiet" onClick={retryContext}>
+            Try again
+          </button>
+        </div>
+      ) : bundleError ? (
         <div className="workspace-state" role="alert">
           <p className="workspace-state-title">Documents unavailable</p>
           <p className="workspace-state-note">{bundleError}</p>
@@ -273,144 +287,211 @@ export default function DocumentsPage() {
             </section>
           ) : null}
 
-          <section aria-labelledby="report-cards-heading">
-            <h2 id="report-cards-heading" className={styles.groupTitle}>
-              Report cards
-            </h2>
-            <div className={styles.rows}>
-              {bundle.reportCards.map((term) => {
-                const available = term.publicationStatus !== "not-published";
-                const document = reportCardDocument(term);
-                return (
-                  <div key={term.termId} className={styles.row}>
-                    <div>
-                      <strong>{term.termLabel} report card</strong>
-                      <small>
-                        {available
-                          ? `${term.publicationStatus === "final" ? "Final" : "Provisional"} report${
-                              term.publishedAtIso ? ` · published ${formatKolkata(term.publishedAtIso, { format: "day" })}` : ""
-                            }`
-                          : "Not yet published"}
-                      </small>
-                    </div>
-                    {available ? (
-                      <span className={styles.rowRight}>
-                        <Link prefetch={false} className="link-arrow" href={`/portal/results?term=${term.termId}`}>
-                          View results →
-                        </Link>
-                        {!supabaseMode ? (
-                          <button
-                            type="button"
-                            className={`button button--quiet button--small ${styles.documentButton}`}
-                            onClick={(event) => openPreview(document, event.currentTarget)}
-                          >
-                            Preview (demo)
-                          </button>
-                        ) : null}
-                      </span>
-                    ) : (
-                      <span className={styles.muted}>—</span>
-                    )}
-                  </div>
-                );
-              })}
+          {/* V14 Panel with flush ledger table for report cards */}
+          <section className="panel">
+            <div className="pn-head"><h2>Report cards</h2></div>
+            <div className="pn-body flush">
+              {bundle.reportCards.length === 0 ? (
+                <div className="pn-body">
+                  <p className="muted small">
+                    No report cards yet. Published term reports appear here once the school releases them for {childName}.
+                  </p>
+                  <Link prefetch={false} className="btn btn-ghost btn-sm" href="/portal/results">
+                    Open results
+                  </Link>
+                </div>
+              ) : (
+              <div className="table-wrap">
+                <table className="ledger">
+                  <thead>
+                    <tr>
+                      <th>Document</th>
+                      <th>Kind</th>
+                      <th>Added</th>
+                      <th>State</th>
+                      <th><span className="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bundle.reportCards.map((term) => {
+                      const available = term.publicationStatus !== "not-published";
+                      const document = reportCardDocument(term);
+                      return (
+                        <tr key={term.termId}>
+                          <td className="strong">
+                            <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                              <span className="msym" style={{ fontSize: 20, color: "var(--muted)" }}>description</span>
+                              {term.termLabel} report card
+                            </span>
+                          </td>
+                          <td className="small muted">Report card</td>
+                          <td className="num small">
+                            {term.publishedAtIso ? formatKolkata(term.publishedAtIso, { format: "day" }) : "—"}
+                          </td>
+                          <td>
+                            {available ? (
+                              <span className="status-badge status-badge--good">
+                                <span className="status-dot status-dot--good" aria-hidden="true" />
+                                {term.publicationStatus === "final"
+                                  ? (supabaseMode ? "Published" : "Ready")
+                                  : "Provisional"}
+                              </span>
+                            ) : (
+                              <span className="status-badge status-badge--neutral">
+                                <span className="status-dot status-dot--neutral" aria-hidden="true" />
+                                Not published
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {available ? (
+                              <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                                <Link prefetch={false} className="btn btn-ghost btn-sm" href={`/portal/results?term=${term.termId}`}>
+                                  <span className="msym" style={{ fontSize: 16 }}>visibility</span> View
+                                </Link>
+                                {!supabaseMode ? (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={(event) => openPreview(document, event.currentTarget)}
+                                  >
+                                    <span className="msym" style={{ fontSize: 16 }}>download</span> PDF
+                                  </button>
+                                ) : null}
+                              </span>
+                            ) : (
+                              <span className="tiny muted">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              )}
             </div>
           </section>
 
-          <section aria-labelledby="receipts-heading">
-            <h2 id="receipts-heading" className={styles.groupTitle}>
-              Receipts
-            </h2>
-            {bundle.receipts.length === 0 ? (
-              <div className="workspace-state">
-                <p className="workspace-state-title">No receipts yet</p>
-                <p className="workspace-state-note">
-                  Numbered receipts appear here after a payment is recorded for {childName}.
-                </p>
-                <Link prefetch={false} className="link-arrow" href="/portal/fees">
-                  Go to the fee ledger →
-                </Link>
-              </div>
-            ) : (
-              <div className={styles.rows}>
-              {bundle.receipts.map((receipt) => {
-                const document: PreviewDocument = {
-                  id: `receipt-${receipt.ref}`,
-                  title: `Receipt ${receipt.ref}`,
-                  fileName: `${receipt.ref}.receipt.demo.pdf`,
-                  format: "PDF-like metadata preview",
-                  size: "Not provided",
-                  updated: formatKolkata(receipt.issuedAtIso, { format: "day" }),
-                  description: "A fictional fee receipt preview. The demo does not contain a downloadable receipt file.",
-                };
-                return (
-                  <div key={receipt.ref} className={styles.row}>
-                    <div>
-                      <strong>{receipt.ref}</strong>
-                      <small>
-                        {formatKolkata(receipt.issuedAtIso, { format: "day" })} · {receipt.method} · {receipt.invoiceRef}
-                      </small>
-                    </div>
-                    <span className={styles.rowRight}>
-                      <span className={`num ${styles.amount}`}>{formatINR(receipt.amountPaise)}</span>
-                      <Link prefetch={false} className="link-arrow" href={`/portal/receipts/${receipt.ref}`}>
-                        View receipt →
-                      </Link>
-                      {!supabaseMode ? (
-                        <button
-                          type="button"
-                          className={`button button--quiet button--small ${styles.documentButton}`}
-                          onClick={(event) => openPreview(document, event.currentTarget)}
-                        >
-                          Preview (demo)
-                        </button>
-                      ) : null}
-                    </span>
-                  </div>
-                );
-              })}
-              </div>
-            )}
+          {/* V14 Panel with flush ledger table for receipts */}
+          <section className="panel">
+            <div className="pn-head"><h2>Receipts</h2></div>
+            <div className="pn-body flush">
+              {bundle.receipts.length === 0 ? (
+                <div className="pn-body">
+                  <p className="muted small">No receipts yet. Numbered receipts appear here after a payment is recorded for {childName}.</p>
+                  <Link prefetch={false} className="btn btn-ghost btn-sm" href="/portal/fees">
+                    Go to the fee ledger
+                  </Link>
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="ledger">
+                    <thead>
+                      <tr>
+                        <th>Document</th>
+                        <th>Kind</th>
+                        <th>Added</th>
+                        <th>State</th>
+                        <th><span className="sr-only">Actions</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bundle.receipts.map((receipt) => {
+                        const document: PreviewDocument = {
+                          id: `receipt-${receipt.ref}`,
+                          title: `Receipt ${receipt.ref}`,
+                          fileName: `${receipt.ref}.receipt.demo.pdf`,
+                          format: "PDF-like metadata preview",
+                          size: "Not provided",
+                          updated: formatKolkata(receipt.issuedAtIso, { format: "day" }),
+                          description: "A fictional fee receipt preview. The demo does not contain a downloadable receipt file.",
+                        };
+                        return (
+                          <tr key={receipt.ref}>
+                            <td className="strong">
+                              <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                <span className="msym" style={{ fontSize: 20, color: "var(--muted)" }}>receipt_long</span>
+                                {receipt.ref}
+                              </span>
+                            </td>
+                            <td className="small muted">Receipt · {receipt.method}</td>
+                            <td className="num small">{formatKolkata(receipt.issuedAtIso, { format: "day" })}</td>
+                            <td>
+                              <span className="status-badge status-badge--good">
+                                <span className="status-dot status-dot--good" aria-hidden="true" />
+                                Ready
+                              </span>
+                            </td>
+                            <td style={{ textAlign: "right" }}>
+                              <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                                <Link prefetch={false} className="btn btn-ghost btn-sm" href={`/portal/receipts/${receipt.ref}`}>
+                                  <span className="msym" style={{ fontSize: 16 }}>visibility</span> View
+                                </Link>
+                                {!supabaseMode ? (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={(event) => openPreview(document, event.currentTarget)}
+                                  >
+                                    <span className="msym" style={{ fontSize: 16 }}>download</span> PDF
+                                  </button>
+                                ) : null}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </section>
 
-          <section aria-labelledby="certificates-heading">
-            <h2 id="certificates-heading" className={styles.groupTitle}>
-              Certificates
-            </h2>
-            <div className="workspace-state">
-              <p className="workspace-state-title">No certificates yet</p>
-              <p className="workspace-state-note">
-                Certificates requested through the school office appear here.
+          {/* V14 Panel for certificates */}
+          <section className="panel">
+            <div className="pn-head"><h2>Certificates</h2></div>
+            <div className="pn-body">
+              <p className="muted small">No certificates yet. Certificates requested through the school office appear here.</p>
+            </div>
+          </section>
+
+          {/* Panel for school record references */}
+          <section className="panel">
+            <div className="pn-head"><h2>School records</h2></div>
+            <div className="pn-body">
+              <div className="facts-ledger" aria-label="School record references">
+                <div className="fl-row">
+                  <span className="k">Student reference</span>
+                  <span className="v num">{bundle.studentRef}</span>
+                </div>
+                <div className="fl-row">
+                  <span className="k">Enrolment reference</span>
+                  <span className="v num">{bundle.enrollmentRef}</span>
+                </div>
+              </div>
+              <p className="muted small" style={{ marginTop: 10 }}>
+                References identify the school record. Issued certificates and generated documents appear in the
+                register above once the school publishes them.
               </p>
             </div>
           </section>
 
-          <section aria-labelledby="admission-heading">
-            <h2 id="admission-heading" className={styles.groupTitle}>
-              School records
-            </h2>
-            <div className={styles.rows}>
-              <div className={styles.row}>
-                <div>
-                  <strong>Student reference</strong>
-                  <small>School-held student reference for the linked child.</small>
-                </div>
-                <span className={`num ${styles.ref}`}>{bundle.studentRef}</span>
-              </div>
-              <div className={styles.row}>
-                <div>
-                  <strong>Enrollment reference</strong>
-                  <small>Current enrollment in {bundle.gradeSectionLabel}.</small>
-                </div>
-                <span className={`num ${styles.ref}`}>{bundle.enrollmentRef}</span>
-              </div>
+          {/* V14 callout for quarantined files */}
+          <div style={{ marginTop: 18 }}>
+            <div className="callout" style={{ borderColor: "var(--madder-line)" }}>
+              <span className="msym" style={{ fontSize: 20, flex: "none", marginTop: 1, color: "var(--madder-ink)" }}>gpp_maybe</span>
+              <span className="small">
+                <strong>Quarantined files are never processed.</strong> If a document you uploaded fails the safety scan, it is held and the office contacts you. Nothing unreadable ever reaches a student record.
+              </span>
             </div>
-          </section>
+          </div>
 
           {!supabaseMode ? (
             <p className={styles.demoNote}>
               <span className="demo-badge">Demo data</span>
-              <span>Fictional documents for {childName} — previews show metadata only; no private file or real download is available.</span>
+              <span>Fictional documents for {childName} · previews show metadata only; no private file or real download is available.</span>
             </p>
           ) : null}
         </>

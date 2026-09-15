@@ -15,8 +15,8 @@
 
 .actionNote {
   margin: 0;
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.5;
 }
 
@@ -34,8 +34,8 @@
   display: grid;
   gap: 8px;
   padding: 12px 14px;
-  border: 1px solid var(--brick);
-  border-radius: var(--radius);
+  border: 1px solid var(--madder);
+  border-radius: var(--r);
   background: rgba(162, 59, 46, 0.06);
 }
 
@@ -49,8 +49,8 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.5;
 }
 
@@ -58,7 +58,7 @@
 .success {
   padding: 16px 18px;
   border: 1px solid var(--willow);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: rgba(83, 109, 87, 0.08);
   outline: none;
 }
@@ -75,7 +75,7 @@
   gap: 10px;
   margin: 0;
   font-family: var(--serif);
-  font-size: 17px;
+  font-size: 1.05rem;
   line-height: 1.5;
 }
 
@@ -91,8 +91,8 @@
 
 .staffNote {
   margin: 10px 0 0;
-  color: var(--ink-faint);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.55;
 }
 
@@ -119,7 +119,7 @@
 }
 
 .devAccountButton small {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 400;
 }

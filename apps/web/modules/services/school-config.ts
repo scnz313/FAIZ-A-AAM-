@@ -185,6 +185,8 @@ export interface SchoolConfigService {
   getAdmissionConfiguration(academicYearId?: string): Promise<AdmissionConfiguration>;
 }
 
+const demoAdmissionYear = demoAcademicYears.find((year) => year.status === "current") ?? demoAcademicYears[0];
+
 export const DEMO_ADMISSION_CONFIGURATION: AdmissionConfiguration = {
   academicYears: clone(demoAcademicYears),
   grades: [6, 7, 8, 9, 10].map((code) => ({
@@ -197,7 +199,7 @@ export const DEMO_ADMISSION_CONFIGURATION: AdmissionConfiguration = {
   windows: [6, 7, 8, 9, 10].map((code) => ({
     id: `demo-window-${code}`,
     ref: `ADMW-DEMO-${code}`,
-    academicYearId: demoAcademicYears[0]?.id ?? "demo-year",
+    academicYearId: demoAdmissionYear?.id ?? "demo-year",
     gradeId: `00000000-0000-4000-8000-0000000007${String(code).padStart(2, "0")}`,
     opensAtIso: "2026-08-01T00:00:00+05:30",
     closesAtIso: "2026-10-31T23:59:59+05:30",
@@ -207,12 +209,14 @@ export const DEMO_ADMISSION_CONFIGURATION: AdmissionConfiguration = {
     policy: { demo: true },
     eligibilityPolicy: {},
   })),
-  documentRequirements: [
-    { id: "demo-adreq-birth", ref: "ADREQ-DEMO-BIRTH", windowId: "demo-window-all", code: "birth", label: "Birth certificate", required: true, allowedMimeTypes: ["application/pdf", "image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, status: "active", version: 1 },
-    { id: "demo-adreq-photo", ref: "ADREQ-DEMO-PHOTO", windowId: "demo-window-all", code: "photo", label: "Student photograph", required: true, allowedMimeTypes: ["image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, status: "active", version: 1 },
-    { id: "demo-adreq-report", ref: "ADREQ-DEMO-REPORT", windowId: "demo-window-all", code: "reportCard", label: "Previous report card", required: true, allowedMimeTypes: ["application/pdf", "image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, status: "active", version: 1 },
-    { id: "demo-adreq-address", ref: "ADREQ-DEMO-ADDRESS", windowId: "demo-window-all", code: "addressProof", label: "Address proof", required: true, allowedMimeTypes: ["application/pdf", "image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, status: "active", version: 1 },
-  ],
+  /* Requirements are configured per window, mirroring the live schema; the
+     form scopes the document step to the window for the chosen class. */
+  documentRequirements: [6, 7, 8, 9, 10].flatMap((code) => [
+    { id: `demo-adreq-${code}-birth`, ref: `ADREQ-DEMO-${code}-BIRTH`, windowId: `demo-window-${code}`, code: "birth", label: "Birth certificate", required: true, allowedMimeTypes: ["application/pdf", "image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, status: "active", version: 1 },
+    { id: `demo-adreq-${code}-photo`, ref: `ADREQ-DEMO-${code}-PHOTO`, windowId: `demo-window-${code}`, code: "photo", label: "Student photograph", required: true, allowedMimeTypes: ["image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, status: "active", version: 1 },
+    { id: `demo-adreq-${code}-report`, ref: `ADREQ-DEMO-${code}-REPORT`, windowId: `demo-window-${code}`, code: "reportCard", label: "Previous report card", required: true, allowedMimeTypes: ["application/pdf", "image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, status: "active", version: 1 },
+    { id: `demo-adreq-${code}-address`, ref: `ADREQ-DEMO-${code}-ADDRESS`, windowId: `demo-window-${code}`, code: "addressProof", label: "Address proof", required: true, allowedMimeTypes: ["application/pdf", "image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, status: "active", version: 1 },
+  ]),
   policy: { version: 1, status: "effective", values: { demo: true } },
 };
 

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import Button from "@/components/ui/Button";
+import { ErrorPanel } from "@/components/ui/AsyncStates";
 import { supportService } from "@/modules/services/support";
 import type { GrievanceCategory } from "@/modules/services/support";
 
@@ -37,6 +38,7 @@ export function GrievanceForm() {
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [ref, setRef] = useState<string | null>(null);
   const successRef = useRef<HTMLElement>(null);
 
@@ -47,23 +49,16 @@ export function GrievanceForm() {
   function validate(): FieldErrors {
     const next: FieldErrors = {};
     if (category === "") next.category = "Choose the category that fits your concern.";
-    if (subject.trim().length < 5) next.subject = "Enter a short subject — at least 5 characters.";
-    if (message.trim().length < 20) next.message = "Describe your concern — at least 20 characters.";
+    if (subject.trim().length < 5) next.subject = "Enter a short subject (at least 5 characters).";
+    if (message.trim().length < 20) next.message = "Describe your concern (at least 20 characters).";
     if (contactName.trim() === "") next.contactName = "Enter your name so the office can reach you.";
     if (!consent) next.consent = "Consent is required before the concern can be accepted.";
     return next;
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const next = validate();
-    setErrors(next);
-    const firstInvalid = FIELD_IDS.find((field) => next[field] !== undefined);
-    if (firstInvalid !== undefined) {
-      document.getElementById(fieldId(firstInvalid))?.focus();
-      return;
-    }
+  async function sendGrievance() {
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const { ref: newRef } = await supportService.submitGrievance({
         category: category as GrievanceCategory,
@@ -75,9 +70,25 @@ export function GrievanceForm() {
       setRef(newRef);
       /* Move keyboard and screen-reader focus to the success panel. */
       requestAnimationFrame(() => successRef.current?.focus());
+    } catch {
+      /* The draft stays in place; retry re-sends the same intent. The server
+         message is never repeated here: it may name internal storage. */
+      setSubmitError("The concern could not be sent. Nothing you wrote was lost.");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const next = validate();
+    setErrors(next);
+    const firstInvalid = FIELD_IDS.find((field) => next[field] !== undefined);
+    if (firstInvalid !== undefined) {
+      document.getElementById(fieldId(firstInvalid))?.focus();
+      return;
+    }
+    await sendGrievance();
   }
 
   function reset() {
@@ -88,6 +99,7 @@ export function GrievanceForm() {
     setContactPhone("");
     setConsent(false);
     setErrors({});
+    setSubmitError(null);
     setRef(null);
   }
 
@@ -101,7 +113,7 @@ export function GrievanceForm() {
         aria-live="polite"
       >
         <p className="section-label">Submitted</p>
-        <h2 className={styles.successTitle}>Concern received — reference {ref}</h2>
+        <h2 className={styles.successTitle}>Concern received · reference {ref}</h2>
         <p className={styles.successLine}>The school office responds on school days.</p>
         <p className={styles.successNote}>
           Keep this reference: once your family portal account is linked, the same reference can be
@@ -129,6 +141,17 @@ export function GrievanceForm() {
           <p className={styles.errorSummary} role="alert">
             Please correct the marked fields before submitting.
           </p>
+        )}
+
+        {submitError !== null && (
+          <ErrorPanel
+            title="The concern was not sent"
+            note={`${submitError} Try again, or call the school office on a working day.`}
+          >
+            <Button variant="quiet" type="button" onClick={() => void sendGrievance()} disabled={submitting}>
+              Try again
+            </Button>
+          </ErrorPanel>
         )}
 
         <div className={`field ${errors.category ? "field--invalid" : ""}`}>
@@ -221,7 +244,7 @@ export function GrievanceForm() {
           </div>
 
           <div className="field">
-            <label htmlFor={fieldId("contactPhone")}>Phone — optional</label>
+            <label htmlFor={fieldId("contactPhone")}>Phone (optional)</label>
             <input
               id={fieldId("contactPhone")}
               className="input"
@@ -264,7 +287,7 @@ export function GrievanceForm() {
 
       <p className={styles.demoNote}>
         <span className="demo-badge">Demo</span>
-        <span>Nothing is sent — this concern is stored in this browser session only.</span>
+        <span>Nothing is sent · this concern is stored in this browser session only.</span>
       </p>
     </div>
   );

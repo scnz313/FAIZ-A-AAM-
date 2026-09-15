@@ -4,17 +4,17 @@
   align-items: baseline;
   gap: 0.35em;
   margin: var(--space-2) 0 0;
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.6;
-  color: var(--ink-soft);
+  color: var(--muted);
 }
 
 .label {
-  font-size: 11px;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--ink-faint, var(--ink-soft));
+  color: var(--muted);
 }
 
 .line strong {
@@ -38,8 +38,8 @@
   margin-left: var(--space-2);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .line {
-    font-size: 13px;
+    font-size: 0.82rem;
   }
 }

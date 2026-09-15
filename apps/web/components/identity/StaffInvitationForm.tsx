@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 
 import Button from "@/components/ui/Button";
+import { DEFAULT_STAFF_PORTAL } from "@/lib/auth/portal-routes";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { usersService, type InviteAcceptanceResult } from "@/modules/services/users";
@@ -93,7 +94,7 @@ export default function StaffInvitationForm({ initialInvitationRef = "" }: { ini
             <dd className="num">{result.grantRef}</dd>
           </div>
         </dl>
-        <Link prefetch={false} className="button button--primary" href={demo ? "/sign-in" : "/sign-in/totp?next=%2Fstaff"}>
+        <Link prefetch={false} className="button button--primary" href={demo ? "/sign-in" : `/sign-in/totp?next=${encodeURIComponent(DEFAULT_STAFF_PORTAL)}`}>
           {demo ? "Continue to sign in" : "Set up two-step verification"}
         </Link>
       </section>

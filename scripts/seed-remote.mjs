@@ -31,6 +31,19 @@ if (!url || !secretKey) {
   process.exit(1);
 }
 
+/* Hard target guard: this script writes to a remote project. It must point at
+   the approved staging ref and the operator must have confirmed staging. */
+const PROJECT_REF = (url.match(/https:\/\/([a-z0-9]+)\.supabase\.co/) ?? [])[1];
+const APPROVED_STAGING_REF = "jxegiamjcawdywqyutdz";
+if (PROJECT_REF !== APPROVED_STAGING_REF || env.FASS_STAGING_CONFIRMED !== "true") {
+  console.error(
+    `Refusing to run: this script seeds a remote project.\n` +
+      `Expected project ${APPROVED_STAGING_REF} with FASS_STAGING_CONFIRMED=true ` +
+      `(got ${PROJECT_REF ?? "unknown"}, FASS_STAGING_CONFIRMED=${env.FASS_STAGING_CONFIRMED ?? "unset"}).`,
+  );
+  process.exit(1);
+}
+
 const admin = createClient(url, secretKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -38,23 +51,51 @@ const admin = createClient(url, secretKey, {
 /* --- seed data (must mirror supabase/seed.sql) -------------------------- */
 
 const ROLE_DEFINITIONS = [
-  ["guardian", "Guardian", "Family portal access through verified guardian/student links."],
-  ["student", "Student", "Own student records; disabled until the school approves the student-account policy."],
-  ["content_editor", "Content editor", "Drafts notices and public content (content.draft)."],
-  ["content_publisher", "Content publisher", "Reviews and publishes notices and content (content.publish)."],
-  ["admissions_officer", "Admissions officer", "Reviews applications and moves them to assessment (admissions.review)."],
-  ["admissions_approver", "Admissions approver", "Decides offers, waitlists, and declines (admissions.approve)."],
-  ["finance_officer", "Finance officer", "Finance operations and payment handling (finance.operate)."],
-  ["finance_approver", "Finance approver", "Approves refunds, write-offs, and reconciliation (finance.approve)."],
-  ["hr_reviewer", "HR reviewer", "Scores and reviews job applications (careers.review)."],
-  ["hr_approver", "HR approver", "Advances, rejects, and offers on job applications (careers.approve)."],
-  ["teacher", "Teacher", "Enters marks for assigned class/subject batches and views own timetable (results.enter)."],
-  ["exam_reviewer", "Exam reviewer", "Moderates and approves result batches (results.approve)."],
-  ["result_publisher", "Result publisher", "Publishes, corrects, and withdraws result publications (results.publish)."],
-  ["timetable_manager", "Timetable manager", "Creates, validates, publishes, and overrides timetables (timetable.manage)."],
-  ["support_officer", "Support officer", "Responds to support requests and verifies guardian links (support.respond, links.verify)."],
-  ["auditor", "Auditor", "Read-only audit and reconciliation projections (audit.view)."],
-  ["system_administrator", "System administrator", "Manages accounts, grants, and configuration — never business approvals (users.manage, settings.manage)."],
+  ["guardian", "Guardian", "Family portal access through verified guardian/student links.", true],
+  ["student", "Student", "Own student records; disabled — students are school records linked to guardians and do not sign in.", false],
+  ["content_editor", "Content editor", "Drafts notices and public content (content.draft).", true],
+  ["content_publisher", "Content publisher", "Reviews and publishes notices and content (content.publish).", true],
+  ["admissions_officer", "Admissions officer", "Reviews applications and moves them to assessment (admissions.review).", true],
+  ["admissions_approver", "Admissions approver", "Decides offers, waitlists, and declines (admissions.approve).", true],
+  ["finance_officer", "Finance officer", "Finance operations and payment handling (finance.operate).", true],
+  ["finance_approver", "Finance approver", "Approves refunds, write-offs, and reconciliation (finance.approve).", true],
+  ["hr_reviewer", "HR reviewer", "Scores and reviews job applications (careers.review).", true],
+  ["hr_approver", "HR approver", "Advances, rejects, and offers on job applications (careers.approve).", true],
+  ["teacher", "Teacher", "Legacy role — teachers are non-login school records. Retained for history/audit only; not assignable.", false],
+  ["result_entry_officer", "Result entry officer", "Enters and imports marks for result batches (results.enter). Principal profile.", true],
+  ["exam_reviewer", "Exam reviewer", "Moderates and approves result batches (results.approve). Administrator profile.", true],
+  ["result_publisher", "Result publisher", "Publishes, corrects, and withdraws result publications (results.publish). Administrator profile.", true],
+  ["timetable_manager", "Timetable manager", "Creates, validates, publishes, and overrides timetables (timetable.manage). Principal profile.", true],
+  ["support_officer", "Support officer", "Responds to support requests (support.respond). Principal profile.", true],
+  ["auditor", "Auditor", "Read-only audit and reconciliation projections (audit.view). Administrator profile.", true],
+  ["system_administrator", "System administrator", "Manages accounts, grants, and configuration — never business approvals (users.manage, settings.manage). Administrator profile.", true],
+];
+
+/* The canonical profile bundles are migration-inserted reference rows
+   (000042); a staging reset that truncates tables must reseed them too. */
+const STAFF_ACCESS_PROFILES = [
+  ["administrator", "Administrator",
+    "Manages accounts, configuration, import/export, audit, and guardian-access approval, and performs final admissions, finance, HR, content, and result decisions."],
+  ["principal", "Principal",
+    "Handles daily admissions, careers, finance operations, result entry/import, timetable management, content drafting, and support."],
+];
+
+const STAFF_ACCESS_PROFILE_ROLES = [
+  ["administrator", "system_administrator", 1],
+  ["administrator", "content_publisher", 2],
+  ["administrator", "admissions_approver", 3],
+  ["administrator", "finance_approver", 4],
+  ["administrator", "hr_approver", 5],
+  ["administrator", "exam_reviewer", 6],
+  ["administrator", "result_publisher", 7],
+  ["administrator", "auditor", 8],
+  ["principal", "content_editor", 1],
+  ["principal", "admissions_officer", 2],
+  ["principal", "finance_officer", 3],
+  ["principal", "hr_reviewer", 4],
+  ["principal", "result_entry_officer", 5],
+  ["principal", "timetable_manager", 6],
+  ["principal", "support_officer", 7],
 ];
 
 const ACADEMIC_YEARS = [
@@ -144,7 +185,9 @@ async function upsert(table, rows, onConflict) {
 
 console.log(`Seeding ${url} (synthetic data only)`);
 
-report("role_definitions", await upsert("role_definitions", ROLE_DEFINITIONS.map(([code, label, description]) => ({ code, label, description })), "code"));
+report("role_definitions", await upsert("role_definitions", ROLE_DEFINITIONS.map(([code, label, description, is_assignable]) => ({ code, label, description, is_assignable })), "code"));
+report("staff_access_profiles", await upsert("staff_access_profiles", STAFF_ACCESS_PROFILES.map(([code, label, description]) => ({ code, label, description, version: 1 })), "code"));
+report("staff_access_profile_roles", await upsert("staff_access_profile_roles", STAFF_ACCESS_PROFILE_ROLES.map(([profile_code, role_code, sort_order]) => ({ profile_code, role_code, sort_order })), "profile_code,role_code"));
 
 report("academic_years", await upsert("academic_years", ACADEMIC_YEARS, "label"));
 report("grades", await upsert("grades", GRADES.map(([code, label, sort_order]) => ({ code, label, sort_order })), "code"));
@@ -208,6 +251,35 @@ if (currentYearId) {
     status: "planned",
   }));
   report(`admission_windows (${windows.length})`, await upsert("admission_windows", windows, "academic_year_id,grade_id"));
+
+  /* Document requirements are configuration data, not fixture content: after
+     a reset they were missing entirely, so the applicant form had no file
+     inputs and no application document could ever attach. Reseed the four
+     synthetic requirements for every window (idempotent). */
+  const { data: windowRows, error: windowReadError } = await admin
+    .from("admission_windows")
+    .select("id")
+    .eq("academic_year_id", currentYearId);
+  report("resolve admission windows", windowReadError);
+  const REQUIREMENT_DEFINITIONS = [
+    ["birth", "Birth certificate", ["application/pdf", "image/jpeg", "image/png"]],
+    ["photo", "Student photograph", ["image/jpeg", "image/png"]],
+    ["reportCard", "Previous report card", ["application/pdf", "image/jpeg", "image/png"]],
+    ["addressProof", "Address proof", ["application/pdf", "image/jpeg", "image/png"]],
+  ];
+  const requirements = (windowRows ?? []).flatMap((window) =>
+    REQUIREMENT_DEFINITIONS.map(([code, label, allowedMimeTypes]) => ({
+      admission_window_id: window.id,
+      code,
+      label,
+      required: true,
+      allowed_mime_types: allowedMimeTypes,
+      max_bytes: 5 * 1024 * 1024,
+      status: "active",
+      version: 1,
+    })),
+  );
+  report(`admission_document_requirements (${requirements.length})`, await upsert("admission_document_requirements", requirements, "admission_window_id,code,version"));
 }
 
 /* --- B4: fee schedule draft (never effective until approved) -------------- */
@@ -283,7 +355,21 @@ if (currentYearId && sectionsRows.length > 0) {
         sort_order: 0,
       })),
     );
-  report(`assessment_components (${components.length})`, await upsert("assessment_components", components, "exam_definition_id,subject_id"));
+  /* 000028 replaced the compound unique constraint with a case-insensitive
+     expression index, which PostgREST cannot target with `onConflict`; read
+     the existing keys and insert only missing rows so re-runs stay
+     idempotent. */
+  const { data: existingComponents, error: componentReadError } = await admin
+    .from("assessment_components")
+    .select("exam_definition_id, subject_id, name");
+  const existingComponentKeys = new Set(
+    (existingComponents ?? []).map((c) => `${c.exam_definition_id}:${c.subject_id}:${c.name.toLowerCase()}`),
+  );
+  const missingComponents = components.filter(
+    (c) => !existingComponentKeys.has(`${c.exam_definition_id}:${c.subject_id}:${c.name.toLowerCase()}`),
+  );
+  const componentError = componentReadError ?? (missingComponents.length > 0 ? (await admin.from("assessment_components").insert(missingComponents)).error : null);
+  report(`assessment_components (${components.length})`, componentError);
 
   /* Draft timetable for 8-A (Monday only; drafts are never family-visible). */
   const sectionA = sectionsRows.find((s) => s.section_label === "A");
@@ -321,41 +407,8 @@ if (currentYearId && sectionsRows.length > 0) {
   }
 }
 
-/* --- B6: notices (published public + scheduled; pages come from the CMS) --- */
-report("content_items", await upsert("content_items", [
-  { kind: "notice", slug: "notice-admissions-2026-27", current_status: "published" },
-  { kind: "notice", slug: "notice-annual-day", current_status: "scheduled" },
-], "slug"));
-
-const { data: contentRows, error: contentError } = await admin.from("content_items").select("id,slug");
-report("resolve content items", contentError);
-const contentIdBySlug = Object.fromEntries((contentRows ?? []).map((c) => [c.slug, c.id]));
-report("notices", await upsert("notices", [
-  {
-    content_item_id: contentIdBySlug["notice-admissions-2026-27"],
-    category: "Admissions",
-    urgent: false,
-    status: "published",
-    published_at: "2026-08-01T09:00:00+05:30",
-    expires_at: "2026-12-31T23:59:59+05:30",
-  },
-  {
-    content_item_id: contentIdBySlug["notice-annual-day"],
-    category: "Events",
-    urgent: false,
-    status: "scheduled",
-  },
-], "content_item_id"));
-
-if (contentIdBySlug["notice-admissions-2026-27"]) {
-  const { data: noticeRows } = await admin.from("notices").select("id,content_item_id");
-  const notice = (noticeRows ?? []).find((n) => n.content_item_id === contentIdBySlug["notice-admissions-2026-27"]);
-  if (notice) {
-    report("notice_audiences", await upsert("notice_audiences", [
-      { notice_id: notice.id, audience: "public" },
-    ], "notice_id,audience,role_code,academic_year_id,grade_section_id,student_id"));
-  }
-}
+/* The CMS is seeded empty on purpose: notices and pages are school-authored
+   content, never fixture data. Seed structural configuration only. */
 
 /* --- verification -------------------------------------------------------- */
 
@@ -370,6 +423,7 @@ const checks = [
   ["settings_versions", "version", null],
   ["feature_flags", "code", null],
   ["admission_windows", "reference", null],
+  ["admission_document_requirements", "code", null],
   ["fee_schedule_versions", "version", null],
   ["fee_schedule_items", "code", null],
   ["grade_band_versions", "version", null],
@@ -377,9 +431,6 @@ const checks = [
   ["assessment_components", "name", null],
   ["timetable_versions", "reference", null],
   ["timetable_periods", "period_number", null],
-  ["content_items", "slug", null],
-  ["notices", "reference", null],
-  ["notice_audiences", "audience", null],
 ];
 console.log("\nVerification:");
 for (const [table, column] of checks) {

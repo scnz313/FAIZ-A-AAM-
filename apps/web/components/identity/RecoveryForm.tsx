@@ -76,7 +76,7 @@ export default function RecoveryForm({ adapter = clientAdapterMode() }: { adapte
             <p className={styles.demoCode}>
               <span className="demo-badge">Demo</span>
               <span>
-                Your reset code is <strong className="num">{result && "demoResetCode" in result ? result.demoResetCode : "—"}</strong> — a real backend sends it by
+                Your reset code is <strong className="num">{result && "demoResetCode" in result ? result.demoResetCode : "—"}</strong> · a real backend sends it by
                 SMS or email.
               </span>
             </p>
@@ -99,7 +99,7 @@ export default function RecoveryForm({ adapter = clientAdapterMode() }: { adapte
   return (
     <div>
       <p className="sr-only" role="status" aria-live="polite">
-        {error !== null ? "Recovery form has an error." : "Recovery form — phone or email."}
+        {error !== null ? "Recovery form has an error." : "Recovery form · phone or email."}
       </p>
 
       <form className={styles.form} onSubmit={handleSubmit} noValidate>

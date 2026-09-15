@@ -13,7 +13,7 @@ Supporting documents:
 - `plan.md` — active C0–C5 Supabase cutover order, gates, and provider handoff sequence.
 - `FEATURE-INTEGRATION-SPEC.md` — detailed user relationships, shared contexts, feature connections, synchronization, and integration tests.
 - `UI-COMPLETION-PLAN.md` — completed frontend reference and route-level acceptance evidence.
-- `design/UX-BLUEPRINT.md` — UI direction and component mapping.
+- `design/UX-BLUEPRINT.md` — **canonical V15 design system**: colour tokens, typography, component specifications (§12.1), responsive breakpoints (§16), screen catalog (§17), role/route matrix (§18), and implementation priority (§20). The design prototype is `V15 Faiz Aam School Platform.html` (repository root); `V14` remains as the historical reference.
 - `design/RESEARCH-NOTES.md` — research and primary implementation sources.
 
 ---
@@ -1380,15 +1380,22 @@ Before production, school leadership/legal/finance owners must validate:
 
 ## 11. Accessibility and UI implementation contract
 
-### 11.1 Visual direction
+### 11.1 Visual direction (V15 canonical)
 
-Follow `design/UX-BLUEPRINT.md`:
+Follow `design/UX-BLUEPRINT.md` and the V15 prototype (`V15 Faiz Aam School Platform.html`, repository root; V14 is retained as the historical reference). V15 keeps the V14 palette, typography, radii, and breakpoints while adding richer page composition, the five-column result queue (`q-head5`/`q-row5`), secondary evidence panels, and improved applicant-shell mobile behavior. **Copy V15 layout only — never its illustrative data, counts, actor names, or client-only authorization behavior.** Where V15's own responsive or accessibility behavior is weak, the application fixes beyond the prototype (owner decision, 8 September 2026):
 
-- UI-led institutional composition; school photography is optional, not required.
-- Ink, paper, saffron, willow, and chalk palette.
-- Editorial serif plus legible sans-serif.
-- Cardless sections, fine rules, clear tables, and restrained controls.
+- **Design tokens:** ink `#0B1C2A`, paper `#F4EFE5`, saffron `#B96832`, willow `#536D57`, chalk `#FFFDF8`, madder `#A33B2E`, plus soft/ink/line variants. See `UX-BLUEPRINT.md` §2 for the complete token table.
+- **Typography:** Source Serif 4 (editorial serif) + Public Sans (legible sans) + Noto Nastaliq Urdu (Urdu strings). Material Symbols Rounded for icons.
+- **Radii:** 4px (default), 3px (small controls), 999px (pills/status badges).
+- **Layout:** 1240px public wrap, 920px narrow, 1160px portal page, 250px sidebar.
+- UI-led institutional composition; school photography is optional, not required. Brand-derived SVG motifs only (eight-point star emblem, contour lines, stamp).
+- Cardless sections, fine rules, clear tables (ledger style), and restrained controls.
 - Public identity is expressive; operational UI is calm and task-oriented.
+- Paper texture: fixed noise overlay at 5% opacity, multiply blend.
+- Motion: restrained hero reveal (staggered `.d1`–`.d5`), drawer/modal/pop animations, upload scan bar, spinner. All disabled under `prefers-reduced-motion`.
+- **Component catalog:** buttons (primary/accent/ghost/quiet/danger), status badges (5 tones, one dot), chips, ledger tables, panels (zero outer padding; `.pn-head`/`.pn-body`), forms, layout primitives (including facts-ledger/record-card), public components, portal shell, workflow components (queue with `q-row`/`q-head5`/`q-row5`, timeline, wizard, modal, callouts, upload slots, payment states). See `UX-BLUEPRINT.md` §12.1 for exact specifications.
+- **Responsive breakpoints:** 1920/1180/1120/1023/719/479px. See `UX-BLUEPRINT.md` §16.
+- **Screen catalog:** 67 screens across public, identity, applicant, guardian, administrator, and principal. See `UX-BLUEPRINT.md` §17. The Administrator Guardians screen is an honest planned-workspace placeholder until the campaign integration is separately approved.
 
 ### 11.2 Accessibility target
 

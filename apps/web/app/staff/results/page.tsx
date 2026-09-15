@@ -17,11 +17,12 @@ export default async function ResultsPage() {
     : await academicsService.listBatches();
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Results</p>
-        <h1 className="workspace-title">Results</h1>
-        <p className="workspace-intro">Entry → Moderation → Published; corrections create new versions.</p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Results</h1>
+          <p className="ph-sub">Entry → Moderation → Published; corrections create new versions.</p>
+        </div>
+      </div>
 
       <ResultsBatches batches={batches} />
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { DemoNotice } from "@/components/layouts/DemoNotice";
 import PageIntro from "@/components/public/PageIntro";
+import { EmptyState } from "@/components/ui/AsyncStates";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { CONTENT_DEMO_NOTE, vacancies, type Vacancy } from "@/modules/content/demo";
 import { formatKolkata } from "@/modules/iot/domain";
@@ -14,17 +15,18 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "Careers",
   description:
-    "Vacancies at Faiz Aam Secondary School, Bandipora — open positions, how we hire, and what to expect from an application.",
+    "Vacancies at Faiz Aam Secondary School, Bandipora · open positions, how we hire, and what to expect from an application.",
+  alternates: { canonical: "/careers" },
 };
 
 const HIRE_STEPS = [
   {
     title: "Apply",
-    line: "Submit the vacancy application with your qualifications and the documents listed, before the deadline.",
+    line: "Submit the vacancy application online with your qualifications and experience, before the deadline. No documents are uploaded with the application.",
   },
   {
     title: "Eligibility review",
-    line: "The recruitment panel checks qualifications and documents against the vacancy.",
+    line: "The recruitment panel checks qualifications and experience against the vacancy.",
   },
   {
     title: "Shortlist & interview",
@@ -52,7 +54,7 @@ export default async function CareersPage() {
       <PageIntro
         eyebrow="Careers"
         title="Work with the school"
-        deck="Vacancies are published here and applications are tracked by reference."
+        deck="Vacancies are published here. Every application is acknowledged, and updates arrive by email."
       />
 
       <section className={styles.section} aria-labelledby="open-heading">
@@ -62,23 +64,30 @@ export default async function CareersPage() {
             Positions currently open.
           </h2>
         </div>
-        <ul className={styles.list}>
-          {open.map((v, i) => (
-            <li key={v.slug}>
-              <Link className={`tile-link ${styles.row}`} href={`/careers/${v.slug}`}>
-                <span className="tile-link__num serif-num">{String(i + 1).padStart(2, "0")}</span>
-                <span className="tile-link__title">{v.title}</span>
-                <span className="tile-link__line">
-                  {v.department} · {v.location} · {v.type}
-                </span>
-                <span className="tile-link__line">{qualificationExcerpt(v)}</span>
-                <span className="tile-link__more">
-                  Closes {formatKolkata(v.deadlineIso, { format: "day" })} · Read more <span aria-hidden="true">→</span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {open.length > 0 ? (
+          <ul className={styles.list}>
+            {open.map((v, i) => (
+              <li key={v.slug}>
+                <Link className={`tile-link ${styles.row}`} href={`/careers/${v.slug}`}>
+                  <span className="tile-link__num serif-num">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="tile-link__title">{v.title}</span>
+                  <span className="tile-link__line">
+                    {v.department} · {v.location} · {v.type}
+                  </span>
+                  <span className="tile-link__line">{qualificationExcerpt(v)}</span>
+                  <span className="tile-link__more">
+                    Closes {formatKolkata(v.deadlineIso, { format: "day" })} · Read more <span aria-hidden="true">→</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            title="No positions are open right now."
+            note="New vacancies are published here as they open. Write to the school office if you would like to be considered for future teaching or support roles."
+          />
+        )}
       </section>
 
       {closed.length > 0 ? (

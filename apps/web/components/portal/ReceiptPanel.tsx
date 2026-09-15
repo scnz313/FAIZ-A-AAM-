@@ -10,7 +10,10 @@ type ReceiptPanelProps = {
   invoice: Invoice;
   /** Active linked child shown on the sheet. */
   studentName: string;
-  studentClass: string;
+  /** Class label when the viewer has one; omitted for staff projections. */
+  studentClass?: string;
+  /** Live projection: never labels a real receipt record as a demo. */
+  live?: boolean;
 };
 
 const PRINT_RULES = `
@@ -28,7 +31,7 @@ const PRINT_RULES = `
  * Bordered receipt sheet with a print action. The print rules in this file
  * hide the portal chrome so only the sheet reaches the printer.
  */
-export function ReceiptPanel({ receipt, invoice, studentName, studentClass }: ReceiptPanelProps) {
+export function ReceiptPanel({ receipt, invoice, studentName, studentClass, live = false }: ReceiptPanelProps) {
   return (
     <div className={styles.wrap}>
       {/* Print rules live in a literal style tag: the chrome they target is
@@ -58,7 +61,8 @@ export function ReceiptPanel({ receipt, invoice, studentName, studentClass }: Re
           <div>
             <dt>Student</dt>
             <dd>
-              {studentName} · {studentClass}
+              {studentName}
+              {studentClass ? ` · ${studentClass}` : ""}
             </dd>
           </div>
           <div>
@@ -81,7 +85,9 @@ export function ReceiptPanel({ receipt, invoice, studentName, studentClass }: Re
         <footer className={styles.sheetFoot}>
           <p className={styles.counter}>Counter: {receipt.counter}</p>
           <p className={styles.demoNote}>
-            This is a demo receipt — official receipts are numbered by the finance office.
+            {live
+              ? "This view reflects the finance office receipt record · the numbered original is issued by the office."
+              : "This is a demo receipt · official receipts are numbered by the finance office."}
           </p>
         </footer>
       </div>

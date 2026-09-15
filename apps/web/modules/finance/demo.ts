@@ -9,7 +9,7 @@
  * when it seeds its session store.
  */
 
-export const FINANCE_DEMO_NOTE = "Fictional demo fee data — the real ledger arrives with the backend.";
+export const FINANCE_DEMO_NOTE = "Fictional demo fee data · the real ledger arrives with the backend.";
 
 /** Stable demo student ids shared with the relationship graph. */
 export const STUDENT_AARIF_ID = "00000000-0000-4000-8000-000000000901";

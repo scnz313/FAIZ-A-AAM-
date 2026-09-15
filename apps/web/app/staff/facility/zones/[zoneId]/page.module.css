@@ -20,7 +20,7 @@
 .notFoundIntro {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 0.92rem;
   line-height: 1.5;
   margin: 0;
   max-width: 56ch;

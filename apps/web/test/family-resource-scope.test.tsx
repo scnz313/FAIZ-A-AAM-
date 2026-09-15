@@ -155,6 +155,24 @@ describe("server-hydrated finance components", () => {
     await waitFor(() => expect(listInvoices).toHaveBeenCalledWith(STUDENT_AARIF_ID));
   });
 
+  it("renders an empty ledger honestly: no filter blame, no dead show-all, no invented concession", async () => {
+    const initialState = await familyInitialState();
+    vi.stubEnv("FASS_DATA_ADAPTER", "demo");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "demo");
+    vi.spyOn(financeService, "listInvoices").mockResolvedValue([]);
+
+    render(
+      <FamilyContextProvider initialState={initialState}>
+        <FeeLedger initial={[]} initialFilter="all" />
+      </FamilyContextProvider>,
+    );
+
+    await screen.findByText("No invoices yet");
+    expect(screen.queryByText("No invoices match this filter")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show all invoices" })).toBeNull();
+    expect(screen.queryByText(/Sibling · applied on request/)).toBeNull();
+  });
+
   it("loads attempts without refetching an authoritative Supabase invoice", async () => {
     const [initial, initialState] = await Promise.all([
       financeService.getInvoice("INV-2026-0101"),

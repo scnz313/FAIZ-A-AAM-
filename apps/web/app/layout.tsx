@@ -1,21 +1,20 @@
 import type { Metadata } from "next";
-import { DM_Sans, Newsreader, Noto_Nastaliq_Urdu } from "next/font/google";
+import { Public_Sans, Source_Serif_4, Noto_Nastaliq_Urdu } from "next/font/google";
 
 import "../styles/tokens.css";
 import "../styles/globals.css";
 
-/* Editorial serif for identity and headlines. */
-const display = Newsreader({
+/* Editorial serif for identity and headlines — V14 canonical typography. */
+const display = Source_Serif_4({
   subsets: ["latin"],
   axes: ["opsz"],
   variable: "--font-display",
   display: "swap",
 });
 
-/* Legible sans for navigation, forms, numbers and tables. */
-const sans = DM_Sans({
+/* Legible sans for navigation, forms, numbers and tables — V14 canonical. */
+const sans = Public_Sans({
   subsets: ["latin"],
-  axes: ["opsz"],
   variable: "--font-sans",
   display: "swap",
 });

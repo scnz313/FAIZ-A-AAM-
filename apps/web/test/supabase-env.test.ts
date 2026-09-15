@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { dataAdapter, developmentAuthEnabled, totpRequired } from "@/lib/supabase/env";
+import { dataAdapter, developmentAuthEnabled, providerEnvReadiness, totpRequired } from "@/lib/supabase/env";
 import { settingsService } from "@/modules/services/settings";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -59,5 +59,50 @@ describe("Supabase adapter configuration", () => {
         "Test administrator",
       ),
     ).rejects.toThrow(/server adapter boundary/);
+  });
+
+  it("derives scanner readiness from the selected provider in Supabase mode", () => {
+    vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("DOCUMENT_SCANNER_PROVIDER", "http");
+    vi.stubEnv("DOCUMENT_SCANNER_URL", "");
+    vi.stubEnv("DOCUMENT_SCANNER_SECRET", "");
+    const httpReadiness = providerEnvReadiness();
+    expect(httpReadiness.scanner).toMatchObject({ provider: "http", ready: false });
+    expect(httpReadiness.missing).toContain("DOCUMENT_SCANNER_URL");
+    expect(httpReadiness.missing).toContain("DOCUMENT_SCANNER_SECRET");
+
+    vi.stubEnv("DOCUMENT_SCANNER_PROVIDER", "manual");
+    vi.stubEnv("DOCUMENT_SCANNER_SECRET", "s".repeat(32));
+    const manualReadiness = providerEnvReadiness();
+    expect(manualReadiness.scanner).toMatchObject({ provider: "manual", ready: true, missing: [] });
+    expect(manualReadiness.missing).not.toContain("DOCUMENT_SCANNER_URL");
+  });
+
+  it("lists only genuinely unset provider names in Supabase mode", () => {
+    vi.stubEnv("FASS_DATA_ADAPTER", "supabase");
+    vi.stubEnv("NEXT_PUBLIC_FASS_DATA_ADAPTER", "supabase");
+    for (const name of [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "SUPABASE_SECRET_KEY",
+      "APP_URL",
+      "CRON_SECRET",
+      "RESEND_API_KEY",
+      "EMAIL_FROM",
+      "RESEND_WEBHOOK_SECRET",
+    ]) {
+      vi.stubEnv(name, "configured-value");
+    }
+    vi.stubEnv("DOCUMENT_SCANNER_PROVIDER", "manual");
+    vi.stubEnv("DOCUMENT_SCANNER_SECRET", "s".repeat(32));
+    const readiness = providerEnvReadiness();
+    expect(readiness.missing).toEqual([]);
+    expect(readiness.ready).toBe(true);
+
+    vi.stubEnv("APP_URL", "");
+    const degraded = providerEnvReadiness();
+    expect(degraded.missing).toEqual(["APP_URL"]);
+    expect(degraded.ready).toBe(false);
   });
 });

@@ -8,7 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
   const headers = { "Cache-Control": "no-store" };
-  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"))) {
+  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"), request.headers.get("sec-fetch-site"))) {
     return NextResponse.json({ ok: false, errors: [{ code: "forbidden", message: "Cross-origin requests are not accepted.", field: null }] }, { status: 403, headers });
   }
   if (dataAdapter() !== "supabase") return new NextResponse(null, { status: 204, headers });

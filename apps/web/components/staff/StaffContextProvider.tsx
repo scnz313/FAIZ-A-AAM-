@@ -153,7 +153,7 @@ export function StaffContextProvider({
         setSwitchError(
           error instanceof Error
             ? error.message
-            : "Switching workspace failed — the previous workspace is unchanged.",
+            : "Switching workspace failed · the previous workspace is unchanged.",
         );
       } finally {
         setSwitching(false);
@@ -184,7 +184,7 @@ export function StaffContextProvider({
         setAnnouncement(`Demo identity switched to ${identity?.displayName ?? "staff member"}.`);
       } catch (error) {
         setSwitchError(
-          error instanceof Error ? error.message : "Switching identity failed — the previous account is unchanged.",
+          error instanceof Error ? error.message : "Switching identity failed · the previous account is unchanged.",
         );
       } finally {
         setSwitching(false);

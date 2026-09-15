@@ -14,13 +14,6 @@ export const DEVELOPMENT_ACCOUNTS = [
     destination: "/apply/student",
   },
   {
-    id: "job-applicant",
-    label: "Job applicant",
-    email: "j@faizaam.example",
-    audience: "family",
-    destination: "/careers",
-  },
-  {
     id: "administrator",
     label: "Administrator",
     email: "ad@faizaam.example",

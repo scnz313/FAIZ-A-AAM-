@@ -20,7 +20,7 @@ import { markMfaVerified, recordAuthEvent } from "@/lib/supabase/domain";
  * is true. It never weakens the security model: the session is really aal2.
  */
 export async function POST(request: Request) {
-  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"))) {
+  if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"), request.headers.get("sec-fetch-site"))) {
     return NextResponse.json(
       { ok: false, errors: [{ code: "forbidden", message: "Cross-origin requests are not accepted.", field: null }] },
       { status: 403 },

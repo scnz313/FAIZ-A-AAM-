@@ -184,7 +184,7 @@ export function supportResponseEmail(input: { threadRef: string }) {
   };
 }
 
-type GenericNotificationInput = { targetRef: string; subject: string; eyebrow: string; title: string; body: string; path?: string };
+type GenericNotificationInput = { targetRef: string; subject: string; eyebrow: string; title: string; body: string; path?: string; note?: string };
 
 function genericNotificationEmail(input: GenericNotificationInput) {
   const { appUrl } = requireAppEnv();
@@ -193,7 +193,10 @@ function genericNotificationEmail(input: GenericNotificationInput) {
     html: shell({
       eyebrow: input.eyebrow,
       title: input.title,
-      cta: { label: "Open the school portal", href: `${appUrl}${input.path ?? "/portal"}` },
+      /* A notification without a portal path is deliberately CTA-free: the
+         job journey is email-only and must never point at a deleted route. */
+      cta: input.path === undefined ? undefined : { label: "Open the school portal", href: `${appUrl}${input.path}` },
+      note: input.note,
       paragraphs: [`${escapeHtml(input.body)} Reference: <strong>${escapeHtml(input.targetRef)}</strong>.`],
     }),
   };
@@ -209,11 +212,45 @@ export function applicationDecisionEmail(input: { applicationRef: string; decisi
 }
 
 export function jobApplicationSubmittedEmail(input: { applicationRef: string }) {
-  return genericNotificationEmail({ targetRef: input.applicationRef, subject: `Job application ${input.applicationRef} received`, eyebrow: "Careers", title: "Your job application has been received", body: "Your vacancy application is now in the school recruitment queue", path: `/apply/job/${encodeURIComponent(input.applicationRef)}/status` });
+  return genericNotificationEmail({
+    targetRef: input.applicationRef,
+    subject: `Job application ${input.applicationRef} received`,
+    eyebrow: "Careers",
+    title: "Your job application has been received",
+    body: "Your vacancy application is now in the school recruitment queue. There is no portal to check; the school emails you whenever the status changes or a decision is recorded",
+    note: "This message was sent by the school office. Reply to this email if you need help with your application.",
+  });
 }
 
-export function jobApplicationStatusEmail(input: { applicationRef: string }) {
-  return genericNotificationEmail({ targetRef: input.applicationRef, subject: `Job application ${input.applicationRef} updated`, eyebrow: "Careers", title: "Your application status has changed", body: "There is a new safe status update for your vacancy application", path: `/apply/job/${encodeURIComponent(input.applicationRef)}/status` });
+export function jobApplicationStatusEmail(input: {
+  applicationRef: string;
+  status?: "shortlisted" | "interview" | "offered" | "not_selected";
+  reason?: string | null;
+}) {
+  const stage: Record<string, string> = {
+    shortlisted: "The school has shortlisted your application for the next stage",
+    interview: "The school has invited your application to interview",
+    offered: "The school has recorded an offer for your application",
+    not_selected: "The school has recorded a decision on your application",
+  };
+  const intro = input.status !== undefined && stage[input.status] !== undefined
+    ? `${stage[input.status]}. Sign-in is not required; every update arrives by email`
+    : "The school has recorded a new stage for your vacancy application. Sign-in is not required; every update arrives by email";
+  const reason = input.reason?.trim();
+  /* A rejection must carry the recorded reason (owner requirement, 15 Sep
+     2026). The decision reason is written by HR and shown to the applicant;
+     internal private notes are never part of this payload. */
+  const body = reason !== undefined && reason.length > 0
+    ? `${intro}. The reason recorded by the school: ${reason}`
+    : intro;
+  return genericNotificationEmail({
+    targetRef: input.applicationRef,
+    subject: `Job application ${input.applicationRef} updated`,
+    eyebrow: "Careers",
+    title: "Your application status has changed",
+    body,
+    note: "This message was sent by the school office. Reply to this email if you need help with your application.",
+  });
 }
 
 export function paymentStatusEmail(input: { reference: string }) {
@@ -233,7 +270,7 @@ export function resultWithdrawnEmail(input: { reference: string }) {
 }
 
 export function resultEntryReviewEmail(input: { reference: string }) {
-  return genericNotificationEmail({ targetRef: input.reference, subject: "A result entry sheet is ready for review", eyebrow: "Results workflow", title: "Marks are awaiting review", body: "An assigned result entry sheet has a new workflow update", path: "/staff/results" });
+  return genericNotificationEmail({ targetRef: input.reference, subject: "A result entry sheet is ready for review", eyebrow: "Results workflow", title: "Marks are awaiting review", body: "An assigned result entry sheet has a new workflow update", path: "/administrator/results" });
 }
 
 export function examDateSheetEmail(input: { reference: string }) {

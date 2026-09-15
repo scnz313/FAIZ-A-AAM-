@@ -25,7 +25,7 @@ export default function ImageBand({ src, alt, caption, priority }: ImageBandProp
             src={src}
             alt={alt}
             fill
-            sizes="(max-width: 700px) 100vw, 92vw"
+            sizes="(max-width: 719px) 100vw, 92vw"
             quality={80}
             priority={priority}
             className={styles.img}

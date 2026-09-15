@@ -1,289 +1,223 @@
+/* V15 hero — paper ground, contour lines, record card */
+
 .hero {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  min-height: 720px;
   overflow: hidden;
-  background: var(--ink);
-  color: var(--chalk);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
 }
 
-/* Decorative canvas -------------------------------------------------- */
-
-.canvas {
+.heroBg {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 
-.canvas::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 7px;
-  background: var(--saffron);
+.contours {
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
 }
 
-/* Islamic girih tessellation — a whisper of pattern behind the text. */
-.pattern {
-  position: absolute;
-  inset: 0;
-}
-
-/* Texture sits behind the composition — fainter than before so the art
-   panel carries the hero now. */
-.grid {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 72px 72px;
-}
-
-.watermark {
-  position: absolute;
-  top: 40px;
-  right: 4%;
-  opacity: 0.05;
-}
-
-/* Ghost wordmark behind the copy column (not the art panel) — far
-   lighter than the chalk text it sits behind, so legibility holds. */
-.ghost {
-  position: absolute;
-  top: 30%;
-  left: -2%;
-  color: rgba(255, 255, 255, 0.06);
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: clamp(120px, 15vw, 230px);
-  font-weight: 500;
-  letter-spacing: -0.075em;
-  line-height: 0.58;
-  text-align: left;
-  white-space: nowrap;
-  user-select: none;
-}
-
-/* Foreground ---------------------------------------------------------- */
-
-.headerRow {
+.inner {
   position: relative;
-  z-index: 3;
-  padding: 16px clamp(48px, 8vw, 96px) 0;
-}
-
-.body {
-  position: relative;
-  z-index: 2;
   display: grid;
-  /* 55 / 45 split: copy column, photograph column. */
-  grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
-  align-items: end;
-  gap: clamp(40px, 5vw, 72px);
-  flex: 1;
-  padding: clamp(64px, 10vh, 128px) clamp(48px, 8vw, 96px) 64px;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(28px, 5vw, 72px);
+  align-items: center;
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: clamp(44px, 7vw, 92px) clamp(16px, 4vw, 40px);
 }
+
+/* Content column ------------------------------------------------------ */
 
 .content {
   min-width: 0;
-  animation: rise 0.7s ease both;
 }
 
-.content :global(.eyebrow) {
-  color: rgba(255, 255, 255, 0.85);
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--saffron-ink);
+  margin: 0 0 22px;
+}
+
+.kicker::before {
+  content: "";
+  width: 34px;
+  height: 1px;
+  background: var(--saffron);
 }
 
 .title {
   margin: 0;
-  color: var(--chalk);
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: clamp(50px, 5.6vw, 88px);
-  font-weight: 400;
-  letter-spacing: -0.05em;
-  line-height: 0.9;
+  font-family: var(--serif);
+  font-size: clamp(2.5rem, 5.4vw, 4.35rem);
+  font-weight: 540;
+  letter-spacing: -0.015em;
+  line-height: 1.06;
+  max-width: 13ch;
   text-wrap: balance;
 }
 
-/* Printed deck line: serif italic, chalk, slightly softened. */
-.deck {
-  max-width: 440px;
-  margin: 28px 0 30px;
-  color: var(--chalk);
-  opacity: 0.92;
-  font-family: var(--font-display, Georgia, "Times New Roman", serif);
+.title em {
   font-style: italic;
-  font-size: 20px;
-  line-height: 1.45;
+  font-weight: 480;
+  color: var(--saffron-ink);
+}
+
+.lede {
+  margin: 22px 0 0;
+  font-family: var(--serif);
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 44ch;
 }
 
 .actions {
   display: flex;
-  align-items: center;
+  gap: 14px;
+  margin-top: 32px;
   flex-wrap: wrap;
-  gap: 30px;
+  align-items: center;
 }
 
-/* Saffron CTA: a quiet inner rule along the bottom edge, nothing else. */
-.cta {
+.note {
+  margin: 18px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.note .msym {
+  font-size: 16px;
+}
+
+/* Record card --------------------------------------------------------- */
+
+.recordCard {
   position: relative;
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
 }
 
-.cta::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 6px;
-  height: 1px;
-  background: var(--line-strong);
-  opacity: 0;
-  transition: opacity 0.15s ease;
+.rcHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--saffron-ink);
 }
 
-.cta:hover::after,
-.cta:focus-visible::after {
-  opacity: 1;
-}
-
-.quietLink {
-  color: var(--chalk);
-}
-
-.quietLink:hover {
-  color: var(--saffron-bright, #d1844d);
-}
-
-.quietArrow {
-  display: inline-block;
-  transition: transform 0.15s ease;
-}
-
-.quietLink:hover .quietArrow,
-.quietLink:focus-visible .quietArrow {
-  transform: translateX(3px);
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .content {
-    animation: none;
-  }
-
-  .quietArrow {
-    transition: none;
-  }
-}
-
-/* Photo panel ---------------------------------------------------------- */
-
-/* Paper-deep framed plate with a 1px chalk rule; no shadow. The photo
-   keeps a 3:2 aspect and scales with the column; the slow ken-burns
-   drift is disabled under reduced motion. */
-.photoPanel {
-  margin: 0;
-  align-self: end;
-  border: 1px solid rgba(255, 255, 255, 0.38);
-  padding: clamp(16px, 2vw, 26px);
-  background: var(--paper-deep);
-}
-
-.photoFrame {
-  position: relative;
-  aspect-ratio: 3 / 2;
-  overflow: hidden;
-  background: var(--paper-deep);
-  /* Mughal elliptical arch: the photograph sits inside an arch frame. */
-  border-radius: 50% 50% 4px 4px / 17% 17% 4px 4px;
-}
-
-.photo {
-  object-fit: cover;
-  animation: ken-burns 26s ease-in-out infinite alternate;
-  transform-origin: 50% 42%;
-}
-
-.caption {
-  margin: 14px 2px 0;
-  color: var(--ink);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  line-height: 1.4;
+.rcLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .photo {
-    animation: none;
-  }
+.rcBody {
+  padding: 18px;
 }
 
-@media (max-width: 1000px) {
-  .body {
+.rcRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px dotted var(--line);
+  font-size: 0.88rem;
+}
+
+.rcRow:last-child {
+  border-bottom: 0;
+}
+
+.rcK {
+  color: var(--muted);
+}
+
+.rcV {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.rcStatus {
+  color: var(--saffron-ink);
+}
+
+.recordNote {
+  margin: 12px 0 0;
+  max-width: 420px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.stamp {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  opacity: 0.9;
+  transform: rotate(-7deg);
+  pointer-events: none;
+}
+
+/* Responsive ---------------------------------------------------------- */
+
+@media (max-width: 1023px) {
+  .inner {
     grid-template-columns: 1fr;
     align-items: start;
+    padding-top: 44px;
   }
 
-  .photoPanel {
-    width: 100%;
-  }
-
-  .ghost {
-    left: -2%;
-    font-size: clamp(120px, 22vw, 200px);
+  .recordCard {
+    max-width: 520px;
   }
 }
 
-@media (max-width: 700px) {
-  .grid,
-  .watermark {
-    display: none;
-  }
-
-  .headerRow {
-    padding: 14px 20px 0;
-  }
-
-  .body {
-    padding: 48px 20px 40px;
-    gap: 40px;
+@media (max-width: 719px) {
+  .inner {
+    padding: 40px 16px 48px;
   }
 
   .title {
-    font-size: clamp(40px, 11.5vw, 56px);
+    font-size: clamp(2rem, 9vw, 3rem);
   }
 
-  .deck {
-    margin: 22px 0 24px;
-    font-size: 18px;
+  .lede {
+    font-size: 1.05rem;
   }
 
-  .actions {
-    gap: 22px;
+  .stamp {
+    display: none;
   }
 }
 
-/* Fine vector detail (wave strokes, figures, birds) disappears at small
-   render sizes where it would read as mud. The group is global because
-   it lives inside the art components' SVG — anchored to the scene's own
-   class to keep the module selector pure. */
-@media (max-width: 700px) {
-  .photoPanel :global(.art-detail) {
-    display: none;
+@media (max-width: 479px) {
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content,
+  .content * {
+    animation: none !important;
   }
 }

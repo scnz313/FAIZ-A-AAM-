@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { MouseEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, ReactNode } from "react";
 
 import { useFamilyContext } from "@/components/portal/FamilyContextProvider";
 import { Crest } from "@/components/ui/Crest";
-import { demoTodayLabel } from "@/modules/demo/clock";
 import { gradeSectionLabel } from "@/modules/services/family-context";
 import { identityService } from "@/modules/services/identity";
 import { demoGuardianNotifications } from "@/modules/notifications/demo";
@@ -17,19 +16,34 @@ import type { NotificationItem } from "@/modules/notifications/demo";
 import { NotificationBell } from "./NotificationBell";
 import styles from "./PortalShell.module.css";
 
-const NAV_LINKS: ReadonlyArray<{ href: string; label: string; exact?: boolean }> = [
-  { href: "/portal", label: "Overview", exact: true },
-  { href: "/portal/fees", label: "Fees" },
-  { href: "/portal/results", label: "Results" },
-  { href: "/portal/timetable", label: "Timetable" },
-  { href: "/portal/notices", label: "Notices" },
-  { href: "/portal/documents", label: "Documents" },
-  { href: "/portal/profile", label: "Profile" },
-  { href: "/portal/security", label: "Security" },
+type NavItem = readonly [href: string, label: string, icon: string];
+type NavGroup = { label?: string; items: readonly NavItem[] };
+
+const NAV_GROUPS: readonly NavGroup[] = [
+  { items: [["/portal", "Overview", "space_dashboard"]] },
+  {
+    label: "Your child",
+    items: [
+      ["/portal/fees", "Fees", "payments"],
+      ["/portal/results", "Results", "workspace_premium"],
+      ["/portal/timetable", "Timetable", "calendar_month"],
+      ["/portal/notices", "Notices", "campaign"],
+      ["/portal/documents", "Documents", "folder_open"],
+    ],
+  },
+  {
+    label: "Account",
+    items: [
+      ["/portal/profile", "Profile", "manage_accounts"],
+      ["/portal/security", "Security", "shield"],
+      ["/portal/support", "Support", "support_agent"],
+      ["/portal/link-child", "Link a child", "add_link"],
+    ],
+  },
 ];
 
 /* Below this width the sidebar becomes an off-canvas drawer. */
-const DRAWER_BREAKPOINT = "(max-width: 1000px)";
+const DRAWER_BREAKPOINT = "(max-width: 1023px)";
 const DRAWER_ID = "shell-nav";
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -41,12 +55,10 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 /**
- * Family/student portal frame: chalk sidebar with the service-driven
- * linked-child switcher, demo-session banner, topbar eyebrow and folio rule.
- * The active child comes from FamilyContextProvider, so switching a child
- * updates the shell and every child-scoped page together. Below 1000px the
- * sidebar becomes a keyboard-operable drawer opened from the topbar Menu
- * button.
+ * Family/student portal frame — V14 app-shell pattern.
+ * Chalk sidebar with profile header, nav-group icons, and child switcher.
+ * Dark sticky ctx-bar with school emblem and child menu dropdown.
+ * Below 1023px the sidebar becomes a keyboard-operable drawer.
  */
 export function PortalShell({
   children,
@@ -63,19 +75,21 @@ export function PortalShell({
     useFamilyContext();
   const [navOpen, setNavOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [cpOpen, setCpOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const supabaseMode = clientAdapterMode() === "supabase";
-  /* Hydration-safe gate — see StaffShell. */
   const [mounted, setMounted] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
+  const childMenuRef = useRef<HTMLDivElement>(null);
+  const childMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const childPopRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  /* Track the drawer layout; leaving it forces the drawer closed. */
   useEffect(() => {
     const query = window.matchMedia(DRAWER_BREAKPOINT);
     const sync = () => {
@@ -87,14 +101,10 @@ export function PortalShell({
     return () => query.removeEventListener("change", sync);
   }, []);
 
-  /* A route change closes the drawer. */
   useEffect(() => {
     setNavOpen(false);
   }, [pathname]);
 
-  /* While open: lock body scroll, focus the first nav link (not the
-     panel itself, so Shift+Tab wraps inside the trap), trap Tab, close
-     on Escape. Focus returns to the Menu button on close. */
   useEffect(() => {
     if (!isMobile || !navOpen) return;
 
@@ -109,14 +119,14 @@ export function PortalShell({
     document.body.style.overflow = "hidden";
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const drawer = drawerRef.current;
+      const drawerEl = drawerRef.current;
       if (event.key === "Escape") {
         event.preventDefault();
         setNavOpen(false);
         return;
       }
-      if (event.key !== "Tab" || !drawer) return;
-      const focusable = Array.from(drawer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      if (event.key !== "Tab" || !drawerEl) return;
+      const focusable = Array.from(drawerEl.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (!first || !last) {
@@ -140,7 +150,56 @@ export function PortalShell({
     };
   }, [isMobile, navOpen]);
 
-  /* A link click inside the drawer closes it even when the route is unchanged. */
+  /* Close child popup on outside click; Escape closes and returns focus to
+     the trigger so keyboard users never lose their place. */
+  useEffect(() => {
+    if (!cpOpen) return;
+    const handler = (event: globalThis.MouseEvent) => {
+      if (childMenuRef.current && !childMenuRef.current.contains(event.target as Node)) {
+        setCpOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setCpOpen(false);
+        childMenuButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [cpOpen]);
+
+  /* APG menu-button pattern: focus moves into the menu when it opens, and
+     arrow keys / Home / End move between the child options. */
+  useEffect(() => {
+    if (!cpOpen) return;
+    const first = childPopRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
+    first?.focus();
+  }, [cpOpen]);
+
+  const handleChildMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(childPopRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    if (items.length === 0) return;
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = (index + step + items.length) % items.length;
+      items[next]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  };
+
   const handleNavClick = (event: MouseEvent<HTMLElement>) => {
     if ((event.target as HTMLElement).closest("a")) setNavOpen(false);
   };
@@ -169,13 +228,18 @@ export function PortalShell({
     }
   }
 
+  const isActive = (href: string, exact?: boolean) =>
+    exact ? pathname === href : pathname.startsWith(href);
+
+  const guardianInitial = guardianName?.charAt(0).toUpperCase() ?? "G";
+
   return (
-    <div className="facility-shell">
+    <div className="app-shell">
       <aside
         ref={drawerRef}
         id={DRAWER_ID}
-        className={`side-nav${navOpen ? " is-open" : ""}`}
-        aria-label="Portal navigation panel"
+        className={`side${navOpen ? " open" : ""}`}
+        aria-label="Guardian portal navigation"
         tabIndex={mounted && isMobile ? -1 : undefined}
         {...(mounted && isMobile && navOpen
           ? { role: "dialog", "aria-modal": "true" }
@@ -183,169 +247,194 @@ export function PortalShell({
         inert={mounted && isMobile && !navOpen}
         onClick={handleNavClick}
       >
-        <Link className="facility-brand" href="/portal" prefetch={false}>
-          <Crest size="sm" />
-          <span className="facility-brand-copy">
-            <strong>Faiz Aam</strong>
-            <span className={`urdu ${styles.urdu}`} dir="rtl" lang="ur">
-              فیض عام
+        <div className="side-head">
+          <div className="profile">
+            <span className="avatar" aria-hidden="true">{guardianInitial}</span>
+            <span className="who">
+              <span className="nm">{guardianName ?? "Guardian"}</span>
+              <span className="rl">Guardian</span>
             </span>
-            <small>Guardian portal</small>
-          </span>
-        </Link>
-
-        <div className={styles.childSwitcher}>
-          <label htmlFor="portal-child">Linked child</label>
-          {status === "loading" ? (
-            <p className={styles.switcherNote} role="status" aria-live="polite">
-              Loading linked children…
-            </p>
-          ) : status === "error" ? (
-            <p className={styles.switcherNote} role="alert">
-              {errorMessage}{" "}
-              <button type="button" className="button button--quiet button--small" onClick={retry}>
-                Try again
-              </button>
-            </p>
-          ) : (
-            <>
-              <select
-                id="portal-child"
-                className="select"
-                value={context?.activeStudentId ?? ""}
-                onChange={(event) => void switchStudent(event.target.value)}
-                disabled={switching}
-                aria-describedby={switchError ? "portal-child-error" : undefined}
-              >
-                {students.map((item) => (
-                  <option key={item.student.id} value={item.student.id}>
-                    {item.student.displayName} · {gradeSectionLabel(item.gradeSection)} · {item.academicYear.label}
-                  </option>
-                ))}
-              </select>
-              {switchError ? (
-                <p id="portal-child-error" className={styles.switcherError} role="alert">
-                  {switchError}
-                </p>
-              ) : null}
-            </>
-          )}
+          </div>
         </div>
 
-        <p className="section-label">Family services</p>
-
-        <nav aria-label="Portal navigation">
-          {NAV_LINKS.map((link) => {
-            const active = link.exact ? pathname === link.href : pathname.startsWith(link.href);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                prefetch={false}
-                className={active ? "active" : undefined}
-                aria-current={active ? "page" : undefined}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
+        <nav className="side-nav">
+          {NAV_GROUPS.map((group, gi) => (
+            <div className="nav-group" key={gi}>
+              {group.label ? <div className="ng-label">{group.label}</div> : null}
+              {group.items.map(([href, label, icon]) => {
+                const exact = href === "/portal";
+                const active = isActive(href, exact);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    prefetch={false}
+                    className={active ? "on" : undefined}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <span className="msym" aria-hidden="true">{icon}</span>
+                    <span>{label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
-        <div className="side-footer">
-          <div className="signed-in">
-            <span className="avatar" aria-hidden="true">
-              <Crest size="sm" tone="chalk" />
-            </span>
-            <span className="signed-in-copy">
-              <strong>{guardianName ?? "Guardian"}</strong>
-              <small>{supabaseMode ? "Guardian account" : "Guardian · demo session"}</small>
-            </span>
-            <button
-              type="button"
-              className="button button--small button--quiet"
-              onClick={() => void handleSignOut()}
-              title={supabaseMode ? "Sign out of this device" : "Back to sign in — demo sessions are not real"}
-              disabled={signingOut}
-            >
-              {signingOut ? "Signing out…" : "Sign out"} {!supabaseMode ? <span className="num">(demo)</span> : null}
-            </button>
-          </div>
-          {signOutError ? <p className={styles.switcherError} role="alert">{signOutError}</p> : null}
-          <Link className="support-link" href="/portal/support" prefetch={false}>
-            Support &amp; grievances
-          </Link>
-          {developmentAuth ? (
-            <Link className="support-link" href="/sign-in" prefetch={false}>
-              Switch local account
-            </Link>
-          ) : null}
+        <div className="side-foot">
+          <span>Faiz Aam · Bandipora</span>
+          <button
+            type="button"
+            className="btn btn-quiet btn-sm no-print"
+            onClick={() => void handleSignOut()}
+            disabled={signingOut}
+            title={supabaseMode ? "Sign out of this device" : "Back to sign in · demo sessions are not real"}
+          >
+            <span className="msym" aria-hidden="true">logout</span>
+            {signingOut ? "…" : "Exit"}
+          </button>
         </div>
       </aside>
 
-      <div className={`nav-scrim${navOpen ? " is-open" : ""}`} aria-hidden="true" onClick={() => setNavOpen(false)} />
+      {navOpen ? (
+        <div
+          className="nav-scrim is-open"
+          aria-hidden="true"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
 
-      <div className="portal-main">
-        <header className="portal-chrome">
-          {!supabaseMode ? (
-            <p className="alert-strip demo-strip">
-              Demo session — sample family data. Your child&apos;s real records appear once guardian accounts are linked.
-            </p>
-          ) : null}
-
-          <div className="portal-topbar">
+      <div className="app-main">
+        <header className="ctx-bar" aria-label="Portal context">
+          <div className="wrap-x">
             <button
               ref={menuButtonRef}
               type="button"
-              className="shell-menu-button"
+              className="ctx-burger"
+              aria-label="Open navigation"
               aria-expanded={navOpen}
               aria-controls={DRAWER_ID}
               onClick={() => setNavOpen((open) => !open)}
             >
-              Menu
+              <span className="msym" aria-hidden="true">menu</span>
             </button>
-            <p className="eyebrow">Guardian portal</p>
-            <div className="topbar-actions">
-              <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoGuardianNotifications())} accountId={context?.accountId ?? undefined} />
-              {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
-              <Link className="link-arrow" href="/portal/support" prefetch={false}>
-                Get help ↗
-              </Link>
-            </div>
-          </div>
+            <Link className="cb-school" href="/portal" prefetch={false} aria-label="Faiz Aam Secondary School · Portal home">
+              <Crest size="xs" tone="chalk" />
+              <span className="hide-s">Faiz Aam Secondary School</span>
+            </Link>
 
-          <div className={`folio ${styles.folio}`}>
-            <span>FAIZ AAM SECONDARY SCHOOL · GUARDIAN PORTAL</span>
-            <span className={styles.folioDate}>{supabaseMode ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date()) : demoTodayLabel()}</span>
-          </div>
-
-          <div className={styles.contextStrip}>
             {status === "ready" && activeStudent ? (
-              <p className={styles.contextLine}>
-                <span className={styles.contextLabel}>Linked student</span>
-                <strong>{activeStudent.student.displayName}</strong>
-                <span>· {gradeSectionLabel(activeStudent.gradeSection)}</span>
-                <span>· {activeStudent.academicYear.label}</span>
-                <span className={`num ${styles.contextRef}`}>{activeStudent.student.ref}</span>
-                {switching ? <span className={styles.contextPending}>· Updating…</span> : null}
-              </p>
+              <div className="ctx-child">
+                <div className="cc-meta hide-s">
+                  <strong>{activeStudent.student.displayName}</strong>
+                  {gradeSectionLabel(activeStudent.gradeSection)} · {activeStudent.academicYear.label} · <span className="num">{activeStudent.student.ref}</span>
+                </div>
+                <div className="child-menu" ref={childMenuRef}>
+                  <button
+                    ref={childMenuButtonRef}
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded={cpOpen}
+                    onClick={() => setCpOpen((o) => !o)}
+                  >
+                    <span className="msym" aria-hidden="true">family_restroom</span>
+                    Your children ({students.length})
+                    <span className="msym" aria-hidden="true">expand_more</span>
+                  </button>
+                  {cpOpen ? (
+                    <div
+                      ref={childPopRef}
+                      className="child-pop"
+                      role="menu"
+                      onKeyDown={handleChildMenuKeyDown}
+                    >
+                      <div className="cp-t">Switch active child</div>
+                      {students.map((item) => (
+                        <button
+                          key={item.student.id}
+                          className={`cp-item${context?.activeStudentId === item.student.id ? " on" : ""}`}
+                          role="menuitem"
+                          onClick={() => {
+                            setCpOpen(false);
+                            childMenuButtonRef.current?.focus();
+                            if (item.student.id !== context?.activeStudentId) {
+                              void switchStudent(item.student.id);
+                            }
+                          }}
+                        >
+                          <span className="ci-av" aria-hidden="true">
+                            {item.student.displayName.charAt(0)}
+                          </span>
+                          <span className="ci-meta">
+                            <span className="nm">{item.student.displayName}</span>
+                            <span className="cl">
+                              {gradeSectionLabel(item.gradeSection)} · {item.academicYear.label}
+                            </span>
+                          </span>
+                          {context?.activeStudentId === item.student.id ? (
+                            <span className="msym st-done" aria-hidden="true" style={{ marginLeft: "auto", fontSize: 18 }}>check</span>
+                          ) : null}
+                        </button>
+                      ))}
+                      <div style={{ borderTop: "1px solid var(--line)", marginTop: 6, paddingTop: 6 }}>
+                        <Link
+                          className="cp-item"
+                          role="menuitem"
+                          href="/portal/link-child"
+                          prefetch={false}
+                          onClick={() => setCpOpen(false)}
+                          style={{ display: "flex", textDecoration: "none", color: "inherit" }}
+                        >
+                          <span className="ci-av" style={{ background: "var(--paper-deep)", color: "var(--muted)" }} aria-hidden="true">
+                            <span className="msym" aria-hidden="true">add</span>
+                          </span>
+                          <span className="ci-meta">
+                            <span className="nm">Link another child</span>
+                            <span className="cl">Use the student reference the office issued</span>
+                          </span>
+                        </Link>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             ) : status === "error" ? (
-              <p className={styles.contextLine} role="alert">
-                <span className={styles.contextLabel}>Linked student</span>
-                <span className={styles.contextError}>{errorMessage}</span>
-              </p>
+              <div className="ctx-child">
+                <div className="cc-meta" role="alert">
+                  <strong>Unable to load</strong>
+                  {errorMessage}{" "}
+                  <button type="button" className="btn btn-quiet btn-sm" style={{ color: "#D8CFBB" }} onClick={retry}>
+                    Try again
+                  </button>
+                </div>
+              </div>
             ) : (
-              <p className={styles.contextLine} role="status" aria-live="polite">
-                <span className={styles.contextLabel}>Linked student</span>
-                <span>Loading linked student…</span>
-              </p>
+              <div className="ctx-child">
+                <div className="cc-meta" role="status" aria-live="polite">
+                  <strong>Loading…</strong>
+                  Loading linked children…
+                </div>
+              </div>
             )}
+            <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoGuardianNotifications())} accountId={context?.accountId ?? undefined} />
+            {switching ? <span className={styles.contextPending}>Updating…</span> : null}
+            {signOutError ? <span className={styles.contextError} role="alert">{signOutError}</span> : null}
           </div>
-          <p className="sr-only" role="status" aria-live="polite">
-            {announcement}
-          </p>
         </header>
 
-        <main id="main" tabIndex={-1}>{children}</main>
+        {!supabaseMode ? (
+          <p className="alert-strip demo-strip">
+            Demo session · sample family data. Your child&apos;s real records appear once guardian accounts are linked.
+          </p>
+        ) : null}
+
+        <div className="page">
+          <main id="main" tabIndex={-1}>{children}</main>
+        </div>
+
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
       </div>
     </div>
   );

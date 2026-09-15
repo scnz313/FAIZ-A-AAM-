@@ -21,6 +21,8 @@ const IDENTITY_SESSION_KEY = sessionKey("identity");
 const FIRDOUS_ACCOUNT_ID = "00000000-0000-4000-8000-000000000201";
 const AARIF_ID = "00000000-0000-4000-8000-000000000901";
 const CLASS_8A_SECTION_ID = "00000000-0000-4000-8000-000000000702";
+const REVIEWER_ACCOUNT_ID = "00000000-0000-4000-8000-000000000203";
+const APPROVER_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
 
 function clearDemoSession(): void {
   window.sessionStorage.clear();
@@ -68,8 +70,8 @@ async function acceptAndPay(ref: string): Promise<string> {
 /** Submit a fresh application and move it through review → assessment → offer. */
 async function submitAndOffer(draft: Parameters<typeof admissionsService.submitApplication>[0]): Promise<string> {
   const { ref } = await admissionsService.submitApplication(draft);
-  await admissionsService.staffMoveToAssessment(ref);
-  await admissionsService.staffOfferSeat(ref, "Meets the entry criteria.");
+  await admissionsService.staffMoveToAssessment(ref, "Panel review.", REVIEWER_ACCOUNT_ID);
+  await admissionsService.staffOfferSeat(ref, "Meets the entry criteria.", APPROVER_ACCOUNT_ID);
   return ref;
 }
 
@@ -227,8 +229,12 @@ describe("enrollment conversion", () => {
 
     /* APP-2026-0423's parent is not in the graph — the child enrolls but
        no guardian link is activated (portalAvailable false). */
-    await admissionsService.staffMoveToAssessment("APP-2026-0423");
-    await admissionsService.staffOfferSeat("APP-2026-0423", "Meets the entry criteria for Class 8.");
+    await admissionsService.staffMoveToAssessment("APP-2026-0423", "Panel review.", REVIEWER_ACCOUNT_ID);
+    await admissionsService.staffOfferSeat(
+      "APP-2026-0423",
+      "Meets the entry criteria for Class 8.",
+      APPROVER_ACCOUNT_ID,
+    );
     await acceptAndPay("APP-2026-0423");
 
     const second = await convertApplication("APP-2026-0423");
@@ -238,19 +244,44 @@ describe("enrollment conversion", () => {
   }, 25_000);
 
   it("rejects conversion when no section is configured for the grade", async () => {
-    /* APP-2026-0418 is already in Assessment in the fixture queue. */
-    await admissionsService.staffOfferSeat("APP-2026-0418", "Seat offered for Class 6.");
-    await acceptAndPay("APP-2026-0418");
+    /* APP-2026-0420 (Class 7) has no configured section in the demo. */
+    await admissionsService.staffMoveToAssessment("APP-2026-0420", "Panel review.", REVIEWER_ACCOUNT_ID);
+    await admissionsService.staffOfferSeat("APP-2026-0420", "Seat offered for Class 7.", APPROVER_ACCOUNT_ID);
+    await acceptAndPay("APP-2026-0420");
 
     try {
-      await convertApplication("APP-2026-0418");
+      await convertApplication("APP-2026-0420");
       expect.unreachable("Expected a no-section-for-grade error.");
     } catch (error) {
       expect(error).toBeInstanceOf(EnrollmentConversionError);
       expect((error as EnrollmentConversionError).code).toBe("no-section-for-grade");
     }
     /* No partial conversion state was left behind. */
-    expect((await admissionsService.getApplication("APP-2026-0418"))?.status).toBe("Offered");
+    expect((await admissionsService.getApplication("APP-2026-0420"))?.status).toBe("Offered");
     expect(await familyContextService.listAccessibleStudents(FIRDOUS_ACCOUNT_ID)).toHaveLength(2);
+  }, 15_000);
+});
+
+describe("enrollment idempotency hardening (S4 extension)", () => {
+  it("returns the same references under sequential double-submit without extra effects", async () => {
+    await acceptAndPay("APP-2026-0417");
+    const first = await convertApplication("APP-2026-0417");
+    const second = await convertApplication("APP-2026-0417");
+    expect(second).toEqual(first);
+    expect((await admissionsService.getApplication("APP-2026-0417"))?.timeline.filter((e) => e.status === "Enrolled")).toHaveLength(1);
+    expect(await familyContextService.listAccessibleStudentContexts(FIRDOUS_ACCOUNT_ID)).toHaveLength(2);
+  }, 15_000);
+
+  it("returns one conversion under two overlapping submits", async () => {
+    await acceptAndPay("APP-2026-0417");
+    /* Overlapping submits: the per-application lock serializes them, so only
+       the first converts and the second observes its stored result. */
+    const [first, second] = await Promise.all([
+      convertApplication("APP-2026-0417"),
+      convertApplication("APP-2026-0417"),
+    ]);
+    expect(second).toEqual(first);
+    expect((await admissionsService.getApplication("APP-2026-0417"))?.timeline.filter((e) => e.status === "Enrolled")).toHaveLength(1);
+    expect(await familyContextService.listAccessibleStudentContexts(FIRDOUS_ACCOUNT_ID)).toHaveLength(2);
   }, 15_000);
 });

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import LinkChildForm from "@/components/identity/LinkChildForm";
+import PendingLinkRequests from "@/components/identity/PendingLinkRequests";
 import { dataAdapter } from "@/lib/supabase/env";
 
 import styles from "./page.module.css";
@@ -12,31 +13,56 @@ export const metadata: Metadata = {
 };
 
 /**
- * Link-another-child request, inside the portal route group (PortalShell
- * frame). Uses the portal header pattern — the shell already renders its own
- * folio, so PageIntro's masthead is not repeated here. The request is
- * recorded by the identity service and verified by the school office.
+ * Link-another-child request — V14 PLinkChild pattern with page-head,
+ * warning callout, and titled panel. The request is recorded by the
+ * identity service and verified by the school office.
  */
 export default function LinkChildPage() {
   return (
     <div className={styles.page}>
-      <header>
-        <p className="eyebrow">Portal · Profile</p>
-        <h1 className={styles.title}>Link another child</h1>
-        <p className={styles.intro}>
-          Linking requires the school to verify the request — a second child appears in the portal only after the
-          office approves the link.
+      <div className="page-head">
+        <h1>Link another child</h1>
+        <p className="ph-sub">
+          The school office verifies each request before a child appears in your portal. Enter the student reference the office gives you; a reference alone never activates access.
         </p>
-      </header>
+      </div>
 
-      <LinkChildForm />
+      <div className={styles.body}>
+        <div className="callout">
+          <span className="msym" aria-hidden="true">gpp_good</span>
+          <div>
+            <strong>How linking works</strong>
+            <p className="small">
+              1. Ask the office to verify you as a guardian of the child. &nbsp;2. The office gives you the student reference on the child&apos;s record. &nbsp;3. Enter it here with your relation. &nbsp;4. The school approves the link, and the child appears in your portal. Nothing activates automatically.
+            </p>
+          </div>
+        </div>
 
-      {dataAdapter() !== "supabase" ? (
-        <p className={styles.demoNote}>
-          <span className="demo-badge">Demo data</span>
-          <span>Linking is not real yet — requests are recorded in this browser session only.</span>
-        </p>
-      ) : null}
+        <section className="panel">
+          <div className="pn-head">
+            <h2>Enter the student reference</h2>
+          </div>
+          <div className="pn-body">
+            <LinkChildForm />
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="pn-head">
+            <h2>Your pending requests</h2>
+          </div>
+          <div className="pn-body">
+            <PendingLinkRequests />
+          </div>
+        </section>
+
+        {dataAdapter() !== "supabase" ? (
+          <p className={styles.demoNote}>
+            <span className="demo-badge">Demo data</span>
+            <span>Linking is not real yet · requests are recorded in this browser session only.</span>
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -13,14 +13,12 @@ const ROUTES = [
   { path: "/notices", expect: ["Notices"] },
   { path: "/careers", expect: ["Careers"] },
   { path: "/contact", expect: ["Contact"] },
-  { path: "/environment", expect: ["Environment"] },
   { path: "/disclosure", expect: ["Disclosure"] },
   { path: "/policies/privacy", expect: ["Privacy"] },
   { path: "/policies/accessibility", expect: ["Accessibility"] },
   { path: "/policies/fees-and-refunds", expect: ["Fees"] },
   { path: "/policies/terms", expect: ["Terms"] },
   { path: "/admissions/apply", expect: ["Apply"] },
-  { path: "/ui-states", expect: ["UI"] },
 ];
 
 module.exports = {

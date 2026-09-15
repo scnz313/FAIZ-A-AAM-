@@ -20,10 +20,14 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase db test",
     "db:types": "supabase gen types typescript --local > apps/web/lib/supabase/database.types.ts",
-    "check:cutover": "node scripts/check-supabase-cutover.cjs"
+    "check:cutover": "node scripts/check-supabase-cutover.cjs",
+    "check:icons": "node scripts/material-icons-inventory.cjs --check"
   },
   "engines": {
     "node": "22.x"
+  },
+  "overrides": {
+    "postcss": "8.5.28"
   },
   "devDependencies": {
     "axe-core": "^4.13.0",

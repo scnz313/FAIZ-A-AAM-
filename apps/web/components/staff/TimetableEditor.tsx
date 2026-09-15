@@ -86,7 +86,7 @@ export function TimetableEditor({
         day,
         time,
         field,
-        message: `${FIELD_LABEL[field]} is required for every edited period — choose a value or keep the current one.`,
+        message: `${FIELD_LABEL[field]} is required for every edited period · choose a value or keep the current one.`,
         detail: `The ${field.toLowerCase()} of ${day} ${time} was left empty.`,
       });
       return;
@@ -216,7 +216,7 @@ export function TimetableEditor({
         </p>
         {preview ? (
           <p className={styles.previewNote}>
-            Preview — the draft is shown read-only. Nothing changes for anyone until a version is published.
+            Preview · the draft is shown read-only. Nothing changes for anyone until a version is published.
           </p>
         ) : null}
       </div>
@@ -233,7 +233,7 @@ export function TimetableEditor({
       <div className="table--scroll">
         <table className={`table ${styles.editorTable}`}>
           <caption className="sr-only">
-            Editable Class {className} timetable for {day} — subject, teacher, and room per period
+            Editable Class {className} timetable for {day} · subject, teacher, and room per period
           </caption>
           <thead>
             <tr>

@@ -77,7 +77,10 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
         }
       })
       .catch(() => {
-        if (!cancelled) return;
+        /* Never leave the page on a permanent "Resolving…" line. */
+        if (!cancelled) {
+          setState({ status: "error", message: "Unable to load this receipt. Check your connection and try again." });
+        }
       });
     return () => {
       cancelled = true;
@@ -109,19 +112,23 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
     const data = await loadReceiptData(receiptRef);
     if (data && "error" in data) {
       setState({ status: "error", message: data.error });
-      setNotice("Receipt lookup failed — retry");
+      setNotice("Receipt lookup failed · retry");
     } else if (data) {
       setState({ status: "found", receipt: data.receipt, invoice: data.invoice });
       setNotice(`Receipt ${receiptRef} is available.`);
     } else {
       setState({ status: "missing" });
-      setNotice("Receipt unavailable — retry");
+      setNotice("Receipt unavailable · retry");
     }
     setRetrying(false);
   }
 
   function printReceipt(): void {
-    setNotice("Print dialog opened for the demo receipt. The browser can save this view as a PDF.");
+    setNotice(
+      clientAdapterMode() === "supabase"
+        ? "Print dialog opened for this receipt. The browser can save this view as a PDF."
+        : "Print dialog opened for the demo receipt. The browser can save this view as a PDF.",
+    );
     window.print();
   }
 
@@ -160,13 +167,16 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
   }
 
   if (state.status === "missing") {
+    const live = clientAdapterMode() === "supabase";
     return (
       <div className={styles.notFound}>
         <p className="eyebrow">Portal · Receipt</p>
         <h1 className={styles.title}>Receipt not found</h1>
         <p className={styles.notFoundText}>
-          No receipt with the reference <span className="num">{receiptRef}</span> could be resolved in this demo ledger.
-          The reference has not been replaced with another receipt.
+          No receipt with the reference <span className="num">{receiptRef}</span>{" "}
+          {live
+            ? "is attached to this family account. Receipts are issued only after the finance office confirms a payment."
+            : "could be resolved in this demo ledger. Receipts are issued only after a payment is confirmed."}
         </p>
         <div className={styles.recoveryActions}>
           <Button variant="quiet" onClick={() => void retryReceipt()} disabled={retrying}>
@@ -176,9 +186,11 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
             ← Back to fees
           </Link>
         </div>
-        <p className={styles.liveNotice} role="status" aria-live="polite">
-          {notice || "Receipt unavailable — retry"}
-        </p>
+        {notice ? (
+          <p className={styles.liveNotice} role="status" aria-live="polite">
+            {notice}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -205,7 +217,10 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
         <div className="workspace-state" role="alert">
           <p className="workspace-state-title">Family context unavailable</p>
           <p className="workspace-state-note">
-            {errorMessage ?? "The demo family context could not be loaded. Retry to continue."}
+            {errorMessage ??
+              (clientAdapterMode() === "supabase"
+                ? "Your family context could not be loaded. Retry to continue."
+                : "The demo family context could not be loaded. Retry to continue.")}
           </p>
           <div className={styles.recoveryActions}>
             <button type="button" className="button button--quiet button--small" onClick={retry}>
@@ -236,7 +251,7 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
               </p>
               <p className={styles.contextPanelNote}>
                 {owningStudent.student.displayName} is in {gradeSectionLabel(owningStudent.gradeSection)}. This
-                record is theirs — switch the active child to view and manage it under their ledger.
+                record is theirs · switch the active child to view and manage it under their ledger.
               </p>
               <div className={styles.contextPanelActions}>
                 <button
@@ -270,10 +285,12 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
             </p>
             <div className={styles.headerActions}>
               <Button variant="quiet" onClick={printReceipt} aria-describedby="receipt-print-note">
-                Print receipt — demo
+                Print receipt{clientAdapterMode() === "demo" ? " · demo" : ""}
               </Button>
               <span id="receipt-print-note" className="sr-only">
-                Opens the browser print dialog for this visible demo receipt. No file is generated by this demo.
+                {clientAdapterMode() === "supabase"
+                  ? "Opens the browser print dialog for this receipt. No file is generated here."
+                  : "Opens the browser print dialog for this visible demo receipt. No file is generated by this demo."}
               </span>
             </div>
             <p className="sr-only" role="status" aria-live="polite">
@@ -281,7 +298,13 @@ export function ReceiptView({ receiptRef }: { receiptRef: string }) {
             </p>
           </div>
 
-          <ReceiptPanel receipt={receipt} invoice={invoice} studentName={studentName} studentClass={studentClass} />
+          <ReceiptPanel
+            receipt={receipt}
+            invoice={invoice}
+            studentName={studentName}
+            studentClass={studentClass}
+            live={clientAdapterMode() === "supabase"}
+          />
         </>
       )}
     </div>

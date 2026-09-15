@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { AUTH_COOKIE_OPTIONS } from "@/lib/supabase/cookie-options";
 
 /**
  * Session refresh middleware (plan.md §4, @supabase/ssr Next.js 15
@@ -31,6 +32,7 @@ export async function updateSession(request: NextRequest) {
   let supabaseResponse = nextResponse();
 
   const supabase = createServerClient(url, publishableKey, {
+    cookieOptions: AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll();

@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import Button from "@/components/ui/Button";
+import { ErrorPanel } from "@/components/ui/AsyncStates";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { formatKolkata } from "@/modules/iot/domain";
+import { clientAdapterMode } from "@/modules/services/adapter-client";
 import { supportService } from "@/modules/services/support";
 import type { Grievance, GrievanceCategory, GrievanceEvent } from "@/modules/services/support";
 
@@ -33,7 +35,7 @@ const FIELD_IDS: ReadonlyArray<keyof FieldErrors> = ["category", "subject", "mes
 function ResponseThread({ events }: { events: GrievanceEvent[] }) {
   const responses = events.filter((event) => event.kind === "response");
   if (responses.length === 0) {
-    return <p className={styles.threadEmpty}>No response yet — the office responds on school days.</p>;
+    return <p className={styles.threadEmpty}>No response yet · the office responds on school days.</p>;
   }
   return (
     <ul className={styles.thread}>
@@ -66,10 +68,12 @@ export function SupportForm() {
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<Grievance | null>(null);
 
   const [trackRef, setTrackRef] = useState("");
   const [tracking, setTracking] = useState(false);
+  const [trackError, setTrackError] = useState<string | null>(null);
   const [tracked, setTracked] = useState<Grievance | null>(null);
   const [trackedMissing, setTrackedMissing] = useState(false);
 
@@ -87,11 +91,31 @@ export function SupportForm() {
   function validate(): FieldErrors {
     const next: FieldErrors = {};
     if (category === "") next.category = "Choose the category that fits your concern.";
-    if (subject.trim().length < 5) next.subject = "Enter a short subject — at least 5 characters.";
-    if (message.trim().length < 20) next.message = "Describe your concern — at least 20 characters.";
+    if (subject.trim().length < 5) next.subject = "Enter a short subject · at least 5 characters.";
+    if (message.trim().length < 20) next.message = "Describe your concern · at least 20 characters.";
     if (contactName.trim() === "") next.contactName = "Enter your name so the office can reach you.";
     if (!consent) next.consent = "Consent is required before the grievance can be accepted.";
     return next;
+  }
+
+  async function sendGrievance() {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const { ref } = await supportService.submitAuthenticatedGrievance({
+        category: category as GrievanceCategory,
+        subject: subject.trim(),
+        message: message.trim(),
+        contactName: contactName.trim(),
+        contactPhone: contactPhone.trim() === "" ? undefined : contactPhone.trim(),
+      });
+      setSubmitted(await supportService.getGrievance(ref));
+    } catch (error) {
+      /* The draft stays in place; retry re-sends the same intent. */
+      setSubmitError(error instanceof Error ? error.message : "The grievance could not be submitted.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -103,19 +127,7 @@ export function SupportForm() {
       document.getElementById(fieldId(firstInvalid))?.focus();
       return;
     }
-    setSubmitting(true);
-    try {
-      const { ref } = await supportService.submitAuthenticatedGrievance({
-        category: category as GrievanceCategory,
-        subject: subject.trim(),
-        message: message.trim(),
-        contactName: contactName.trim(),
-        contactPhone: contactPhone.trim() === "" ? undefined : contactPhone.trim(),
-      });
-      setSubmitted(await supportService.getGrievance(ref));
-    } finally {
-      setSubmitting(false);
-    }
+    await sendGrievance();
   }
 
   function reset() {
@@ -126,23 +138,31 @@ export function SupportForm() {
     setContactPhone("");
     setConsent(false);
     setErrors({});
+    setSubmitError(null);
     setSubmitted(null);
   }
 
-  async function handleTrack(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function checkReference() {
     const ref = trackRef.trim();
     if (ref === "") return;
     setTracking(true);
     setTracked(null);
     setTrackedMissing(false);
+    setTrackError(null);
     try {
       const record = await supportService.getGrievance(ref);
       if (record === null) setTrackedMissing(true);
       else setTracked(record);
+    } catch (error) {
+      setTrackError(error instanceof Error ? error.message : "The reference could not be checked.");
     } finally {
       setTracking(false);
     }
+  }
+
+  async function handleTrack(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await checkReference();
   }
 
   const hasErrors = Object.keys(errors).length > 0;
@@ -178,13 +198,21 @@ export function SupportForm() {
           <p className="sr-only" role="status" aria-live="polite">
             {hasErrors
               ? "The form has errors. Please review the marked fields before submitting."
-              : "Grievance form — all fields are required."}
+              : "Grievance form · all fields are required."}
           </p>
 
           {hasErrors && (
             <p className={styles.errorSummary} role="alert">
               Please correct the marked fields before submitting.
             </p>
+          )}
+
+          {submitError !== null && (
+            <ErrorPanel title="The grievance was not submitted" note={`${submitError} Your draft is preserved.`}>
+              <Button variant="quiet" type="button" onClick={() => void sendGrievance()} disabled={submitting}>
+                Try again
+              </Button>
+            </ErrorPanel>
           )}
 
           <div className={`field ${errors.category ? "field--invalid" : ""}`}>
@@ -276,7 +304,7 @@ export function SupportForm() {
           </div>
 
           <div className="field">
-            <label htmlFor="grievance-contact-phone">Phone — optional</label>
+            <label htmlFor="grievance-contact-phone">Phone · optional</label>
             <input
               id="grievance-contact-phone"
               className="input"
@@ -297,7 +325,9 @@ export function SupportForm() {
                 checked={consent}
                 onChange={(event) => setConsent(event.target.checked)}
               />
-              I understand this is a demo form — nothing is sent to the school.
+              {clientAdapterMode() === "supabase"
+                ? "I understand this concern is recorded and visible to the school office."
+                : "I understand this is a demo form: nothing is sent to the school."}
             </label>
             {errors.consent && (
               <p id={`${fieldId("consent")}-error`} className="field-error">
@@ -310,7 +340,7 @@ export function SupportForm() {
             <Button variant="primary" type="submit" disabled={submitting}>
               {submitting ? "Submitting…" : "Submit grievance"}
             </Button>
-            <p className={styles.actionNote}>The office responds on school days within 3 working days.</p>
+            <p className={styles.actionNote}>The office responds on school days within two working days.</p>
           </div>
         </form>
       )}
@@ -337,13 +367,13 @@ export function SupportForm() {
                 setTrackRef(event.target.value);
                 setTrackedMissing(false);
               }}
-              placeholder="GRV-2026-0107"
+              placeholder="SR-2026-XXXXXX"
               aria-describedby={trackedMissing ? "grievance-track-error" : undefined}
               aria-invalid={trackedMissing}
             />
             {trackedMissing && (
               <p id="grievance-track-error" className="field-error">
-                No grievance found for that reference — check the number and try again.
+                No grievance found for that reference · check the number and try again.
               </p>
             )}
           </div>
@@ -352,8 +382,16 @@ export function SupportForm() {
           </Button>
         </form>
 
+        {trackError !== null && (
+          <ErrorPanel title="The reference could not be checked" note={trackError}>
+            <Button variant="quiet" type="button" onClick={() => void checkReference()} disabled={tracking}>
+              Try again
+            </Button>
+          </ErrorPanel>
+        )}
+
         {tracked !== null && (
-          <div className={styles.tracked}>
+          <div className={styles.tracked} role="status" aria-live="polite">
             <div className={styles.recordHead}>
               <span className={`num ${styles.trackedRef}`}>{tracked.ref}</span>
               <StatusBadge tone={STATUS_TONE[tracked.status]}>{tracked.status}</StatusBadge>

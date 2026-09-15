@@ -21,6 +21,7 @@ import { convertApplication, ENROLLMENT_SESSION_KEYS } from "@/modules/services/
 
 const PINNED = new Date("2026-08-10T05:00:00.000Z");
 const FIRDOUS_ACCOUNT_ID = "00000000-0000-4000-8000-000000000201";
+const NIDA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000202";
 const AARIF_ID = "00000000-0000-4000-8000-000000000901";
 const MARIAM_ID = "00000000-0000-4000-8000-000000000902";
 const ZOYA_ID = "00000000-0000-4000-8000-000000000903";
@@ -68,7 +69,7 @@ describe("link-request store (plan.md Phase 3 unification)", () => {
       "Parent",
     );
     expect(retry.ref).toBe(first.ref);
-    expect((await familyContextService.listLinkRequests()).filter((row) => row.request.status === "pending")).toHaveLength(1);
+    expect((await familyContextService.listLinkRequests()).rows.filter((row) => row.request.status === "pending")).toHaveLength(1);
   });
 
   it("refuses a request for a child already actively linked to the account", async () => {
@@ -84,9 +85,10 @@ describe("link-request store (plan.md Phase 3 unification)", () => {
       "STU-2026-0903",
       "Parent",
     );
-    const rows = await familyContextService.listLinkRequests();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.student?.displayName).toBe("Zoya Khan");
+    const page = await familyContextService.listLinkRequests();
+    expect(page.rows).toHaveLength(1);
+    expect(page.total).toBe(1);
+    expect(page.rows[0]?.student?.displayName).toBe("Zoya Khan");
   });
 
   it("approves a request by creating exactly one active link; retries never duplicate", async () => {
@@ -109,7 +111,7 @@ describe("link-request store (plan.md Phase 3 unification)", () => {
     const accessible = await familyContextService.listAccessibleStudents(FIRDOUS_ACCOUNT_ID);
     expect(accessible.map((student) => student.id)).toEqual([AARIF_ID, MARIAM_ID, ZOYA_ID]);
 
-    const links = (await familyContextService.listLinkRequests()).length;
+    const links = (await familyContextService.listLinkRequests()).rows.length;
     expect(links).toBe(1);
 
     /* Exactly one outbox event + one audit row for the approval. */
@@ -156,7 +158,72 @@ describe("link-request store (plan.md Phase 3 unification)", () => {
     await expect(familyContextService.approvePendingLinkRequest(request.id)).rejects.toMatchObject({
       code: "student-not-linked",
     });
-    expect((await familyContextService.listLinkRequests())[0]?.request.status).toBe("pending");
+    expect((await familyContextService.listLinkRequests()).rows[0]?.request.status).toBe("pending");
+  });
+
+  it("binds approval to the requesting guardian only — no cross-guardian leak (binding-bypass negative)", async () => {
+    const request = await familyContextService.createPendingLinkRequest(
+      FIRDOUS_ACCOUNT_ID,
+      "Firdous Ahmad",
+      "STU-2026-0903",
+      "Parent",
+    );
+    const approved = await familyContextService.approvePendingLinkRequest(request.id);
+    expect(approved.status).toBe("approved");
+
+    /* Nida is a different guardian: the approval grants her nothing. */
+    expect((await familyContextService.listAccessibleStudents(NIDA_ACCOUNT_ID)).map((s) => s.id)).not.toContain(
+      ZOYA_ID,
+    );
+    await expect(familyContextService.setActiveStudent(NIDA_ACCOUNT_ID, ZOYA_ID)).rejects.toMatchObject({
+      code: "link-not-active",
+    });
+    expect(await familyContextService.classifyStudentAccess(NIDA_ACCOUNT_ID, ZOYA_ID)).toBe("none");
+
+    /* The requesting guardian did gain exactly Zoya alongside the original children. */
+    expect((await familyContextService.listAccessibleStudents(FIRDOUS_ACCOUNT_ID)).map((s) => s.id)).toEqual([
+      AARIF_ID,
+      MARIAM_ID,
+      ZOYA_ID,
+    ]);
+  });
+
+  it("revoking an approved request link denies that child immediately while siblings stay accessible", async () => {
+    const request = await familyContextService.createPendingLinkRequest(
+      FIRDOUS_ACCOUNT_ID,
+      "Firdous Ahmad",
+      "STU-2026-0903",
+      "Parent",
+    );
+    const approved = await familyContextService.approvePendingLinkRequest(request.id);
+    expect(approved.approvedLinkId).not.toBeNull();
+
+    const revoked = await familyContextService.revokeLink(approved.approvedLinkId!);
+    expect(revoked.status).toBe("ended");
+
+    /* Revocation is idempotent — a retry returns the same ended link. */
+    const again = await familyContextService.revokeLink(approved.approvedLinkId!);
+    expect(again.status).toBe("ended");
+    expect(again.version).toBe(revoked.version);
+
+    expect((await familyContextService.listAccessibleStudents(FIRDOUS_ACCOUNT_ID)).map((s) => s.id)).toEqual([
+      AARIF_ID,
+      MARIAM_ID,
+    ]);
+    await expect(familyContextService.setActiveStudent(FIRDOUS_ACCOUNT_ID, ZOYA_ID)).rejects.toMatchObject({
+      code: "link-not-active",
+    });
+    expect(await familyContextService.classifyStudentAccess(FIRDOUS_ACCOUNT_ID, ZOYA_ID)).toBe("none");
+  });
+
+  it("legacy approveLink is idempotent — a retry returns the same active link", async () => {
+    const PENDING_LINK_ID = "00000000-0000-4000-8000-000000001103";
+    const first = await familyContextService.approveLink(PENDING_LINK_ID);
+    expect(first.status).toBe("active");
+    const second = await familyContextService.approveLink(PENDING_LINK_ID);
+    expect(second.id).toBe(first.id);
+    expect(second.version).toBe(first.version);
+    expect(listOutboxEvents().filter((event) => event.kind === "link.approved")).toHaveLength(1);
   });
 
   it("records one audit row and one outbox event per raised request", async () => {

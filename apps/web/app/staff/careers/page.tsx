@@ -25,18 +25,21 @@ export default async function CareersPage() {
 
   return (
     <div className={styles.page}>
-      <header className={`workspace-header ${styles.header}`}>
-        <p className="eyebrow">Staff · Careers</p>
-        <h1 className="workspace-title">Careers</h1>
-        <p className="workspace-intro">Recruitment queue by vacancy.</p>
-        <p className={styles.summary}>
-          <strong className="num">{open.length}</strong> open · <strong className="num">{closed}</strong> closed ·
-          nearest deadline{" "}
-          <strong className="num">
-            {nearestDeadlineIso ? formatKolkata(nearestDeadlineIso, { format: "day" }) : "—"}
-          </strong>
-        </p>
-      </header>
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Careers</h1>
+          <p className="ph-sub">Recruitment pipeline. Scorecards and panel notes are visible to staff with HR roles only.</p>
+        </div>
+      </div>
+      <p className={styles.summary}>
+        <strong className="num">{open.length}</strong> open · <strong className="num">{closed}</strong> closed
+        {nearestDeadlineIso ? (
+          <>
+            {" "}· nearest deadline{" "}
+            <strong className="num">{formatKolkata(nearestDeadlineIso, { format: "day" })}</strong>
+          </>
+        ) : null}
+      </p>
 
       <section aria-labelledby="queue-heading">
         <div className={styles.sectionHead}>

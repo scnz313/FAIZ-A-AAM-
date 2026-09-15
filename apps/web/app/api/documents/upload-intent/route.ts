@@ -16,7 +16,7 @@ const MIME_EXTENSIONS: Record<string, string> = {
 };
 
 type UploadInput = {
-  ownerDomain: "admission_application" | "job_application" | "student" | "data_import_batch";
+  ownerDomain: "admission_application" | "job_application" | "student" | "data_import_batch" | "school_document";
   ownerRecordRef?: string;
   attachmentCode: string;
   filename: string;
@@ -33,13 +33,17 @@ type UploadConstraints = {
  * browser-declared type/size is never trusted: admission documents resolve
  * their configured requirement through the public configuration projection;
  * job/student uploads use the conservative platform default until
- * per-requirement configuration exists. */
+ * per-requirement configuration exists. School documents use the same
+ * conservative PDF/JPEG/PNG default; CSV is reserved for import sources. */
 async function resolveUploadConstraints(
   client: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   ownerDomain: UploadInput["ownerDomain"],
   ownerRecordId: string,
   attachmentCode: string,
 ): Promise<UploadConstraints> {
+  if (ownerDomain === "school_document") {
+    return { allowedMimeTypes: ["application/pdf", "image/jpeg", "image/png"], maxBytes: MAX_BYTES };
+  }
   if (ownerDomain === "admission_application") {
     const { data: application } = await client
       .from("admission_applications")
@@ -71,6 +75,9 @@ async function resolveOwnerId(
   input: UploadInput,
 ): Promise<string | null> {
   const ref = input.ownerRecordRef;
+  /* School documents are anchored to the publishing account itself; the RPC
+     layer enforces AAL2 + content_publisher for this domain. */
+  if (input.ownerDomain === "school_document") return actorId;
   if (input.ownerDomain === "admission_application") {
     let query = client.from("admission_applications").select("id").eq("owner_account_id", actorId);
     if (ref) query = query.eq("reference", ref);
@@ -104,7 +111,7 @@ async function resolveOwnerId(
 export async function POST(request: Request) {
   const correlationId = crypto.randomUUID();
   const origin = request.headers.get("origin");
-  if (origin === null || !isSameOrigin(request.url, origin, request.headers.get("host"))) return NextResponse.json({ error: "Cross-origin requests are not accepted." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  if (origin === null || !isSameOrigin(request.url, origin, request.headers.get("host"), request.headers.get("sec-fetch-site"))) return NextResponse.json({ error: "Cross-origin requests are not accepted." }, { status: 403, headers: { "Cache-Control": "no-store" } });
   if (dataAdapter() !== "supabase") {
     return NextResponse.json({ error: "document uploads are not active in demo mode" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
@@ -115,7 +122,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<UploadInput>;
     if (
-      (body.ownerDomain !== "admission_application" && body.ownerDomain !== "job_application" && body.ownerDomain !== "student" && body.ownerDomain !== "data_import_batch") ||
+      (body.ownerDomain !== "admission_application" && body.ownerDomain !== "job_application" && body.ownerDomain !== "student" && body.ownerDomain !== "data_import_batch" && body.ownerDomain !== "school_document") ||
       typeof body.ownerRecordRef !== "string" ||
       typeof body.attachmentCode !== "string" || typeof body.filename !== "string" ||
       typeof body.mimeType !== "string" || typeof body.sizeBytes !== "number"
@@ -123,6 +130,13 @@ export async function POST(request: Request) {
     input = body as UploadInput;
   } catch {
     return NextResponse.json({ error: "Invalid upload request." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
+  /* Browsers report `.csv` inconsistently; the extension is the stable signal. */
+  if (
+    input.filename.toLowerCase().endsWith(".csv")
+    && (input.mimeType === "" || input.mimeType === "text/plain" || input.mimeType === "application/vnd.ms-excel")
+  ) {
+    input.mimeType = "text/csv";
   }
   if (!MIME_EXTENSIONS[input.mimeType] || input.sizeBytes <= 0 || input.sizeBytes > MAX_BYTES) {
     return NextResponse.json({ error: "File type, size, or owner reference is not allowed." }, { status: 422, headers: { "Cache-Control": "no-store" } });

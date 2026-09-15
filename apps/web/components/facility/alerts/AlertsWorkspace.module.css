@@ -27,7 +27,7 @@
 
 .summaryCount {
   font-family: var(--serif);
-  font-size: 26px;
+  font-size: 1.6rem;
   font-weight: 400;
   line-height: 1;
   margin: 0;
@@ -52,11 +52,11 @@
 
 .cellTitle strong {
   display: block;
-  font-size: 12px;
+  font-size: 0.78rem;
 }
 
 .cellTitle small {
-  color: var(--ink-soft);
+  color: var(--muted);
   display: block;
   font-size: 10px;
   line-height: 1.45;
@@ -69,7 +69,7 @@
 }
 
 .cellContext small {
-  color: var(--ink-soft);
+  color: var(--muted);
   display: block;
   font-size: 9px;
   margin-top: 3px;
@@ -94,7 +94,7 @@
 }
 
 .alertTrail {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 9px;
   line-height: 1.5;
 }
@@ -128,7 +128,7 @@
 .actionError {
   background: #f3dfce;
   color: #7c3f14;
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 16px 0 0;
   padding: 10px 14px;
 }
@@ -147,7 +147,7 @@
   width: 1px;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .summaryCell {
     padding: 14px 18px 14px 0;
   }

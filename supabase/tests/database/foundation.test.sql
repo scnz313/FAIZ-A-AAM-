@@ -66,6 +66,11 @@ select is(
 
 insert into public.outbox_events (event_key, kind, target_type, target_reference)
 values ('pdf.generate:rc-1:v1', 'pdf.generate', 'receipt', 'RC-2026-TEST01');
+
+-- 000085: the outbox state machine is service-role only. The synthetic
+-- service-role claim stands in for the worker's admin client.
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+
 select is(
   (select count(*)::int from app.claim_outbox(10)),
   2,

@@ -23,7 +23,7 @@
 
 .railLabel {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 11px;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   margin: 0 0 14px;
@@ -32,7 +32,7 @@
 
 .railTitle {
   color: #fff;
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
+  font-family: var(--serif);
   font-size: 27px;
   font-weight: 400;
   line-height: 1.12;
@@ -42,7 +42,7 @@
 .railTitle em {
   color: var(--saffron-bright);
   display: block;
-  font-size: 13px;
+  font-size: 0.82rem;
   font-style: normal;
   margin-top: 6px;
 }
@@ -89,7 +89,7 @@
 
 .railItem strong {
   display: block;
-  font-size: 11px;
+  font-size: 0.72rem;
   font-weight: 600;
 }
 
@@ -111,8 +111,8 @@
 }
 
 .railItemCurrent > span {
-  background: var(--saffron-deep);
-  border-color: var(--saffron-deep);
+  background: var(--saffron-ink);
+  border-color: var(--saffron-ink);
   color: var(--chalk);
 }
 
@@ -125,8 +125,8 @@
 .railHelp strong {
   color: #fff;
   display: block;
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: 15px;
+  font-family: var(--serif);
+  font-size: 0.92rem;
   font-weight: 400;
 }
 
@@ -155,21 +155,21 @@
 
 .errorSummary {
   background: #f9efed;
-  border: 1px solid var(--brick);
+  border: 1px solid var(--madder);
   margin-bottom: 26px;
   padding: 16px 18px;
 }
 
 .errorSummary p {
-  color: var(--brick-deep);
-  font-size: 13px;
+  color: var(--madder-ink);
+  font-size: 0.82rem;
   font-weight: 600;
   margin: 0 0 8px;
 }
 
 .errorSummary ul {
-  color: var(--brick-deep);
-  font-size: 13px;
+  color: var(--madder-ink);
+  font-size: 0.82rem;
   margin: 0;
   padding-left: 18px;
 }
@@ -179,16 +179,24 @@
   margin: 3px 0;
 }
 
+/* Error links keep a 24 px minimum target (WCAG 2.2 AA, 2.5.8) while the
+   list keeps its inline reading rhythm. */
+.errorSummary a {
+  display: inline-block;
+  min-height: 24px;
+  padding: 3px 0;
+}
+
 /* Recoverable submit failure: brick callout; the submit button stays
    enabled so the applicant can retry. */
 .submitError {
   margin: 0 0 22px;
   padding: 14px 18px;
-  border: 1px solid var(--brick);
-  border-top: 2px solid var(--brick);
+  border: 1px solid var(--madder);
+  border-top: 2px solid var(--madder);
   background: #f9efed;
-  color: var(--brick-deep);
-  font-size: 13px;
+  color: var(--madder-ink);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 
@@ -199,7 +207,7 @@
 }
 
 .draftRecoveryStale {
-  border-color: var(--saffron-deep);
+  border-color: var(--saffron-ink);
 }
 
 .draftRecoveryLegacy {
@@ -207,17 +215,17 @@
 }
 
 .draftRecoveryTitle {
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: 22px;
-  font-weight: 500;
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  font-weight: 540;
   line-height: 1.2;
   margin: 0;
 }
 
 .recoveryCopy,
 .storageNotice p {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
   margin: 8px 0 0;
 }
@@ -230,13 +238,13 @@
 }
 
 .storageNotice {
-  border-left: 3px solid var(--brick);
+  border-top: 3px solid var(--madder);
   margin-bottom: 22px;
 }
 
 .storageNoticeTitle {
-  color: var(--brick-deep) !important;
-  font-size: 13px !important;
+  color: var(--madder-ink) !important;
+  font-size: 0.82rem !important;
   font-weight: 600;
   margin-top: 0 !important;
 }
@@ -247,18 +255,18 @@
 }
 
 .formTitle {
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: clamp(28px, 3vw, 36px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-family: var(--serif);
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 540;
+  letter-spacing: -0.01em;
   line-height: 1.1;
   margin: 0;
 }
 
 .formIntro > p:last-child {
-  color: var(--ink-soft);
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: 14px;
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 0.88rem;
   font-style: italic;
   margin: 8px 0 0;
 }
@@ -274,8 +282,19 @@
   grid-column: 1 / -1;
 }
 
+/* Honeypot field: hidden from people and assistive technology, reachable
+   only by automated probes. A filled value rejects the submission. */
+.honeypot {
+  height: 1px;
+  left: -9999px;
+  overflow: hidden;
+  position: absolute;
+  top: auto;
+  width: 1px;
+}
+
 .required {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
 }
 
 .fileInput {
@@ -284,7 +303,7 @@
 
 .docHeading {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 0.78rem;
   font-weight: 600;
   margin: 0;
 }
@@ -296,14 +315,14 @@
 }
 
 .consent input {
-  accent-color: var(--saffron-deep);
+  accent-color: var(--saffron-ink);
   height: 18px;
   margin-top: 1px;
   width: 18px;
 }
 
 .consent span {
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.6;
 }
 
@@ -323,8 +342,8 @@
 }
 
 .savedNote {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.4;
   margin: 0;
   max-width: 28em;
@@ -348,22 +367,22 @@
 }
 
 .contextTitle {
-  font-family: var(--serif, Georgia, "Times New Roman", serif);
-  font-size: 17px;
-  font-weight: 500;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 650;
   margin: 0;
 }
 
 .contextSmall {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   line-height: 1.5;
   margin: 6px 0 0;
 }
 
 .docList {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.7;
   margin: 10px 0 0;
   padding-left: 16px;
@@ -379,8 +398,8 @@
 }
 
 .privacyNote p {
-  color: var(--willow-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   line-height: 1.55;
   margin: 0;
 }
@@ -389,7 +408,7 @@
 /* Responsive                                                          */
 /* ------------------------------------------------------------------ */
 
-@media (max-width: 1000px) {
+@media (max-width: 1023px) {
   .shell {
     grid-template-columns: 240px minmax(0, 1fr);
   }
@@ -399,7 +418,7 @@
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .shell {
     display: block;
   }

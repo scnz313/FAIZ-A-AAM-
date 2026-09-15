@@ -46,23 +46,23 @@ const BASE = process.argv[2] ?? "http://localhost:3000";
 
   try {
     await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    const menu = page.getByRole("button", { name: "Menu" });
+    const menu = page.getByRole("button", { name: "Open menu" });
     await menu.click();
-    check((await page.locator("#public-nav.is-open").count()) === 1, "public mobile menu opens");
+    check((await page.locator("#public-nav-drawer").count()) === 1, "public mobile menu opens");
     check((await page.evaluate(() => document.body.style.overflow)) === "hidden", "mobile menu locks page scroll");
-    check(await page.locator("#public-nav a").first().evaluate((element) => element === document.activeElement), "mobile menu moves focus inside drawer");
+    check(await page.locator("#public-nav-drawer").evaluate((element) => element.contains(document.activeElement)), "mobile menu moves focus inside drawer");
     await page.keyboard.press("Escape");
-    check((await page.locator("#public-nav.is-open").count()) === 0, "Escape closes public mobile menu");
+    check((await page.locator("#public-nav-drawer").count()) === 0, "Escape closes public mobile menu");
     check((await page.evaluate(() => document.body.style.overflow)) === "", "menu close restores page scroll");
     check(await menu.evaluate((element) => element === document.activeElement), "menu close returns focus to toggle");
 
-    await page.goto(`${BASE}/ui-states`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/about`, { waitUntil: "networkidle" });
     await page.locator(".skip-link").focus();
     await page.keyboard.press("Enter");
     check((await page.evaluate(() => document.activeElement?.id)) === "main", "skip link focuses main content");
 
     await page.goto(`${BASE}/portal/documents`, { waitUntil: "networkidle" });
-    const trigger = page.getByRole("button", { name: "Preview (demo)" }).first();
+    const trigger = page.getByRole("button", { name: /PDF/ }).first();
     await trigger.click();
     check((await page.getByRole("dialog").count()) === 1, "document preview opens");
     check(await page.getByRole("button", { name: "Close", exact: true }).evaluate((element) => element === document.activeElement), "document preview focuses close control");
@@ -71,7 +71,7 @@ const BASE = process.argv[2] ?? "http://localhost:3000";
     check(await trigger.evaluate((element) => element === document.activeElement), "document preview returns focus to trigger");
 
     await page.goto(`${BASE}/portal/fees`, { waitUntil: "networkidle" });
-    await page.getByRole("button", { name: /Statement \(PDF\)/ }).click();
+    await page.getByRole("button", { name: "Download statement" }).click();
     check(await page.locator("#statement-preview").evaluate((element) => element === document.activeElement), "statement preview receives focus");
     await page.getByRole("button", { name: "Close preview" }).click();
     check((await page.locator("#statement-preview").count()) === 0, "statement preview closes");

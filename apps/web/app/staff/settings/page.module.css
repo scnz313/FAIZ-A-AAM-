@@ -1,12 +1,20 @@
 .page {
-  grid-template-columns: minmax(0, 1fr);
   display: grid;
-  gap: 44px;
+  gap: 18px;
 }
 
 /* The global workspace-header margin is absorbed by the grid gap. */
 .header {
   margin-bottom: 0;
+}
+
+.title {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+  margin: 0;
 }
 
 .sections {
@@ -23,15 +31,15 @@
 
 .sectionTitle {
   font-family: var(--serif);
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 1.25rem;
+  font-weight: 650;
   margin: 0 0 18px;
 }
 
 .loading {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   margin: 0;
 }
 
@@ -43,8 +51,8 @@
 
 .savedBy {
   border-top: 1px solid var(--line);
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   margin: 20px 0 0;
@@ -87,16 +95,33 @@
 }
 
 .toggleCopy label {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 0.88rem;
+  font-weight: 650;
 }
 
 .toggleHelp {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   line-height: 1.5;
   margin: 2px 0 0;
   max-width: 52ch;
+}
+
+.lockNote {
+  align-items: flex-start;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.78rem;
+  gap: 8px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 60ch;
+}
+
+.lockNote :global(.msym) {
+  flex: none;
+  font-size: 16px;
+  margin-top: 1px;
 }
 
 .saveRow {
@@ -106,26 +131,26 @@
 }
 
 .savedNote {
-  color: var(--saffron-deep);
-  font-size: 13px;
+  color: var(--saffron-ink);
+  font-size: 0.82rem;
   margin: 0;
 }
 
 .dangerZone {
-  border-color: var(--brick);
+  border-color: var(--madder);
 }
 
 .dangerCopy {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.5;
   margin: 0;
   max-width: 56ch;
 }
 
 .resetNote {
-  color: var(--brick);
-  font-size: 13px;
+  color: var(--madder);
+  font-size: 0.82rem;
   margin: 0;
 }
 
@@ -133,20 +158,35 @@
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.5;
   margin: 0;
   padding-top: 18px;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .datePair {
     grid-template-columns: 1fr;
   }
 
-  .saveRow {
-    align-items: flex-start;
+  .controlRow {
+    align-items: stretch;
     flex-direction: column;
+  }
+
+  .saveRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .saveRow :global(.btn) {
+    justify-content: center;
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .toggleRow {
+    min-height: 44px;
   }
 }
 

@@ -29,7 +29,7 @@ import {
   type Term,
 } from "@/modules/academics/demo";
 import { demoNowIso } from "@/modules/demo/clock";
-import { demoStudents } from "@/modules/relationships/demo";
+import { demoAcademicYears, demoGradeSections, demoStudents } from "@/modules/relationships/demo";
 import { auditService } from "@/modules/services/audit";
 import { enqueueOutboxEvent } from "@/modules/services/outbox";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
@@ -55,6 +55,8 @@ export type MarksRow = {
   componentId?: string;
   studentId?: string;
   studentName?: string;
+  /** Assessment component label for student matrix rows (e.g. "Midterm"). */
+  componentName?: string;
   markStatus?: "pending" | "present" | "absent" | "exempt" | "not_applicable";
 };
 
@@ -119,13 +121,24 @@ export type EntryBatch = {
   note?: string;
   /** Full matrix used by Supabase; rows remain a presentation-compatible view. */
   entrySheet?: ResultEntrySheet;
+  /** A correction request awaiting independent reviewer approval (server rows). */
+  pendingCorrectionReason?: string;
+  /**
+   * Queue-only counts from the server list projection (000109). The list
+   * carries no roster or mark arrays; surfaces that need the full matrix
+   * read it through `getBatch`. Never present these as authored values —
+   * they are derived server-side from the same marks the detail read shows.
+   */
+  enteredCount?: number;
+  totalCount?: number;
 };
 
 export type Publication = {
   ref: string;
   term: string;
   status: "final" | "provisional";
-  publishedAtIso: string;
+  /** Null when the release row carries no publication timestamp — never fabricated. */
+  publishedAtIso: string | null;
   version: number;
   /** Why a later version exists — shown on the published report. */
   correctionNote?: string;
@@ -169,6 +182,78 @@ export type StudentResultSnapshot = {
   terms: Record<string, SnapshotMarkRow[]>;
 };
 
+/** One roster student's readiness for a per-student report release. */
+export type ReportReleaseCandidate = {
+  studentId: string;
+  enrollmentId: string;
+  studentName: string;
+  /** Published subject snapshots for this academic year and term. */
+  publicationIds: string[];
+  /** The current release for the term, if one exists. */
+  release: { releaseId: string; reference: string; version: number; status: string } | null;
+};
+
+export type ReportReleaseBatchSummary = {
+  released: number;
+  skipped: number;
+  failed: Array<{ studentId: string; message: string }>;
+};
+
+/**
+ * A correction request awaiting independent reviewer approval. The request
+ * itself creates no editable record; approval opens a new draft entry sheet
+ * linked to the published source (`sourceSheetRef`) and repeats the
+ * maker/checker chain.
+ */
+export type PendingCorrection = {
+  requestId: string;
+  version: number;
+  reason: string;
+  status: string;
+  requestedAtIso: string;
+  releaseRef: string | null;
+  publicationRef: string | null;
+  sheetRef: string | null;
+  subject: string | null;
+  term: string | null;
+  className: string | null;
+};
+
+/** The new editable sheet an approved correction opened. */
+export type CorrectionApproval = {
+  requestId: string;
+  sheetRef: string;
+  sheetVersion: number;
+};
+
+/**
+ * One configured exam definition (term + class section) the signed-in result
+ * officer may open a batch for. `subjects` contains only subjects with
+ * configured assessment components inside the caller's role-grant scope, so
+ * a create selection never fails for a missing component.
+ */
+export type ExamDefinitionOption = {
+  id: string;
+  ref: string;
+  term: string;
+  status: "planned" | "open" | "closed";
+  academicYearId: string;
+  academicYearLabel?: string;
+  academicYearStatus?: string;
+  gradeSectionId: string;
+  gradeLabel: string;
+  sectionLabel: string;
+  subjects: Array<{ id: string; code: string; name: string }>;
+};
+
+/** Selection the create-batch panel resolves before calling the service. */
+export type CreateBatchInput = {
+  examDefinitionId: string;
+  gradeSectionId: string;
+  subjectId: string;
+  idempotencyKey?: string;
+};
+
 /** Shared status labels and tones for entry batches (single source of truth). */
 export const ENTRY_BATCH_STATUS_META: Record<EntryBatchStatus, { label: string; tone: "good" | "watch" | "alert" | "neutral" }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -203,11 +288,24 @@ export function gradeForPercentage(percentage: number): Grade {
 
 export interface ResultsService {
   listBatches(): Promise<EntryBatch[]>;
+  /**
+   * Exam definitions (term + class section + scoped subjects) the signed-in
+   * result officer may open a batch for. Read-only; an adapter/RLS failure is
+   * returned as an error so the panel can offer a retry instead of an
+   * honest-looking empty list.
+   */
+  listExamDefinitions(): Promise<AcademicResult<ExamDefinitionOption[]>>;
+  /**
+   * Create the entry sheet (batch) for one exam definition and subject. The
+   * server freezes the active roster and assessment components; an existing
+   * open sheet for the same selection is returned instead of duplicated.
+   */
+  createBatch(input: CreateBatchInput): Promise<AcademicResult<EntryBatch>>;
   getBatch(ref: string): Promise<EntryBatch | null>;
   saveEntryDraft(ref: string, rows: MarksRow[]): Promise<AcademicResult<EntryBatch>>;
-  submitForModeration(ref: string, rows: MarksRow[]): Promise<AcademicResult<EntryBatch>>;
-  returnWithReason(ref: string, reason: string): Promise<AcademicResult<EntryBatch>>;
-  approve(ref: string): Promise<AcademicResult<EntryBatch>>;
+  submitForModeration(ref: string, rows: MarksRow[], by?: string): Promise<AcademicResult<EntryBatch>>;
+  returnWithReason(ref: string, reason: string, by?: string): Promise<AcademicResult<EntryBatch>>;
+  approve(ref: string, by?: string): Promise<AcademicResult<EntryBatch>>;
   publish(ref: string, by?: string): Promise<AcademicResult<Publication>>;
   /** Open a new editable version of a published batch. */
   startCorrection(ref: string, reason: string, by?: string): Promise<AcademicResult<EntryBatch>>;
@@ -229,6 +327,26 @@ export interface ResultsService {
    * renders marks from this snapshot only, never from a term fixture.
    */
   getStudentResultSnapshot(studentId: string, academicYearId: string): Promise<StudentResultSnapshot | null>;
+  /**
+   * Per-student release readiness for a published batch: the published
+   * subject publications for the batch's term/year and the current release.
+   * Live mode only; demo mode publishes straight to the portal.
+   */
+  listReleaseCandidates(ref: string): Promise<AcademicResult<ReportReleaseCandidate[]>>;
+  /**
+   * Assemble report releases for the batch's roster (all students unless
+   * `studentIds` is given). One release per student; a failure for one
+   * student never aborts the rest. Live mode only.
+   */
+  publishReportReleases(ref: string, options?: { studentIds?: string[] }): Promise<AcademicResult<ReportReleaseBatchSummary>>;
+  /**
+   * Correction requests awaiting independent reviewer approval. The request
+   * is raised by the entry officer (or a publisher) against a published
+   * release item; approval opens a new editable sheet. Live mode only.
+   */
+  listCorrections(): Promise<AcademicResult<PendingCorrection[]>>;
+  /** Approve a pending correction request and return the new draft sheet. */
+  approveCorrection(requestId: string, expectedVersion: number): Promise<AcademicResult<CorrectionApproval>>;
 }
 
 export type AcademicsService = ResultsService;
@@ -266,8 +384,17 @@ export type SupabaseResultRow = {
   subjectName?: string;
   components?: Array<{ id: string; reference?: string; name: string; maxMarks: number; weight?: number | null; order?: number }>;
   roster?: Array<{ id: string; reference?: string; studentId: string; enrollmentId: string; studentName?: string; order?: number; marks?: Array<{ id?: string; componentId: string; obtained: number | null; markStatus?: string; remark?: string | null }> }>;
+  /* Queue counts from `app.results_entry_sheet_list` (000109): the list
+     projection intentionally carries no roster/mark arrays. */
+  rosterCount?: number;
+  componentCount?: number;
+  enteredCount?: number;
+  incompleteCount?: number;
   exam_definitions?: { term?: string; grade_sections?: { section_label?: string; grades?: { label?: string } | null } | null; assessment_components?: Array<{ id: string; name: string; max_marks: number }> } | null;
   result_rosters?: Array<{ id: string; mark_entries?: Array<{ component_id: string; obtained: number | null; absent: boolean; remark: string | null }> }>;
+  /* Enrichment attached by the results.getBatch adapter operation. */
+  versions?: Array<{ version?: number; state?: string; note?: string | null; createdAt?: string; created_at?: string; actorAccountId?: string; actor_account_id?: string }>;
+  corrections?: Array<{ id?: string; reason?: string; version?: number; status?: string }>;
 };
 
 function supabaseBatchStatus(status: string): EntryBatchStatus {
@@ -275,6 +402,7 @@ function supabaseBatchStatus(status: string): EntryBatchStatus {
 }
 
 export function mapServerResultBatch(row: SupabaseResultRow): EntryBatch {
+  const workflowNote = serverWorkflowNote(row);
   if (Array.isArray(row.components) && Array.isArray(row.roster)) {
     const components: ResultEntryComponent[] = row.components.map((component, index) => ({
       id: component.id,
@@ -289,7 +417,9 @@ export function mapServerResultBatch(row: SupabaseResultRow): EntryBatch {
       ref: candidate.reference,
       studentId: candidate.studentId,
       enrollmentId: candidate.enrollmentId,
-      studentName: candidate.studentName ?? candidate.studentId,
+      /* A person record may carry an empty display name (imported or pending
+         correction); never render a label-less row in the marks matrix. */
+      studentName: candidate.studentName?.trim() ? candidate.studentName.trim() : "Student",
       order: candidate.order ?? rosterIndex,
       marks: (candidate.marks ?? []).map((mark) => ({
         id: mark.id,
@@ -311,6 +441,7 @@ export function mapServerResultBatch(row: SupabaseResultRow): EntryBatch {
         componentId: component.id,
         studentId: candidate.studentId,
         studentName: candidate.studentName,
+        componentName: component.name,
         markStatus: mark?.markStatus ?? "pending",
       } satisfies MarksRow;
     }));
@@ -323,7 +454,31 @@ export function mapServerResultBatch(row: SupabaseResultRow): EntryBatch {
       rows,
       totalsIncomplete: rows.some((item) => item.obtained === null && item.markStatus === "pending"),
       version: row.version,
+      returnedReason: workflowNote.returnedReason,
+      note: workflowNote.note,
+      pendingCorrectionReason: workflowNote.pendingCorrectionReason,
       entrySheet: { id: row.id, ref: row.reference, examDefinitionId: row.examDefinitionId, academicYearId: row.academicYearId, gradeSectionId: row.gradeSectionId, subjectId: row.subjectId, state: supabaseBatchStatus(row.state ?? row.status), version: row.version, components, roster },
+    };
+  }
+  /* Queue shape (000109): the list projection carries counts only, so the
+     queue computes "entered / total" from them instead of a full matrix.
+     `entrySheet` is intentionally absent; the entry workspace and detail
+     page read the full sheet through `getBatch`. */
+  if (typeof row.rosterCount === "number" && typeof row.componentCount === "number") {
+    return {
+      ref: row.reference,
+      exam: row.examTerm ?? "Results",
+      className: `${row.gradeLabel ?? "Class"} · ${row.sectionLabel ?? ""}`.trim(),
+      subject: row.subjectName ?? "",
+      status: supabaseBatchStatus(row.state ?? row.status),
+      rows: [],
+      totalsIncomplete: (row.incompleteCount ?? 0) > 0,
+      version: row.version,
+      enteredCount: row.enteredCount ?? 0,
+      totalCount: row.rosterCount * row.componentCount,
+      returnedReason: workflowNote.returnedReason,
+      note: workflowNote.note,
+      pendingCorrectionReason: workflowNote.pendingCorrectionReason,
     };
   }
   const components = row.exam_definitions?.assessment_components ?? [];
@@ -342,6 +497,40 @@ export function mapServerResultBatch(row: SupabaseResultRow): EntryBatch {
     rows,
     totalsIncomplete: rows.some((item) => item.obtained === null),
     version: row.version,
+    returnedReason: workflowNote.returnedReason,
+    note: workflowNote.note,
+    pendingCorrectionReason: workflowNote.pendingCorrectionReason,
+  };
+}
+
+/** The entry sheet carries no workflow note column; the latest returned
+ * version (or a pending correction request) is the authoritative reason. */
+function serverWorkflowNote(row: SupabaseResultRow): {
+  returnedReason?: string;
+  note?: string;
+  pendingCorrectionReason?: string;
+} {
+  const status = supabaseBatchStatus(row.state ?? row.status);
+  const returned = (row.versions ?? []).find((version) => version.state === "returned" && typeof version.note === "string" && version.note.trim() !== "");
+  const returnedReason = returned?.note?.trim();
+  const pendingCorrectionReason = (row.corrections ?? []).find((correction) => typeof correction.reason === "string" && correction.reason.trim() !== "")?.reason?.trim();
+  if (status === "returned" && returnedReason !== undefined) {
+    return { returnedReason, note: `Returned for correction — ${returnedReason}` };
+  }
+  if (pendingCorrectionReason !== undefined) {
+    return { pendingCorrectionReason, note: `Correction pending reviewer approval — ${pendingCorrectionReason}` };
+  }
+  return {};
+}
+
+export function mapServerResultVersion(row: { version?: number; state?: string; note?: string | null; createdAt?: string; created_at?: string }): BatchVersion {
+  /* The actor is only exposed as an internal account id; never render a raw
+     UUID as a person's name. The timestamp may be absent — never fabricate. */
+  return {
+    version: row.version ?? 0,
+    note: row.note ?? "",
+    atIso: row.createdAt ?? row.created_at ?? "",
+    state: row.state,
   };
 }
 
@@ -350,6 +539,38 @@ async function supabaseBatch(ref: string): Promise<{ id: string; raw: SupabaseRe
   if (!listed.ok) return null;
   const raw = listed.value.find((candidate) => candidate.reference === ref || candidate.id === ref);
   return raw ? { id: raw.id, raw } : null;
+}
+
+/** Server projection row from `results.examDefinitions` (migration 000094). */
+export type SupabaseExamDefinitionRow = {
+  id: string;
+  reference?: string;
+  term: string;
+  status?: string;
+  academicYearId?: string;
+  academicYearLabel?: string;
+  academicYearStatus?: string;
+  gradeSectionId: string;
+  gradeLabel?: string;
+  sectionLabel?: string;
+  subjects?: Array<{ id: string; code?: string; name: string }>;
+};
+
+export function mapServerExamDefinition(row: SupabaseExamDefinitionRow): ExamDefinitionOption {
+  const status = row.status === "planned" || row.status === "closed" ? row.status : "open";
+  return {
+    id: row.id,
+    ref: row.reference ?? row.id,
+    term: row.term,
+    status,
+    academicYearId: row.academicYearId ?? "",
+    academicYearLabel: row.academicYearLabel,
+    academicYearStatus: row.academicYearStatus,
+    gradeSectionId: row.gradeSectionId,
+    gradeLabel: row.gradeLabel ?? "Class",
+    sectionLabel: row.sectionLabel ?? "",
+    subjects: (row.subjects ?? []).map((subject) => ({ id: subject.id, code: subject.code ?? "", name: subject.name })),
+  };
 }
 
 function markPayload(rows: MarksRow[], raw: SupabaseResultRow): Array<{ rosterId: string; componentId: string; obtained: number | null; absent: boolean; remark: string | null }> {
@@ -371,8 +592,21 @@ function markPayload(rows: MarksRow[], raw: SupabaseResultRow): Array<{ rosterId
 
 /* --- Session snapshot ---------------------------------------------- */
 
-/** Internal batch record: public fields plus correction/publisher audit. */
-type SessionBatch = EntryBatch & { correctionReason?: string; publishedBy?: string };
+/** Internal batch record: public fields plus correction/publisher audit.
+ * submittedBy/approvedBy exist only to enforce demo role separation
+ * (entry officer vs moderator vs publisher, no self-publish) when callers
+ * supply an explicit actor. The definition/scope ids exist only so a demo
+ * create is idempotent for the same exam, section, and subject. Supabase mode
+ * delegates all of this to the server. */
+type SessionBatch = EntryBatch & {
+  correctionReason?: string;
+  publishedBy?: string;
+  submittedBy?: string;
+  approvedBy?: string;
+  examDefinitionId?: string;
+  gradeSectionId?: string;
+  subjectId?: string;
+};
 
 type AcademicsSession = {
   batches: Record<string, SessionBatch>;
@@ -450,6 +684,65 @@ function saveSession(state: AcademicsSession): void {
   sessionSet(SESSION_KEY, state);
 }
 
+/* --- Demo exam definitions (batch creation) ------------------------- */
+
+function demoSubjectSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function demoSubjectCode(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase();
+}
+
+/**
+ * Deterministic demo exam definitions for the batch-creation panel. Only
+ * terms with marks fixtures are offered, so a demo-created batch always has
+ * a configured maximum for its subject; active class sections only. These
+ * are fictional fixtures, not a server contract.
+ */
+export function demoExamDefinitions(): ExamDefinitionOption[] {
+  const yearById = new Map(demoAcademicYears.map((year) => [year.id, year]));
+  const activeSections = demoGradeSections.filter((section) => section.status === "active");
+  const options: ExamDefinitionOption[] = [];
+  for (const term of Object.keys(marksByTerm)) {
+    const marks = marksByTerm[term] ?? [];
+    for (const section of activeSections) {
+      const year = yearById.get(section.academicYearId);
+      options.push({
+        id: `demo-exam:${demoSubjectSlug(term)}:${section.id}`,
+        ref: `EXM-DEMO-${demoSubjectSlug(term)}-${section.sectionLabel}`,
+        term,
+        status: "open",
+        academicYearId: section.academicYearId,
+        academicYearLabel: year?.label,
+        academicYearStatus: year?.status,
+        gradeSectionId: section.id,
+        gradeLabel: section.gradeLabel,
+        sectionLabel: section.sectionLabel,
+        subjects: marks.map((mark) => ({
+          id: `demo-subject:${demoSubjectSlug(mark.subject)}`,
+          code: demoSubjectCode(mark.subject),
+          name: mark.subject,
+        })),
+      });
+    }
+  }
+  return options;
+}
+
+/** Next free demo batch reference (fixtures occupy RB-2026-0138..0144). */
+function nextDemoBatchRef(state: AcademicsSession): string {
+  const numbers = Object.keys(state.batches)
+    .map((ref) => Number(ref.replace(/^RB-2026-/, "")))
+    .filter((value) => Number.isFinite(value));
+  const next = (numbers.length === 0 ? 137 : Math.max(...numbers)) + 1;
+  return `RB-2026-${String(next).padStart(4, "0")}`;
+}
+
 function publicBatch(batch: SessionBatch): EntryBatch {
   return {
     ref: batch.ref,
@@ -457,13 +750,13 @@ function publicBatch(batch: SessionBatch): EntryBatch {
     className: batch.className,
     subject: batch.subject,
     status: batch.status,
-    rows: batch.rows,
+    rows: batch.rows.map((row) => ({ ...row })),
     totalsIncomplete: batch.totalsIncomplete,
     returnedReason: batch.returnedReason,
     version: batch.version,
     publishedAtIso: batch.publishedAtIso,
     note: batch.note,
-    entrySheet: batch.entrySheet,
+    entrySheet: batch.entrySheet === undefined ? undefined : (JSON.parse(JSON.stringify(batch.entrySheet)) as ResultEntrySheet),
   };
 }
 
@@ -514,23 +807,96 @@ async function listBatches(): Promise<EntryBatch[]> {
   if (clientAdapterMode() === "supabase") {
     const response = await adapterCall<SupabaseResultRow[]>("results.listBatches", {});
     if (!response.ok) return [];
-    return response.value.map(mapServerResultBatch);
+    const batches = response.value.map(mapServerResultBatch);
+    /* One extra read annotates every published row whose correction request is
+       still awaiting reviewer approval; a failed read never fails the queue. */
+    const corrections = await adapterCall<Array<{ sheet_reference?: string | null; reason?: string }>>("results.listCorrections", {});
+    if (corrections.ok) {
+      const reasons = new Map<string, string>();
+      for (const correction of corrections.value) {
+        if (typeof correction.sheet_reference === "string" && correction.sheet_reference !== "" && typeof correction.reason === "string" && correction.reason.trim() !== "") {
+          reasons.set(correction.sheet_reference, correction.reason.trim());
+        }
+      }
+      return batches.map((batch) => {
+        const reason = reasons.get(batch.ref);
+        return reason === undefined ? batch : { ...batch, pendingCorrectionReason: reason, note: `Correction pending reviewer approval — ${reason}` };
+      });
+    }
+    return batches;
   }
   return respond(() => Object.values(loadSession().batches).map(publicBatch));
 }
 
 async function getBatch(ref: string): Promise<EntryBatch | null> {
   if (clientAdapterMode() === "supabase") {
-    const listed = await adapterCall<SupabaseResultRow[]>("results.listBatches", {});
-    if (!listed.ok) return null;
-    const found = listed.value.find((candidate) => candidate.reference === ref || candidate.id === ref);
-    if (!found) return null;
-    const detail = await adapterCall<SupabaseResultRow>("results.getBatch", { batchRef: found.reference });
-    return detail.ok ? mapServerResultBatch(detail.value) : mapServerResultBatch(found);
+    /* A single bounded detail read: the reference resolves server-side, so the
+       whole queue is never listed just to find one batch. */
+    const detail = await adapterCall<SupabaseResultRow | null>("results.getBatch", { batchRef: ref });
+    if (!detail.ok) throw new Error(detail.errors[0]?.message ?? "The result batch could not be read.");
+    return detail.value === null ? null : mapServerResultBatch(detail.value);
   }
   return respond(() => {
     const batch = loadSession().batches[ref];
     return batch ? publicBatch(batch) : null;
+  });
+}
+
+async function listExamDefinitions(): Promise<AcademicResult<ExamDefinitionOption[]>> {
+  if (clientAdapterMode() === "supabase") {
+    const response = await adapterCall<SupabaseExamDefinitionRow[]>("results.examDefinitions", {});
+    if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+    return { ok: true, value: response.value.map(mapServerExamDefinition) };
+  }
+  return respond(() => ({ ok: true as const, value: demoExamDefinitions() }));
+}
+
+async function createBatch(input: CreateBatchInput): Promise<AcademicResult<EntryBatch>> {
+  if (clientAdapterMode() === "supabase") {
+    const response = await adapterCall<SupabaseResultRow>("results.createBatch", {
+      examDefinitionId: input.examDefinitionId,
+      gradeSectionId: input.gradeSectionId,
+      subjectId: input.subjectId,
+      ...(input.idempotencyKey === undefined ? {} : { idempotencyKey: input.idempotencyKey }),
+    });
+    if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+    return { ok: true, value: mapServerResultBatch(response.value) };
+  }
+  return respond(() => {
+    const state = loadSession();
+    const definition = demoExamDefinitions().find((candidate) => candidate.id === input.examDefinitionId);
+    if (!definition) return fail("The selected exam is not available.");
+    const subject = definition.subjects.find((candidate) => candidate.id === input.subjectId);
+    if (!subject) return fail("The selected subject is not configured for this exam.");
+    /* The same selection reopens the open demo batch instead of duplicating:
+       mirrors the server's active-sheet lookup. */
+    const existing = Object.values(state.batches).find(
+      (batch) =>
+        batch.examDefinitionId === input.examDefinitionId &&
+        batch.gradeSectionId === input.gradeSectionId &&
+        batch.subjectId === input.subjectId &&
+        batch.status !== "withdrawn",
+    );
+    if (existing) return { ok: true, value: publicBatch(existing) };
+    const marks = (marksByTerm[definition.term] ?? []).find((mark) => mark.subject === subject.name);
+    if (!marks) return fail("The chosen term has no configured marks maximum for this subject.");
+    const className = `${definition.gradeLabel.replace(/^Class\s+/i, "")}-${definition.sectionLabel}`;
+    const batch: SessionBatch = {
+      ref: nextDemoBatchRef(state),
+      exam: definition.term,
+      className,
+      subject: subject.name,
+      status: "draft",
+      rows: [{ subject: subject.name, max: marks.max, obtained: null }],
+      totalsIncomplete: true,
+      version: 1,
+      examDefinitionId: definition.id,
+      gradeSectionId: definition.gradeSectionId,
+      subjectId: subject.id,
+    };
+    state.batches[batch.ref] = batch;
+    saveSession(state);
+    return { ok: true, value: publicBatch(batch) };
   });
 }
 
@@ -559,7 +925,7 @@ async function saveEntryDraft(ref: string, rows: MarksRow[]): Promise<AcademicRe
   });
 }
 
-async function submitForModeration(ref: string, rows: MarksRow[]): Promise<AcademicResult<EntryBatch>> {
+async function submitForModeration(ref: string, rows: MarksRow[], by?: string): Promise<AcademicResult<EntryBatch>> {
   if (clientAdapterMode() === "supabase") {
     const resolved = await supabaseBatch(ref);
     if (!resolved) return fail("Batch not found.");
@@ -581,12 +947,14 @@ async function submitForModeration(ref: string, rows: MarksRow[]): Promise<Acade
     batch.totalsIncomplete = false;
     batch.returnedReason = undefined;
     batch.status = "submitted";
+    if (by !== undefined && by.trim() !== "") batch.submittedBy = by.trim();
+    batch.approvedBy = undefined;
     saveSession(state);
     return { ok: true, value: publicBatch(batch) };
   });
 }
 
-async function returnWithReason(ref: string, reason: string): Promise<AcademicResult<EntryBatch>> {
+async function returnWithReason(ref: string, reason: string, _by?: string): Promise<AcademicResult<EntryBatch>> {
   if (clientAdapterMode() === "supabase") {
     const resolved = await supabaseBatch(ref);
     if (!resolved) return fail("Batch not found.");
@@ -610,7 +978,7 @@ async function returnWithReason(ref: string, reason: string): Promise<AcademicRe
   });
 }
 
-async function approve(ref: string): Promise<AcademicResult<EntryBatch>> {
+async function approve(ref: string, by?: string): Promise<AcademicResult<EntryBatch>> {
   if (clientAdapterMode() === "supabase") {
     const resolved = await supabaseBatch(ref);
     if (!resolved) return fail("Batch not found.");
@@ -626,7 +994,12 @@ async function approve(ref: string): Promise<AcademicResult<EntryBatch>> {
     if (batch.status !== "submitted" && batch.status !== "moderation") {
       return fail(`Only sheets awaiting moderation can be approved — the batch is ${statusLabel(batch.status)}.`);
     }
+    const approver = by?.trim() ? by.trim() : undefined;
+    if (approver !== undefined && batch.submittedBy !== undefined && approver === batch.submittedBy) {
+      return fail("Moderation requires a different reviewer — the entry officer cannot approve their own sheet.");
+    }
     batch.status = "approved";
+    if (approver !== undefined) batch.approvedBy = approver;
     saveSession(state);
     return { ok: true, value: publicBatch(batch) };
   });
@@ -641,7 +1014,7 @@ async function publish(ref: string, by: string = DEFAULT_ACTOR): Promise<Academi
     const publications = await adapterCall<Array<{ reference: string; version: number; status: string; published_at: string }>>("results.listPublications", {});
     const publicationRef = response.value.publicationRef ?? response.value.publicationId ?? resolved.raw.reference;
     const item = publications.ok ? publications.value.find((candidate) => candidate.reference === publicationRef) : undefined;
-    return { ok: true, value: { ref: publicationRef, term: resolved.raw.exam_definitions?.term ?? resolved.raw.examTerm ?? "Results", status: "final", publishedAtIso: item?.published_at ?? new Date().toISOString(), version: item?.version ?? resolved.raw.version } };
+    return { ok: true, value: { ref: publicationRef, term: resolved.raw.exam_definitions?.term ?? resolved.raw.examTerm ?? "Results", status: "final", publishedAtIso: item?.published_at ?? null, version: item?.version ?? resolved.raw.version } };
   }
   return respond(() => {
     const state = loadSession();
@@ -650,6 +1023,10 @@ async function publish(ref: string, by: string = DEFAULT_ACTOR): Promise<Academi
     if (batch.status === "published") return fail("This batch is already published — corrections release as a new version.");
     if (batch.status !== "approved") {
       return fail(`Only approved sheets can be published — the batch is ${statusLabel(batch.status)}.`);
+    }
+    const publisher = by?.trim() ? by.trim() : undefined;
+    if (publisher !== undefined && batch.approvedBy !== undefined && publisher === batch.approvedBy) {
+      return fail("Publishing requires a different publisher — the moderator cannot publish their own approval (no self-publish).");
     }
     const counter = state.pubCounter;
     state.pubCounter += 1;
@@ -665,7 +1042,7 @@ async function publish(ref: string, by: string = DEFAULT_ACTOR): Promise<Academi
           : undefined,
     };
     batch.status = "published";
-    batch.publishedAtIso = publication.publishedAtIso;
+    batch.publishedAtIso = publication.publishedAtIso ?? demoNowIso();
     batch.publishedBy = by;
     batch.note = undefined;
     state.publications.push(publication);
@@ -685,13 +1062,29 @@ async function publish(ref: string, by: string = DEFAULT_ACTOR): Promise<Academi
 
 async function startCorrection(ref: string, reason: string, by: string = DEFAULT_ACTOR): Promise<AcademicResult<EntryBatch>> {
   if (clientAdapterMode() === "supabase") {
-    const publications = await adapterCall<Array<{ id: string; reference: string; batch_id?: string; releaseId?: string; items?: Array<{ publicationId: string; subjectId: string; snapshot: unknown }> }>>("results.listReleases", {});
-    if (!publications.ok) return { ok: false, errors: publications.errors.map((error) => ({ subject: null, message: error.message })) };
-    const publication = publications.value.find((candidate) => candidate.reference === ref || candidate.releaseId === ref);
-    if (!publication) return fail("Publication not found.");
-    const target = publication.items?.[0];
-    if (!target) return fail("The report release has no subject publication to correct.");
-    const request = await adapterCall<{ requestId: string }>("results.requestCorrection", { releaseRef: publication.reference, publicationRef: target.publicationId, reason, idempotencyKey: `correction:${publication.reference}:${target.publicationId}` });
+    const resolved = await supabaseBatch(ref);
+    if (!resolved) return fail("Batch not found.");
+    /* A correction is requested against the published report release item that
+       carries this sheet — never against the batch reference. Approval by an
+       independent reviewer opens a new editable sheet linked to the source. */
+    const releases = await adapterCall<Array<{
+      id?: string;
+      reference?: string;
+      status?: string;
+      publishedAt?: string;
+      items?: Array<{ publicationId?: string; entrySheetId?: string | null; subjectId?: string }>;
+    }>>("results.listReleases", {});
+    if (!releases.ok) return { ok: false, errors: releases.errors.map((error) => ({ subject: null, message: error.message })) };
+    const candidates = releases.value
+      .filter((release) => release.status === "published")
+      .filter((release) => (release.items ?? []).some((item) => item.entrySheetId === resolved.id))
+      .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
+    const release = candidates[0];
+    const target = release?.items?.find((item) => item.entrySheetId === resolved.id);
+    if (release === undefined || target === undefined || typeof target.publicationId !== "string") {
+      return fail("This batch has no published report release to correct yet. Assemble its report release first.");
+    }
+    const request = await adapterCall<{ requestId: string }>("results.requestCorrection", { releaseId: release.id, publicationId: target.publicationId, reason });
     if (!request.ok) return { ok: false, errors: request.errors.map((error) => ({ subject: null, message: error.message })) };
     const next = await getBatch(ref);
     return next
@@ -711,7 +1104,13 @@ async function startCorrection(ref: string, reason: string, by: string = DEFAULT
     batch.status = "draft";
     batch.returnedReason = undefined;
     batch.correctionReason = reason.trim();
+    /* Deep-clone rows so later edits to the correction draft cannot mutate
+       the published version's bytes held by earlier readers. */
+    batch.rows = batch.rows.map((row) => ({ ...row }));
+    batch.totalsIncomplete = batch.rows.some((row) => row.obtained === null);
     batch.note = `Correction v${version} — ${reason.trim()}`;
+    batch.submittedBy = undefined;
+    batch.approvedBy = undefined;
     state.versions[batch.ref] = [{ version, note: reason.trim(), atIso: demoNowIso(), by }, ...(state.versions[batch.ref] ?? [])];
     saveSession(state);
     return { ok: true, value: publicBatch(batch) };
@@ -720,22 +1119,22 @@ async function startCorrection(ref: string, reason: string, by: string = DEFAULT
 
 async function withdrawPublication(ref: string, reason: string, by: string = DEFAULT_ACTOR): Promise<AcademicResult<EntryBatch>> {
   if (clientAdapterMode() === "supabase") {
-    /* The caller passes a batch reference (RB-...); resolve it to the batch's
-       active publication (PUB-...) before calling results.withdraw. */
-    const publications = await adapterCall<Array<{ id: string; reference: string; batch_id: string; status?: string }>>("results.listPublications", {});
+    /* The caller passes a batch reference (RES-...); resolve it to the batch's
+       active publication (PUB-...). Sheet-native publications carry no
+       batch_id, so both the sheet link and the legacy batch link are matched. */
+    const publications = await adapterCall<Array<{ id: string; reference: string; batch_id?: string | null; source_entry_sheet_id?: string | null; version?: number; status?: string }>>("results.listPublications", {});
     if (!publications.ok) return { ok: false, errors: publications.errors.map((error) => ({ subject: null, message: error.message })) };
-    /* Try matching by publication reference first, then fall back to batch_id. */
-    let publication = publications.value.find((candidate) => candidate.reference === ref);
+    const active = publications.value.filter((candidate) => candidate.status !== "withdrawn");
+    let publication = active.find((candidate) => candidate.reference === ref);
     if (!publication) {
-      const batches = await adapterCall<SupabaseResultRow[]>("results.listBatches", {});
-      if (batches.ok) {
-        const batch = batches.value.find((candidate) => candidate.reference === ref || candidate.id === ref);
-        if (batch) {
-          publication = publications.value.find((candidate) => candidate.batch_id === batch.id && candidate.status !== "withdrawn");
-        }
+      const resolved = await supabaseBatch(ref);
+      if (resolved) {
+        publication = [...active]
+          .filter((candidate) => candidate.source_entry_sheet_id === resolved.id || candidate.batch_id === resolved.id)
+          .sort((a, b) => (b.version ?? 0) - (a.version ?? 0))[0];
       }
     }
-    if (!publication) return fail("Publication not found for this batch.");
+    if (!publication) return fail("No live publication was found for this batch.");
     const response = await adapterCall<unknown>("results.withdraw", { publicationId: publication.id, reason });
     if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
     const next = await getBatch(ref);
@@ -791,13 +1190,15 @@ async function withdrawPublication(ref: string, reason: string, by: string = DEF
 async function getPublications(): Promise<Publication[]> {
   if (clientAdapterMode() === "supabase") {
     const response = await adapterCall<Array<{ id: string; reference: string; term: string; version: number; status: string; publishedAt?: string; published_at?: string; items?: Array<{ publicationId: string; subjectId: string; snapshot: unknown }> }>>("results.listReleases", {});
-    if (!response.ok) return [];
-    return response.value.map((publication) => ({ ref: publication.reference, term: publication.term ?? "Results", status: publication.status === "provisional" ? "provisional" : "final", publishedAtIso: publication.publishedAt ?? publication.published_at ?? new Date().toISOString(), version: publication.version, releaseId: publication.id, releaseVersion: publication.version, items: publication.items }));
+    /* A failed read must reject so the portal shows an error with retry
+       instead of an honest-looking empty list. */
+    if (!response.ok) throw new Error(response.errors[0]?.message ?? "Published results could not be loaded.");
+    return response.value.map((publication) => ({ ref: publication.reference, term: publication.term ?? "Results", status: publication.status === "provisional" ? "provisional" : "final", publishedAtIso: publication.publishedAt ?? publication.published_at ?? null, version: publication.version, releaseId: publication.id, releaseVersion: publication.version, items: publication.items }));
   }
   return respond(() =>
     loadSession()
       .publications.filter((publication) => publication.withdrawnAtIso === undefined)
-      .map((publication) => ({ ...publication })),
+      .map((publication) => ({ ...publication, items: publication.items?.map((item) => ({ ...item })) })),
   );
 }
 
@@ -808,7 +1209,7 @@ async function getPublication(ref: string): Promise<Publication | null> {
   }
   return respond(() => {
     const publication = loadSession().publications.find((item) => item.ref === ref);
-    return publication ? { ...publication } : null;
+    return publication ? { ...publication, items: publication.items?.map((item) => ({ ...item })) } : null;
   });
 }
 
@@ -816,24 +1217,24 @@ async function listVersions(batchRef: string): Promise<BatchVersion[]> {
   if (clientAdapterMode() === "supabase") {
     const resolved = await supabaseBatch(batchRef);
     if (!resolved) return [];
-    const response = await adapterCall<Array<{ version?: number; note?: string | null; createdAt?: string; created_at?: string; actorAccountId?: string; created_by_account_id?: string }>>("results.listVersions", { sheetRef: resolved.raw.reference });
+    const response = await adapterCall<Array<{ version?: number; state?: string; note?: string | null; createdAt?: string; created_at?: string; actorAccountId?: string; created_by_account_id?: string }>>("results.listVersions", { sheetRef: resolved.raw.reference });
     if (!response.ok) return [];
-    return response.value.map((item) => ({ version: item.version ?? 0, note: item.note ?? "", atIso: item.createdAt ?? item.created_at ?? new Date(0).toISOString(), by: item.actorAccountId ?? item.created_by_account_id ?? "Result office" }));
+    return response.value.map(mapServerResultVersion);
   }
-  return respond(() => [...(loadSession().versions[batchRef] ?? [])]);
+  return respond(() => (loadSession().versions[batchRef] ?? []).map((entry) => ({ ...entry })));
 }
 
 async function getTerms(): Promise<Term[]> {
   if (clientAdapterMode() === "supabase") {
     const publications = await getPublications();
-    return publications.map((publication) => ({ id: publication.ref, label: publication.term, publicationStatus: publication.status, publishedAtIso: publication.publishedAtIso, version: publication.version }));
+    return publications.map((publication) => ({ id: publication.ref, label: publication.term, publicationStatus: publication.status, publishedAtIso: publication.publishedAtIso ?? undefined, version: publication.version }));
   }
   return respond(() => {
     const state = loadSession();
     /* Withdrawn publications are not live: the term falls back to the honest
        not-published state until a corrected version is published again. */
     const livePublications = state.publications.filter((publication) => publication.withdrawnAtIso === undefined);
-    const newestFirst = [...livePublications].sort((a, b) => b.publishedAtIso.localeCompare(a.publishedAtIso));
+    const newestFirst = [...livePublications].sort((a, b) => (b.publishedAtIso ?? "").localeCompare(a.publishedAtIso ?? ""));
     return terms.map((term) => {
       const publication = newestFirst.find((item) => item.term === term.label);
       if (!publication) {
@@ -843,7 +1244,7 @@ async function getTerms(): Promise<Term[]> {
         id: term.id,
         label: term.label,
         publicationStatus: publication.status,
-        publishedAtIso: publication.publishedAtIso,
+        publishedAtIso: publication.publishedAtIso ?? undefined,
         version: publication.version,
       };
     });
@@ -861,7 +1262,9 @@ async function getTerms(): Promise<Term[]> {
 async function getStudentResultSnapshot(studentId: string, academicYearId: string): Promise<StudentResultSnapshot | null> {
   if (clientAdapterMode() === "supabase") {
     const response = await adapterCall<Array<{ term?: string; academicYearId?: string; items?: Array<{ snapshot: unknown }> }>>("results.listReleases", { studentRef: studentId });
-    if (!response.ok) return null;
+    /* A transport/authorization failure must reject: callers render an error
+       with retry. Only a successful read with no rows is "no snapshot". */
+    if (!response.ok) throw new Error(response.errors[0]?.message ?? "The released report could not be loaded.");
     const terms: Record<string, SnapshotMarkRow[]> = {};
     for (const publication of response.value) {
       if (publication.academicYearId !== undefined && publication.academicYearId !== academicYearId) continue;
@@ -870,7 +1273,19 @@ async function getStudentResultSnapshot(studentId: string, academicYearId: strin
         if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) continue;
         const value = snapshot as { term?: string; subject?: string; marks?: Array<{ max?: number; obtained?: number | null; component?: string; remark?: string; markStatus?: string; status?: string }> };
         const term = value.term ?? publication.term ?? "Results";
-        terms[term] = [...(terms[term] ?? []), ...(value.marks ?? []).map((mark) => ({ subject: mark.component ?? value.subject ?? "Subject", max: Number(mark.max ?? 0), obtained: mark.obtained === null || mark.obtained === undefined ? null : Number(mark.obtained), remark: mark.remark, markStatus: mark.markStatus ?? mark.status }))];
+        const subjectName = typeof value.subject === "string" && value.subject.trim() !== "" ? value.subject.trim() : null;
+        const marks = value.marks ?? [];
+        terms[term] = [...(terms[term] ?? []), ...marks.map((mark) => ({
+          /* The subject is the report row; a subject with several components
+             names each component after it. Never show only the component. */
+          subject: subjectName !== null
+            ? (marks.length > 1 ? `${subjectName} · ${mark.component ?? "Mark"}` : subjectName)
+            : mark.component ?? "Subject",
+          max: Number(mark.max ?? 0),
+          obtained: mark.obtained === null || mark.obtained === undefined ? null : Number(mark.obtained),
+          remark: mark.remark,
+          markStatus: mark.markStatus ?? mark.status,
+        }))];
       }
     }
     return Object.keys(terms).length === 0 ? null : { studentId, academicYearId, terms };
@@ -898,11 +1313,137 @@ async function getStudentResultSnapshot(studentId: string, academicYearId: strin
 }
 
 /* ------------------------------------------------------------------ */
+/* Report release assembly (live mode)                                 */
+/* ------------------------------------------------------------------ */
+
+async function listReleaseCandidates(ref: string): Promise<AcademicResult<ReportReleaseCandidate[]>> {
+  if (clientAdapterMode() !== "supabase") {
+    /* Demo mode publishes straight to the portal: there is no separate
+       release manifest to assemble, so there is nothing to list. */
+    return { ok: true, value: [] };
+  }
+  const resolved = await supabaseBatch(ref);
+  if (!resolved) return fail("Batch not found.");
+  const response = await adapterCall<Array<{
+    studentId: string;
+    enrollmentId: string;
+    studentName?: string;
+    publications?: Array<{ publicationId: string; reference?: string }>;
+    release?: { releaseId: string; reference: string; version: number; status: string } | null;
+  }>>("results.releaseCandidates", { sheetRef: resolved.raw.reference });
+  if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+  return {
+    ok: true,
+    value: response.value.map((candidate) => ({
+      studentId: candidate.studentId,
+      enrollmentId: candidate.enrollmentId,
+      studentName: candidate.studentName?.trim() ? candidate.studentName.trim() : "Student",
+      publicationIds: (candidate.publications ?? []).map((publication) => publication.publicationId),
+      release: candidate.release ?? null,
+    })),
+  };
+}
+
+async function publishReportReleases(ref: string, options?: { studentIds?: string[] }): Promise<AcademicResult<ReportReleaseBatchSummary>> {
+  if (clientAdapterMode() !== "supabase") {
+    return fail("Report releases are assembled by the server; demo mode publishes directly to the portal.");
+  }
+  const resolved = await supabaseBatch(ref);
+  if (!resolved) return fail("Batch not found.");
+  const response = await adapterCall<{ released?: number; skipped?: number; failed?: Array<{ studentId: string; message: string }> }>(
+    "results.publishReleaseBatch",
+    {
+      sheetRef: resolved.raw.reference,
+      studentIds: options?.studentIds,
+      idempotencyKey: `release-batch:${resolved.raw.reference}`,
+    },
+  );
+  if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+  return {
+    ok: true,
+    value: {
+      released: response.value.released ?? 0,
+      skipped: response.value.skipped ?? 0,
+      failed: response.value.failed ?? [],
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Correction requests (maker/checker depth)                            */
+/* ------------------------------------------------------------------ */
+
+async function listCorrections(): Promise<AcademicResult<PendingCorrection[]>> {
+  if (clientAdapterMode() !== "supabase") {
+    /* Demo mode corrects in place: there is no separate approval request. */
+    return { ok: true, value: [] };
+  }
+  const response = await adapterCall<Array<{
+    id?: string;
+    version?: number;
+    reason?: string;
+    status?: string;
+    created_at?: string;
+    release_reference?: string | null;
+    publication_id?: string | null;
+    sheet_reference?: string | null;
+    subject_name?: string | null;
+    term?: string | null;
+    section_label?: string | null;
+    grade_label?: string | null;
+  }>>("results.listCorrections", {});
+  if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+  return {
+    ok: true,
+    value: response.value.map((row) => ({
+      requestId: row.id ?? "",
+      version: row.version ?? 1,
+      reason: row.reason ?? "",
+      status: row.status ?? "requested",
+      requestedAtIso: row.created_at ?? "",
+      releaseRef: row.release_reference ?? null,
+      publicationRef: row.publication_id ?? null,
+      sheetRef: row.sheet_reference ?? null,
+      subject: row.subject_name ?? null,
+      term: row.term ?? null,
+      className: row.grade_label === null || row.grade_label === undefined
+        ? null
+        : `${row.grade_label}${row.section_label ? ` · ${row.section_label}` : ""}`,
+    })),
+  };
+}
+
+async function approveCorrection(requestId: string, expectedVersion: number): Promise<AcademicResult<CorrectionApproval>> {
+  if (clientAdapterMode() !== "supabase") {
+    return fail("Correction approval is only available against the live results service.");
+  }
+  const response = await adapterCall<{ requestId?: string; sheetId?: string; sheetRef?: string; sheetVersion?: number }>("results.approveCorrection", {
+    requestId,
+    expectedVersion,
+  });
+  if (!response.ok) return { ok: false, errors: response.errors.map((error) => ({ subject: null, message: error.message })) };
+  const sheetRef = response.value.sheetRef;
+  if (typeof sheetRef !== "string" || sheetRef === "") {
+    return fail("The correction was approved but the new entry sheet reference was not returned.");
+  }
+  return {
+    ok: true,
+    value: {
+      requestId: response.value.requestId ?? requestId,
+      sheetRef,
+      sheetVersion: response.value.sheetVersion ?? 1,
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* The one exported facade                                             */
 /* ------------------------------------------------------------------ */
 
 export const academicsService: AcademicsService = {
   listBatches,
+  listExamDefinitions,
+  createBatch,
   getBatch,
   saveEntryDraft,
   submitForModeration,
@@ -916,4 +1457,8 @@ export const academicsService: AcademicsService = {
   listVersions,
   getTerms,
   getStudentResultSnapshot,
+  listReleaseCandidates,
+  publishReportReleases,
+  listCorrections,
+  approveCorrection,
 };

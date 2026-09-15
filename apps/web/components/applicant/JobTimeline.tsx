@@ -29,7 +29,7 @@ export default function JobTimeline({ events }: { events: JobTimelineEvent[] }) 
       {events.map((event) => (
         <li key={event.id} className={`${styles.item} ${STATE_CLASS[event.state]}`}>
           <span className={styles.marker} aria-hidden="true">
-            {event.state === "done" ? "✓" : ""}
+            {event.state === "done" ? <span className="msym">check</span> : ""}
           </span>
           <div className={styles.body}>
             <p className={styles.label}>{event.label}</p>

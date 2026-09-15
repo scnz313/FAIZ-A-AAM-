@@ -1,22 +1,21 @@
 .page {
-  grid-template-columns: minmax(0, 1fr);
   display: grid;
-  gap: 40px;
+  gap: 18px;
 }
 
 .title {
   font-family: var(--serif);
-  font-size: clamp(30px, 4vw, 38px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
   margin: 0;
 }
 
 .intro {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 0.92rem;
   line-height: 1.5;
   margin: 12px 0 0;
   max-width: 62ch;
@@ -24,8 +23,8 @@
 
 .groupTitle {
   font-family: var(--serif);
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 1.4rem;
+  font-weight: 580;
   margin: 0;
 }
 
@@ -51,14 +50,14 @@
 
 .row strong {
   display: block;
-  font-size: 14px;
+  font-size: 0.88rem;
   font-weight: 600;
 }
 
 .row small {
-  color: var(--ink-soft);
+  color: var(--muted);
   display: block;
-  font-size: 12px;
+  font-size: 0.78rem;
   line-height: 1.5;
   margin-top: 3px;
 }
@@ -75,18 +74,18 @@
 }
 
 .amount {
-  font-size: 14px;
+  font-size: 0.88rem;
   font-weight: 600;
 }
 
 .ref {
-  font-size: 14px;
+  font-size: 0.88rem;
   font-weight: 600;
 }
 
 .muted {
-  color: var(--ink-faint);
-  font-size: 13px;
+  color: var(--faint);
+  font-size: 0.82rem;
 }
 
 .demoNote {
@@ -95,7 +94,7 @@
   color: var(--muted);
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 0.78rem;
   gap: 10px;
   line-height: 1.5;
   margin: 0;
@@ -155,14 +154,14 @@
 }
 
 .previewMeta dt {
-  color: var(--ink-soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .previewMeta dd {
-  font-size: 13px;
+  font-size: 0.82rem;
   margin: 3px 0 0;
   overflow-wrap: anywhere;
 }
@@ -174,7 +173,7 @@
 }
 
 .previewControl label {
-  font-size: 12px;
+  font-size: 0.78rem;
   font-weight: 600;
 }
 
@@ -189,12 +188,12 @@
 }
 
 .previewState[data-state="access-denied"] {
-  border-top-color: var(--brick-deep);
+  border-top-color: var(--madder-ink);
 }
 
 .previewState p {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.5;
   margin: 0;
 }
@@ -202,7 +201,7 @@
 .previewStateTitle {
   color: var(--ink) !important;
   font-family: var(--serif);
-  font-size: 18px !important;
+  font-size: 1.1rem !important;
   margin-bottom: 4px !important;
 }
 
@@ -218,27 +217,27 @@
 
 .previewSheet strong {
   font-family: var(--serif);
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 1.25rem;
+  font-weight: 580;
 }
 
 .previewSheet span:last-child {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .previewWatermark {
-  color: var(--saffron-deep);
-  font-size: 11px;
+  color: var(--saffron-ink);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.1em;
 }
 
 .downloadMessage {
   background: var(--paper);
-  border-left: 3px solid var(--saffron);
+  border-top: 3px solid var(--saffron);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 0.82rem;
   line-height: 1.5;
   margin: 18px 0 0;
   padding: 10px 12px;
@@ -251,7 +250,7 @@
   margin-top: 20px;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 479px) {
   .previewHeader {
     flex-direction: column;
   }

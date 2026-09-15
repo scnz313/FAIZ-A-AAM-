@@ -1,7 +1,5 @@
 import type { MetadataRoute } from "next";
 
-import { notices } from "@/modules/content/demo";
-
 /* Concept domain — the platform is not yet deployed. `.example` is an
    IANA-reserved documentation domain; set NEXT_PUBLIC_SITE_URL (or replace
    this fallback) with the real school domain at launch. */
@@ -38,11 +36,10 @@ const PUBLIC_PATHS: readonly string[] = [
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  /* Notice deep links are discovered through the notices board and on-page
+     navigation, so the sitemap never hardcodes a fixture record. */
   return [
     { url: absolute("/"), changeFrequency: "monthly", priority: 1 },
     ...PUBLIC_PATHS.map(publicEntry),
-    /* One representative public notice — the list page itself is already
-       included; deep links are discovered by on-page navigation instead. */
-    publicEntry(`/notices/${notices[0]!.slug}`),
   ];
 }

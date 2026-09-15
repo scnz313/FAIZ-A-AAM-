@@ -1,0 +1,104 @@
+.shell {
+  min-height: 100vh;
+  background: var(--paper);
+}
+
+.head {
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.headWrap {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 clamp(16px, 4vw, 40px);
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.brandLock {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  text-decoration: none;
+  color: var(--ink);
+  flex: none;
+}
+
+.brandName {
+  display: block;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 0.98rem;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.brandSub {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--saffron-ink);
+  background: var(--saffron-soft);
+  border: 1px solid var(--saffron-line);
+  border-radius: var(--r-pill);
+  padding: 3px 12px;
+  flex: none;
+}
+
+.quickLinks {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.main {
+  min-width: 0;
+}
+
+@media (max-width: 719px) {
+  .headWrap {
+    min-height: 64px;
+  }
+
+  /* V15: the applicant context remains in the page title/progress rail;
+     secondary chip/links disappear before they force a second header row. */
+  .chip,
+  .quickLinks {
+    display: none;
+  }
+}
+
+@media (max-width: 479px) {
+  /* The official school name is still unconfirmed; keep a longer
+     wordmark on one line instead of overflowing 320px phones. */
+  .headWrap {
+    gap: 12px;
+  }
+
+  .brandLock {
+    min-width: 0;
+  }
+
+  .brandName {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

@@ -4,12 +4,14 @@ import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { createSupabasePublicClient } from "@/lib/supabase/public";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { serverAdapterOperation } from "@/lib/supabase/adapter-server";
 import { dataAdapter } from "@/lib/supabase/env";
 import { getServerActor } from "@/lib/auth/actor";
 import { isStaffPath } from "@/lib/auth/portal-routes";
-import { admissionPublicConfiguration, contentListPublic, financeListAllAttempts, financeListMyInvoices, financeListMyReceipts, financeListReconciliationProjection, jobsListPublishedVacancies, resolveFamilyContext, resolveStaffContext, type FinanceAttemptProjectionRow, type FinanceReconciliationProjectionRow } from "@/lib/supabase/domain";
+import { admissionPublicConfiguration, contentListPublic, contentListPublicDownloads, financeListAllAttempts, financeListAttemptsForInvoices, financeListInvoicesPage, financeListMyInvoices, financeListMyReceipts, financeListReconciliationProjection, jobsListPublishedVacancies, resolveFamilyContext, resolveStaffContext, type FinanceAttemptProjectionRow, type FinanceReconciliationProjectionRow } from "@/lib/supabase/domain";
+import { financeRegisterRange, financeRegisterView } from "@/modules/services/finance-register";
 import type { ServerFamilyContextResponse } from "@/modules/services/family-context";
 import type { ServerStaffContextResponse } from "@/modules/services/staff-context";
 import { mapServerStaffContext } from "@/modules/services/staff-context";
@@ -22,16 +24,16 @@ import {
 } from "@/modules/services/finance-server-map";
 import type { InvoiceView } from "@/modules/services/finance";
 import type { Vacancy } from "@/modules/content/demo";
-import { mapServerContentRow, type ContentNotice, type ServerContentRow } from "@/modules/services/content";
+import { isNoticeExpired, mapServerContentRow, mapServerPublicDownloadRow, type ContentNotice, type DownloadItem, type ServerContentRow } from "@/modules/services/content";
 import { mapServerJob, type JobApplicationRecord, type ServerJobRow } from "@/modules/services/careers";
 import { mapServerApplication, type ApplicationRecord, type ServerAdmissionRow } from "@/modules/services/admissions";
-import { mapServerResultBatch, type EntryBatch, type SupabaseResultRow } from "@/modules/services/academics";
-import { mapServerSupportRow, type Grievance, type ServerSupportRow } from "@/modules/services/support";
+import { mapServerResultBatch, mapServerResultVersion, type BatchVersion, type EntryBatch, type SupabaseResultRow } from "@/modules/services/academics";
+import { mapRequesterSupportRow, mapServerSupportRow, type Grievance, type ServerSupportRow } from "@/modules/services/support";
 import type { AdmissionConfiguration, AdmissionWindow, AdmissionDocumentRequirement, SchoolGrade } from "@/modules/services/school-config";
 import type { AcademicYear } from "@fass/contracts";
 import type { NotificationItem } from "@/modules/notifications/demo";
 import { mapServerAuditEvent, type AuditEvent, type ServerAuditEventRow } from "@/modules/services/audit";
-import { notificationHref, notificationKind, type ServerNotificationRow } from "@/modules/services/notifications";
+import { notificationHref, notificationKind, type NotificationAudience, type ServerNotificationRow } from "@/modules/services/notifications";
 
 async function financeClient() {
   return createSupabaseServerClient();
@@ -76,8 +78,8 @@ export const loadServerStaffContext = cache(async (): Promise<ServerStaffContext
 
 /**
  * Resolve the active staff access-profile code for a Server Component. Returns
- * null outside Supabase mode or when the context is unavailable so callers can
- * fall back to the legacy `/staff` prefix via `canonicalStaffUrl(null, …)`.
+ * null outside Supabase mode or when the context is unavailable; the canonical
+ * URL helper uses the Administrator portal as the safe user-facing fallback.
  */
 export async function loadServerProfileCode(): Promise<StaffProfileCode | null> {
   if (dataAdapter() !== "supabase") return null;
@@ -101,13 +103,62 @@ export const loadServerInvoices = cache(async (studentId?: string): Promise<Invo
     .map((row) => mapServerInvoiceView(row, receipts) satisfies InvoiceView);
 });
 
+export type ServerInvoiceRegister = {
+  views: InvoiceView[];
+  invoiceIds: string[];
+  total: number;
+  page: number;
+  pageCount: number;
+  shownFrom: number;
+  shownTo: number;
+};
+
+/** One page of the staff invoice register with an exact total. The nested
+ *  projection is fetched per page, so a school-sized register stays bounded. */
+export const loadServerInvoiceRegister = cache(async (requestedPage: number): Promise<ServerInvoiceRegister> => {
+  await requireServerActor();
+  const client = await financeClient();
+  const first = financeRegisterRange(requestedPage);
+  const firstResult = await financeListInvoicesPage(client, first);
+  if (!firstResult.ok) throw new Error(firstResult.errors[0]?.message ?? "Invoices could not be loaded.");
+  const firstView = financeRegisterView(requestedPage, firstResult.value.total);
+  let rows = firstResult.value.rows as unknown as ServerInvoiceRow[];
+  if (firstView.page !== Math.max(Math.trunc(requestedPage), 1)) {
+    const retry = await financeListInvoicesPage(client, financeRegisterRange(firstView.page));
+    if (!retry.ok) throw new Error(retry.errors[0]?.message ?? "Invoices could not be loaded.");
+    rows = retry.value.rows as unknown as ServerInvoiceRow[];
+  }
+  return {
+    views: rows.map((row) => mapServerInvoiceView(row)),
+    invoiceIds: rows.flatMap((row) => (typeof row.id === "string" && row.id.length > 0 ? [row.id] : [])),
+    total: firstResult.value.total,
+    page: firstView.page,
+    pageCount: firstView.pageCount,
+    shownFrom: firstView.shownFrom,
+    shownTo: firstView.shownTo,
+  };
+});
+
+/** Attempts for one page's invoices (bounded by the page size). */
+export async function loadServerPaymentAttemptsForInvoices(invoiceIds: string[]): Promise<FinanceAttemptProjectionRow[]> {
+  await requireServerActor();
+  const result = await financeListAttemptsForInvoices(await financeClient(), invoiceIds);
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Payment attempts could not be loaded.");
+  return result.value;
+}
+
 export const loadServerActiveStudentInvoices = cache(async (): Promise<InvoiceView[]> => {
   const context = await loadServerFamilyContext();
   return loadServerInvoices(context.activeStudentId ?? undefined);
 });
 
-export async function loadServerVacancies(): Promise<Vacancy[]> {
-  const result = await jobsListPublishedVacancies(await financeClient());
+/* Request-scoped cache: the public careers pages read vacancies twice (list
+   and detail); React `cache` collapses that to one Supabase round trip. */
+export const loadServerVacancies = cache(async (): Promise<Vacancy[]> => {
+  /* Published vacancies are a public projection with an `anon` RLS policy.
+     Use the anonymous client so a signed-in applicant (authenticated role)
+     still receives them; the request-aware client would miss that policy. */
+  const result = await jobsListPublishedVacancies(createSupabasePublicClient());
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Vacancies could not be loaded.");
   return result.value.map((row) => {
     const terms = row.terms;
@@ -124,9 +175,11 @@ export async function loadServerVacancies(): Promise<Vacancy[]> {
       deadlineIso: typeof terms.deadlineIso === "string" ? terms.deadlineIso : new Date().toISOString(),
       status: "open",
       description: typeof terms.description === "string" ? terms.description : "Published vacancy details.",
+      reference: row.reference,
+      version: row.version,
     } satisfies Vacancy;
   });
-}
+});
 
 export async function loadServerJobs(): Promise<JobApplicationRecord[]> {
   const result = await serverAdapterOperation<ServerJobRow[]>("jobs.staffQueue");
@@ -135,7 +188,10 @@ export async function loadServerJobs(): Promise<JobApplicationRecord[]> {
 }
 
 export async function loadServerJobByRef(reference: string): Promise<JobApplicationRecord | null> {
-  const result = await serverAdapterOperation<ServerJobRow[]>("jobs.listMine");
+  /* The staff projection carries reviewer assignments and scorecards, which
+     the owner-facing mine projection deliberately omits. The detail page is
+     staff-only, so read the authorized staff queue. */
+  const result = await serverAdapterOperation<ServerJobRow[]>("jobs.staffQueue");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Job application could not be loaded.");
   const row = result.value.find((candidate) => candidate.reference === reference);
   return row ? mapServerJob(row) : null;
@@ -148,10 +204,27 @@ export async function loadServerAdmissions(): Promise<ApplicationRecord[]> {
 }
 
 export async function loadServerAdmissionByRef(reference: string): Promise<ApplicationRecord | null> {
-  const result = await serverAdapterOperation<ServerAdmissionRow[]>("admissions.listMine");
+  const result = await serverAdapterOperation<ServerAdmissionRow | null>("admissions.staffByRef", { applicationRef: reference });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Application could not be loaded.");
-  const row = result.value.find((candidate) => candidate.reference === reference);
-  return row ? mapServerApplication(row) : null;
+  const row = result.value;
+  if (row === null) return null;
+  const record = mapServerApplication(row);
+  /* Enrolled records need the public conversion references, which live on the
+     staff-only conversion row; the owner is authorized for these fields. */
+  if (record.status !== "Enrolled" || (record.studentRef !== undefined && record.enrollmentRef !== undefined)) {
+    return record;
+  }
+  const refs = await serverAdapterOperation<{ studentRef?: string; enrollmentRef?: string; linkRef?: string | null } | null>(
+    "admissions.enrollmentReference",
+    { applicationRef: reference },
+  );
+  if (!refs.ok || refs.value === null) return record;
+  return {
+    ...record,
+    studentRef: refs.value.studentRef ?? record.studentRef,
+    enrollmentRef: refs.value.enrollmentRef ?? record.enrollmentRef,
+    linkRef: refs.value.linkRef ?? record.linkRef,
+  };
 }
 
 /** Public-safe configuration loader; it does not call the authenticated
@@ -188,6 +261,15 @@ export async function loadServerPaymentAttempts(): Promise<FinanceAttemptProject
   return result.value;
 }
 
+/** Staff receipt projection (RLS staff_read_receipts): the same amounts the
+ * family ledger reads, so staff receipt detail matches the guardian view. */
+export async function loadServerStaffReceipts(): Promise<Array<ReturnType<typeof mapServerReceipt>>> {
+  await requireServerActor();
+  const result = await serverAdapterOperation<ServerReceiptRow[]>("finance.listAllReceipts");
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Receipts could not be loaded.");
+  return (result.value as unknown as ServerReceiptRow[]).map(mapServerReceipt);
+}
+
 export async function loadServerReconciliationProjection(): Promise<FinanceReconciliationProjectionRow[]> {
   await requireServerActor();
   const result = await financeListReconciliationProjection(await financeClient());
@@ -204,16 +286,18 @@ export async function loadServerResultsBatches(): Promise<EntryBatch[]> {
   return result.value.map(mapServerResultBatch);
 }
 
-export async function loadServerResultBatch(batchRef: string): Promise<EntryBatch | null> {
+/* Request-scoped cache: the batch detail and entry pages read the same batch
+   twice (metadata + render); React `cache` collapses that to one operation. */
+export const loadServerResultBatch = cache(async (batchRef: string): Promise<EntryBatch | null> => {
   const result = await serverAdapterOperation<SupabaseResultRow | null>("results.getBatch", { batchRef });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Result batch could not be loaded.");
   return result.value === null ? null : mapServerResultBatch(result.value);
-}
+});
 
-export async function loadServerResultVersions(batchRef: string): Promise<unknown[]> {
-  const result = await serverAdapterOperation<unknown[]>("results.listVersions", { sheetRef: batchRef });
+export async function loadServerResultVersions(batchRef: string): Promise<BatchVersion[]> {
+  const result = await serverAdapterOperation<Array<{ version?: number; state?: string; note?: string | null; createdAt?: string; created_at?: string }>>("results.listVersions", { sheetRef: batchRef });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Result versions could not be loaded.");
-  return result.value;
+  return (result.value ?? []).map(mapServerResultVersion);
 }
 
 export async function loadServerResultPublications(studentId?: string): Promise<unknown[]> {
@@ -231,24 +315,65 @@ export async function loadServerTimetable(gradeSectionId: string): Promise<unkno
 export async function loadServerContent(scope: "public" | "family" | "staff"): Promise<ContentNotice[]> {
   const result = await serverAdapterOperation<ServerContentRow[]>("content.list", { scope });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Content could not be loaded.");
-  return (result.value as unknown as ServerContentRow[]).map(mapServerContentRow);
+  /* The staff/family projections carry both notices and managed pages. This
+     loader feeds the notice surfaces (portal list/overview and the staff
+     notice register), so page rows must never be mapped into notice records. */
+  const mapped = (result.value as unknown as ServerContentRow[])
+    .filter((row) => row.kind === "notice")
+    .map(mapServerContentRow);
+  if (scope !== "family") return mapped;
+  /* The portal copy promises that expired notices disappear automatically.
+     The staff projection returns every workflow state, so the family boundary
+     keeps only published, unexpired notices addressed to the public or to
+     families. Drafts, schedules, archives, and expired rows never reach the
+     guardian portal. */
+  const nowIso = new Date().toISOString();
+  return mapped.filter(
+    (notice) =>
+      notice.status === "published" &&
+      !isNoticeExpired(notice, nowIso) &&
+      (notice.audience === "public" || notice.audience === "family"),
+  );
 }
 
 /** Anonymous public content never traverses the authenticated adapter route.
- * Supabase RLS/SECURITY DEFINER projections return only published public rows. */
-export async function loadServerPublicContent(): Promise<ContentNotice[]> {
+ * Supabase RLS/SECURITY DEFINER projections return only published public rows.
+ * The projection also carries pages for the managed-page loader, so notice
+ * consumers filter to kind='notice' before mapping; the audience guard keeps
+ * family-targeted rows out of the public surface when a signed-in session is
+ * present on an otherwise public page. */
+/* One anonymous projection per request: the homepage resolves four managed
+   page slugs plus the notice list, and each previously re-scanned the whole
+   published corpus. React `cache` collapses them to a single read. */
+const loadServerPublicContentRows = cache(async (): Promise<ServerContentRow[]> => {
   const result = await contentListPublic(await financeClient());
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Public content could not be loaded.");
-  return (result.value as unknown as ServerContentRow[]).map(mapServerContentRow);
+  return result.value as unknown as ServerContentRow[];
+});
+
+export async function loadServerPublicContent(): Promise<ContentNotice[]> {
+  const rows = await loadServerPublicContentRows();
+  const nowIso = new Date().toISOString();
+  return rows
+    .filter((row) => row.kind === "notice")
+    .map(mapServerContentRow)
+    .filter(
+      (notice) =>
+        notice.status === "published" && notice.audience === "public" && !isNoticeExpired(notice, nowIso),
+    );
 }
 
 /** Published public page body for one route slug, or null when the page is
  * not published. Falls back to nothing so the route can keep its concept
  * copy until the school publishes a managed page. */
 export async function loadServerPublicPageBody(slug: string): Promise<{ title: string; body: string[]; updatedAtIso: string | null } | null> {
-  const result = await contentListPublic(await financeClient());
-  if (!result.ok) return null;
-  const row = (result.value as unknown as ServerContentRow[]).find(
+  let rows: ServerContentRow[];
+  try {
+    rows = await loadServerPublicContentRows();
+  } catch {
+    return null;
+  }
+  const row = rows.find(
     (candidate) => candidate.kind === "page" && candidate.slug === slug && candidate.current_status === "published",
   );
   if (!row) return null;
@@ -264,6 +389,16 @@ export async function loadServerPublicPageBody(slug: string): Promise<{ title: s
     updatedAtIso: versionRow.published_at ?? versionRow.created_at,
   };
 }
+
+/** Anonymous-safe public downloads register. Reads the same rows the anon and
+ * authenticated RLS policies allow (`public_approved` and a finalized
+ * `clean`/`ready` scan) and strips everything but the safe register
+ * metadata. */
+export const loadServerPublicDownloads = cache(async (): Promise<DownloadItem[]> => {
+  const result = await contentListPublicDownloads(await financeClient());
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Public downloads could not be loaded.");
+  return result.value.map(mapServerPublicDownloadRow);
+});
 
 function parseServerPageBody(value: unknown): string[] {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -281,19 +416,33 @@ function parseServerPageBody(value: unknown): string[] {
 export async function loadServerSupport(scope: "mine" | "staff"): Promise<Grievance[]> {
   const result = await serverAdapterOperation<ServerSupportRow[]>("support.list", { scope });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Support could not be loaded.");
-  return result.value.map(mapServerSupportRow);
+  /* Requester scope strips staff-private notes/assignment at the boundary. */
+  return scope === "mine" ? result.value.map(mapRequesterSupportRow) : result.value.map(mapServerSupportRow);
 }
 
-export async function loadServerNotifications(): Promise<NotificationItem[]> {
+export async function loadServerNotifications(audience: NotificationAudience = "family"): Promise<NotificationItem[]> {
   const result = await serverAdapterOperation<ServerNotificationRow[]>("notifications.list");
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Notifications could not be loaded.");
-  return result.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: notificationKind(item), text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null, href: notificationHref(item) }));
+  return result.value.map((item) => ({ id: item.id, version: item.version ?? 1, kind: notificationKind(item), text: item.body ? `${item.title} — ${item.body}` : item.title, atIso: item.created_at, unread: item.read_at === null, href: notificationHref(item, audience) }));
 }
 
 export async function loadServerAudit(): Promise<AuditEvent[]> {
   const result = await serverAdapterOperation<ServerAuditEventRow[]>("audit.list", { limit: 100 });
   if (!result.ok) throw new Error(result.errors[0]?.message ?? "Audit could not be loaded.");
   return result.value.map(mapServerAuditEvent);
+}
+
+/**
+ * First page of the live audit register (newest first) plus the cursor for
+ * walking older history. Uses the paginated projection so the page can load
+ * beyond the first page instead of silently stopping at a cap.
+ */
+export async function loadServerAuditPage(limit = 50): Promise<{ events: AuditEvent[]; nextCursor: string | null }> {
+  const result = await serverAdapterOperation<ServerAuditEventRow[]>("audit.listPage", { limit, cursor: null });
+  if (!result.ok) throw new Error(result.errors[0]?.message ?? "Audit could not be loaded.");
+  const events = result.value.map(mapServerAuditEvent);
+  const last = events[events.length - 1];
+  return { events, nextCursor: events.length === limit && last !== undefined ? last.timestampIso : null };
 }
 
 export type ServerDocumentProjection = { ref: string; ownerReference?: string; category: string; filename: string; processingState: string; mimeType: string; sizeBytes: number };

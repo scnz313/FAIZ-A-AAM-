@@ -43,7 +43,7 @@
 .checkLabel {
   align-items: center;
   display: flex;
-  font-size: 12px;
+  font-size: 0.78rem;
   gap: 8px;
 }
 
@@ -103,7 +103,7 @@
 
 .previewRef {
   color: var(--muted);
-  font-size: 15px;
+  font-size: 0.92rem;
 }
 
 .previewActions {
@@ -125,7 +125,7 @@
 }
 
 .reportMeta dt {
-  color: var(--ink-soft);
+  color: var(--muted);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -133,7 +133,7 @@
 }
 
 .reportMeta dd {
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 0;
 }
 
@@ -141,7 +141,7 @@
   border-top: 1px solid var(--line);
   color: #3d4a52;
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.55;
   margin: 18px 0 20px;
   padding-top: 18px;
@@ -164,7 +164,7 @@
 
 .generating p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 0;
 }
 
@@ -204,11 +204,11 @@
 
 .generateStatus {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 0.72rem;
   margin: 0;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 719px) {
   .layout {
     grid-template-columns: 1fr;
   }

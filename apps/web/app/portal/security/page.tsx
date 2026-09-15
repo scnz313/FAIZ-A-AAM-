@@ -20,28 +20,29 @@ type SessionRow = {
 const SESSIONS: ReadonlyArray<SessionRow> = [
   {
     id: "session-1",
-    device: "Chrome · macOS",
+    device: "This device · Chrome, macOS",
     location: "Bandipora, Jammu & Kashmir",
-    lastActive: "Active now",
+    lastActive: "Now",
     current: true,
   },
   {
     id: "session-2",
-    device: "Firefox · Android",
+    device: "Redmi Note 11 · app",
     location: "Bandipora, Jammu & Kashmir",
-    lastActive: "Today, 09:12",
+    lastActive: "Yesterday, 8:42 pm",
   },
   {
     id: "session-3",
-    device: "Safari · iPhone",
+    device: "Windows PC · Firefox",
     location: "Srinagar, Jammu & Kashmir",
-    lastActive: "Yesterday, 18:40",
+    lastActive: "3 days ago",
   },
 ];
 
 /**
- * Security settings. A client page so the demo "sign out this session"
- * toggle can flip a row to its signed-out state without a backend.
+ * Security settings — V14 aligned. PageHead + grid of panels for active
+ * sessions and sign-in method. A client page so the demo "sign out this
+ * session" toggle can flip a row to its signed-out state without a backend.
  */
 export default function SecurityPage() {
   const [signedOut, setSignedOut] = useState<Record<string, boolean>>({});
@@ -52,7 +53,8 @@ export default function SecurityPage() {
   const confirmRef = useRef<HTMLButtonElement>(null);
   const activeCount = SESSIONS.filter((session) => !signedOut[session.id]).length;
   const supabaseMode = clientAdapterMode() === "supabase";
-  const [mfaStatus, setMfaStatus] = useState<"checking" | "verified" | "not-enrolled">("checking");
+  const [mfaStatus, setMfaStatus] = useState<"checking" | "verified" | "not-enrolled" | "unavailable">("checking");
+  const [mfaReload, setMfaReload] = useState(0);
   const [securityBusy, setSecurityBusy] = useState<"local" | "others" | "global" | null>(null);
   const [securityError, setSecurityError] = useState<string | null>(null);
   const [securityMessage, setSecurityMessage] = useState<string | null>(null);
@@ -64,16 +66,21 @@ export default function SecurityPage() {
   useEffect(() => {
     if (!supabaseMode) return;
     let cancelled = false;
-    void createSupabaseBrowserClient().auth.mfa.listFactors().then(({ data }) => {
+    setMfaStatus("checking");
+    void createSupabaseBrowserClient().auth.mfa.listFactors().then(({ data, error }) => {
       if (cancelled) return;
+      if (error) {
+        setMfaStatus("unavailable");
+        return;
+      }
       setMfaStatus((data?.totp ?? []).some((factor) => factor.status === "verified") ? "verified" : "not-enrolled");
     }).catch(() => {
-      if (!cancelled) setMfaStatus("not-enrolled");
+      if (!cancelled) setMfaStatus("unavailable");
     });
     return () => {
       cancelled = true;
     };
-  }, [supabaseMode]);
+  }, [supabaseMode, mfaReload]);
 
   function beginConfirm(id: string) {
     setConfirmingId(id);
@@ -115,192 +122,207 @@ export default function SecurityPage() {
   if (supabaseMode) {
     return (
       <div className={styles.page}>
-        <header>
-          <p className="eyebrow">Portal · Security</p>
-          <h1 className={styles.title}>Security</h1>
-          <p className={styles.intro}>Manage this signed-in browser, other sessions, password recovery, and authenticator status.</p>
-        </header>
+        {/* V14 PageHead */}
+        <div className="page-head">
+          <div>
+            <h1 className={styles.title}>Security</h1>
+            <p className="ph-sub">Sessions, devices and sign-in methods for your guardian account.</p>
+          </div>
+        </div>
 
         {securityError ? <p className="field-error" role="alert">{securityError}</p> : null}
         {securityMessage ? <p role="status" aria-live="polite">{securityMessage}</p> : null}
 
-        <section aria-labelledby="sessions-heading">
-          <h2 id="sessions-heading" className={styles.sectionTitle}>Session access</h2>
-          <div className={styles.rows}>
-            <div className={styles.sessionRow}>
-              <div>
-                <strong>Current browser</strong>
-                <small>Verified Supabase session</small>
+        {/* V14 grid of panels */}
+        <div className={styles.grid}>
+          <section className="panel">
+            <div className="pn-head"><h2>Active sessions</h2></div>
+            <div className="pn-body flush">
+              <div
+                className="table-wrap"
+                role="region"
+                aria-label="Active sessions table"
+                tabIndex={0}
+              >
+                <table className="ledger">
+                  <thead>
+                    <tr>
+                      <th>Device</th>
+                      <th>Last active</th>
+                      <th><span className="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="strong small">Current browser · verified Supabase session</td>
+                      <td className="num small muted">Active now</td>
+                      <td style={{ textAlign: "right" }}>
+                        <StatusBadge tone="good">Current</StatusBadge>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              <p className={styles.lastActive}><StatusBadge tone="good">This device</StatusBadge>Active now</p>
-              <div className={styles.sessionAction}>
-                <Button variant="quiet" onClick={() => void signOutProvider("local")} disabled={securityBusy !== null}>
-                  {securityBusy === "local" ? "Signing out…" : "Sign out this device"}
-                </Button>
+              <div className="pn-body" style={{ borderTop: "1px solid var(--line-soft)", paddingTop: 12 }}>
+                <p className="small muted" style={{ marginBottom: 10 }}>Close sessions on other browsers if you no longer recognize or use them.</p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Button variant="quiet" onClick={() => void signOutProvider("others")} disabled={securityBusy !== null}>
+                    {securityBusy === "others" ? "Closing…" : "Sign out other devices"}
+                  </Button>
+                  <Button variant="quiet" onClick={() => void signOutProvider("global")} disabled={securityBusy !== null}>
+                    {securityBusy === "global" ? "Closing all…" : "Sign out everywhere"}
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-          <div className={styles.statusLine}>
-            <p className={styles.statusText}>Close sessions on other browsers if you no longer recognize or use them.</p>
-            <Button variant="quiet" onClick={() => void signOutProvider("others")} disabled={securityBusy !== null}>
-              {securityBusy === "others" ? "Closing sessions…" : "Sign out other devices"}
-            </Button>
-            <Button variant="quiet" onClick={() => void signOutProvider("global")} disabled={securityBusy !== null}>
-              {securityBusy === "global" ? "Closing all sessions…" : "Sign out everywhere"}
-            </Button>
-          </div>
-        </section>
+          </section>
 
-        <section aria-labelledby="twofa-heading">
-          <h2 id="twofa-heading" className={styles.sectionTitle}>Two-factor authentication</h2>
-          <div className={styles.statusLine}>
-            <StatusBadge tone={mfaStatus === "verified" ? "good" : "neutral"}>
-              {mfaStatus === "checking" ? "Checking" : mfaStatus === "verified" ? "Enabled" : "Not enrolled"}
-            </StatusBadge>
-            <p className={styles.statusText}>Authenticator verification is mandatory for staff workspaces. Guardian enrollment remains subject to school policy.</p>
-          </div>
-        </section>
-
-        <section aria-labelledby="password-heading">
-          <h2 id="password-heading" className={styles.sectionTitle}>Password</h2>
-          <p className={styles.passwordNote}>Staff passwords are changed through a time-limited recovery email. Family and applicant sign-in continues to use an email code.</p>
-          <Button href="/sign-in/recovery" variant="quiet">Send password reset email</Button>
-        </section>
+          <section className="panel">
+            <div className="pn-head"><h2>Sign-in method</h2></div>
+            <div className="pn-body" style={{ paddingTop: 12 }}>
+              <div className={styles.methodRow}>
+                <span className="small">Password</span>
+                <span className="tiny muted">Reset by email link</span>
+              </div>
+              <div className={styles.methodRow}>
+                <span className="small">Authenticator app (TOTP)</span>
+                {mfaStatus === "checking" ? (
+                  <span className="tiny muted" role="status" aria-live="polite">Checking…</span>
+                ) : mfaStatus === "verified" ? (
+                  <StatusBadge tone="good">Enabled</StatusBadge>
+                ) : mfaStatus === "unavailable" ? (
+                  <span className={styles.methodActions}>
+                    <span className="tiny muted">Could not check</span>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMfaReload((key) => key + 1)}>
+                      Try again
+                    </button>
+                  </span>
+                ) : (
+                  <StatusBadge tone="neutral">Not set up</StatusBadge>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                <Button href="/sign-in/recovery" variant="quiet">Send password reset email</Button>
+              </div>
+              <p className="tiny muted" style={{ marginTop: 10 }}>
+                Authenticator verification is mandatory for staff workspaces. Guardian enrollment remains subject to school policy.
+              </p>
+            </div>
+          </section>
+        </div>
       </div>
     );
   }
 
   return (
     <div className={styles.page}>
-      <header>
-        <p className="eyebrow">Portal · Security</p>
-        <h1 className={styles.title}>Security</h1>
-        <p className={styles.intro}>
-          Signed-in devices, two-factor authentication, and password handling for this account.
-        </p>
-      </header>
+      {/* V14 PageHead */}
+      <div className="page-head">
+        <div>
+          <h1 className={styles.title}>Security</h1>
+          <p className="ph-sub">Sessions, devices and sign-in methods for your guardian account.</p>
+        </div>
+      </div>
 
       <p className="sr-only" role="status" aria-live="polite">
         {activeCount} of {SESSIONS.length} active sessions.
       </p>
 
-      <section aria-labelledby="sessions-heading">
-        <h2 id="sessions-heading" className={styles.sectionTitle}>
-          Active sessions
-        </h2>
-        <div className={styles.rows}>
-          {SESSIONS.map((session) => {
-            const out = signedOut[session.id] === true;
-            return (
-              <div
-                key={session.id}
-                className={`${styles.sessionRow}${out ? ` ${styles.sessionRowMuted}` : ""}`}
-              >
-                <div>
-                  <strong>{session.device}</strong>
-                  <small>{session.location}</small>
-                </div>
-                <p className={styles.lastActive}>
-                  {session.current && <StatusBadge tone="good">This device</StatusBadge>}
-                  {session.lastActive}
-                </p>
-                <div className={styles.sessionAction}>
-                  {out ? (
-                    <StatusBadge tone="neutral">Signed out (demo)</StatusBadge>
-                  ) : confirmingId === session.id ? (
-                    <div className={styles.confirmBox} role="group" aria-label={`Confirm sign out of ${session.device}`}>
-                      <p className={styles.confirmText}>
-                        Sign out <strong>{session.device}</strong>? Its access ends now.
-                      </p>
-                      <div className={styles.confirmActions}>
-                        <button
-                          ref={confirmRef}
-                          type="button"
-                          className="button button--quiet button--small"
-                          onClick={() => signOut(session.id)}
-                        >
-                          Yes, sign out
-                        </button>
-                        <button
-                          type="button"
-                          className="button button--quiet button--small"
-                          onClick={() => cancelConfirm(session.id)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <Button variant="quiet" onClick={() => beginConfirm(session.id)}>
-                      Sign out this session
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {/* V14 grid of panels */}
+      <div className={styles.grid}>
+        {/* Active sessions panel with flush ledger table */}
+        <section className="panel">
+          <div className="pn-head"><h2>Active sessions</h2></div>
+          <div className="pn-body flush">
+            <div className="table-wrap">
+              <table className="ledger">
+                <thead>
+                  <tr>
+                    <th>Device</th>
+                    <th>Last active</th>
+                    <th><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {SESSIONS.map((session) => {
+                    const out = signedOut[session.id] === true;
+                    return (
+                      <tr key={session.id} style={out ? { opacity: 0.5 } : undefined}>
+                        <td className="strong small">{session.device}</td>
+                        <td className="num small muted">{session.lastActive}</td>
+                        <td style={{ textAlign: "right" }}>
+                          {out ? (
+                            <StatusBadge tone="neutral">Signed out</StatusBadge>
+                          ) : session.current ? (
+                            <StatusBadge tone="good">Current</StatusBadge>
+                          ) : confirmingId === session.id ? (
+                            <div className={styles.confirmBox} role="group" aria-label={`Confirm sign out of ${session.device}`}>
+                              <p className={styles.confirmText}>
+                                Sign out <strong>{session.device}</strong>?
+                              </p>
+                              <div className={styles.confirmActions}>
+                                <button
+                                  ref={confirmRef}
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => signOut(session.id)}
+                                >
+                                  Yes, sign out
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => cancelConfirm(session.id)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button className="btn btn-ghost btn-sm" onClick={() => beginConfirm(session.id)}>
+                              Sign out
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
 
-      <section aria-labelledby="twofa-heading">
-        <h2 id="twofa-heading" className={styles.sectionTitle}>
-          Two-factor authentication
-        </h2>
-        <div className={styles.statusLine}>
-          <StatusBadge tone="neutral">Not enabled</StatusBadge>
-          <p className={styles.statusText}>
-            Available to guardians once accounts are verified.
-          </p>
-          <Button variant="quiet" disabled>
-            Enable two-factor authentication
-          </Button>
-        </div>
-      </section>
-
-      <section aria-labelledby="password-heading">
-        <h2 id="password-heading" className={styles.sectionTitle}>
-          Password
-        </h2>
-        <div className={styles.passwordFields}>
-          <div className="field">
-            <label htmlFor="current-password">Current password</label>
-            <input
-              id="current-password"
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              disabled
-            />
+        {/* Sign-in method panel */}
+        <section className="panel">
+          <div className="pn-head"><h2>Sign-in method</h2></div>
+          <div className="pn-body" style={{ paddingTop: 12 }}>
+            <div className={styles.methodRow}>
+              <span className="small">Password</span>
+              <span className="tiny muted">Disabled in demo</span>
+            </div>
+            <div className={styles.methodRow}>
+              <span className="small">Second factor (SMS)</span>
+              <StatusBadge tone="good">On</StatusBadge>
+            </div>
+            <div className={styles.methodRow}>
+              <span className="small">Authenticator app (TOTP)</span>
+              <span className="tiny muted">Not set up</span>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+              <Button variant="quiet" disabled>Change password</Button>
+              <Button variant="quiet" disabled>Set up authenticator</Button>
+            </div>
+            <p className="tiny muted" style={{ marginTop: 10 }}>
+              Authenticator enrolment is disabled in this prototype. The provider wording above follows the school&apos;s live configuration.
+            </p>
           </div>
-          <div className="field">
-            <label htmlFor="new-password">New password</label>
-            <input
-              id="new-password"
-              className="input"
-              type="password"
-              autoComplete="new-password"
-              disabled
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="confirm-password">Confirm new password</label>
-            <input
-              id="confirm-password"
-              className="input"
-              type="password"
-              autoComplete="new-password"
-              disabled
-            />
-          </div>
-        </div>
-        <p className={styles.passwordNote}>
-          Password changes are handled by the identity provider in the backend phase.
-        </p>
-      </section>
+        </section>
+      </div>
 
       <p className={styles.demoNote}>
         <span className="demo-badge">Demo data</span>
-        <span>Fictional sessions and settings — real security controls arrive with authentication.</span>
+        <span>Fictional sessions and settings · real security controls arrive with authentication.</span>
       </p>
     </div>
   );

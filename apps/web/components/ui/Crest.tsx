@@ -1,114 +1,72 @@
-import { useId, type CSSProperties } from "react";
-
-import { CHINAR_PATH } from "./ChinarMark";
-
-type CrestSize = "sm" | "md" | "lg";
+type CrestSize = "xs" | "sm" | "md" | "lg";
 type CrestTone = "ink" | "chalk";
 
 type CrestProps = {
-  /** sm 40px, md 56px, lg 72px. */
+  /** xs 26px (ctx-bar), sm 40px (auth/applicant), md 46px (header), lg 52px (footer). */
   size?: CrestSize;
-  /** ink = ink field with chalk marks (on paper grounds); chalk = for ink grounds. */
+  /** ink = colour emblem on paper grounds; chalk = paper-line emblem on ink grounds. */
   tone?: CrestTone;
   className?: string;
 };
 
-const CREST_PX: Record<CrestSize, number> = { sm: 40, md: 56, lg: 72 };
+/** V15 emblem palette. The colour emblem is the inherited school mark:
+ *  navy star field, gold rules, cream book. Mono variants render all
+ *  strokes in a single colour for ink or paper grounds. */
+const COLOR_EMBLEM = { field: "#1E3A5F", gold: "#C9A227", cream: "#FAF5EA" } as const;
+const MONO_INK = { field: "#0B1C2A", gold: "#0B1C2A", cream: "#F4EFE5" } as const;
+const MONO_PAPER = { field: "#F4EFE5", gold: "#F4EFE5", cream: "#0B1C2A" } as const;
 
-const INK = "#0b1c2a";
-const CHALK = "#fffdf8";
+/** Eight-pointed star outline — the V15 emblem field (400×400 viewBox). */
+const STAR_PATH =
+  "M375.5 272.7 L272.7 375.5 L127.3 375.5 L24.5 272.7 L24.5 127.3 L127.3 24.5 L272.7 24.5 L375.5 127.3 Z";
 
-/* All geometry is drawn in a 72-unit viewBox so the same paths stay
-   crisp at 40px and elegant at 72px. */
-
-/** Mughal ogee-arch shield — the Islamic-school identity mark: straight
-   sides rising into an ogee point, echoing the arches of the valley's
-   Mughal buildings. */
-const SHIELD_PATH =
-  "M 10 52 V 24 Q 10 12 22 10.6 Q 30 9.6 34.4 5.4 Q 36 3.2 36 3.2 Q 37.6 5.4 42 9.6 Q 50 10.6 62 12 V 24 V 52 Z";
-
-/** 1px inner rule following the arch, inset ~3 units (scaled about the
-   arch centre so the ogee profile is preserved). */
-const SHIELD_RULE_PATH = SHIELD_PATH;
-const SHIELD_RULE_TRANSFORM = "translate(3.4 2.6) scale(0.92)";
-
-/** Diyā — lamp flame above a small cup (the light of learning). */
-const FLAME_PATH = "M 36 9.6 C 37.8 12.1 38.8 13.5 38.8 15 C 38.8 16.6 37.5 17.6 36 17.6 C 34.5 17.6 33.2 16.6 33.2 15 C 33.2 13.5 34.2 12.1 36 9.6 Z";
-const FLAME_CORE_PATH = "M 36 12.5 C 36.8 13.6 37.1 14.3 37.1 14.9 C 37.1 15.6 36.6 16 36 16 C 35.4 16 34.9 15.6 34.9 14.9 C 34.9 14.3 35.2 13.6 36 12.5 Z";
-const CUP_PATH = "M 31.8 18 L 40.2 18 L 38.2 20.1 Q 36 21.2 33.8 20.1 Z";
-
-/** Open book — two page halves meeting at a spine. */
-const BOOK_LEFT_PATH = "M 36 21.6 Q 30.6 20.7 25.7 23 L 25.7 31.6 Q 30.6 29.3 36 30.2 Z";
-const BOOK_RIGHT_PATH = "M 36 21.6 Q 41.4 20.7 46.3 23 L 46.3 31.6 Q 41.4 29.3 36 30.2 Z";
-const BOOK_SPINE_PATH = "M 36 21.6 L 36 30.2";
-
-/** Bottom band with the serif monogram. */
-const BAND_PATH = "M 15.8 46.2 H 56.2 V 49.8 Q 56.2 51.2 54.8 51.2 H 17.2 Q 15.8 51.2 15.8 49.8 Z";
-
-/** CHINAR_PATH (32x40 space) mapped into the crest: tip at (36, 33.6), scale 0.61. */
-const LEAF_TRANSFORM = "translate(36 33.6) scale(0.61) translate(-16 -3)";
+/** Small decorative star (top-right of the emblem, 24-unit space). */
+const MINI_STAR_PATH =
+  "M219.0,123.5 L220.0,126.6 L223.3,126.6 L220.6,128.5 L221.6,131.6 L219.0,129.7 L216.4,131.6 L217.4,128.5 L214.7,126.6 L218.0,126.6Z";
 
 /**
- * School crest — hand-drawn Mughal ogee-arch shield with the lamp
- * flame, open book, chinar leaf and "FA" band. Concept artwork: the
- * official school crest is pending verification and this mark will be
- * replaced when the verified identity assets arrive. Decorative — the
- * accessible name always comes from the surrounding link/heading.
+ * School emblem — V15 eight-pointed star with gold rules, rotated square
+ * frame, seal dot, and open book. Inherited brand asset geometry from the
+ * V15 prototype; the official school crest remains pending verification.
+ * Sizes come exclusively from the .crest--{size} classes (including the
+ * ≤479px header shrink) so server and client markup match exactly.
+ * Decorative — the accessible name comes from the surrounding link/heading.
  */
 export function Crest({ size = "md", tone = "ink", className }: CrestProps) {
-  const px = CREST_PX[size];
-  const leafId = useId();
-  const sm = size === "sm";
-  const field = tone === "ink" ? INK : CHALK;
-  const mark = tone === "ink" ? CHALK : INK;
-
-  const style: CSSProperties = {
-    width: px,
-    height: px,
-    // The .crest class paints an ink field; chalk-tone crests stand on
-    // ink grounds and must not carry their own background.
-    ...(tone === "chalk" ? { background: "transparent" } : null),
-  };
+  const palette = tone === "chalk" ? MONO_PAPER : COLOR_EMBLEM;
+  const mono = tone === "chalk";
 
   return (
     <span
       className={`crest crest--${size}${className ? ` ${className}` : ""}`}
-      style={style}
       aria-hidden="true"
     >
-      <svg viewBox="0 0 72 72" width="100%" height="100%" role="presentation" focusable="false">
-        <path d={SHIELD_PATH} fill={field} />
-        <path d={SHIELD_RULE_PATH} transform={SHIELD_RULE_TRANSFORM} fill="none" stroke={mark} strokeWidth={sm ? 1.5 : 1} />
-
-        <path d={FLAME_PATH} fill={mark} />
-        {/* The core cutout is sub-pixel at 40px; the solid flame reads better. */}
-        {sm ? null : <path d={FLAME_CORE_PATH} fill={field} />}
-        <path d={CUP_PATH} fill={mark} />
-
-        <path d={BOOK_LEFT_PATH} fill={mark} />
-        <path d={BOOK_RIGHT_PATH} fill={mark} />
-        <path d={BOOK_SPINE_PATH} fill="none" stroke={field} strokeWidth={sm ? 1.5 : 1} />
-
-        <defs>
-          {/* useId keeps the id unique per instance — header, footer and
-              wallboard each mount their own copy. */}
-          <path id={leafId} d={CHINAR_PATH} />
-        </defs>
-        <use href={`#${leafId}`} transform={LEAF_TRANSFORM} fill={mark} />
-
-        <path d={BAND_PATH} fill={mark} />
-        <text
-          x="36"
-          y={sm ? 50.4 : 50.35}
-          textAnchor="middle"
-          fontFamily="var(--font-display), Georgia, 'Times New Roman', serif"
-          fontSize={sm ? 6.2 : 5.7}
-          fontWeight="600"
-          letterSpacing="0.5"
-          fill={field}
-        >
-          FA
-        </text>
+      <svg viewBox="0 0 400 400" width="100%" height="100%" role="presentation" focusable="false">
+        <path d={STAR_PATH} fill={palette.field} />
+        {/* Inner star rule, inset about the centre. */}
+        <g transform="translate(200 200) scale(0.93) translate(-200 -200)">
+          <path d={STAR_PATH} fill="none" stroke={palette.gold} strokeWidth="5" />
+        </g>
+        {/* Rotated square frame. */}
+        <g fill="none" stroke={palette.gold} strokeWidth="5">
+          <path d="M104 82 H296 V274 H104 Z" />
+          <path d="M104 82 H296 V274 H104 Z" transform="rotate(45 200 178)" />
+        </g>
+        {/* Seal dot with offset core. */}
+        <circle cx="200" cy="130" r="16" fill={palette.gold} />
+        <circle cx="207" cy="125" r="13.5" fill={mono ? palette.cream : palette.field} />
+        <path d={MINI_STAR_PATH} fill={palette.gold} />
+        {/* Open book. */}
+        <path d="M200 218 L144 206 L144 184 L200 194 Z" fill={palette.cream} />
+        <path d="M200 218 L256 206 L256 184 L200 194 Z" fill={palette.cream} />
+        <line x1="200" y1="194" x2="200" y2="218" stroke={palette.gold} strokeWidth="3" />
+        {/* Page detail lines. */}
+        <g stroke={mono ? palette.cream : palette.field} strokeWidth="1.5" opacity="0.45">
+          <line x1="154" y1="197" x2="190" y2="203" />
+          <line x1="155" y1="203" x2="189" y2="209" />
+          <line x1="246" y1="197" x2="210" y2="203" />
+          <line x1="245" y1="203" x2="211" y2="209" />
+        </g>
       </svg>
     </span>
   );

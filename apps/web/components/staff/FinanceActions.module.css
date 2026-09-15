@@ -8,8 +8,8 @@
 }
 
 .intro {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.6;
   margin: 0 0 16px;
 }
@@ -23,7 +23,7 @@
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -42,8 +42,8 @@
 }
 
 .historyLabel {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin-top: 12px;
@@ -67,7 +67,7 @@
 }
 
 .requestCopy small {
-  color: var(--ink-soft);
+  color: var(--muted);
 }
 
 .decide {
@@ -84,23 +84,23 @@
 
 .error {
   color: var(--alert-ink, #8b1a1a);
-  font-size: 12px;
+  font-size: 0.78rem;
   margin: 0;
 }
 
 .empty {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .readOnly {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .live {
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   margin-top: 14px;
   min-height: 18px;
 }

@@ -2,6 +2,12 @@
   grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: 44px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.page > * {
+  min-width: 0;
 }
 
 .ruleNote {
@@ -12,11 +18,38 @@
 .ruleNote p {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.55;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .ruleNote p + p {
   margin-top: 8px;
+}
+
+@media (max-width: 1023px) {
+  .page {
+    gap: 32px;
+  }
+}
+
+@media (max-width: 719px) {
+  .page {
+    gap: 24px;
+  }
+
+  .ruleNote {
+    padding-top: 14px;
+  }
+}
+
+@media (max-width: 479px) {
+  .page {
+    gap: 20px;
+  }
+
+  .ruleNote {
+    padding-top: 12px;
+  }
 }

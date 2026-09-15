@@ -46,7 +46,71 @@ export type DownloadItem = {
   kind: string;
   size: string;
   updated: string;
+  /** Authorized document reference; absent in the demo register. */
+  reference?: string;
 };
+
+/** Safe public document metadata returned by `content.listDownloads`. */
+export type ServerPublicDownloadRow = {
+  reference: string;
+  safe_filename: string;
+  category: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+  finalized_at: string | null;
+};
+
+function formatDownloadSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "Not recorded";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDownloadDate(value: string | null): string {
+  if (value === null || value === "") return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(date);
+}
+
+function downloadKind(mimeType: string, filename: string): string {
+  const extension = /\.[a-z0-9]+$/i.exec(filename)?.[0]?.slice(1).toUpperCase();
+  const fromMime = mimeType === "application/pdf" ? "PDF" : mimeType.startsWith("image/") ? mimeType.slice("image/".length).toUpperCase() : null;
+  return fromMime ?? extension ?? "File";
+}
+
+function humanizeDownloadCategory(category: string): string {
+  const trimmed = category.trim();
+  if (trimmed === "") return "Document";
+  return trimmed
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+/**
+ * Map the anonymous-safe `content.listDownloads` projection into the register
+ * row. Titles come from the safe filename; the category provides a fallback
+ * label when a row has no filename. No object key, bucket, checksum, or owner
+ * field is ever read here.
+ */
+export function mapServerPublicDownloadRow(row: ServerPublicDownloadRow): DownloadItem {
+  const filename = typeof row.safe_filename === "string" ? row.safe_filename.trim() : "";
+  const name = filename !== "" ? filename : humanizeDownloadCategory(row.category);
+  return {
+    reference: row.reference,
+    name,
+    kind: downloadKind(row.mime_type, name),
+    size: formatDownloadSize(Number(row.size_bytes)),
+    updated: formatDownloadDate(row.finalized_at ?? row.created_at),
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Notice lifecycle types                                              */
@@ -90,7 +154,11 @@ export type ContentNotice = Notice & {
   /** Proposed by the editor and preserved inside immutable version metadata. */
   publishNote?: string;
   reviewDue: string;
+  /** Pinned notices lead the staff and public lists. Stored from version metadata. */
+  pinned: boolean;
   scheduledForIso: string | null;
+  /** Optional expiry instant: past-expiry notices never appear in audience projections. */
+  expiresAtIso?: string | null;
 };
 
 /** Every write returns a typed, conflict-aware outcome for recoverable UI. */
@@ -330,6 +398,15 @@ function staleFailure<T>(expectedVersion: number, currentVersion: number, state:
   );
 }
 
+/**
+ * Query-time expiry: a notice carrying a past `expiresAtIso` is invisible to
+ * every audience projection (there is no demo cron — exclusion is the demo
+ * semantic for expiry, mirroring the server `expires_at` gate).
+ */
+export function isNoticeExpired(notice: Pick<ContentNotice, "expiresAtIso">, nowIso: string): boolean {
+  return notice.expiresAtIso != null && notice.expiresAtIso <= nowIso;
+}
+
 function normalizeNotice(notice: ContentNotice): ContentNotice {
   const version = notice.version > 0 ? notice.version : 1;
   const reviewStatus =
@@ -343,7 +420,9 @@ function normalizeNotice(notice: ContentNotice): ContentNotice {
     reviewStatus,
     authorAccountId: notice.authorAccountId ?? SEEDED_CONTENT_AUTHOR_ID,
     reviewedByAccountId: notice.reviewedByAccountId ?? (reviewStatus === "published" ? "demo-content-seed-publisher" : null),
+    pinned: notice.pinned ?? false,
     scheduledForIso: notice.scheduledForIso ?? null,
+    expiresAtIso: notice.expiresAtIso ?? null,
     body: [...notice.body],
   };
 }
@@ -373,7 +452,9 @@ function withMeta(
     reviewedByAccountId: status === "draft" ? null : "demo-content-seed-publisher",
     publishNote,
     reviewDue: noticeReviewDue[notice.slug] ?? "2026-09-01",
+    pinned: false,
     scheduledForIso: null,
+    expiresAtIso: null,
   };
 }
 
@@ -451,6 +532,8 @@ export interface ContentService {
     body: string[];
     urgent?: boolean;
     audience?: NoticeAudience;
+    pinned?: boolean;
+    reviewDue?: string | null;
     publishNote?: string;
     actor?: ContentActor;
     idempotencyKey?: string;
@@ -490,6 +573,8 @@ export interface ContentService {
       body?: string[];
       urgent?: boolean;
       audience?: NoticeAudience;
+      pinned?: boolean;
+      reviewDue?: string | null;
       publishNote?: string;
       actor?: ContentActor;
       expectedVersion?: number;
@@ -528,12 +613,14 @@ export function createDemoContentService(): ContentService {
   const service: ContentService = {
     async listForAudience(audience, opts = {}) {
       const status = opts.status ?? "published";
-      return loadStore().filter((notice) => visibleTo(notice, audience, status));
+      const nowIso = demoNowIso();
+      return loadStore().filter((notice) => visibleTo(notice, audience, status) && !isNoticeExpired(notice, nowIso));
     },
 
     async getNotice(slug, audience) {
+      const nowIso = demoNowIso();
       const notice = loadStore().find(
-        (candidate) => candidate.slug === slug && visibleTo(candidate, audience, "published"),
+        (candidate) => candidate.slug === slug && visibleTo(candidate, audience, "published") && !isNoticeExpired(candidate, nowIso),
       );
       return notice ? cloneNotice(notice) : null;
     },
@@ -569,9 +656,11 @@ export function createDemoContentService(): ContentService {
         authorAccountId: actor.accountId,
         reviewedByAccountId: null,
         publishNote: input.publishNote?.trim() || undefined,
-        reviewDue: "2026-09-01",
+        reviewDue: input.reviewDue?.trim() || "2026-09-01",
+        pinned: input.pinned ?? false,
         /* Scheduling is a publisher transition, never a property of a new draft. */
         scheduledForIso: null,
+        expiresAtIso: null,
       };
       saveStore([...store, created]);
       return cloneNotice(created);
@@ -688,9 +777,10 @@ export function createDemoContentService(): ContentService {
       if (current === undefined) return contentFailure("not-found", "The notice was not found.");
       const expectedVersion = input.expectedVersion ?? current.version;
       const scheduledForIso = input.scheduledForIso?.trim() || null;
+      const requestedExpiry = input.expiresAtIso?.trim() || null;
       const idempotencyKey =
         input.idempotencyKey ??
-        workflowKey("publish", slug, expectedVersion, `${scheduledForIso ?? "now"}|${current.publishNote ?? ""}`);
+        workflowKey("publish", slug, expectedVersion, `${scheduledForIso ?? "now"}|${requestedExpiry ?? "no-expiry"}|${current.publishNote ?? ""}`);
       const replay = replayedNotice(idempotencyKey, "publish");
       if (replay !== null) return { ok: true, value: replay, replayed: true };
       if (expectedVersion !== current.version) {
@@ -736,6 +826,19 @@ export function createDemoContentService(): ContentService {
       if (scheduledForIso !== null && scheduleTime !== null && (!Number.isFinite(scheduleTime) || scheduleTime <= Date.parse(demoNowIso()))) {
         return contentFailure("validation", "Choose a valid future date to schedule publication.");
       }
+      /* Expiry was previously accepted in the input and silently dropped. A
+         provided expiry must be a valid instant after publication; it is
+         stored on the version and gates every audience projection. */
+      const rawExpiry = input.expiresAtIso?.trim() || null;
+      if (rawExpiry !== null) {
+        const expiryTime = Date.parse(rawExpiry);
+        if (!Number.isFinite(expiryTime)) {
+          return contentFailure("validation", "Choose a valid expiry date.");
+        }
+        if (expiryTime <= Date.parse(demoNowIso())) {
+          return contentFailure("validation", "Choose an expiry date after publication.");
+        }
+      }
       const scheduled = scheduledForIso !== null;
       const nextVersion = current.version + 1;
       const next: ContentNotice = {
@@ -747,6 +850,7 @@ export function createDemoContentService(): ContentService {
         reviewStatus: scheduled ? "approved" : "published",
         dateIso: scheduled ? current.dateIso : demoNowIso(),
         scheduledForIso,
+        expiresAtIso: rawExpiry,
       };
       saveStore(store.map((notice) => (notice.slug === slug ? next : notice)));
       saveIntent({ key: idempotencyKey, action: "publish", notice: cloneNotice(next) });
@@ -974,9 +1078,13 @@ export function createDemoContentService(): ContentService {
         urgent: input.urgent ?? current.urgent,
         audience: input.audience ?? current.audience,
         publishNote: input.publishNote === undefined ? current.publishNote : input.publishNote.trim() || undefined,
+        reviewDue: input.reviewDue?.trim() || current.reviewDue,
+        pinned: input.pinned ?? current.pinned,
         authorAccountId: actor.accountId,
         reviewedByAccountId: null,
         scheduledForIso: null,
+        /* A re-draft restarts the lifecycle: stale schedule/expiry never carry over. */
+        expiresAtIso: null,
       };
       saveStore(store.map((notice) => (notice.slug === slug ? updated : notice)));
       void auditService.record({
@@ -1105,32 +1213,52 @@ type ServerContentVersionRow = {
   approved_at?: string | null;
 };
 
+/**
+ * The `notices` projection attached to a content item. PostgREST detects the
+ * one-to-one relationship (`notices.content_item_id` is unique) and returns a
+ * single object, while older fixtures/tests model the same embed as an array.
+ * Both shapes must map to the same notice: reading `[0]` on the object shape
+ * silently dropped `review_due` and `scheduled_at` from every live row.
+ */
+export type ServerNoticeProjection = {
+  category: string;
+  urgent: boolean;
+  pinned?: boolean | null;
+  status: string;
+  published_at: string | null;
+  expires_at: string | null;
+  review_due?: string | null;
+  scheduled_at?: string | null;
+  notice_audiences?: Array<{ audience: string }>;
+};
+
 export type ServerContentRow = {
   id: string;
   reference: string;
   kind: string;
   slug: string;
   current_status: string;
+  scheduled_at?: string | null;
   version?: number;
   current_version_id?: string | null;
   updated_at?: string;
   content_versions?: ServerContentVersionRow[];
-  notices?: Array<{
-    category: string;
-    urgent: boolean;
-    status: string;
-    published_at: string | null;
-    expires_at: string | null;
-    review_due?: string | null;
-    scheduled_at?: string | null;
-    notice_audiences?: Array<{ audience: string }>;
-  }>;
+  notices?: ServerNoticeProjection | ServerNoticeProjection[] | null;
 };
+
+/** First embedded notice regardless of the embed's object/array shape. */
+function firstServerNotice(row: ServerContentRow): ServerNoticeProjection | undefined {
+  const value = row.notices;
+  if (Array.isArray(value)) return value[0];
+  return value ?? undefined;
+}
 
 type VersionMetadata = {
   category?: unknown;
   urgent?: unknown;
   audience?: unknown;
+  pinned?: unknown;
+  reviewDue?: unknown;
   publishNote?: unknown;
   href?: unknown;
 };
@@ -1191,7 +1319,7 @@ function metadataCategory(metadata: VersionMetadata, fallback: string | undefine
 
 function metadataAudience(
   metadata: VersionMetadata,
-  notice: NonNullable<ServerContentRow["notices"]>[number] | undefined,
+  notice: ServerNoticeProjection | undefined,
 ): NoticeAudience {
   if (metadata.audience === "family" || metadata.audience === "public") return metadata.audience;
   return notice?.notice_audiences?.some((candidate) => candidate.audience !== "public") ? "family" : "public";
@@ -1202,14 +1330,19 @@ function serverVersionBody(input: {
   category: NoticeCategory;
   urgent: boolean;
   audience: NoticeAudience;
+  pinned?: boolean;
+  reviewDue?: string | null;
   publishNote?: string;
 }): Record<string, unknown> {
+  const reviewDue = input.reviewDue?.trim() || "";
   return {
     blocks: input.body.map((text) => ({ type: "paragraph", text })),
     metadata: {
       category: input.category,
       urgent: input.urgent,
       audience: input.audience,
+      ...(input.pinned === true ? { pinned: true } : {}),
+      ...(reviewDue ? { reviewDue } : {}),
       ...(input.publishNote?.trim() ? { publishNote: input.publishNote.trim() } : {}),
     },
   };
@@ -1288,7 +1421,7 @@ export function mapServerContentRow(row: ServerContentRow): ContentNotice {
   const versionRow = latestServerVersion(row);
   const parsed = parseVersionBody(versionRow?.body);
   const body = parsed.body.length > 0 ? parsed.body : ["Published school notice."];
-  const notice = row.notices?.[0];
+  const notice = firstServerNotice(row);
   const status = noticeStatus(row.current_status);
   const immutableVersion = versionRow?.version ?? row.version ?? 1;
   return {
@@ -1312,7 +1445,9 @@ export function mapServerContentRow(row: ServerContentRow): ContentNotice {
     reviewedByAccountId: versionRow?.reviewed_by_account_id ?? null,
     publishNote: typeof parsed.metadata.publishNote === "string" ? parsed.metadata.publishNote : undefined,
     reviewDue: notice?.review_due ?? "—",
+    pinned: notice?.pinned === true || parsed.metadata.pinned === true,
     scheduledForIso: notice?.scheduled_at ?? null,
+    expiresAtIso: notice?.expires_at ?? null,
   };
 }
 
@@ -1353,7 +1488,7 @@ export function mapServerPublicPageRow(row: ServerContentRow): PublicPageRow {
     authorAccountId: versionRow?.author_account_id ?? null,
     reviewedByAccountId: versionRow?.reviewed_by_account_id ?? null,
     publishNote: typeof parsed.metadata.publishNote === "string" ? parsed.metadata.publishNote : undefined,
-    scheduledForIso: null,
+    scheduledForIso: row.scheduled_at ?? null,
     label: versionRow?.title ?? row.slug,
     href: typeof parsed.metadata.href === "string" ? parsed.metadata.href : `/${row.slug}`,
     status: publicPageStatus(row, status, review),
@@ -1443,10 +1578,13 @@ contentService.listForAudience = async (audience, opts = {}) => {
   });
   if (!response.ok) throw new Error(response.errors[0]?.message ?? "Content is unavailable.");
   const status = opts.status ?? "published";
+  const nowIso = new Date().toISOString();
   return response.value
     .filter((row) => row.kind === "notice")
     .map(mapServerContentRow)
-    .filter((notice) => visibleTo(notice, audience, status));
+    /* Defense in depth: the facade never serves past-expiry rows even if the
+       server projection already gates them. */
+    .filter((notice) => visibleTo(notice, audience, status) && !isNoticeExpired(notice, nowIso));
 };
 contentService.getNotice = async (slug, audience) => {
   if (clientAdapterMode() !== "supabase") return originalContent.getNotice(slug, audience);
@@ -1471,6 +1609,8 @@ contentService.createNotice = async (input) => {
       .replace(/^-+|-+$/g, "") || "notice";
   const audience = input.audience ?? "public";
   const publishNote = input.publishNote?.trim() || undefined;
+  const pinned = input.pinned === true;
+  const reviewDue = input.reviewDue?.trim() || "";
   const idempotencyKey =
     input.idempotencyKey ??
     workflowKey("save-draft", slug, 0, `${title}|${body.join("\n")}|${publishNote ?? ""}`);
@@ -1483,11 +1623,19 @@ contentService.createNotice = async (input) => {
       category: input.category,
       urgent: input.urgent ?? false,
       audience,
+      pinned,
+      reviewDue,
       publishNote,
     }),
     idempotencyKey,
   });
-  if (!response.ok) throw new Error(response.errors[0]?.message ?? "Unable to create content draft.");
+  if (!response.ok) {
+    const error = response.errors[0];
+    if (error?.code === "duplicate") {
+      throw new Error(`A notice or page with the address "${slug}" already exists. Search the registers for it to revise the existing record, or choose a different title.`);
+    }
+    throw new Error(error?.message ?? "Unable to create content draft.");
+  }
   const version = transitionVersion(response.value, 1);
   const fallback: ContentNotice = {
     slug,
@@ -1509,7 +1657,8 @@ contentService.createNotice = async (input) => {
     authorAccountId: null,
     reviewedByAccountId: null,
     publishNote,
-    reviewDue: "—",
+    reviewDue: reviewDue || "—",
+    pinned,
     scheduledForIso: null,
   };
   return refreshServerNotice(slug, fallback, version);
@@ -1647,7 +1796,7 @@ contentService.publishVersionV2 = async (slug, input = {}) => {
   const sourceBody = parseVersionBody(source.body);
   const persistedNote =
     typeof sourceBody.metadata.publishNote === "string" ? sourceBody.metadata.publishNote.trim() : "";
-  const approvedAudience = metadataAudience(sourceBody.metadata, loaded.value.row.notices?.[0]);
+  const approvedAudience = metadataAudience(sourceBody.metadata, firstServerNotice(loaded.value.row));
   if (!persistedNote) {
     return contentFailure(
       "validation",
@@ -1714,8 +1863,11 @@ contentService.unpublishNotice = async (slug, input = {}) => {
   const reason = input.reason?.trim() || "Archived through the content workspace.";
   if (reason.length < 3) return contentFailure("validation", "An unpublish reason is required.");
   const expectedVersion = input.expectedVersion ?? current.itemVersion;
-  /* The unpublish command has no server idempotency-key input. Treat only the
-     exact immediately-archived revision as a safe semantic retry. */
+  const idempotencyKey =
+    input.idempotencyKey ?? workflowKey("unpublish", slug, expectedVersion, reason);
+  /* Keep the semantic fast-path for the exact immediately-archived revision;
+     the server also records and replays this key so a lost response retries
+     safely without archiving twice. */
   if (current.status === "archived" && expectedVersion + 1 === current.itemVersion) {
     return { ok: true, value: current, replayed: true };
   }
@@ -1734,6 +1886,7 @@ contentService.unpublishNotice = async (slug, input = {}) => {
     contentItemId: current.contentItemId,
     reason,
     expectedVersion,
+    idempotencyKey,
   });
   if (!response.ok) return adapterFailure(response, "Unable to unpublish content.");
   const itemVersion = transitionVersion(response.value, current.itemVersion + 1);
@@ -1747,10 +1900,9 @@ contentService.unpublishNotice = async (slug, input = {}) => {
 };
 contentService.listDownloads = async () => {
   if (clientAdapterMode() !== "supabase") return originalContent.listDownloads();
-  /* Public download metadata requires a published content-document projection
-   * that is not yet wired. Return an honest empty list so the public notices
-   * page does not fail when downloads are absent. */
-  return [];
+  const response = await adapterCall<ServerPublicDownloadRow[]>("content.listDownloads", {});
+  if (!response.ok) throw new Error(response.errors[0]?.message ?? "Public downloads are unavailable.");
+  return response.value.map(mapServerPublicDownloadRow);
 };
 contentService.listPublicPages = async () => {
   if (clientAdapterMode() !== "supabase") return originalContent.listPublicPages();
@@ -1901,17 +2053,24 @@ contentService.editNotice = async (slug, input) => {
   const category = input.category ?? current.category;
   const urgent = input.urgent ?? current.urgent ?? false;
   const audience = input.audience ?? current.audience;
+  const pinned = input.pinned ?? current.pinned;
+  const reviewDue =
+    input.reviewDue === undefined
+      ? current.reviewDue === "—"
+        ? ""
+        : current.reviewDue
+      : input.reviewDue?.trim() || "";
   const publishNote = input.publishNote === undefined ? current.publishNote : input.publishNote.trim() || undefined;
   const expectedVersion = input.expectedVersion ?? current.itemVersion;
   const idempotencyKey =
     input.idempotencyKey ??
-    workflowKey("save-draft", slug, expectedVersion, `${title}|${body.join("\n")}|${publishNote ?? ""}`);
+    workflowKey("save-draft", slug, expectedVersion, `${title}|${body.join("\n")}|${publishNote ?? ""}|${pinned}|${reviewDue}`);
   const response = await adapterCall<ServerContentTransition>("content.saveDraft", {
     contentItemId: current.contentItemId,
     kind: "notice",
     slug,
     title,
-    body: serverVersionBody({ body, category, urgent, audience, publishNote }),
+    body: serverVersionBody({ body, category, urgent, audience, pinned, reviewDue, publishNote }),
     expectedVersion,
     idempotencyKey,
   });
@@ -1931,6 +2090,8 @@ contentService.editNotice = async (slug, input) => {
     urgent,
     audience,
     publishNote,
+    reviewDue: reviewDue || "—",
+    pinned,
     reviewedByAccountId: null,
     scheduledForIso: null,
   };
@@ -1952,7 +2113,16 @@ contentService.createPublicPage = async (input) => {
     body: serverVersionBody({ body, category: "General", urgent: false, audience: "public", publishNote: input.publishNote?.trim() || undefined }),
     idempotencyKey,
   });
-  if (!response.ok) return adapterFailure(response, "Unable to create the public page draft.");
+  if (!response.ok) {
+    const error = response.errors[0];
+    if (error?.code === "duplicate") {
+      return contentFailure(
+        "duplicate",
+        `A page with the route "/${slug}" already exists. Open the existing page row to start a revision, or choose a different route slug.`,
+      );
+    }
+    return adapterFailure(response, "Unable to create the public page draft.");
+  }
   const version = transitionVersion(response.value, 1);
   const fallback: PublicPageRow = {
     key: slug,
@@ -2040,8 +2210,14 @@ contentService.getPublicPageBody = async (key) => {
   const loaded = await loadServerItemForWrite(key, "page");
   if (!loaded.ok) return null;
   const row = loaded.value.row;
+  /* Staff-scoped read: the content workspace uses this to open the latest
+     version for editing and for the read-only preview. A draft, approved,
+     archived, or expired page must load its own body here — requiring
+     `published` made every non-published editor open empty and every draft
+     preview claim no body was stored. The public route keeps its own
+     published-only gate in `loadServerPublicPageBody`. */
   const versionRow = latestServerVersion(row);
-  if (!versionRow || row.current_status !== "published") return null;
+  if (!versionRow) return null;
   const parsed = parseVersionBody(versionRow.body);
   return {
     title: versionRow.title,

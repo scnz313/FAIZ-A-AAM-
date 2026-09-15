@@ -18,14 +18,19 @@ module.exports = {
       await page.waitForTimeout(1500);
       const body = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("portal ledger renders invoices", body.includes("INV-2026-"), body.slice(-120));
-      const tabLabels = await page.locator('a[aria-current]').allTextContents();
+      const tabLabels = await page.getByRole("tablist", { name: "Filter invoices" }).getByRole("tab").allTextContents();
       check("ledger filter tabs present", tabLabels.length >= 2, tabLabels.join(", "));
-      const unpaidTab = page.getByRole("link", { name: /Unpaid/ }).first();
+      const unpaidTab = page.getByRole("tab", { name: /Unpaid/ }).first();
       if ((await unpaidTab.count()) > 0) {
         await unpaidTab.click();
         await page.waitForTimeout(800);
         const after = (await page.locator("body").innerText()).replace(/\s+/g, " ");
-        check("unpaid filter narrows the ledger", after.includes("Outstanding"), after.slice(-120));
+        const selected = await unpaidTab.getAttribute("aria-selected");
+        check(
+          "unpaid filter narrows the ledger",
+          selected === "true" && !after.includes("INV-2026-0101") && after.includes("INV-2026-0102"),
+          `selected=${selected} ${after.slice(-120)}`,
+        );
       }
       const invoiceLink = page.locator('a[href*="/portal/fees/INV-"]').first();
       if ((await invoiceLink.count()) > 0) {
@@ -50,7 +55,7 @@ module.exports = {
     }
 
     try {
-      await staffAs(page, base, "/staff/finance");
+      await staffAs(page, base, "/principal/finance", { identity: STAFF_IDS.rania });
       const ws = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check(
         "finance workspace renders the ledger summary",
@@ -62,9 +67,9 @@ module.exports = {
     }
 
     for (const [path, name, needle] of [
-      ["/staff/finance/invoices", "staff invoices register", /INV-2026-/],
-      ["/staff/finance/payments", "staff payments register", /Payment|PAY-|success/i],
-      ["/staff/finance/reconciliation", "reconciliation page", /Reconciliation|match|discrepancy/i],
+      ["/principal/finance/invoices", "staff invoices register", /INV-2026-/],
+      ["/principal/finance/payments", "staff payments register", /Payment|PAY-|success/i],
+      ["/principal/finance/reconciliation", "reconciliation page", /Reconciliation|match|discrepancy/i],
     ]) {
       try {
         await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
@@ -77,7 +82,7 @@ module.exports = {
     }
 
     try {
-      await page.goto(`${base}/staff/finance/reconciliation`, { waitUntil: "networkidle" });
+      await page.goto(`${base}/principal/finance/reconciliation`, { waitUntil: "networkidle" });
       await page.waitForTimeout(1200);
       const runBtn = page.getByRole("button", { name: /Run reconciliation|Start reconciliation/ });
       if ((await runBtn.count()) > 0) {
@@ -95,7 +100,7 @@ module.exports = {
     /* Maker/checker adjustment flow: officer requests, approver approves,
        officer posts, and the family portal sees the same ledger state. */
     try {
-      await staffAs(page, base, "/staff/finance");
+      await staffAs(page, base, "/principal/finance", { identity: STAFF_IDS.rania });
       await page.waitForSelector("#adjust-invoice", { timeout: 20000 });
       const invoiceOptions = await page.locator("#adjust-invoice option").allTextContents();
       const unpaidIndex = invoiceOptions.findIndex((label) => label.startsWith("INV-2026-0103"));
@@ -108,7 +113,7 @@ module.exports = {
       const after = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("officer requests an adjustment", after.includes("ADJ-2026-0401 requested"), after.slice(-120));
 
-      await page.getByRole("combobox", { name: "Demo identity" }).selectOption(STAFF_IDS.rania);
+      await page.getByRole("combobox", { name: "Demo identity" }).selectOption(STAFF_IDS.aisha);
       await page.waitForTimeout(2000);
       const ws = page.getByRole("combobox", { name: "Workspace" });
       const options = await ws.locator("option").allTextContents();
@@ -125,7 +130,7 @@ module.exports = {
       const approved = (await page.locator("body").innerText()).replace(/\s+/g, " ");
       check("approver approves the adjustment", approved.includes("ADJ-2026-0401 approved"), approved.slice(-120));
 
-      await page.getByRole("combobox", { name: "Demo identity" }).selectOption(STAFF_IDS.sana);
+      await page.getByRole("combobox", { name: "Demo identity" }).selectOption(STAFF_IDS.rania);
       await page.waitForTimeout(2500);
       const ws2 = page.getByRole("combobox", { name: "Workspace" });
       const options2 = await ws2.locator("option").allTextContents();

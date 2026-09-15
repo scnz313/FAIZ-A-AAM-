@@ -20,6 +20,9 @@ import {
   CONTENT_SESSION_KEY,
   CONTENT_INTENTS_SESSION_KEY,
   PUBLIC_PAGES_SESSION_KEY,
+  isNoticeExpired,
+  mapServerContentRow,
+  mapServerPublicPageRow,
   type ContentActor,
   type ServerContentRow,
 } from "@/modules/services/content";
@@ -88,6 +91,9 @@ function serverNoticeRow(input: {
   audience?: "public" | "family";
   slug?: string;
   kind?: string;
+  pinned?: boolean;
+  reviewDue?: string;
+  scheduledAt?: string | null;
 }): ServerContentRow {
   const audience = input.audience ?? "public";
   const latest = [...input.versions].sort((left, right) => right.version - left.version)[0];
@@ -97,6 +103,7 @@ function serverNoticeRow(input: {
     kind: input.kind ?? "notice",
     slug: input.slug ?? "adapter-notice",
     current_status: input.status,
+    scheduled_at: input.scheduledAt ?? null,
     version: input.itemVersion,
     current_version_id: latest?.id ?? null,
     updated_at: "2026-08-10T06:00:00.000Z",
@@ -108,10 +115,11 @@ function serverNoticeRow(input: {
             {
               category: "General",
               urgent: false,
+              pinned: input.pinned ?? false,
               status: input.status === "archived" ? "expired" : input.status,
               published_at: input.status === "published" ? "2026-08-10T06:00:00.000Z" : null,
               expires_at: null,
-              review_due: "2026-09-01",
+              review_due: input.reviewDue ?? "2026-09-01",
               scheduled_at: input.status === "scheduled" ? "2099-09-01T18:30:00.000Z" : null,
               notice_audiences: [{ audience: audience === "public" ? "public" : "academic_year" }],
             },
@@ -747,12 +755,14 @@ describe("contentService Supabase adapter contract", () => {
       actor: DEMO_PUBLISHER_ACTOR,
       expectedVersion: 4,
       reason: "Superseded notice",
+      idempotencyKey: "adapter-unpublish-key",
     });
     expect(archived).toMatchObject({ ok: true, value: { status: "archived", itemVersion: 5 } });
     const archiveReplay = await contentService.unpublishNotice(created.slug, {
       actor: DEMO_PUBLISHER_ACTOR,
       expectedVersion: 4,
       reason: "Superseded notice",
+      idempotencyKey: "adapter-unpublish-key",
     });
     expect(archiveReplay).toMatchObject({ ok: true, replayed: true, value: { status: "archived" } });
     expect(await contentService.listForAudience("family")).toEqual([]);
@@ -789,7 +799,47 @@ describe("contentService Supabase adapter contract", () => {
       contentItemId: SERVER_CONTENT_ID,
       reason: "Superseded notice",
       expectedVersion: 4,
+      idempotencyKey: "adapter-unpublish-key",
     });
+  });
+
+  it("maps public and family audience selections into the immutable draft payload", async () => {
+    const drafts: Array<Record<string, unknown>> = [];
+    adapterMocks.call.mockImplementation(async (operation: string, payload: Record<string, unknown>) => {
+      if (operation === "content.saveDraft") {
+        drafts.push(payload);
+        return ok({
+          id: SERVER_CONTENT_ID,
+          reference: "CTN-2026-C101",
+          versionId: SERVER_VERSION_IDS[0],
+          version: 1,
+          status: "draft",
+          replayed: false,
+        });
+      }
+      if (operation === "content.list") return ok([]);
+      throw new Error(`Unexpected adapter operation ${operation}`);
+    });
+
+    await contentService.createNotice({
+      title: "Public notice",
+      category: "General",
+      body: ["Public body"],
+      audience: "public",
+      actor: DEMO_EDITOR_ACTOR,
+      idempotencyKey: "audience-public",
+    });
+    await contentService.createNotice({
+      title: "Family notice",
+      category: "General",
+      body: ["Family body"],
+      audience: "family",
+      actor: DEMO_EDITOR_ACTOR,
+      idempotencyKey: "audience-family",
+    });
+
+    const audiences = drafts.map((draft) => (draft.body as { metadata: { audience: string } }).metadata.audience);
+    expect(audiences).toEqual(["public", "family"]);
   });
 
   it("normalizes Kolkata schedule and expiry inputs before calling the adapter", async () => {
@@ -1010,6 +1060,245 @@ describe("contentService Supabase adapter contract", () => {
     ]);
   });
 
+  it("round-trips pinned and review-due through version metadata and the server row", async () => {
+    const draftPayloads: Array<Record<string, unknown>> = [];
+    const draftRow = () =>
+      serverNoticeRow({
+        versions: [serverVersion(1, "draft")],
+        itemVersion: 1,
+        status: "draft",
+        pinned: true,
+        reviewDue: "2026-12-31",
+      });
+    adapterMocks.call.mockImplementation(async (operation: string, payload: Record<string, unknown>) => {
+      if (operation === "content.saveDraft") {
+        draftPayloads.push(payload);
+        return ok({
+          id: SERVER_CONTENT_ID,
+          reference: "CTN-2026-C101",
+          versionId: SERVER_VERSION_IDS[0],
+          version: 1,
+          status: "draft",
+          replayed: false,
+        });
+      }
+      if (operation === "content.list") return ok([draftRow()]);
+      throw new Error(`Unexpected adapter operation ${operation}`);
+    });
+
+    const created = await contentService.createNotice({
+      title: "Pinned adapter notice",
+      category: "General",
+      body: ["Pinned body."],
+      audience: "public",
+      pinned: true,
+      reviewDue: "2026-12-31",
+      actor: DEMO_EDITOR_ACTOR,
+      idempotencyKey: "adapter-pinned-key",
+    });
+
+    const metadata = (draftPayloads[0]?.body as { metadata: Record<string, unknown> }).metadata;
+    expect(metadata).toMatchObject({ pinned: true, reviewDue: "2026-12-31" });
+    expect(created).toMatchObject({ pinned: true, reviewDue: "2026-12-31" });
+
+    const mapped = mapServerContentRow(draftRow());
+    expect(mapped.pinned).toBe(true);
+    expect(mapped.reviewDue).toBe("2026-12-31");
+  });
+
+  it("maps the to-one notices embed shape PostgREST returns for content.list", () => {
+    const arrayRow = serverNoticeRow({
+      versions: [serverVersion(1, "approved")],
+      itemVersion: 1,
+      status: "scheduled",
+      pinned: true,
+      reviewDue: "2026-12-31",
+    });
+    /* PostgREST returns a single object for the unique content_item_id
+       relationship; reading `[0]` on that shape dropped review-due and the
+       schedule instant from every live staff/portal row. */
+    const embed = Array.isArray(arrayRow.notices) ? arrayRow.notices[0] : arrayRow.notices;
+    const mapped = mapServerContentRow({ ...arrayRow, notices: embed });
+
+    expect(mapped.pinned).toBe(true);
+    expect(mapped.reviewDue).toBe("2026-12-31");
+    expect(mapped.scheduledForIso).toBe("2099-09-01T18:30:00.000Z");
+    expect(mapped.status).toBe("scheduled");
+    expect(mapped.audience).toBe("public");
+  });
+
+  it("sends the caller's unpublish idempotency key to the adapter", async () => {
+    let row = serverNoticeRow({
+      versions: [serverVersion(1, "published")],
+      itemVersion: 3,
+      status: "published",
+    });
+    adapterMocks.call.mockImplementation(async (operation: string) => {
+      if (operation === "content.list") return ok([row]);
+      if (operation === "content.unpublish") {
+        row = serverNoticeRow({
+          versions: row.content_versions ?? [],
+          itemVersion: 4,
+          status: "archived",
+        });
+        return ok({ id: SERVER_CONTENT_ID, version: 4, status: "archived", replayed: false });
+      }
+      throw new Error(`Unexpected adapter operation ${operation}`);
+    });
+
+    const archived = await contentService.unpublishNotice(row.slug, {
+      actor: DEMO_PUBLISHER_ACTOR,
+      expectedVersion: 3,
+      reason: "Superseded by the pinned notice",
+      idempotencyKey: "retry-tolerant-unpublish-key",
+    });
+    expect(archived).toMatchObject({ ok: true, value: { status: "archived" } });
+
+    expect(adapterMocks.call.mock.calls.find(([operation]) => operation === "content.unpublish")?.[1]).toEqual({
+      contentItemId: SERVER_CONTENT_ID,
+      reason: "Superseded by the pinned notice",
+      expectedVersion: 3,
+      idempotencyKey: "retry-tolerant-unpublish-key",
+    });
+  });
+
+  it("schedules a page through the shared publish adapter operation with the requested instant", async () => {
+    let row = serverNoticeRow({
+      versions: [serverVersion(1, "draft"), serverVersion(2, "in_review"), serverVersion(3, "approved")],
+      itemVersion: 2,
+      status: "draft",
+      kind: "page",
+      slug: "school-life",
+    });
+    adapterMocks.call.mockImplementation(async (operation: string) => {
+      if (operation === "content.list") return ok([row]);
+      if (operation === "content.publishVersion") {
+        const source = row.content_versions?.find((candidate) => candidate.version === 3)!;
+        const scheduled = { ...source, id: SERVER_VERSION_IDS[3], version: 4 };
+        row = serverNoticeRow({
+          versions: [...(row.content_versions ?? []), scheduled],
+          itemVersion: 4,
+          status: "scheduled",
+          kind: "page",
+          slug: "school-life",
+          scheduledAt: "2099-09-01T18:30:00.000Z",
+        });
+        return ok({
+          id: SERVER_CONTENT_ID,
+          reference: row.reference,
+          versionId: scheduled.id,
+          version: 4,
+          status: "scheduled",
+          replayed: false,
+        });
+      }
+      throw new Error(`Unexpected adapter operation ${operation}`);
+    });
+
+    const result = await contentService.setPublicPageStatus("school-life", "Scheduled", DEMO_PUBLISHER_ACTOR, {
+      expectedVersion: 3,
+      scheduledForIso: "2099-09-01T18:30:00.000Z",
+      idempotencyKey: "page-schedule-key",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        status: "Scheduled",
+        currentStatus: "scheduled",
+        scheduledForIso: "2099-09-01T18:30:00.000Z",
+      },
+    });
+    expect(adapterMocks.call.mock.calls.find(([operation]) => operation === "content.publishVersion")?.[1]).toEqual({
+      versionId: SERVER_VERSION_IDS[2],
+      expectedVersion: 3,
+      scheduledAt: "2099-09-01T18:30:00.000Z",
+      expiresAt: null,
+      idempotencyKey: "page-schedule-key",
+    });
+  });
+
+  it("loads the latest draft page body for staff editing and preview", async () => {
+    const draft = {
+      ...serverVersion(1, "draft"),
+      title: "Draft hero",
+      body: { blocks: [{ type: "paragraph", text: "Draft body paragraph." }], metadata: {} },
+    };
+    adapterMocks.call.mockImplementation(async (operation: string) => {
+      if (operation === "content.list") {
+        return ok([
+          serverNoticeRow({ versions: [draft], itemVersion: 1, status: "draft", kind: "page", slug: "home-hero" }),
+        ]);
+      }
+      throw new Error(`Unexpected adapter operation ${operation}`);
+    });
+
+    /* A non-published page must still return its own latest version: the
+       workspace editor and the read-only preview both read through this
+       method and previously opened empty for every draft. */
+    const body = await contentService.getPublicPageBody("home-hero");
+    expect(body).toMatchObject({ title: "Draft hero", body: ["Draft body paragraph."] });
+  });
+
+  it("carries a scheduled page's stored item schedule into scheduledForIso", () => {
+    const scheduled = serverNoticeRow({
+      versions: [serverVersion(1, "approved")],
+      itemVersion: 1,
+      status: "scheduled",
+      kind: "page",
+      slug: "school-life",
+      scheduledAt: "2099-09-01T18:30:00.000Z",
+    });
+
+    expect(mapServerPublicPageRow(scheduled).scheduledForIso).toBe("2099-09-01T18:30:00.000Z");
+    expect(mapServerPublicPageRow({ ...scheduled, scheduled_at: null }).scheduledForIso).toBeNull();
+  });
+
+  it("maps the anonymous public download projection into safe register rows", async () => {
+    adapterMocks.call.mockImplementation(async (operation: string) => {
+      if (operation === "content.listDownloads") {
+        return ok([
+          {
+            reference: "DOC-2026-9Q1M4B",
+            safe_filename: "fee-schedule-2026-27.pdf",
+            category: "fee_schedule",
+            mime_type: "application/pdf",
+            size_bytes: 217_088,
+            created_at: "2026-07-28T06:30:00.000Z",
+            finalized_at: "2026-07-28T06:45:00.000Z",
+            object_key: "never/return/this-key.pdf",
+            checksum: "never-return-this-checksum",
+            owner_record_id: "00000000-0000-4000-8000-000000000999",
+          },
+        ]);
+      }
+      throw new Error(`Unexpected adapter operation ${operation}`);
+    });
+
+    const downloads = await contentService.listDownloads();
+
+    expect(adapterMocks.call).toHaveBeenCalledWith("content.listDownloads", {});
+    expect(downloads).toEqual([
+      expect.objectContaining({
+        reference: "DOC-2026-9Q1M4B",
+        name: "fee-schedule-2026-27.pdf",
+        kind: "PDF",
+        size: "212 KB",
+        updated: "28 Jul 2026",
+      }),
+    ]);
+    const serialized = JSON.stringify(downloads);
+    expect(serialized).not.toMatch(/object_key|never\/return|checksum|owner_record_id/);
+  });
+
+  it("propagates the adapter refusal when the public register cannot be read", async () => {
+    adapterMocks.call.mockResolvedValue({
+      ok: false,
+      errors: [{ code: "forbidden", message: "Public downloads are unavailable.", field: null }],
+    });
+
+    await expect(contentService.listDownloads()).rejects.toThrow("Public downloads are unavailable.");
+  });
+
   it("defensively filters public, family, non-notice, and archived adapter rows", async () => {
     const publicRow = serverNoticeRow({
       versions: [serverVersion(1, "published", "public")],
@@ -1054,5 +1343,212 @@ describe("contentService Supabase adapter contract", () => {
       ["content.list", { scope: "public" }],
       ["content.list", { scope: "family" }],
     ]);
+  });
+
+  it("turns a duplicate slug into actionable create guidance", async () => {
+    adapterMocks.call.mockResolvedValue({
+      ok: false,
+      errors: [{ code: "duplicate", message: "A record with the same unique details already exists. Review the existing record and try again.", field: null }],
+    });
+
+    await expect(
+      contentService.createNotice({ title: "Duplicate notice", category: "General", body: ["Body."], actor: DEMO_EDITOR_ACTOR }),
+    ).rejects.toThrow(/already exists\. Search the registers/);
+
+    const pageResult = await contentService.createPublicPage({
+      slug: "home-hero",
+      title: "Duplicate page",
+      body: ["Body."],
+      actor: DEMO_EDITOR_ACTOR,
+    });
+    expect(pageResult.ok).toBe(false);
+    if (pageResult.ok) return;
+    expect(pageResult.code).toBe("duplicate");
+    expect(pageResult.message).toMatch(/route "\/home-hero" already exists/);
+  });
+});
+
+describe("contentService audience + lifecycle projection negatives (S4)", () => {
+  it("getNotice returns null across audiences — family notices never leak to public", async () => {
+    const created = await contentService.createNotice({
+      title: "Family only",
+      category: "General",
+      body: ["Body."],
+      audience: "family",
+      publishNote: "Publish",
+    });
+    await publishThroughWorkflow(created.slug, "Publish");
+
+    expect(await contentService.getNotice(created.slug, "public")).toBeNull();
+    expect(await contentService.getNotice(created.slug, "family")).not.toBeNull();
+  });
+
+  it("hides draft, scheduled, and archived notices from published audience reads", async () => {
+    const draft = await contentService.createNotice({
+      title: "Still a draft",
+      category: "General",
+      body: ["Body."],
+      audience: "public",
+      publishNote: "Publish",
+    });
+    expect(await contentService.getNotice(draft.slug, "public")).toBeNull();
+    expect((await contentService.listForAudience("public")).some((n) => n.slug === draft.slug)).toBe(false);
+
+    const scheduled = await contentService.createNotice({
+      title: "Scheduled ahead",
+      category: "General",
+      body: ["Body."],
+      audience: "public",
+      publishNote: "Publish",
+    });
+    await contentService.requestReview(scheduled.slug);
+    await contentService.approveVersion(scheduled.slug, { actor: DEMO_PUBLISHER_ACTOR });
+    const scheduledResult = await contentService.publishVersionV2(scheduled.slug, {
+      actor: DEMO_PUBLISHER_ACTOR,
+      note: "Publish",
+      scheduledForIso: "2026-09-01T00:00:00.000Z",
+    });
+    expect(scheduledResult.ok).toBe(true);
+    /* A scheduled (not yet published) version is invisible to published reads. */
+    expect(await contentService.getNotice(scheduled.slug, "public")).toBeNull();
+    expect((await contentService.listForAudience("public")).some((n) => n.slug === scheduled.slug)).toBe(false);
+    expect(
+      (await contentService.listForAudience("public", { status: "scheduled" })).some((n) => n.slug === scheduled.slug),
+    ).toBe(true);
+
+    const published = await contentService.createNotice({
+      title: "Soon archived",
+      category: "General",
+      body: ["Body."],
+      audience: "public",
+      publishNote: "Publish",
+    });
+    await publishThroughWorkflow(published.slug, "Publish");
+    expect(await contentService.getNotice(published.slug, "public")).not.toBeNull();
+    const archived = await contentService.unpublishNotice(published.slug, {
+      actor: DEMO_PUBLISHER_ACTOR,
+      reason: "Superseded.",
+    });
+    expect(archived.ok).toBe(true);
+    expect(await contentService.getNotice(published.slug, "public")).toBeNull();
+    expect((await contentService.listForAudience("public")).some((n) => n.slug === published.slug)).toBe(false);
+    /* Staff keeps the full lifecycle view, including drafts and archives. */
+    const staffSlugs = (await contentService.listForStaff()).map((n) => n.slug);
+    expect(staffSlugs).toContain(draft.slug);
+    expect(staffSlugs).toContain(scheduled.slug);
+    expect(staffSlugs).toContain(published.slug);
+  });
+
+  it("stores a future expiry, keeps the notice visible, then hides it past expiry", async () => {
+    const created = await contentService.createNotice({
+      title: "Time boxed",
+      category: "General",
+      body: ["Body."],
+      audience: "public",
+      publishNote: "Publish",
+    });
+    await contentService.requestReview(created.slug);
+    await contentService.approveVersion(created.slug, { actor: DEMO_PUBLISHER_ACTOR });
+    const published = await contentService.publishVersionV2(created.slug, {
+      actor: DEMO_PUBLISHER_ACTOR,
+      note: "Publish",
+      expiresAtIso: "2026-08-11T05:00:00.000Z",
+    });
+    expect(published.ok).toBe(true);
+    if (!published.ok) throw new Error("publish failed");
+    expect(published.value.expiresAtIso).toBe("2026-08-11T05:00:00.000Z");
+    expect(await contentService.getNotice(created.slug, "public")).not.toBeNull();
+
+    setDemoNow(new Date("2026-08-12T00:00:00.000Z"));
+    expect(await contentService.getNotice(created.slug, "public")).toBeNull();
+    expect((await contentService.listForAudience("public")).some((n) => n.slug === created.slug)).toBe(false);
+    expect((await contentService.listForAudience("family")).some((n) => n.slug === created.slug)).toBe(false);
+  });
+
+  it("rejects invalid and already-past expiry instants at publish", async () => {
+    const created = await contentService.createNotice({
+      title: "Bad expiry",
+      category: "General",
+      body: ["Body."],
+      audience: "public",
+      publishNote: "Publish",
+    });
+    await contentService.requestReview(created.slug);
+    await contentService.approveVersion(created.slug, { actor: DEMO_PUBLISHER_ACTOR });
+
+    const invalid = await contentService.publishVersionV2(created.slug, {
+      actor: DEMO_PUBLISHER_ACTOR,
+      note: "Publish",
+      expiresAtIso: "not-a-date",
+    });
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) expect(invalid.code).toBe("validation");
+
+    const past = await contentService.publishVersionV2(created.slug, {
+      actor: DEMO_PUBLISHER_ACTOR,
+      note: "Publish",
+      expiresAtIso: "2026-08-01T00:00:00.000Z",
+    });
+    expect(past.ok).toBe(false);
+    if (!past.ok) expect(past.code).toBe("validation");
+  });
+
+  it("refuses to edit an approved version — reviewed versions are immutable", async () => {
+    const created = await contentService.createNotice({
+      title: "Immutable after approval",
+      category: "General",
+      body: ["Body."],
+      audience: "public",
+      publishNote: "Publish",
+    });
+    await contentService.requestReview(created.slug);
+    await contentService.approveVersion(created.slug, { actor: DEMO_PUBLISHER_ACTOR });
+
+    const edited = await contentService.editNotice(created.slug, { title: "Changed after approval" });
+    expect(edited.ok).toBe(false);
+    if (!edited.ok) expect(edited.code).toBe("conflict");
+  });
+
+  it("a re-draft after unpublish restarts the lifecycle without a stale expiry", async () => {
+    const created = await contentService.createNotice({
+      title: "Relifecycle",
+      category: "General",
+      body: ["Body."],
+      audience: "public",
+      publishNote: "Publish",
+    });
+    await publishThroughWorkflow(created.slug, "Publish");
+    await contentService.unpublishNotice(created.slug, { actor: DEMO_PUBLISHER_ACTOR, reason: "Refresh." });
+    const redraft = await contentService.editNotice(created.slug, { title: "Relifecycle v2" });
+    expect(redraft.ok).toBe(true);
+    if (!redraft.ok) throw new Error("re-draft failed");
+    expect(redraft.value.status).toBe("draft");
+    expect(redraft.value.expiresAtIso).toBeNull();
+    expect(redraft.value.scheduledForIso).toBeNull();
+  });
+
+  it("isNoticeExpired gates only past instants", () => {
+    expect(isNoticeExpired({ expiresAtIso: null }, PINNED.toISOString())).toBe(false);
+    expect(isNoticeExpired({}, PINNED.toISOString())).toBe(false);
+    expect(isNoticeExpired({ expiresAtIso: "2026-08-11T00:00:00.000Z" }, PINNED.toISOString())).toBe(false);
+    expect(isNoticeExpired({ expiresAtIso: PINNED.toISOString() }, PINNED.toISOString())).toBe(true);
+    expect(isNoticeExpired({ expiresAtIso: "2026-08-01T00:00:00.000Z" }, PINNED.toISOString())).toBe(true);
+  });
+
+  it("maps the server expires_at into the notice and filters past-expiry adapter rows", async () => {
+    const expiredRow = serverNoticeRow({
+      versions: [serverVersion(1, "published", "public")],
+      itemVersion: 1,
+      status: "published",
+      audience: "public",
+      slug: "expired-adapter-notice",
+    });
+    (expiredRow.notices as Array<{ expires_at: string | null }>)[0]!.expires_at = "2026-08-01T00:00:00.000Z";
+    expect(mapServerContentRow(expiredRow).expiresAtIso).toBe("2026-08-01T00:00:00.000Z");
+
+    adapterMocks.mode.mockReturnValue("supabase");
+    adapterMocks.call.mockResolvedValue(ok([expiredRow]));
+    expect(await contentService.listForAudience("public")).toEqual([]);
+    expect(await contentService.getNotice("expired-adapter-notice", "public")).toBeNull();
   });
 });

@@ -42,8 +42,8 @@ describe("canonicalStaffUrl", () => {
     expect(canonicalStaffUrl("principal", "timetables")).toBe("/principal/timetables");
   });
 
-  it("falls back to the shared /staff tree only for unknown profiles", () => {
-    expect(canonicalStaffUrl(null, "/users")).toBe("/staff/users");
+  it("uses the canonical Administrator landing for an unresolved profile", () => {
+    expect(canonicalStaffUrl(null, "/users")).toBe("/administrator/users");
   });
 });
 

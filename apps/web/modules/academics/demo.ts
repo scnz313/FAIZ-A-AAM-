@@ -239,8 +239,12 @@ export const resultBatches: ResultBatch[] = [
 export type BatchVersion = {
   version: number;
   note: string;
+  /** Empty string when the server row carries no timestamp — never fabricated. */
   atIso: string;
-  by: string;
+  /** Omitted when the actor is only known as an internal account id. */
+  by?: string;
+  /** Authoritative workflow state recorded with the version (server rows). */
+  state?: string;
 };
 
 /** Version history for corrected batches, newest first. */

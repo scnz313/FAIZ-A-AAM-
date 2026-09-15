@@ -17,6 +17,8 @@ import type { StaffProfileCode } from "@fass/contracts";
 export type PortalPrefix = "/administrator" | "/principal" | "/portal";
 
 export const STAFF_PORTAL_PREFIXES: ReadonlyArray<PortalPrefix> = ["/administrator", "/principal"];
+/** Safe landing portal when a staff profile is not available yet. */
+export const DEFAULT_STAFF_PORTAL: Exclude<PortalPrefix, "/portal"> = "/administrator";
 
 const PREFIX_FOR_PROFILE: Readonly<Record<StaffProfileCode, Exclude<PortalPrefix, "/portal">>> = {
   administrator: "/administrator",
@@ -25,8 +27,9 @@ const PREFIX_FOR_PROFILE: Readonly<Record<StaffProfileCode, Exclude<PortalPrefix
 
 /**
  * The canonical portal prefix for a staff access profile. Returns null for
- * accounts without an active profile (legacy/custom staff) so the caller can
- * route them to the shared `/staff` root for reconciliation.
+ * accounts without an active profile (legacy/custom staff); callers should
+ * use DEFAULT_STAFF_PORTAL for a user-facing landing route until the profile
+ * is resolved.
  */
 export function portalPrefixForProfile(profileCode: StaffProfileCode | null | undefined): PortalPrefix | null {
   if (profileCode === null || profileCode === undefined) return null;
@@ -39,9 +42,10 @@ export function portalPrefixForProfile(profileCode: StaffProfileCode | null | un
  * shared `/staff` root (e.g. `/users`, `/finance`) so the same call site works
  * during and after the consolidation.
  *
- * Returns the legacy `/staff<subPath>` URL when the profile is unknown so the
- * staff layout can reconcile the account. The root sub-path ("/" or "") maps
- * to the exact portal root with no trailing slash.
+ * Unknown profiles use the Administrator portal as a safe user-facing
+ * landing route. The root sub-path ("/" or "") maps to the exact portal root
+ * with no trailing slash. The legacy `/staff` prefix is parsed separately for
+ * rewrite/redirect compatibility and is never generated here.
  */
 export function canonicalStaffUrl(profile: PortalPrefix | StaffProfileCode | null | undefined, subPath: string): string {
   /* Accept either a profile code or an already-resolved prefix; both map to
@@ -51,7 +55,7 @@ export function canonicalStaffUrl(profile: PortalPrefix | StaffProfileCode | nul
     : portalPrefixForProfile(profile as StaffProfileCode | null | undefined);
   const trimmed = subPath.replace(/\/+$/, "");
   const normalized = trimmed === "" ? "" : trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  if (prefix === null) return `/staff${normalized}`;
+  if (prefix === null) return `${DEFAULT_STAFF_PORTAL}${normalized}`;
   return `${prefix}${normalized}`;
 }
 

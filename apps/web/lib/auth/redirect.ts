@@ -1,5 +1,9 @@
 const AUTHENTICATED_ROUTE_PREFIXES = [
   "/portal",
+  "/administrator",
+  "/principal",
+  /* Accepted only so an explicit legacy URL can be redirected by the staff
+     layout; no normal auth fallback should generate this prefix. */
   "/staff",
   "/apply/student",
   "/apply/job",
@@ -8,7 +12,9 @@ const AUTHENTICATED_ROUTE_PREFIXES = [
   "/sign-in/totp",
 ] as const;
 
-export function safeAuthRedirect(value: string | null | undefined, fallback: string): string {
+export function safeAuthRedirect(value: string | null | undefined, fallback: string): string;
+export function safeAuthRedirect(value: string | null | undefined, fallback: null): string | null;
+export function safeAuthRedirect(value: string | null | undefined, fallback: string | null): string | null {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return fallback;
   try {
     const parsed = new URL(value, "https://fass.invalid");

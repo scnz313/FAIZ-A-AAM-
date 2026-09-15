@@ -10,6 +10,7 @@
  * persists editable fields to sessionStorage and records an audit event.
  */
 
+import { demoNowIso } from "@/modules/demo/clock";
 import { demoAcademicYears } from "@/modules/relationships/demo";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 import { auditService } from "@/modules/services/audit";
@@ -61,6 +62,12 @@ export type SettingsInput = {
     defaultExpiryDays: number;
     emailSender: string;
   };
+  /**
+   * Optional effective instant for the new version. A future-dated version is
+   * stored but stays inert: reads keep serving the current effective version
+   * until the clock reaches this instant (upcoming-change pattern).
+   */
+  effectiveFromIso?: string;
 };
 
 /** Fictional policy-pending view — the school has not confirmed these values. */
@@ -112,13 +119,42 @@ type SettingsOverrides = {
   savedAtIso: string;
 };
 
-function loadOverrides(): SettingsOverrides | null {
-  return sessionGet<SettingsOverrides>(SETTINGS_SESSION_KEY);
+/** One versioned settings change with its effective instant. */
+type SettingsVersionRecord = SettingsOverrides & {
+  version: number;
+  effectiveFromIso: string;
+};
+
+/**
+ * Versioned effective-dated history (stored under the same session key so
+ * existing resets keep working). Legacy single-override sessions migrate as
+ * version 1 effective at their saved instant.
+ */
+function loadHistory(): SettingsVersionRecord[] {
+  const stored = sessionGet<SettingsVersionRecord[] | SettingsOverrides>(SETTINGS_SESSION_KEY);
+  if (stored === null) return [];
+  if (Array.isArray(stored)) return stored;
+  const legacy = stored as SettingsOverrides;
+  if (typeof legacy?.resultsPolicy !== "object" || legacy.resultsPolicy === null) return [];
+  return [{ ...legacy, version: 1, effectiveFromIso: legacy.savedAtIso }];
 }
 
-function saveOverrides(overrides: SettingsOverrides): void {
-  sessionSet(SETTINGS_SESSION_KEY, overrides);
+function saveHistory(history: SettingsVersionRecord[]): void {
+  sessionSet(SETTINGS_SESSION_KEY, history);
 }
+
+function loadOverrides(): SettingsOverrides | null {
+  return effectiveRecord(demoNowIso());
+}
+
+/** Latest version whose effective instant has passed — upcoming changes stay inert. */
+function effectiveRecord(atIso: string): SettingsVersionRecord | null {
+  const candidates = loadHistory()
+    .filter((record) => record.effectiveFromIso <= atIso)
+    .sort((left, right) => left.version - right.version);
+  return candidates[candidates.length - 1] ?? null;
+}
+
 
 function buildView(overrides: SettingsOverrides | null): SettingsView {
   const graphYears = demoAcademicYears.map((year) => ({
@@ -152,17 +188,38 @@ function buildView(overrides: SettingsOverrides | null): SettingsView {
   };
 }
 
+export type SettingsVersionState = {
+  id: string;
+  version: number;
+  status: string;
+  createdAtIso: string | null;
+  /** Account that saved this version, for maker/checker display. */
+  changedByAccountId: string | null;
+};
+
 export interface SettingsService {
   /** The current effective (fictional) settings view. */
   getSettings(): Promise<SettingsView>;
+  /** The newest stored version (draft/effective), for the approval workflow. */
+  getLatestVersion(): Promise<SettingsVersionState | null>;
+  /** Approve a stored version and make it effective from the given instant. */
+  approveVersion(input: { settingsId: string; expectedVersion: number; effectiveFrom?: string | null }): Promise<void>;
   /** Save editable settings — persists to the demo session and records audit. */
   saveSettings(input: SettingsInput, actor: string): Promise<SettingsView>;
 }
 
 const POLICY_KEYS: readonly PolicyPendingKey[] = ["admission-window", "fee-policy", "results-policy", "working-days", "notifications"];
 
-function mapAuthoritativeSettings(row: { version?: number; status?: string; policy?: Record<string, unknown> | null; changed_by_account_id?: string | null; created_at?: string | null; effective_from?: string | null } | null): SettingsView {
-  const policy = row?.policy ?? {};
+/**
+ * Map the authoritative (server) settings row into the staff view. Only a
+ * row the server marks `effective` contributes values; scheduled/upcoming
+ * rows stay fully policy-pending so upcoming changes are inert until their
+ * effective instant. Exported for contract tests.
+ */
+export function mapAuthoritativeSettings(row: { version?: number; status?: string; policy?: Record<string, unknown> | null; changed_by_account_id?: string | null; changed_by_label?: string | null; created_at?: string | null; effective_from?: string | null } | null): SettingsView {
+  /* Upcoming (non-effective) rows stay fully inert: their policy never reads
+     as configured, no matter what the row carries. */
+  const policy = row?.status === "effective" ? (row?.policy ?? {}) : {};
   const record = (value: unknown): Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const admission = record(policy.admissionWindow);
   const fees = record(policy.feePolicy);
@@ -180,7 +237,9 @@ function mapAuthoritativeSettings(row: { version?: number; status?: string; poli
     ? policy.academicYears.filter((item): item is { label: string; status: string } => typeof item === "object" && item !== null && typeof (item as { label?: unknown }).label === "string" && typeof (item as { status?: unknown }).status === "string")
     : [];
   const current = years.find((year) => year.status === "current") ?? years[0] ?? { label: "Not configured", status: "not_configured" };
-  const has = (value: unknown): boolean => value !== undefined && value !== null && value !== "";
+  /* An empty string or the sentinel "Not configured" both mean the school has
+     not confirmed a value, so the section stays visibly policy-pending. */
+  const has = (value: unknown): boolean => value !== undefined && value !== null && value !== "" && value !== "Not configured";
   const pending = row?.status === "effective"
     ? POLICY_KEYS.filter((key) => !({
         "admission-window": has(admission.fromIso) && has(admission.toIso),
@@ -199,7 +258,9 @@ function mapAuthoritativeSettings(row: { version?: number; status?: string; poli
     noticeDefaults: { defaultExpiryDays: typeof notices.defaultExpiryDays === "number" ? notices.defaultExpiryDays : 0, emailSender: typeof notices.emailSender === "string" ? notices.emailSender : "Not configured", smsEnabled: notices.smsEnabled === true },
     workingDays: { days: Array.isArray(working.days) ? working.days.filter((day): day is string => typeof day === "string") : [], periodsPerDay: typeof working.periodsPerDay === "number" ? working.periodsPerDay : 0 },
     policyPending: pending,
-    savedBy: row?.changed_by_account_id ?? "Not configured",
+    /* Saved-by is always a person label, never a raw account UUID: the
+       adapter resolves the acting account before this view is built. */
+    savedBy: typeof row?.changed_by_label === "string" && row.changed_by_label.trim() !== "" ? row.changed_by_label : "Not configured",
     savedAtIso: row?.created_at ?? row?.effective_from ?? "",
   };
 }
@@ -214,6 +275,37 @@ export const settingsService: SettingsService = {
     return buildView(loadOverrides());
   },
 
+  async getLatestVersion() {
+    if (clientAdapterMode() === "supabase") {
+      const response = await adapterCall<{ id?: string; version?: number; status?: string; created_at?: string; changed_by_account_id?: string | null } | null>("settings.readLatest", {});
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "Settings are unavailable.");
+      const row = response.value;
+      if (!row || typeof row.id !== "string") return null;
+      return {
+        id: row.id,
+        version: Number(row.version ?? 1),
+        status: String(row.status ?? "draft"),
+        createdAtIso: row.created_at ?? null,
+        changedByAccountId: typeof row.changed_by_account_id === "string" ? row.changed_by_account_id : null,
+      };
+    }
+    const history = loadHistory();
+    const latest = history[history.length - 1];
+    return latest ? { id: `demo-${latest.version}`, version: latest.version, status: "draft", createdAtIso: latest.savedAtIso, changedByAccountId: null } : null;
+  },
+
+  async approveVersion(input) {
+    if (clientAdapterMode() !== "supabase") {
+      throw new Error("Policy approval is available with the live database.");
+    }
+    const response = await adapterCall<unknown>("settings.approve", {
+      settingsId: input.settingsId,
+      expectedVersion: input.expectedVersion,
+      effectiveFrom: input.effectiveFrom ?? null,
+    });
+    if (!response.ok) throw new Error(response.errors[0]?.message ?? "The settings version could not be approved.");
+  },
+
   async saveSettings(input, actor) {
     if (clientAdapterMode() === "supabase") {
       const current = await adapterCall<{ version: number } | null>("settings.readLatest", {});
@@ -223,7 +315,13 @@ export const settingsService: SettingsService = {
       if (!response.ok) throw new Error(response.errors[0]?.message ?? "Settings could not be saved.");
       return this.getSettings();
     }
-    const nowIso = new Date().toISOString();
+    const nowIso = demoNowIso();
+    const rawEffective = input.effectiveFromIso?.trim() || nowIso;
+    if (!Number.isFinite(Date.parse(rawEffective))) {
+      throw new Error("Choose a valid effective date for the settings change.");
+    }
+    const effectiveFromIso = new Date(rawEffective).toISOString();
+    const upcoming = effectiveFromIso > nowIso;
     const overrides: SettingsOverrides = {
       resultsPolicy: {
         gradingScheme: input.resultsPolicy.gradingScheme,
@@ -236,17 +334,22 @@ export const settingsService: SettingsService = {
       savedBy: actor,
       savedAtIso: nowIso,
     };
-    saveOverrides(overrides);
+    const history = loadHistory();
+    const version = history.reduce((max, record) => Math.max(max, record.version), 0) + 1;
+    saveHistory([...history, { ...overrides, version, effectiveFromIso }]);
 
     await auditService.record({
       actor,
       action: "Setting changed",
       target: `Settings saved — grading: ${input.resultsPolicy.gradingScheme}, expiry: ${input.noticeDefaults.defaultExpiryDays}d`,
       outcome: "Success",
-      reason: "Settings updated through the staff settings page.",
+      reason: upcoming
+        ? `Settings version ${version} scheduled effective ${effectiveFromIso} through the staff settings page.`
+        : "Settings updated through the staff settings page.",
     });
 
-    return buildView(overrides);
+    /* A future-dated version stays inert: serve the current effective view. */
+    return buildView(effectiveRecord(nowIso));
   },
 };
 

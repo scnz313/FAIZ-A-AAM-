@@ -15,7 +15,7 @@ module.exports = {
     const check = (name, ok, detail = "") => checks.push({ name, ok, detail });
 
     try {
-      await staffAs(page, base, "/staff/notices", { identity: STAFF_IDS.aisha });
+      await staffAs(page, base, "/principal/notices", { identity: STAFF_IDS.rania });
       const titleField = page.getByLabel("Title");
       if ((await titleField.count()) > 0) {
         await titleField.fill("Parent-teacher meeting on Friday");
@@ -42,8 +42,12 @@ module.exports = {
            clearing the session store (the draft lives there), then approve
            and release. */
         const identitySelect = page.getByRole("combobox", { name: "Demo identity" });
+        const menuButton = page.getByRole("button", { name: /MENU/i });
+        if ((await identitySelect.count()) === 0 && (await menuButton.count()) > 0) await menuButton.click();
         if ((await identitySelect.count()) > 0) {
-          await identitySelect.selectOption(STAFF_IDS.naseer);
+          await identitySelect.selectOption(STAFF_IDS.aisha);
+          await page.goto(`${base}/administrator/notices`, { waitUntil: "networkidle" });
+          await page.waitForTimeout(900);
         }
         /* The workspace re-renders after the identity switch; poll for the
            Approve control before giving up. */
@@ -117,7 +121,7 @@ module.exports = {
         body.includes("Report card") || body.includes("Receipt") || body.includes("document"),
         body.slice(-120),
       );
-      const previewBtn = page.getByRole("button", { name: /Preview/ }).first();
+      const previewBtn = page.getByRole("button", { name: /PDF/ }).first();
       if ((await previewBtn.count()) > 0) {
         await previewBtn.click();
         await page.waitForTimeout(800);
@@ -149,7 +153,7 @@ module.exports = {
     }
 
     try {
-      await staffAs(page, base, "/staff/support", { identity: STAFF_IDS.aisha });
+      await staffAs(page, base, "/principal/support", { identity: STAFF_IDS.rania });
       const row = page.locator('li, tr, [class*="row"]').filter({ hasText: /GRV-2026-/ }).first();
       if ((await row.count()) > 0) {
         await row.click();

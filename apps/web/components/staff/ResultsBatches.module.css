@@ -1,23 +1,56 @@
 .sectionHead {
   align-items: baseline;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   justify-content: space-between;
   margin-bottom: 14px;
+  min-width: 0;
 }
 
 .sectionHead h2 {
   margin: 0;
 }
 
-.tabCount {
-  margin-left: var(--space-1);
-  font-size: 11px;
-  color: var(--ink-soft);
+/* Queue-head controls: demo marker + New batch (Principal only). */
+.headActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
-.batchTable {
-  min-width: 1000px;
+/* Create-batch panel copy; the panel itself follows V15 pn-head/pn-body. */
+.panelNote {
+  color: var(--muted);
+  font-size: 0.86rem;
+  margin: 0 0 16px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  max-width: 720px;
+}
+
+.tabCount {
+  margin-left: var(--space-1);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* V15 q-row5 supplies the row grid, padding, and rule; notes/panels stack
+   beneath without an extra border. */
+.batchItem > :global(.panel) {
+  margin: 0 0 14px;
+}
+
+.noteLine {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: -6px 0 14px;
+  padding: 0 4px;
 }
 
 /* Batch ref link in the first cell, matching staff queue rows. */
@@ -27,7 +60,7 @@
 }
 
 .rowLink:hover {
-  color: var(--saffron-deep);
+  color: var(--saffron-ink);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -44,26 +77,82 @@
   justify-content: flex-end;
 }
 
-/* Version note row directly under a batch row. */
-.batchTable tr.noteRow {
-  border-bottom: 0;
-}
-
-.batchTable tr.noteRow > td {
-  color: var(--ink-soft);
-  font-size: 12px;
-  padding: 2px 0 14px;
+.publishSuccess {
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+  gap: 10px;
+  margin: 18px 0 0;
+  overflow-wrap: anywhere;
+  padding-top: 16px;
 }
 
 .live {
-  color: var(--ink-soft);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
   margin: 14px 0 0;
   min-height: 1.4em;
+  overflow-wrap: anywhere;
 }
 
-/* Whole-cell numerics align right so columns of figures compare. */
-.batchTable th:global(.num),
-.batchTable td:global(.num) {
-  text-align: right;
+@media (max-width: 1023px) {
+  .sectionHead {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 719px) {
+  .sectionHead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Row actions stack so a two-action row cannot squeeze the batch reference
+     into a mid-string wrap at 390px. */
+  .batchItem :global(.q-row5) > :global(.q-act) {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .actions button,
+  .actions a {
+    min-height: 44px;
+  }
+
+  .rowLink {
+    align-items: center;
+    display: inline-flex;
+    min-height: 44px;
+  }
+
+  .publishSuccess a {
+    align-items: center;
+    display: inline-flex;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 479px) {
+  .sectionHead {
+    margin-bottom: 12px;
+  }
+
+  .actions button,
+  .actions a {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .noteLine {
+    margin-bottom: 10px;
+  }
 }

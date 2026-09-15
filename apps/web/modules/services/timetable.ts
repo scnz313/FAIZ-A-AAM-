@@ -71,6 +71,8 @@ export type TimetableVersionEntry = {
   by: string;
   /** True when published in this browser session (fixture history is not). */
   session: boolean;
+  /** Lifecycle of the server version; absent on fixture history. */
+  status?: "draft" | "published" | "superseded";
 };
 
 export type DraftNote = {
@@ -160,6 +162,7 @@ type SupabaseTimetablePeriod = {
   teaching_assignment_id: string | null;
   room_id: string | null;
   kind: string;
+  teacher_name?: string | null;
   subjects?: { name: string } | null;
   teaching_assignments?: { staff_members?: { people?: { display_name: string } | null } | null } | null;
   staff_assignments?: { staff_members?: { people?: { display_name: string } | null } | null } | null;
@@ -193,6 +196,8 @@ type SupabaseTimetableOverride = {
   room_id: string | null;
   substitute_teacher_assignment_id: string | null;
   substitute_teaching_assignment_id: string | null;
+  /** Definer-resolved teacher name when the RLS embeds are hidden. */
+  substitute_teacher_name?: string | null;
   note: string | null;
   created_at: string;
   created_by_account_id?: string | null;
@@ -287,13 +292,12 @@ function mapSupabasePeriod(period: SupabaseTimetablePeriod): Period {
   }
   return {
     time: shortTime(period.starts_at),
-    subject: period.subjects?.name ?? period.subject_id ?? "Scheduled class",
-    teacher: period.teaching_assignments?.staff_members?.people?.display_name
+    subject: period.subjects?.name ?? "Scheduled class",
+    teacher: period.teacher_name
+      ?? period.teaching_assignments?.staff_members?.people?.display_name
       ?? period.staff_assignments?.staff_members?.people?.display_name
-      ?? period.teaching_assignment_id
-      ?? period.teacher_assignment_id
       ?? "Assigned teacher",
-    room: period.rooms?.label ?? period.room_id ?? "Assigned room",
+    room: period.rooms?.label ?? "Assigned room",
     kind,
     periodNumber: period.period_number,
     endsAt: shortTime(period.ends_at),
@@ -317,13 +321,15 @@ async function supabaseConfiguration(): Promise<SupabaseConfiguration | null> {
   return response.ok ? response.value : null;
 }
 
-async function supabaseSectionId(className: string): Promise<string | null> {
-  const config = await supabaseConfiguration();
+/** Resolve a section against an already-read configuration when the caller
+ *  has one, so one projection costs a single config read instead of three. */
+async function supabaseSectionId(className: string, prefetched?: SupabaseConfiguration | null): Promise<string | null> {
+  const config = prefetched !== undefined ? prefetched : await supabaseConfiguration();
   return config === null ? null : configuredSection(config, className)?.id ?? null;
 }
 
-async function supabaseSectionRef(className: string): Promise<string | null> {
-  const config = await supabaseConfiguration();
+async function supabaseSectionRef(className: string, prefetched?: SupabaseConfiguration | null): Promise<string | null> {
+  const config = prefetched !== undefined ? prefetched : await supabaseConfiguration();
   return config === null ? null : configuredSection(config, className)?.ref ?? null;
 }
 
@@ -365,7 +371,8 @@ function mapSupabaseOverride(
     period.dayOfWeek === row.day_of_week && period.periodNumber === row.period_number,
   );
   const startsAt = effectivePeriod?.starts_at ?? configuredPeriod?.startsAt;
-  const assignment = config.assignments?.find((candidate) => candidate.id === row.substitute_teacher_assignment_id);
+  const assignment = config.assignments?.find((candidate) =>
+    candidate.id === row.substitute_teaching_assignment_id || candidate.id === row.substitute_teacher_assignment_id);
   const subject = config.subjects?.find((candidate) => candidate.id === row.subject_id);
   const room = config.rooms?.find((candidate) => candidate.id === row.room_id);
   const kind: TimetableOverrideKind = row.kind === "room_change"
@@ -382,7 +389,8 @@ function mapSupabaseOverride(
     periodNumber: row.period_number,
     kind,
     teacher: kind === "substitute"
-      ? row.teaching_assignments?.staff_members?.people?.display_name
+      ? row.substitute_teacher_name
+        ?? row.teaching_assignments?.staff_members?.people?.display_name
         ?? row.staff_assignments?.staff_members?.people?.display_name
         ?? assignment?.teacherName
       : undefined,
@@ -506,6 +514,21 @@ export function timetableWeekdayForDate(dateIso: string): string | null {
   return DAY_NAMES[mondayIndex] ?? null;
 }
 
+/** Weekday ("Monday"…) for a UTC instant, resolved in Asia/Kolkata. The live
+ * portal uses this so "Today" is the real school day and never the demo
+ * clock; the instant is passed from the server so SSR and hydration agree. */
+export function timetableWeekdayForInstant(iso: string): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const kolkataDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+  return timetableWeekdayForDate(kolkataDate);
+}
+
 /** Date for a weekday in the seven-day window beginning at `weekOf`. */
 export function dateForTimetableWeekday(day: string, weekOf: string = TIMETABLE_WEEK): string | null {
   if (!DAY_NAMES.includes(day as (typeof DAY_NAMES)[number]) || timetableWeekdayForDate(weekOf) === null) return null;
@@ -593,6 +616,7 @@ export const fixtureVersion: TimetableVersionEntry = {
   publishedAtIso: "2026-08-03T03:00:00Z",
   by: "Timetable office",
   session: false,
+  status: "published",
 };
 
 /* ------------------------------------------------------------------ */
@@ -1140,15 +1164,19 @@ export async function getEffectiveTimetable(className: string = TIMETABLE_CLASS)
  * staff manager both read this — a staff publish is immediately what the
  * portal shows.
  */
-export async function getTimetableVersion(className: string = TIMETABLE_CLASS): Promise<TimetableVersion | null> {
+export async function getTimetableVersion(className: string = TIMETABLE_CLASS, prefetchedConfig?: SupabaseConfiguration | null): Promise<TimetableVersion | null> {
   if (clientAdapterMode() === "supabase") {
-    const sectionRef = await supabaseSectionRef(className);
+    const sectionRef = await supabaseSectionRef(className, prefetchedConfig);
     if (!sectionRef) {
       updateSupabaseTimetableCache(className, { version: null });
       return null;
     }
     const response = await adapterCall<SupabaseTimetableVersion | null>("timetable.effective", { gradeSectionRef: sectionRef });
-    if (!response.ok || !response.value) {
+    /* Transport/authorization failures reject so the portal can show an
+       error with retry; only a successful read with no published row means
+       "nothing published". */
+    if (!response.ok) throw new Error(response.errors[0]?.message ?? "The published timetable could not be loaded.");
+    if (!response.value) {
       updateSupabaseTimetableCache(className, { version: null });
       return null;
     }
@@ -1174,7 +1202,7 @@ export async function getTimetableVersionList(className: string = TIMETABLE_CLAS
     const response = await adapterCall<SupabaseTimetableVersion[]>("timetable.listVersions", {});
     if (!response.ok) return [];
     const sectionId = await supabaseSectionId(className);
-    return response.value.filter((item) => item.grade_section_id === sectionId).map((item) => ({ version: item.version, note: item.timetable_publications?.[0]?.note ?? `Timetable ${item.status}`, publishedAtIso: item.timetable_publications?.[0]?.published_at ?? item.created_at, by: "Timetable office", session: false }));
+    return response.value.filter((item) => item.grade_section_id === sectionId).map((item) => ({ version: item.version, note: item.timetable_publications?.[0]?.note ?? `Timetable ${item.status}`, publishedAtIso: item.timetable_publications?.[0]?.published_at ?? item.created_at, by: "Timetable office", session: false, status: item.status as TimetableVersionEntry["status"] }));
   }
   const history = sessionGet<TimetableVersionEntry[]>(historyKey(className)) ?? [];
   if (!isKnownTimetableClass(className)) return [...history];
@@ -1238,13 +1266,20 @@ async function mapPeriodsToDatabase(
     if (!isPlaceholder && (subjectId === null || assignmentId === null || roomId === null)) {
       throw new Error(`Timetable entry ${day} ${period.time} needs an authorised subject, teacher assignment, and room.`);
     }
+    const teacherRef = typeof assignment?.ref === "string" && assignment.ref.length > 0 ? assignment.ref : null;
     return {
       dayOfWeek,
       periodNumber,
       startsAt: definition?.startsAt ?? period.time,
       endsAt: definition?.endsAt ?? period.endsAt,
       subjectRef: isPlaceholder ? null : (subject?.code ?? period.subject),
-      teacherAssignmentRef: isPlaceholder ? null : (assignment?.ref ?? period.teacher),
+      ...(isPlaceholder
+        ? {}
+        : assignmentId !== null
+          ? { teachingAssignmentId: assignmentId }
+          : teacherRef !== null
+            ? { teacherAssignmentRef: teacherRef }
+            : {}),
       roomRef: isPlaceholder ? null : (room?.code ?? period.room),
       kind: period.kind ?? "class",
     };
@@ -1290,6 +1325,18 @@ export async function publishTimetable(
   if (trimmedNote === "") {
     throw new Error("A note for the published timetable is required — it becomes the version note in the change log.");
   }
+  const baseline = readPublishedVersion(className)?.periods ?? timetableByDay;
+  const nextPeriods = applyEdits(baseline, edits);
+  /* Demo hard-clash gate (mirrors the Supabase validator): block a publish
+     that introduces a fresh teacher/room double-booking beyond the
+     pre-existing baseline. Baseline carries the documented Computer-lab room
+     claim, so only fresh conflicts throw — each names its counterpart class,
+     day, and time for recovery. Assignment identity is the teacher/room name
+     itself: demo teachers are non-login teaching_assignment holders (never
+     accounts/grants), so the check is independent of logins. */
+  const baselineIds = new Set(detectConflicts(baseline, className).map((conflict) => conflict.id));
+  const freshConflicts = detectConflicts(nextPeriods, className).filter((conflict) => !baselineIds.has(conflict.id));
+  if (freshConflicts.length > 0) throw new TimetableConflictError(freshConflicts);
   const version = nextVersionNumber(className);
   const published: TimetableVersion = {
     className,
@@ -1297,7 +1344,7 @@ export async function publishTimetable(
     version,
     note: trimmedNote,
     publishedAtIso: demoNowIso(),
-    periods: applyEdits(readPublishedVersion(className)?.periods ?? timetableByDay, edits),
+    periods: nextPeriods,
   };
   sessionSet(periodsKey(className), published);
   const history = sessionGet<TimetableVersionEntry[]>(historyKey(className)) ?? [];
@@ -1308,6 +1355,7 @@ export async function publishTimetable(
       publishedAtIso: published.publishedAtIso,
       by: "Timetable office",
       session: true,
+      status: "published",
     },
     ...history,
   ]);
@@ -1400,10 +1448,10 @@ export function listTimetableOverrides(className: string = TIMETABLE_CLASS): Tim
 
 /** Authoritative override list. RLS limits a guardian to active overrides for
  * the selected linked section while timetable staff also receive revoked rows. */
-export async function listTimetableOverridesAsync(className: string = TIMETABLE_CLASS): Promise<TimetableOverride[]> {
+export async function listTimetableOverridesAsync(className: string = TIMETABLE_CLASS, prefetchedConfig?: SupabaseConfiguration | null): Promise<TimetableOverride[]> {
   if (clientAdapterMode() !== "supabase") return listTimetableOverrides(className);
   updateSupabaseTimetableCache(className, { overrides: [] });
-  const config = await supabaseConfiguration();
+  const config = prefetchedConfig !== undefined ? prefetchedConfig : await supabaseConfiguration();
   if (config === null) return [];
   const section = configuredSection(config, className);
   if (!section?.ref) return [];
@@ -1411,7 +1459,7 @@ export async function listTimetableOverridesAsync(className: string = TIMETABLE_
     adapterCall<SupabaseTimetableOverride[]>("timetable.listOverrides", { gradeSectionRef: section.ref }),
     adapterCall<SupabaseTimetableVersion | null>("timetable.effective", { gradeSectionRef: section.ref }),
   ]);
-  if (!overridesResponse.ok) return [];
+  if (!overridesResponse.ok) throw new Error(overridesResponse.errors[0]?.message ?? "The timetable overrides could not be loaded.");
   const effective = effectiveResponse.ok ? effectiveResponse.value : null;
   const mapped = sortOverrides(overridesResponse.value
     .filter((row) => row.grade_section_id === section.id)
@@ -1430,6 +1478,9 @@ function validateOverrideFields(input: TimetableOverrideInput): void {
   }
   if (timetableWeekdayForDate(input.dateIso) === null) {
     throw new Error("Choose a valid override date.");
+  }
+  if (input.time.trim() === "") {
+    throw new Error("Choose the period for this override · the options come from the published timetable for the chosen date.");
   }
   if (input.kind === "substitute" && (input.teacher === undefined || input.teacher.trim() === "")) {
     throw new Error("A substitute teacher is required for a substitute override.");
@@ -1487,7 +1538,13 @@ export async function saveTimetableOverride(
 
     const requestedSubject = input.subject?.trim() ?? "";
     const subject = config.subjects?.find((candidate) => candidate.name.toLowerCase() === requestedSubject.toLowerCase() || candidate.code?.toLowerCase() === requestedSubject.toLowerCase());
-    const subjectId = uuidOrNull(requestedSubject) ?? subject?.id ?? (input.kind === "substitute" ? effectivePeriod?.subject_id ?? null : null);
+    /* A typed subject that does not match the configuration must fail loudly:
+       silently falling back to the effective period's subject would record an
+       override the manager did not ask for. The effective subject is used
+       only when no subject was supplied at all. */
+    const resolvedSubjectId = uuidOrNull(requestedSubject) ?? subject?.id ?? null;
+    const subjectId = resolvedSubjectId
+      ?? (requestedSubject === "" && input.kind === "substitute" ? effectivePeriod?.subject_id ?? null : null);
     if (requestedSubject !== "" && subjectId === null) throw new Error("Choose an authorised subject from the school timetable configuration.");
 
     const requestedRoom = input.room?.trim() ?? "";
@@ -1653,16 +1710,16 @@ export function effectivePeriodsForDate(
 /* ------------------------------------------------------------------ */
 
 /** Published date-sheet state for a class, or null when never published. */
-export async function getDateSheetState(className: string = TIMETABLE_CLASS): Promise<DateSheetState | null> {
+export async function getDateSheetState(className: string = TIMETABLE_CLASS, prefetchedConfig?: SupabaseConfiguration | null): Promise<DateSheetState | null> {
   if (clientAdapterMode() === "supabase") {
-    const config = await supabaseConfiguration();
+    const config = prefetchedConfig !== undefined ? prefetchedConfig : await supabaseConfiguration();
     if (config === null) return null;
     const section = configuredSection(config, className);
     if (!section?.ref) return null;
     const response = await adapterCall<SupabaseExamScheduleVersion[]>("timetable.listDateSheets", {
       gradeSectionRef: section.ref,
     });
-    if (!response.ok) return null;
+    if (!response.ok) throw new Error(response.errors[0]?.message ?? "The exam date sheet could not be loaded.");
     const published = response.value
       .filter((candidate) => candidate.grade_section_id === section.id && candidate.status === "published")
       .sort((left, right) => right.version - left.version)[0];
@@ -1688,12 +1745,16 @@ export async function getDateSheetState(className: string = TIMETABLE_CLASS): Pr
  * Publishes the exam date sheet for a class — session-backed in the demo
  * (versioned, audited) so the staff publish is a real service write that
  * the portal can read. Supabase mode publishes through the school
- * timetable service when a date-sheet version exists.
+ * timetable service when a date-sheet version exists. The optional note is
+ * the manager's recorded reason; it becomes the publication note (and the
+ * audit reason in the demo session). Earlier versions stay in history.
  */
 export async function publishDateSheet(
   className: string = TIMETABLE_CLASS,
   entries: ReadonlyArray<ExamSlot> = [],
+  note: string = "",
 ): Promise<DateSheetState> {
+  const trimmedNote = note.trim();
   if (clientAdapterMode() === "supabase") {
     if (entries.length === 0) throw new Error("Add at least one exam date before publishing the date sheet.");
     const config = await supabaseConfiguration();
@@ -1719,7 +1780,7 @@ export async function publishDateSheet(
     if (!saved.value.versionId) throw new Error("The saved exam date sheet has no publishable version.");
     const published = await adapterCall<{ reference: string }>("timetable.publishDateSheet", {
       versionId: saved.value.versionId,
-      note: `Exam date sheet published for Class ${className}`,
+      note: trimmedNote === "" ? `Exam date sheet published for Class ${className}` : trimmedNote,
     });
     if (!published.ok) throw new Error(published.errors[0]?.message ?? "Unable to publish the exam date sheet.");
     const authoritative = await getDateSheetState(className);
@@ -1743,45 +1804,105 @@ export async function publishDateSheet(
     action: "Timetable changed",
     target: `Exam date sheet · ${className}`,
     outcome: "Success",
-    reason: "Mid-term exam date sheet published.",
+    reason: trimmedNote === "" ? "Mid-term exam date sheet published." : trimmedNote,
   });
   return cloneDateSheetState(state);
 }
+
+export type TimetablePortalVersion = {
+  version: number;
+  effectiveFromIso: string | null;
+  publishedAtIso: string | null;
+  note?: string;
+};
 
 export type TimetablePortalProjection = {
   timetable: Record<string, Period[]> | null;
   weekDays: string[];
   dateSheet: ExamSlot[];
+  /** Published base version metadata for the active section, if any. */
+  version: TimetablePortalVersion | null;
+  /** Active date-specific overrides for the section (already projected into
+   * `timetable`; used for the "N overrides apply" explanation). */
+  overrides: TimetableOverride[];
+  dateSheetVersion: number | null;
+  dateSheetPublishedAtIso: string | null;
 };
 
 /** One portal read boundary for the effective base, exact-date overrides, and
- * latest published date sheet. Supabase failures return honest empty state and
- * never consult the demo fixture. */
+ * latest published date sheet. Transport failures reject so the page can show
+ * an error with retry; a successful read with no published row is the honest
+ * empty state and never consults the demo fixture in live mode. */
 export async function getTimetablePortalProjection(
   className: string = TIMETABLE_CLASS,
 ): Promise<TimetablePortalProjection> {
   if (clientAdapterMode() !== "supabase") {
+    const sessionVersion = await getTimetableVersion(className);
     const timetable = effectiveTimetable(className);
+    const overrides = listTimetableOverrides(className).filter((override) => override.revokedAtIso === null);
+    const version: TimetablePortalVersion | null =
+      sessionVersion !== null
+        ? {
+            version: sessionVersion.version,
+            effectiveFromIso: sessionVersion.weekOf ?? null,
+            publishedAtIso: sessionVersion.publishedAtIso ?? null,
+            note: sessionVersion.note,
+          }
+        : isKnownTimetableClass(className)
+          ? {
+              version: fixtureVersion.version,
+              effectiveFromIso: TIMETABLE_WEEK,
+              publishedAtIso: fixtureVersion.publishedAtIso,
+              note: fixtureVersion.note,
+            }
+          : null;
     return {
-      timetable,
+      timetable:
+        timetable === null
+          ? null
+          : projectTimetableOverrides(timetable, overrides, sessionVersion?.weekOf ?? TIMETABLE_WEEK),
       weekDays: timetable === null ? [] : [...TIMETABLE_WEEK_DAYS],
       dateSheet: getDemoDateSheet(),
+      version,
+      overrides,
+      dateSheetVersion: null,
+      dateSheetPublishedAtIso: null,
     };
   }
 
-  const version = await getTimetableVersion(className);
+  /* One config read resolves the section for the version, overrides, and
+     date sheet, so the portal projection is not three serial reads deep. */
+  const config = await supabaseConfiguration();
+  const version = await getTimetableVersion(className, config);
   if (version === null) {
     updateSupabaseTimetableCache(className, { version: null, overrides: [] });
-    return { timetable: null, weekDays: [], dateSheet: [] };
+    return {
+      timetable: null,
+      weekDays: [],
+      dateSheet: [],
+      version: null,
+      overrides: [],
+      dateSheetVersion: null,
+      dateSheetPublishedAtIso: null,
+    };
   }
   const [overrides, dateSheet] = await Promise.all([
-    listTimetableOverridesAsync(className),
-    getDateSheetState(className),
+    listTimetableOverridesAsync(className, config),
+    getDateSheetState(className, config),
   ]);
   return {
     timetable: projectTimetableOverrides(version.periods, overrides, version.weekOf),
     weekDays: timetableDays(version.periods),
     dateSheet: dateSheet?.entries.map((entry) => ({ ...entry })) ?? [],
+    version: {
+      version: version.version,
+      effectiveFromIso: version.weekOf ?? null,
+      publishedAtIso: version.publishedAtIso ?? null,
+      note: version.note,
+    },
+    overrides,
+    dateSheetVersion: dateSheet?.version ?? null,
+    dateSheetPublishedAtIso: dateSheet?.publishedAtIso ?? null,
   };
 }
 

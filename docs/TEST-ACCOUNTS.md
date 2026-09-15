@@ -6,7 +6,7 @@ Fictional data only — never use in production or with real data.
 ## Sign-in
 
 - **URL:** `/sign-in/staff`
-- **Password (all accounts):** `FaizAam-Test-2026`
+- **Password (all accounts):** supplied through the `TEST_ACCOUNT_PASSWORD` environment value — never committed to the repository. The seed script refuses empty, short, or known-default passwords.
 - First sign-in per account enrolls TOTP (plan.md §4). After enrollment, the
   authenticator secret stored for that account is required for later logins.
 

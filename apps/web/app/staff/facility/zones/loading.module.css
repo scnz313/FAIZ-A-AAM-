@@ -1,7 +1,7 @@
 .loading {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 0.92rem;
   line-height: 1.5;
   margin: 0;
   padding: 6px 0;

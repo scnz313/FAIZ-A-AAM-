@@ -1,4 +1,4 @@
-/* Verification step --------------------------------------------------------- */
+/* Verification step — V14 OTP boxes */
 
 .form {
   display: grid;
@@ -13,21 +13,53 @@
   margin: 0;
   padding: 12px 14px;
   border: 1px dashed var(--saffron);
-  border-radius: var(--radius);
-  color: var(--ink-soft);
-  font-size: 13px;
+  border-radius: var(--r);
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 
 .demoCode strong {
   color: var(--ink);
-  font-size: 15px;
+  font-size: 0.92rem;
 }
 
-.codeInput {
-  font-size: 20px;
-  letter-spacing: 0.32em;
+.errorLine {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--madder-line);
+  background: var(--madder-soft);
+  border-radius: var(--r);
+  color: var(--madder-ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* V14 OTP row — 6 individual boxes */
+.otpRow {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 18px 0 8px;
+}
+
+.otp {
+  width: 52px;
+  height: 60px;
   text-align: center;
+  font-size: 1.4rem;
+  font-family: var(--serif);
+  font-weight: 600;
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  color: var(--ink);
+}
+
+.otp:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 
 .actions {
@@ -38,25 +70,23 @@
   margin-top: 4px;
 }
 
-.actionNote {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 12px;
-  line-height: 1.5;
+.submitBtn {
+  width: 100%;
+  justify-content: center;
 }
 
 .back {
   margin: 22px 0 0;
   padding-top: 16px;
   border-top: 1px solid var(--line);
+  text-align: center;
 }
 
-/* Signed-in panel ----------------------------------------------------------- */
-
+/* Signed-in panel */
 .success {
   padding: 18px 20px;
   border: 1px solid var(--willow);
-  border-radius: var(--radius);
+  border-radius: var(--r);
   background: rgba(83, 109, 87, 0.08);
   outline: none;
 }
@@ -73,17 +103,35 @@
   gap: 10px;
   margin: 0;
   font-family: var(--serif);
-  font-size: 19px;
+  font-size: 1.2rem;
   line-height: 1.45;
 }
 
 .successNote {
   margin: 10px 0 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 
 .successAction {
   margin-top: 18px;
+}
+
+@media (max-width: 719px) {
+  .otp {
+    width: clamp(38px, 12.5vw, 52px);
+    height: 54px;
+  }
+
+  .otpRow {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 479px) {
+  .otp {
+    width: 44px;
+    height: 54px;
+  }
 }

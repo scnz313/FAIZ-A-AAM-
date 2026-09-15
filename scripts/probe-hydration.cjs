@@ -1,5 +1,5 @@
 /* Catch the flaky hydration mismatch: navigate the same route sequence as
- * the responsive check, then when /staff/facility@320 errors, diff the
+ * the responsive check, then when the administrator facility@320 route errors, diff the
  * current DOM text against a fresh server fetch of the same route. */
 const { chromium } = require("playwright");
 
@@ -7,7 +7,7 @@ const BASE = "http://localhost:3000";
 const SEQUENCE = [
   "/", "/about", "/admissions", "/careers", "/contact", "/environment",
   "/apply/student", "/portal", "/portal/fees", "/portal/results",
-  "/staff", "/staff/admissions", "/staff/finance", "/staff/facility",
+  "/administrator", "/principal/admissions", "/principal/finance", "/administrator/facility",
 ];
 
 (async () => {
@@ -22,10 +22,10 @@ const SEQUENCE = [
     errors.length = 0;
     await page.goto(BASE + route, { waitUntil: "networkidle" });
     await page.waitForTimeout(350);
-    if (route === "/staff/facility" && errors.length) {
-      console.log("ERROR on /staff/facility:", errors[0].slice(0, 100));
+    if (route === "/administrator/facility" && errors.length) {
+      console.log("ERROR on /administrator/facility:", errors[0].slice(0, 100));
       const diff = await page.evaluate(async () => {
-        const fresh = await fetch("/staff/facility", { headers: { "x-diff-probe": "1" } }).then((r) => r.text());
+        const fresh = await fetch("/administrator/facility", { headers: { "x-diff-probe": "1" } }).then((r) => r.text());
         const holder = document.createElement("div");
         holder.innerHTML = fresh;
         const serverText = holder.querySelector("body")?.innerText ?? "";

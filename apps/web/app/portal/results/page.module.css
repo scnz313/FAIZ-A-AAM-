@@ -4,46 +4,57 @@
   gap: 40px;
 }
 
+.body {
+  display: grid;
+  gap: 18px;
+}
+
 .title {
   font-family: var(--serif);
-  font-size: clamp(30px, 4vw, 38px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 580;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
   margin: 0;
 }
 
-.intro {
+.mutedEm {
   color: var(--muted);
+  font-style: italic;
+  font-size: 0.82rem;
+}
+
+/* V14 aggregate number */
+.aggNum {
   font-family: var(--serif);
-  font-size: 15px;
-  line-height: 1.5;
-  margin: 12px 0 0;
-  max-width: 62ch;
+  font-size: 1.5rem;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
-/* Anchor tabs mirror the global .tabs button styling. */
-.tabLink {
+/* V14 released reports file rows */
+.pubFile {
+  display: flex;
   align-items: center;
-  border-bottom: 2px solid transparent;
-  color: var(--ink-soft);
-  display: inline-flex;
-  font-size: 13px;
-  /* 44px touch target. */
-  min-height: 44px;
-  padding: 0 14px;
-  text-decoration: none;
-  transition: color 0.15s ease;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
 }
 
-.tabLink:hover {
-  color: var(--ink);
+.pubFile:last-child {
+  border-bottom: 0;
 }
 
-.tabLinkActive {
-  border-bottom-color: var(--saffron);
-  color: var(--ink);
-  font-weight: 600;
+.pubFileName {
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.pubFileMeta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 2px;
 }
 
 .demoNote {
@@ -52,7 +63,7 @@
   color: var(--muted);
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 0.78rem;
   gap: 10px;
   line-height: 1.5;
   margin: 0;
@@ -64,7 +75,7 @@
   gap: 14px;
 }
 
-/* Publication rows linking to the published report pages. */
+/* Legacy publication list (kept for backward compat) */
 .publicationList {
   list-style: none;
   margin: 0;
@@ -89,6 +100,12 @@
   color: var(--muted);
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 0.78rem;
   gap: 8px;
+}
+
+@media (max-width: 719px) {
+  .pubFile {
+    flex-wrap: wrap;
+  }
 }

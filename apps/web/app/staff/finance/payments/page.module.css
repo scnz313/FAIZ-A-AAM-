@@ -2,6 +2,7 @@
   grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: 44px;
+  min-width: 0;
 }
 
 /* The global workspace-header margin is absorbed by the grid gap. */
@@ -29,6 +30,21 @@
   white-space: nowrap;
 }
 
+.receiptLink {
+  color: var(--saffron-ink);
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.receiptLink:hover {
+  text-decoration: underline;
+}
+
+.receiptLink:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .refCell :global(.demo-badge) {
   margin-left: 8px;
 }
@@ -41,7 +57,7 @@
 .ruleNote p {
   color: var(--muted);
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: 0.88rem;
   line-height: 1.55;
   margin: 0;
 }
@@ -54,4 +70,40 @@
 .paymentsTable th:global(.num),
 .paymentsTable td:global(.num) {
   text-align: right;
+}
+
+/* Responsive — presentation only; desktop composition is unchanged.
+   The register keeps its min-width and scrolls inside .table--scroll. */
+
+@media (max-width: 1023px) {
+  .page {
+    gap: 32px;
+  }
+
+  .sectionHead {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+}
+
+@media (max-width: 719px) {
+  .page {
+    gap: 24px;
+  }
+
+  .sectionHead {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .refCell {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 479px) {
+  .page {
+    gap: 20px;
+  }
 }

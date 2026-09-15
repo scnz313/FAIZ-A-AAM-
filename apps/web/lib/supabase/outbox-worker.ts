@@ -51,11 +51,13 @@ import {
   timetablePublishedEmail,
 } from "@/lib/email/templates";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { providerEnvReadiness } from "@/lib/supabase/env";
 import { PdfTransientError, generateReceiptPdf, generateReportCardPdf, generatedObjectKey, type GeneratedPdf } from "@/lib/pdf/adapter";
 import { generateCsv } from "@/lib/exports/csv-generator";
 import { parseCsv } from "@/lib/imports/csv-parser";
+import { shapeSourceRows } from "@/modules/imports/source-rows";
 import { SupabaseStorageProvider } from "@/lib/documents/providers";
-import { createConfiguredDocumentScanner, detectContentType, type DocumentScanner, type StorageProvider } from "@/modules/services/document-providers";
+import { createConfiguredDocumentScanner, detectContentType, ManualScanDeferredError, type DocumentScanner, type ScanInput, type StorageProvider } from "@/modules/services/document-providers";
 
 export type OutboxEventRow = {
   id: string;
@@ -79,6 +81,7 @@ export type OutboxEventRow = {
 async function dispatchDataImportParse(
   admin: SupabaseClient<Database>,
   event: OutboxEventRow,
+  storage: StorageProvider,
 ): Promise<DispatchOutcome> {
   const batchRef = event.target_reference;
 
@@ -108,24 +111,49 @@ async function dispatchDataImportParse(
     return { kind: "permanent", error: `source document for batch ${batchRef} not found` };
   }
 
+  /* A storage read failure is a provider/transport problem, not a bad file.
+   * It must stay transient: recording it as a scan error would move the
+   * batch to `mapping` and the retry would then see a non-scanning state. */
+  let bytes: Uint8Array;
   try {
-    const storage = new SupabaseStorageProvider(admin);
     const stat = await storage.stat({
       bucket: doc.storage_bucket,
       objectKey: doc.object_key,
     });
-    const bytes = stat.bytes;
+    bytes = stat.bytes;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "source document could not be read";
+    return { kind: "transient", error: `import batch ${batchRef} source document could not be read: ${message}` };
+  }
 
+  try {
     // 3. Parse the CSV server-side with bounded limits
     const parsed = parseCsv(bytes);
 
-    // 4. Record scan results
+    /* Canonical camelCase field names are the commit contract; the shared
+     * shaper also normalizes contacts/names deterministically. */
+    const rows = shapeSourceRows(parsed).map((row) => ({ ...row, status: "pending" }));
+
+    /* Store rows in bounded chunks: one 10k-row JSON payload can exceed the
+     * platform request-body limit, and the RPC upserts on
+     * (batch_id, row_number), so a retry re-sends each chunk idempotently. */
+    const STORE_CHUNK_ROWS = 500;
+    for (let offset = 0; offset < rows.length; offset += STORE_CHUNK_ROWS) {
+      const chunk = rows.slice(offset, offset + STORE_CHUNK_ROWS);
+      const { error: rowsError } = await callAppRpc<number>(admin, "data_import_store_rows", {
+        p_batch_id: batch.id,
+        p_rows: chunk,
+      });
+      if (rowsError !== null) return { kind: "transient", error: rowsError.message };
+    }
+
+    // 4. Record scan results (headers are a JSON array, never a JSON string)
     const { error: scanError } = await callAppRpc<Record<string, unknown>>(
       admin, "data_import_record_scan", {
         p_batch_id: batch.id,
         p_row_count: parsed.rows.length,
         p_column_count: parsed.headers.length,
-        p_headers: JSON.stringify(parsed.headers),
+        p_headers: parsed.headers,
         p_encoding: "utf-8",
       },
     );
@@ -141,7 +169,7 @@ async function dispatchDataImportParse(
       p_batch_id: batch.id,
       p_row_count: 0,
       p_column_count: 0,
-      p_headers: JSON.stringify([]),
+      p_headers: [],
       p_encoding: "utf-8",
       p_error: message,
     });
@@ -152,6 +180,7 @@ async function dispatchDataImportParse(
 async function dispatchDataExportGenerate(
   admin: SupabaseClient<Database>,
   event: OutboxEventRow,
+  storage: StorageProvider,
 ): Promise<DispatchOutcome> {
   const reference = event.target_reference;
   const { data: claimed, error: claimError } = await callAppRpc<Record<string, unknown>>(
@@ -161,12 +190,20 @@ async function dispatchDataExportGenerate(
 
   const { data: request, error: requestError } = await admin
     .from("data_export_requests")
-    .select("domain, format, filters, columns")
+    .select("id, domain, format, filters, columns")
     .eq("reference", reference)
     .maybeSingle();
   if (requestError !== null || request === null) {
     return { kind: "permanent", error: `export request ${reference} not found` };
   }
+
+  /* A transient failure after the claim must release the request back to
+     'requested'; otherwise every later attempt is refused with "not
+     generatable (state: generating)" and the export wedges forever. */
+  const release = async (): Promise<string | null> => {
+    const result = await callAppRpc<Record<string, unknown>>(admin, "data_export_release_generation", { p_request_reference: reference });
+    return result.error === null ? null : result.error.message;
+  };
 
   try {
     const rows = await readExportRows(admin, request.domain as string, (request.filters ?? {}) as Record<string, unknown>);
@@ -174,36 +211,66 @@ async function dispatchDataExportGenerate(
     const csv = generateCsv({ columns, rows });
     const checksum = sha256(csv);
     const objectKey = `exports/${reference}.csv`;
-    const storage = new SupabaseStorageProvider(admin);
     await storage.upload({
       bucket: "fass-generated-documents",
       objectKey,
       bytes: new TextEncoder().encode(csv),
       contentType: "text/csv; charset=utf-8",
+      /* A retry after a partial failure must overwrite the previous object. */
+      upsert: true,
     });
-    const { data: document, error: documentError } = await (admin as unknown as SupabaseClient)
+    /* Idempotent document row: a retry after a partial insert reuses the
+       existing row for this object key instead of failing. */
+    let documentId: string | null = null;
+    const { data: existingDocument } = await (admin as unknown as SupabaseClient)
       .from("documents")
-      .insert({
-        owner_domain: "data_export",
-        owner_record_id: reference,
-        storage_bucket: "fass-generated-documents",
-        object_key: objectKey,
-        filename: `${reference}.csv`,
-        mime_type: "text/csv",
-        size_bytes: Buffer.byteLength(csv, "utf8"),
-        processing_state: "clean",
-        generated: true,
-      })
-      .select("id")
-      .single();
-    if (documentError !== null || document === null) {
-      return { kind: "transient", error: documentError?.message ?? "export document row unavailable" };
+      .select("id, checksum")
+      .eq("object_key", objectKey)
+      .maybeSingle();
+    if (existingDocument) {
+      documentId = existingDocument.id;
+      if (existingDocument.checksum !== checksum) {
+        await (admin as unknown as SupabaseClient)
+          .from("documents")
+          .update({ checksum, size_bytes: Buffer.byteLength(csv, "utf8") })
+          .eq("id", existingDocument.id);
+      }
+    } else {
+      const inserted = await (admin as unknown as SupabaseClient)
+        .from("documents")
+        .insert({
+          owner_domain: "data_export",
+          owner_record_id: request.id,
+          category: "generated_export",
+          storage_bucket: "fass-generated-documents",
+          object_key: objectKey,
+          safe_filename: `${reference}.csv`,
+          mime_type: "text/csv",
+          size_bytes: Buffer.byteLength(csv, "utf8"),
+          checksum,
+          actual_mime_type: "text/csv",
+          actual_size_bytes: Buffer.byteLength(csv, "utf8"),
+          checksum_verified: true,
+          scan_status: "ready",
+          visibility: "private",
+          finalized_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+      if (inserted.error !== null || inserted.data === null) {
+        const releaseError = await release();
+        return { kind: "transient", error: `${inserted.error?.message ?? "export document row unavailable"}${releaseError === null ? "" : ` (release failed: ${releaseError})`}` };
+      }
+      documentId = inserted.data.id;
     }
     const { error: readyError } = await callAppRpc<Record<string, unknown>>(
       admin, "data_export_mark_ready",
-      { p_request_reference: reference, p_row_count: rows.length, p_document_id: document.id },
+      { p_request_reference: reference, p_row_count: rows.length, p_document_id: documentId },
     );
-    if (readyError !== null) return { kind: "transient", error: readyError.message };
+    if (readyError !== null) {
+      const releaseError = await release();
+      return { kind: "transient", error: `${readyError.message}${releaseError === null ? "" : ` (release failed: ${releaseError})`}` };
+    }
     await (admin as unknown as SupabaseClient).from("data_export_requests").update({ artifact_checksum: checksum }).eq("reference", reference);
     return { kind: "delivered", providerIds: [`export:${reference}:${rows.length}rows`] };
   } catch (error) {
@@ -223,52 +290,83 @@ async function readExportRows(
   filters: Record<string, unknown>,
 ): Promise<Array<Record<string, unknown>>> {
   const EXPORT_MAX_ROWS = 50_000;
+  const PAGE_SIZE = 1000;
   const filterValues = (allowed: string[]): Array<[string, string]> =>
     Object.entries(filters)
       .filter(([key, value]) => allowed.includes(key) && typeof value === "string")
       .map(([key, value]) => [key, value as string]);
   const finish = async (
     query: ReturnType<SupabaseClient<Database>["from"]>,
+    aliases: Record<string, string>,
   ): Promise<Array<Record<string, unknown>>> => {
-    const { data, error } = await query.limit(EXPORT_MAX_ROWS);
-    if (error !== null) throw new Error(error.message);
-    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => flattenExportRow(row));
+    /* Keyset the read in 1000-row pages: a server-side PostgREST row cap must
+     * never silently truncate an export. The generator still fails visibly
+     * above EXPORT_MAX_ROWS. */
+    const rows: Array<Record<string, unknown>> = [];
+    for (let from = 0; from <= EXPORT_MAX_ROWS + PAGE_SIZE; from += PAGE_SIZE) {
+      const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+      if (error !== null) throw new Error(error.message);
+      const page = (data ?? []) as Array<Record<string, unknown>>;
+      rows.push(...page.map((row) => applyExportColumnAliases(flattenExportRow(row), aliases)));
+      if (page.length < PAGE_SIZE) break;
+    }
+    return rows;
   };
   switch (domain) {
     case "students": {
       let query = admin.from("students").select("reference, people(display_name), status, school_student_number, enrollments(status, grade_sections(grades(label), section_label), academic_years(label))");
       for (const [key, value] of filterValues(["status"])) query = query.eq(key, value);
-      return finish(query);
+      return finish(query, {
+        people_display_name: "display_name",
+        enrollments_status: "enrollment_status",
+        enrollments_grade_sections_grades_label: "grade_label",
+        enrollments_grade_sections_section_label: "section_label",
+        enrollments_academic_years_label: "academic_year_label",
+      });
     }
     case "guardians": {
-      let query = admin.from("guardians").select("reference, people(display_name), status");
+      let query = admin.from("guardians").select("reference, people(display_name), status, guardian_student_links(count)");
       for (const [key, value] of filterValues(["status"])) query = query.eq(key, value);
-      return finish(query);
+      return finish(query, {
+        people_display_name: "display_name",
+        guardian_student_links_count: "linked_children_count",
+      });
     }
     case "guardian_student_links": {
       let query = admin.from("guardian_student_links").select("reference, guardians(people(display_name)), students(people(display_name)), relationship_label, status, verification_source, effective_from");
       for (const [key, value] of filterValues(["status", "verification_source"])) query = query.eq(key, value);
-      return finish(query);
+      return finish(query, {
+        guardians_people_display_name: "guardian_display_name",
+        students_people_display_name: "student_display_name",
+      });
     }
     case "enrollments": {
       let query = admin.from("enrollments").select("reference, students(people(display_name)), grade_sections(grades(label), section_label), academic_years(label), status, effective_from");
       for (const [key, value] of filterValues(["status"])) query = query.eq(key, value);
-      return finish(query);
+      return finish(query, {
+        students_people_display_name: "student_display_name",
+        grade_sections_grades_label: "grade_label",
+        grade_sections_section_label: "section_label",
+        academic_years_label: "academic_year_label",
+      });
     }
     case "admissions": {
       let query = admin.from("admission_applications").select("reference, student_name, parent_name, current_status, grade_sections(grades(label)), academic_years(label), submitted_at");
       for (const [key, value] of filterValues(["current_status"])) query = query.eq(key, value);
-      return finish(query);
+      return finish(query, {
+        grade_sections_grades_label: "grade_label",
+        academic_years_label: "academic_year_label",
+      });
     }
     case "invoices": {
       let query = admin.from("invoices").select("reference, students(people(display_name)), term, status, amount_paise, paid_paise, due_date");
       for (const [key, value] of filterValues(["status", "term"])) query = query.eq(key, value);
-      return finish(query);
+      return finish(query, { students_people_display_name: "student_display_name" });
     }
     case "results": {
       let query = admin.from("result_report_releases").select("reference, students(people(display_name)), term, status, version, published_at");
       for (const [key, value] of filterValues(["status", "term"])) query = query.eq(key, value);
-      return finish(query);
+      return finish(query, { students_people_display_name: "student_display_name" });
     }
     default:
       throw new Error(`export domain ${domain} is not implemented`);
@@ -304,28 +402,42 @@ function flattenExportRow(row: Record<string, unknown>): Record<string, unknown>
   return flat;
 }
 
-/** Normalize requested columns to the domain's allowlist; empty request
- * means the default minimal column set (the allowlist itself). */
+/** Rename flattened join keys to the catalog column names the SQL allowlist
+ * (000060) and the export builder UI agree on. Without this the generated
+ * artifact carried values under join-shaped keys and every selected column
+ * rendered empty. */
+function applyExportColumnAliases(
+  row: Record<string, unknown>,
+  aliases: Record<string, string>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...row };
+  for (const [flat, target] of Object.entries(aliases)) {
+    if (Object.prototype.hasOwnProperty.call(out, flat)) {
+      out[target] = out[flat];
+      delete out[flat];
+    }
+  }
+  return out;
+}
+
+/** Normalize requested columns to the domain's allowlist; an empty request
+ * means the full default column set. */
 function normalizeExportColumns(domain: string, requested: string[]): string[] {
-  const allowed = EXPORT_COLUMN_CATALOG.data_export_allowed_columns?.(domain) ?? [];
+  const allowed = EXPORT_COLUMN_CATALOG[domain] ?? [];
   if (requested.length === 0) return [...allowed];
   return requested.filter((column) => allowed.includes(column));
 }
 
-/* Static mirror of the SQL allowlist catalog (000060) for the worker. */
-const EXPORT_COLUMN_CATALOG: Record<string, (domain: string) => string[] | null> = {
-  data_export_allowed_columns: (domain: string): string[] | null => {
-    const catalog: Record<string, string[]> = {
-      students: ["reference", "people_display_name", "status", "school_student_number", "enrollments_status", "enrollments_grade_sections_grades_label", "enrollments_grade_sections_section_label", "enrollments_academic_years_label"],
-      guardians: ["reference", "people_display_name", "status"],
-      guardian_student_links: ["reference", "guardians_people_display_name", "students_people_display_name", "relationship_label", "status", "verification_source", "effective_from"],
-      enrollments: ["reference", "students_people_display_name", "grade_sections_grades_label", "grade_sections_section_label", "academic_years_label", "status", "effective_from"],
-      admissions: ["reference", "student_name", "parent_name", "current_status", "grade_sections_grades_label", "academic_years_label", "submitted_at"],
-      invoices: ["reference", "students_people_display_name", "term", "status", "amount_paise", "paid_paise", "due_date"],
-      results: ["reference", "students_people_display_name", "term", "status", "version", "published_at"],
-    };
-    return catalog[domain] ?? null;
-  },
+/* Static mirror of the SQL allowlist catalog (000060/000064) for the worker.
+ * The database remains the enforcement layer; this list must match exactly. */
+const EXPORT_COLUMN_CATALOG: Record<string, string[]> = {
+  students: ["reference", "display_name", "status", "school_student_number", "enrollment_status", "grade_label", "section_label", "academic_year_label"],
+  guardians: ["reference", "display_name", "status", "linked_children_count"],
+  guardian_student_links: ["reference", "guardian_display_name", "student_display_name", "relationship_label", "status", "verification_source", "effective_from"],
+  enrollments: ["reference", "student_display_name", "grade_label", "section_label", "academic_year_label", "status", "effective_from"],
+  admissions: ["reference", "student_name", "parent_name", "current_status", "grade_label", "academic_year_label", "submitted_at"],
+  invoices: ["reference", "student_display_name", "term", "status", "amount_paise", "paid_paise", "due_date"],
+  results: ["reference", "student_display_name", "term", "status", "version", "published_at"],
 };
 
 export type WorkerSummary = {
@@ -334,9 +446,13 @@ export type WorkerSummary = {
   permanentFailed: number;
   transientFailed: number;
   skippedUnknown: number;
+  /** Delivered email events that resolved no recipient (clean no-op). */
+  skippedNoRecipients: number;
+  /** True when email provider configuration is missing; no work was claimed. */
+  emailConfigMissing: boolean;
 };
 
-export type Recipient = { accountId: string; email: string };
+export type Recipient = { accountId: string | null; email: string };
 
 export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -350,98 +466,119 @@ function isUuid(value: string): boolean {
 /* Recipient resolution (from the record, never from caller payloads)   */
 /* ------------------------------------------------------------------ */
 
+/** Only an `@`-bearing contact is a deliverable address. A phone number in
+ *  `verified_contact` is skipped, never handed to the email provider. */
+function emailRecipient(accountId: string | null, contact: unknown): Recipient | null {
+  if (typeof contact !== "string") return null;
+  const email = contact.trim();
+  if (email.length === 0 || !email.includes("@")) return null;
+  return { accountId, email };
+}
+
 async function ownerEmail(admin: SupabaseClient<Database>, applicationRef: string): Promise<Recipient | null> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("admission_applications")
     .select("owner_account_id, user_accounts(verified_contact)")
     .eq("reference", applicationRef)
     .maybeSingle();
-  const contact = data?.user_accounts?.verified_contact;
-  if (data === null || typeof contact !== "string" || contact.length === 0) return null;
-  return { accountId: data.owner_account_id, email: contact };
+  if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
+  if (data === null) return null;
+  return emailRecipient(data.owner_account_id, data.user_accounts?.verified_contact);
+}
+
+/** Active emails for guardian person ids. Guardians and user_accounts share
+ *  `people`, so PostgREST cannot embed one from the other (there is no direct
+ *  FK); this is a deliberate two-step resolution. */
+async function guardianEmailsForPersons(admin: SupabaseClient<Database>, personIds: string[]): Promise<Recipient[]> {
+  const unique = [...new Set(personIds.filter((id) => typeof id === "string" && id.length > 0))];
+  if (unique.length === 0) return [];
+  const { data, error } = await admin
+    .from("user_accounts")
+    .select("id, person_id, verified_contact")
+    .in("person_id", unique)
+    .eq("status", "active");
+  if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
+  return (data ?? []).flatMap((account) => {
+    const recipient = emailRecipient(account.id, account.verified_contact);
+    return recipient === null ? [] : [recipient];
+  });
 }
 
 async function guardianEmailsForStudent(admin: SupabaseClient<Database>, studentId: string): Promise<Recipient[]> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("guardian_student_links")
-    .select("guardians(person_id, user_accounts(id, verified_contact))")
+    .select("guardians(person_id)")
     .eq("student_id", studentId)
     .eq("status", "active");
-  const recipients: Recipient[] = [];
-  for (const link of data ?? []) {
-    // The guardians → user_accounts embed resolves through the shared
-    // person_id and may arrive as an array or a single object.
-    const accounts = Array.isArray(link.guardians?.user_accounts)
-      ? link.guardians.user_accounts
-      : link.guardians?.user_accounts !== null && link.guardians?.user_accounts !== undefined
-        ? [link.guardians.user_accounts]
-        : [];
-    for (const account of accounts) {
-      if (typeof account.verified_contact === "string" && account.verified_contact.length > 0) {
-        recipients.push({ accountId: account.id, email: account.verified_contact });
-      }
-    }
-  }
-  return recipients;
+  if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
+  const personIds = (data ?? []).map((link) => link.guardians?.person_id).filter((id): id is string => typeof id === "string");
+  return guardianEmailsForPersons(admin, personIds);
 }
 
 async function studentsInSection(admin: SupabaseClient<Database>, gradeSectionId: string): Promise<string[]> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("enrollments")
     .select("student_id")
     .eq("grade_section_id", gradeSectionId)
     .eq("status", "active");
+  if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
   return (data ?? []).map((enrollment) => enrollment.student_id);
 }
 
 async function guardianEmailsForLink(admin: SupabaseClient<Database>, linkReference: string): Promise<Recipient[]> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("guardian_student_links")
-    .select("guardian_id, guardians(person_id, user_accounts(id, verified_contact))")
+    .select("guardians(person_id)")
     .eq("reference", linkReference)
     .maybeSingle();
-  if (!data || data.guardians === null) return [];
-  const accounts = Array.isArray(data.guardians.user_accounts)
-    ? data.guardians.user_accounts
-    : data.guardians.user_accounts ? [data.guardians.user_accounts] : [];
-  return accounts.flatMap((account) => typeof account.verified_contact === "string" && account.verified_contact.length > 0
-    ? [{ accountId: account.id, email: account.verified_contact }]
-    : []);
+  if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
+  const personId = data?.guardians?.person_id;
+  return guardianEmailsForPersons(admin, typeof personId === "string" ? [personId] : []);
 }
 
 async function accountEmails(admin: SupabaseClient<Database>, accountIds: string[]): Promise<Recipient[]> {
   if (accountIds.length === 0) return [];
-  const { data } = await admin.from("user_accounts").select("id, verified_contact").in("id", accountIds);
-  return (data ?? []).flatMap((account) => typeof account.verified_contact === "string" && account.verified_contact.length > 0
-    ? [{ accountId: account.id, email: account.verified_contact }]
-    : []);
+  const { data, error } = await admin.from("user_accounts").select("id, verified_contact").in("id", accountIds);
+  if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
+  return (data ?? []).flatMap((account) => {
+    const recipient = emailRecipient(account.id, account.verified_contact);
+    return recipient === null ? [] : [recipient];
+  });
 }
 
 async function staffEmailsForRoles(admin: SupabaseClient<Database>, roles: string[]): Promise<Recipient[]> {
-  const { data } = await admin.from("role_grants").select("account_id, role_code").in("role_code", roles).eq("status", "active");
+  const { data, error } = await admin.from("role_grants").select("account_id, role_code").in("role_code", roles).eq("status", "active");
+  if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
   return accountEmails(admin, [...new Set((data ?? []).map((grant) => grant.account_id))]);
 }
 
 async function recipientsForNotice(admin: SupabaseClient<Database>, noticeReference: string): Promise<Recipient[]> {
-  const { data: notice } = await admin.from("notices").select("id").eq("reference", noticeReference).maybeSingle();
+  const { data: notice, error: noticeError } = await admin.from("notices").select("id").eq("reference", noticeReference).maybeSingle();
+  if (noticeError !== null) throw new Error(`recipient lookup failed: ${noticeError.message}`);
   if (!notice) return [];
-  const { data: audiences } = await admin.from("notice_audiences").select("audience, role_code, academic_year_id, grade_section_id, student_id").eq("notice_id", notice.id);
+  const { data: audiences, error: audienceError } = await admin.from("notice_audiences").select("audience, role_code, academic_year_id, grade_section_id, student_id").eq("notice_id", notice.id);
+  if (audienceError !== null) throw new Error(`recipient lookup failed: ${audienceError.message}`);
   const accountIds = new Set<string>();
   for (const audience of audiences ?? []) {
     if (audience.audience === "role" && audience.role_code) {
       const roleRecipients = await staffEmailsForRoles(admin, [audience.role_code]);
-      roleRecipients.forEach((recipient) => accountIds.add(recipient.accountId));
+      roleRecipients.forEach((recipient) => {
+        if (recipient.accountId !== null) accountIds.add(recipient.accountId);
+      });
       continue;
     }
     let studentIds: string[] = [];
     if (audience.audience === "student" && audience.student_id) studentIds = [audience.student_id];
     if (audience.audience === "grade_section" && audience.grade_section_id) studentIds = await studentsInSection(admin, audience.grade_section_id);
     if (audience.audience === "academic_year" && audience.academic_year_id) {
-      const { data: enrollments } = await admin.from("enrollments").select("student_id").eq("academic_year_id", audience.academic_year_id).eq("status", "active");
+      const { data: enrollments, error: enrollmentError } = await admin.from("enrollments").select("student_id").eq("academic_year_id", audience.academic_year_id).eq("status", "active");
+      if (enrollmentError !== null) throw new Error(`recipient lookup failed: ${enrollmentError.message}`);
       studentIds = (enrollments ?? []).map((enrollment) => enrollment.student_id);
     }
     for (const studentId of studentIds) {
-      for (const recipient of await guardianEmailsForStudent(admin, studentId)) accountIds.add(recipient.accountId);
+      for (const recipient of await guardianEmailsForStudent(admin, studentId)) {
+        if (recipient.accountId !== null) accountIds.add(recipient.accountId);
+      }
     }
   }
   return accountEmails(admin, [...accountIds]);
@@ -463,11 +600,12 @@ export async function resolveRecipients(
       break;
     }
     case "invoice": {
-      const { data: invoice } = await admin
+      const { data: invoice, error: invoiceError } = await admin
         .from("invoices")
         .select("student_id, applicant_ref")
         .eq("reference", target)
         .maybeSingle();
+      if (invoiceError !== null) throw new Error(`recipient lookup failed: ${invoiceError.message}`);
       if (invoice === null) break;
       if (invoice.applicant_ref !== null) {
         const owner = await ownerEmail(admin, invoice.applicant_ref);
@@ -478,11 +616,12 @@ export async function resolveRecipients(
       break;
     }
     case "receipt": {
-      const { data: receipt } = await admin
+      const { data: receipt, error: receiptError } = await admin
         .from("receipts")
         .select("invoices(reference)")
         .eq("reference", target)
         .maybeSingle();
+      if (receiptError !== null) throw new Error(`recipient lookup failed: ${receiptError.message}`);
       if (receipt?.invoices?.reference !== undefined && receipt.invoices.reference !== null) {
         recipients.push(...(await resolveRecipients(admin, { ...event, target_type: "invoice", target_reference: receipt.invoices.reference })));
       }
@@ -490,11 +629,12 @@ export async function resolveRecipients(
     }
     case "refund_request":
     case "refund_requests": {
-      const { data: refund } = await admin
+      const { data: refund, error: refundError } = await admin
         .from("refund_requests")
         .select("payments(payment_allocations(invoices(reference)))")
         .eq("reference", target)
         .maybeSingle();
+      if (refundError !== null) throw new Error(`recipient lookup failed: ${refundError.message}`);
       const allocations = Array.isArray(refund?.payments?.payment_allocations)
         ? refund.payments.payment_allocations
         : refund?.payments?.payment_allocations ? [refund.payments.payment_allocations] : [];
@@ -505,7 +645,8 @@ export async function resolveRecipients(
     }
     case "support_request":
     case "support_requests": {
-      const { data: support } = await admin.from("support_requests").select("requester_account_id, assignee_account_id").eq("reference", target).maybeSingle();
+      const { data: support, error: supportError } = await admin.from("support_requests").select("requester_account_id, assignee_account_id").eq("reference", target).maybeSingle();
+      if (supportError !== null) throw new Error(`recipient lookup failed: ${supportError.message}`);
       const accounts = event.event_key.startsWith("email.support")
         ? [support?.requester_account_id]
         : [support?.requester_account_id, support?.assignee_account_id];
@@ -516,13 +657,15 @@ export async function resolveRecipients(
       const enrollmentQuery = isUuid(target)
         ? admin.from("enrollments").select("student_id").eq("id", target)
         : admin.from("enrollments").select("student_id").eq("reference", target);
-      const { data: enrollment } = await enrollmentQuery.maybeSingle();
+      const { data: enrollment, error: enrollmentError } = await enrollmentQuery.maybeSingle();
+      if (enrollmentError !== null) throw new Error(`recipient lookup failed: ${enrollmentError.message}`);
       if (enrollment !== null) recipients.push(...(await guardianEmailsForStudent(admin, enrollment.student_id)));
       break;
     }
     case "student":
     case "students": {
-      const { data: student } = await admin.from("students").select("id").eq("reference", target).maybeSingle();
+      const { data: student, error: studentError } = await admin.from("students").select("id").eq("reference", target).maybeSingle();
+      if (studentError !== null) throw new Error(`recipient lookup failed: ${studentError.message}`);
       if (student) recipients.push(...(await guardianEmailsForStudent(admin, student.id)));
       break;
     }
@@ -533,8 +676,43 @@ export async function resolveRecipients(
       break;
     case "job_application":
     case "job_applications": {
-      const { data } = await admin.from("job_applications").select("owner_account_id").eq("reference", target).maybeSingle();
-      if (data) recipients.push(...(await accountEmails(admin, [data.owner_account_id])));
+      /* Public intake applications have no owner account; their contact
+         identity is the application's own applicant_email (000105). Until the
+         migration is applied the column does not exist, so fall back to the
+         account-bound projection rather than failing every job email. */
+      const withContact = await admin
+        .from("job_applications")
+        .select("owner_account_id, applicant_email")
+        .eq("reference", target)
+        .maybeSingle();
+      let row: { owner_account_id: string | null; applicant_email: string | null } | null = withContact.data === null || withContact.data === undefined
+        ? null
+        : {
+            owner_account_id: (withContact.data as { owner_account_id: string | null }).owner_account_id,
+            applicant_email: (withContact.data as { applicant_email: string | null }).applicant_email ?? null,
+          };
+      if (withContact.error !== null) {
+        if (!withContact.error.message.includes("applicant_email")) {
+          throw new Error(`recipient lookup failed: ${withContact.error.message}`);
+        }
+        const legacy = await admin
+          .from("job_applications")
+          .select("owner_account_id")
+          .eq("reference", target)
+          .maybeSingle();
+        if (legacy.error !== null) throw new Error(`recipient lookup failed: ${legacy.error.message}`);
+        row = legacy.data === null || legacy.data === undefined
+          ? null
+          : { owner_account_id: (legacy.data as { owner_account_id: string | null }).owner_account_id, applicant_email: null };
+      }
+      if (row) {
+        if (row.owner_account_id !== null && row.owner_account_id !== undefined) {
+          recipients.push(...(await accountEmails(admin, [row.owner_account_id])));
+        } else {
+          const contact = emailRecipient(null, row.applicant_email);
+          if (contact !== null) recipients.push(contact);
+        }
+      }
       break;
     }
     case "notice":
@@ -558,9 +736,10 @@ export async function resolveRecipients(
     }
     case "account_invitation":
     case "account_invitations": {
-      const { data } = await admin.from("account_invitations").select("account_id, created_by_account_id").eq("reference", target).maybeSingle();
-      const accountIds = [data?.account_id, data?.created_by_account_id].filter((id): id is string => typeof id === "string");
-      recipients.push(...(await accountEmails(admin, accountIds)));
+      /* Supabase Auth delivers the invitation token at creation
+       * (`dispatchStaffInvitation` -> `provider.inviteUser`). This outbox
+       * event carries no token, so it is a safe no-op; in particular the
+       * inviter must never receive the invitee's invitation. */
       break;
     }
     case "result_batch":
@@ -571,26 +750,30 @@ export async function resolveRecipients(
       break;
     case "result_report_release":
     case "result_report_releases": {
-      const { data } = await db.from("result_report_releases").select("student_id").eq("reference", target).maybeSingle();
+      const { data, error } = await db.from("result_report_releases").select("student_id").eq("reference", target).maybeSingle();
+      if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
       if (data) recipients.push(...(await guardianEmailsForStudent(admin, data.student_id)));
       break;
     }
     case "exam_schedule_version": {
-      const { data } = await admin.from("exam_schedule_versions").select("grade_section_id").eq("reference", target).maybeSingle();
+      const { data, error } = await admin.from("exam_schedule_versions").select("grade_section_id").eq("reference", target).maybeSingle();
+      if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
       if (data) for (const studentId of await studentsInSection(admin, data.grade_section_id)) recipients.push(...(await guardianEmailsForStudent(admin, studentId)));
       break;
     }
     case "timetable_override": {
-      const { data } = await db.from("timetable_overrides").select("grade_section_id").eq("reference", target).maybeSingle();
+      const { data, error } = await db.from("timetable_overrides").select("grade_section_id").eq("reference", target).maybeSingle();
+      if (error !== null) throw new Error(`recipient lookup failed: ${error.message}`);
       if (data) for (const studentId of await studentsInSection(admin, data.grade_section_id)) recipients.push(...(await guardianEmailsForStudent(admin, studentId)));
       break;
     }
     case "result_publication": {
-      const { data: publication } = await db
+      const { data: publication, error: publicationError } = await db
         .from("result_publications")
         .select("batch_id, source_entry_sheet_id, result_batches(grade_section_id), result_entry_sheets(grade_section_id)")
         .eq("reference", target)
         .maybeSingle();
+      if (publicationError !== null) throw new Error(`recipient lookup failed: ${publicationError.message}`);
       const publicationRecord = publication as {
         result_batches?: { grade_section_id?: string } | { grade_section_id?: string }[] | null;
         result_entry_sheets?: { grade_section_id?: string } | { grade_section_id?: string }[] | null;
@@ -605,11 +788,12 @@ export async function resolveRecipients(
       break;
     }
     case "timetable_publication": {
-      const { data: publication } = await admin
+      const { data: publication, error: publicationError } = await admin
         .from("timetable_publications")
         .select("timetable_versions(grade_section_id)")
         .eq("reference", target)
         .maybeSingle();
+      if (publicationError !== null) throw new Error(`recipient lookup failed: ${publicationError.message}`);
       if (publication?.timetable_versions?.grade_section_id !== undefined && publication.timetable_versions.grade_section_id !== null) {
         const studentIds = await studentsInSection(admin, publication.timetable_versions.grade_section_id);
         for (const studentId of studentIds) recipients.push(...(await guardianEmailsForStudent(admin, studentId)));
@@ -666,21 +850,81 @@ export async function renderEmail(admin: SupabaseClient<Database>, event: Outbox
     return enrollmentCompleteEmail({ studentRef: data?.students?.reference ?? "your child" });
   }
   if (key.startsWith("email.job_submitted")) return jobApplicationSubmittedEmail({ applicationRef: target });
-  if (key.startsWith("email.job_offer") || key.startsWith("email.job_status")) return jobApplicationStatusEmail({ applicationRef: target });
+  if (key.startsWith("email.job_offer") || key.startsWith("email.job_status")) {
+    /* The rejection/offer email must carry the HR decision reason the
+       applicant is entitled to see (owner requirement, 15 Sep 2026). The
+       event key ends in `:v<application version>`; resolve exactly that
+       decision row so a retried event never picks up a later decision. */
+    const versionMatch = /:v(\d+)$/.exec(key);
+    const decisionVersion = versionMatch ? Number(versionMatch[1]) : null;
+    const payloadStatus = typeof event.payload.status === "string" ? event.payload.status : null;
+    const status = payloadStatus === "shortlisted" || payloadStatus === "interview" || payloadStatus === "offered" || payloadStatus === "not_selected"
+      ? payloadStatus
+      : undefined;
+    let reason: string | null = null;
+    const { data: application, error: applicationError } = await admin
+      .from("job_applications")
+      .select("id")
+      .eq("reference", target)
+      .maybeSingle();
+    if (applicationError !== null) throw new Error(`recipient lookup failed: ${applicationError.message}`);
+    if (application !== null) {
+      const decisionQuery = admin
+        .from("job_application_decisions")
+        .select("reason, action, version")
+        .eq("application_id", application.id);
+      const { data: decision } = decisionVersion !== null
+        ? await decisionQuery.eq("version", decisionVersion).maybeSingle()
+        : await decisionQuery.order("version", { ascending: false }).limit(1).maybeSingle();
+      reason = typeof decision?.reason === "string" && decision.reason.trim().length > 0 ? decision.reason.trim() : null;
+    }
+    return jobApplicationStatusEmail({ applicationRef: target, status, reason });
+  }
   if (key.startsWith("email.payment") || key.startsWith("email.finance")) return paymentStatusEmail({ reference: target });
   if (key.startsWith("email.refund")) return refundStatusEmail({ reference: target });
   if (key.startsWith("email.results_published")) {
     const { data } = await admin
       .from("result_publications")
-      .select("result_batches(exam_definitions(term), subjects(name))")
+      .select("source_entry_sheet_id, result_entry_sheets(exam_definitions(term), subjects(name)), result_batches(exam_definitions(term), subjects(name))")
       .eq("reference", target)
       .maybeSingle();
+    const sheet = Array.isArray(data?.result_entry_sheets) ? data.result_entry_sheets[0] : data?.result_entry_sheets;
+    const batch = Array.isArray(data?.result_batches) ? data.result_batches[0] : data?.result_batches;
+    const sheetExam = Array.isArray(sheet?.exam_definitions) ? sheet.exam_definitions[0] : sheet?.exam_definitions;
+    const batchExam = Array.isArray(batch?.exam_definitions) ? batch.exam_definitions[0] : batch?.exam_definitions;
     return resultsPublishedEmail({
-      term: data?.result_batches?.exam_definitions?.term ?? "recent",
-      subject: data?.result_batches?.subjects?.name ?? "subject",
+      term: sheetExam?.term ?? batchExam?.term ?? "recent",
+      subject: sheet?.subjects?.name ?? batch?.subjects?.name ?? "subject",
     });
   }
-  if (key.startsWith("email.result_publication") || key.startsWith("email.result_report_release")) return resultsPublishedEmail({ term: "published", subject: "school" });
+  if (key.startsWith("email.result_publication")) {
+    /* Sheet-native publications carry their term/subject on the entry sheet;
+       never fall back to placeholder copy while the real record is readable. */
+    const { data } = await admin
+      .from("result_publications")
+      .select("source_entry_sheet_id, result_entry_sheets(exam_definitions(term), subjects(name)), result_batches(exam_definitions(term), subjects(name))")
+      .eq("reference", target)
+      .maybeSingle();
+    const sheet = Array.isArray(data?.result_entry_sheets) ? data.result_entry_sheets[0] : data?.result_entry_sheets;
+    const batch = Array.isArray(data?.result_batches) ? data.result_batches[0] : data?.result_batches;
+    const sheetExam = Array.isArray(sheet?.exam_definitions) ? sheet.exam_definitions[0] : sheet?.exam_definitions;
+    const batchExam = Array.isArray(batch?.exam_definitions) ? batch.exam_definitions[0] : batch?.exam_definitions;
+    return resultsPublishedEmail({
+      term: sheetExam?.term ?? batchExam?.term ?? "recent",
+      subject: sheet?.subjects?.name ?? batch?.subjects?.name ?? "subject",
+    });
+  }
+  if (key.startsWith("email.result_report_release")) {
+    /* A report release is the multi-subject manifest families read. */
+    const { data } = await admin
+      .from("result_report_releases")
+      .select("term, result_report_release_items(subjects(name))")
+      .eq("reference", target)
+      .maybeSingle();
+    const items = data?.result_report_release_items ?? [];
+    const subject = items.length === 1 ? (items[0]?.subjects?.name ?? "Report card") : "Report card";
+    return resultsPublishedEmail({ term: data?.term ?? "recent", subject });
+  }
   if (key.startsWith("email.results_withdrawn")) return resultWithdrawnEmail({ reference: target });
   if (key.startsWith("email.result_correction") || key.startsWith("email.results_corrected")) return resultCorrectionEmail({ reference: target });
   if (key.startsWith("email.exam_date_sheet")) return examDateSheetEmail({ reference: target });
@@ -716,16 +960,47 @@ async function recordDelivery(
   admin: SupabaseClient<Database>,
   input: { eventId: string; eventKey: string; recipient: Recipient; templateVersion: string },
 ): Promise<{ id: string; status: string; attempts: number; nextAttemptAt: string | null; failureClass: string | null } | null> {
+  const db = admin as unknown as SupabaseClient;
+  const deliveryFields = {
+    event_id: input.eventId,
+    channel: "email",
+    template_version: input.templateVersion,
+    status: "pending",
+    attempts: 0,
+  };
+  if (input.recipient.accountId === null) {
+    /* Accountless recipient (public job applicant, 000105): dedupe by the
+       lowercased contact through the partial unique index, because a null
+       account id is distinct in the account-bound unique constraint. */
+    const contact = input.recipient.email.toLowerCase().trim();
+    const inserted = await db
+      .from("notification_deliveries")
+      .insert({ ...deliveryFields, recipient_account_id: null, recipient_contact: contact })
+      .select("id")
+      .single();
+    if (inserted.error === null && inserted.data !== null) {
+      return { id: inserted.data.id, status: "pending", attempts: 0, nextAttemptAt: null, failureClass: null };
+    }
+    const { data: existing, error: existingError } = await db
+      .from("notification_deliveries")
+      .select("id, status, attempts, next_attempt_at, failure_class")
+      .eq("event_id", input.eventId)
+      .is("recipient_account_id", null)
+      .eq("recipient_contact", contact)
+      .eq("channel", "email")
+      .eq("template_version", input.templateVersion)
+      .maybeSingle();
+    if (existingError !== null) throw new Error(`delivery record lookup failed: ${existingError.message}`);
+    if (existing === null) return null;
+    return { id: existing.id, status: existing.status, attempts: existing.attempts, nextAttemptAt: existing.next_attempt_at, failureClass: existing.failure_class };
+  }
+
   const { data, error } = await admin
     .from("notification_deliveries")
     .upsert(
       {
-        event_id: input.eventId,
+        ...deliveryFields,
         recipient_account_id: input.recipient.accountId,
-        channel: "email",
-        template_version: input.templateVersion,
-        status: "pending",
-        attempts: 0,
       },
       { onConflict: "event_id,recipient_account_id,channel,template_version", ignoreDuplicates: true },
   )
@@ -735,7 +1010,6 @@ async function recordDelivery(
   // A duplicate upsert can surface as an empty representation (or a
   // provider-specific conflict code). Always resolve the existing row by its
   // unique tuple rather than treating it as already processed.
-  const db = admin as unknown as SupabaseClient;
   const { data: existing, error: existingError } = await db
     .from("notification_deliveries")
     .select("id, status, attempts, next_attempt_at, failure_class")
@@ -744,7 +1018,8 @@ async function recordDelivery(
     .eq("channel", "email")
     .eq("template_version", input.templateVersion)
     .maybeSingle();
-  if (existingError !== null || existing === null) return null;
+  if (existingError !== null) throw new Error(`delivery record lookup failed: ${existingError.message}`);
+  if (existing === null) return null;
   return { id: existing.id, status: existing.status, attempts: existing.attempts, nextAttemptAt: existing.next_attempt_at, failureClass: existing.failure_class };
 }
 
@@ -754,7 +1029,7 @@ async function updateDelivery(
   update: { status: string; providerMessageId?: string | null; lastError?: string | null; failureClass?: string | null; attempts: number; nextAttemptAt?: string | null },
 ) {
   const db = admin as unknown as SupabaseClient;
-  await db
+  const { error } = await db
     .from("notification_deliveries")
     .update({
       status: update.status,
@@ -766,6 +1041,7 @@ async function updateDelivery(
       updated_at: new Date().toISOString(),
     })
     .eq("id", deliveryId);
+  if (error !== null) throw new Error(`delivery record update failed: ${error.message}`);
 }
 
 async function persistGeneratedPdf(
@@ -920,7 +1196,7 @@ async function dispatchStorageEvent(
     return { kind: "delivered", providerIds: [`retention:${candidates?.length ?? 0}`] };
   }
   const documentRef = event.target_reference;
-  const { data: document, error: documentError } = await db.from("documents").select("id, reference, object_key, storage_bucket, mime_type, size_bytes, checksum_verified, scan_status").eq("reference", documentRef).maybeSingle();
+  const { data: document, error: documentError } = await db.from("documents").select("id, reference, object_key, storage_bucket, mime_type, size_bytes, checksum_verified, scan_status, actual_mime_type, actual_size_bytes").eq("reference", documentRef).maybeSingle();
   if (documentError !== null) return { kind: "transient", error: documentError.message };
   if (!document) return { kind: "permanent", error: `document ${documentRef} not found` };
   if (document.scan_status === "ready" || document.scan_status === "clean") return { kind: "delivered", providerIds: [document.reference] };
@@ -930,18 +1206,36 @@ async function dispatchStorageEvent(
   } catch (error) {
     return { kind: "transient", error: error instanceof Error ? error.message : "storage stat failed" };
   }
-  const actualMimeType = detectContentType(stat.bytes);
-  const finalized = await callAppRpc<{ status: string }>(admin, "documents_finalize_upload", {
-    p_document_id: document.id,
-    p_actual_mime_type: actualMimeType,
-    p_actual_size: stat.sizeBytes,
-    p_checksum: stat.checksumSha256,
-  });
-  if (finalized.error !== null) return { kind: "permanent", error: finalized.error.message };
+  /* The browser finalize boundary may already have attested the stored bytes
+   * (checksum + actual MIME). Re-finalising in that case is redundant, and a
+   * magic-byte detector that cannot see the declared type (for example a CSV)
+   * would fail a record that is already verified. Trust the stored attestation
+   * and only finalize when the document is not yet verified. */
+  const alreadyVerified = document.checksum_verified === true && typeof document.actual_mime_type === "string" && document.actual_mime_type !== "";
+  const actualMimeType = alreadyVerified ? (document.actual_mime_type as string) : detectContentType(stat.bytes);
+  if (!alreadyVerified) {
+    const finalized = await callAppRpc<{ status: string }>(admin, "documents_finalize_upload", {
+      p_document_id: document.id,
+      p_actual_mime_type: actualMimeType,
+      p_actual_size: stat.sizeBytes,
+      p_checksum: stat.checksumSha256,
+    });
+    if (finalized.error !== null) return { kind: "permanent", error: finalized.error.message };
+  }
   let scanResult;
   try {
-    scanResult = await scanner.scan({ bucket: document.storage_bucket, objectKey: document.object_key, declaredMimeType: actualMimeType, sizeBytes: stat.sizeBytes, checksumSha256: stat.checksumSha256 });
+    /* The storage stat already read the authoritative bytes; pass them to the
+     * provider so clamav/http never re-fetch the object. */
+    scanResult = await scanner.scan({ bucket: document.storage_bucket, objectKey: document.object_key, declaredMimeType: actualMimeType, sizeBytes: stat.sizeBytes, checksumSha256: stat.checksumSha256, bytes: stat.bytes });
   } catch (error) {
+    if (error instanceof ManualScanDeferredError) {
+      /* Manual provider: the result arrives only through the authenticated
+       * scan callback route. Record the handoff as delivered and leave the
+       * document `pending_scan`; nothing here may mark it ready. A later
+       * callback flips the document, and the next worker pass sees the
+       * terminal scan state on the document row. */
+      return { kind: "delivered", providerIds: [`manual:${document.reference}:pending_callback`] };
+    }
     return { kind: "transient", error: error instanceof Error ? error.message : "document scan failed" };
   }
   const scanned = await callAppRpc<{ status: string }>(admin, "documents_apply_scan", { p_document_id: document.id, p_status: scanResult.state, p_detail: scanResult.detail ?? null });
@@ -949,7 +1243,7 @@ async function dispatchStorageEvent(
   return { kind: "delivered", providerIds: [document.reference] };
 }
 
-async function dispatchEvent(
+export async function dispatchEvent(
   admin: SupabaseClient<Database>,
   event: OutboxEventRow,
   sender: EmailSender | undefined,
@@ -959,6 +1253,15 @@ async function dispatchEvent(
   if (event.kind === "content.publish") {
     const { error } = await callAppRpc<number>(admin, "content_publish_due", {});
     return error === null ? { kind: "delivered", providerIds: ["content.publish"] } : { kind: "transient", error: error.message };
+  }
+  if (event.kind === "content.expire") {
+    const { error } = await callAppRpc<number>(admin, "content_expire_due", {});
+    return error === null ? { kind: "delivered", providerIds: ["content.expire"] } : { kind: "transient", error: error.message };
+  }
+  if (event.kind === "content.expired") {
+    // The expiry transition, audit row, and in-app projection already ran
+    // with the outbox insert. There is no provider action to deliver.
+    return { kind: "delivered", providerIds: ["content.expired"] };
   }
   if (event.kind === "settings.effective") {
     const { error } = await callAppRpc<number>(admin, "settings_effective_due", {});
@@ -981,14 +1284,32 @@ async function dispatchEvent(
     }
   }
   if (event.kind === "data.export.generate" || event.kind === "data_export_generate") {
-    return dispatchDataExportGenerate(admin, event);
+    return dispatchDataExportGenerate(admin, event, storage);
   }
   if (event.kind === "data_import_parse" || event.kind === "data.import.parse") {
-    return dispatchDataImportParse(admin, event);
+    return dispatchDataImportParse(admin, event, storage);
   }
   const isEmailEvent = event.kind === "email.deliver" || event.kind.startsWith("security.") || event.event_key.startsWith("email.");
   if (!isEmailEvent) {
     return { kind: "unknown" };
+  }
+
+  let recipients: Recipient[];
+  try {
+    recipients = await resolveRecipients(admin, event);
+  } catch (error) {
+    return { kind: "transient", error: error instanceof Error ? error.message : "recipient resolution failed" };
+  }
+
+  /* No resolvable recipient with an email address (an empty audience, a
+   * phone-only contact, or a page with no audience). Acknowledge the event as
+   * delivered (skipped) so a clean no-op never burns provider attempts or
+   * retires as failed work; the provider id keeps it visible in the outcome.
+   * This includes notices: a notice fanned out to no currently-addressable
+   * account is a skip, because permanently failed events have no requeue path
+   * and would only create unrecoverable ops noise. */
+  if (recipients.length === 0) {
+    return { kind: "delivered", providerIds: [`skipped:${event.event_key}`] };
   }
 
   let emailSender: EmailSender;
@@ -997,13 +1318,9 @@ async function dispatchEvent(
   } catch (error) {
     return { kind: "transient", error: error instanceof Error ? error.message : "email provider unavailable" };
   }
-  const recipients = await resolveRecipients(admin, event);
-  if (recipients.length === 0) {
-    return { kind: "permanent", error: `no verified recipients for ${event.target_type} ${event.target_reference}` };
-  }
   const firstRecipient = recipients[0];
   if (firstRecipient === undefined) {
-    return { kind: "permanent", error: "no recipients" };
+    return { kind: "transient", error: "recipient resolution returned an empty set" };
   }
 
   const template = await renderEmail(admin, event, firstRecipient);
@@ -1013,56 +1330,69 @@ async function dispatchEvent(
 
   const providerIds: string[] = [];
   let permanentFailure: string | null = null;
+  let deferredDelivery = false;
   for (const recipient of recipients) {
-    const delivery = await recordDelivery(admin, {
-      eventId: event.id,
-      eventKey: event.event_key,
-      recipient,
-      templateVersion: "v1",
-    });
-    if (delivery === null) return { kind: "transient", error: `notification delivery row unavailable for ${recipient.accountId}` };
-    if (["sent", "delivered", "bounced", "complained", "suppressed"].includes(delivery.status)) {
-      providerIds.push(`existing:${recipient.accountId}`);
-      continue;
-    }
-    if (delivery.status === "failed" && delivery.failureClass === "permanent") {
-      providerIds.push(`permanent-failure:${recipient.accountId}`);
-      continue;
-    }
-    if (delivery.nextAttemptAt !== null && new Date(delivery.nextAttemptAt).getTime() > Date.now()) continue;
-
-    const { data: suppressed } = await admin
-      .from("email_suppressions")
-      .select("reason")
-      .eq("email_hash", sha256(recipient.email.toLowerCase().trim()))
-      .maybeSingle();
-    if (suppressed !== null) {
-      await updateDelivery(admin, delivery.id, { status: "suppressed", lastError: `suppressed:${suppressed.reason}`, failureClass: "suppressed", attempts: delivery.attempts });
-      continue;
-    }
-
     try {
-      const result = await emailSender({
-        to: [recipient.email],
-        subject: template.subject,
-        html: template.html,
-        idempotencyKey: `delivery:${delivery.id}`,
+      const delivery = await recordDelivery(admin, {
+        eventId: event.id,
+        eventKey: event.event_key,
+        recipient,
+        templateVersion: "v1",
       });
-      await updateDelivery(admin, delivery.id, { status: "sent", providerMessageId: result.providerMessageId, attempts: delivery.attempts + 1, failureClass: null });
-      providerIds.push(result.providerMessageId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "unknown send error";
-      if (message.startsWith("Permanent")) {
-        await updateDelivery(admin, delivery.id, { status: "failed", lastError: message, failureClass: "permanent", attempts: delivery.attempts + 1 });
-        permanentFailure = message;
+      if (delivery === null) return { kind: "transient", error: `notification delivery row unavailable for ${recipient.accountId}` };
+      if (["sent", "delivered", "bounced", "complained", "suppressed"].includes(delivery.status)) {
+        providerIds.push(`existing:${recipient.accountId}`);
         continue;
       }
-      const nextAttemptAt = new Date(Date.now() + Math.min(60 * 60 * 1000, 60_000 * 2 ** Math.min(delivery.attempts, 6))).toISOString();
-      await updateDelivery(admin, delivery.id, { status: "failed", lastError: message, failureClass: "transient", attempts: delivery.attempts + 1, nextAttemptAt });
-      return { kind: "transient", error: message };
+      if (delivery.status === "failed" && delivery.failureClass === "permanent") {
+        providerIds.push(`permanent-failure:${recipient.accountId}`);
+        continue;
+      }
+      if (delivery.nextAttemptAt !== null && new Date(delivery.nextAttemptAt).getTime() > Date.now()) {
+        /* The per-recipient backoff has not elapsed; this recipient still owes
+         * a provider attempt. The event must stay pending so the send happens
+         * once due — marking it delivered here would silently drop the mail. */
+        deferredDelivery = true;
+        continue;
+      }
+
+      const { data: suppressed, error: suppressionError } = await admin
+        .from("email_suppressions")
+        .select("reason")
+        .eq("email_hash", sha256(recipient.email.toLowerCase().trim()))
+        .maybeSingle();
+      if (suppressionError !== null) return { kind: "transient", error: `suppression lookup failed: ${suppressionError.message}` };
+      if (suppressed !== null) {
+        await updateDelivery(admin, delivery.id, { status: "suppressed", lastError: `suppressed:${suppressed.reason}`, failureClass: "suppressed", attempts: delivery.attempts });
+        continue;
+      }
+
+      try {
+        const result = await emailSender({
+          to: [recipient.email],
+          subject: template.subject,
+          html: template.html,
+          idempotencyKey: `delivery:${delivery.id}`,
+        });
+        await updateDelivery(admin, delivery.id, { status: "sent", providerMessageId: result.providerMessageId, attempts: delivery.attempts + 1, failureClass: null });
+        providerIds.push(result.providerMessageId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unknown send error";
+        if (message.startsWith("Permanent")) {
+          await updateDelivery(admin, delivery.id, { status: "failed", lastError: message, failureClass: "permanent", attempts: delivery.attempts + 1 });
+          permanentFailure = message;
+          continue;
+        }
+        const nextAttemptAt = new Date(Date.now() + Math.min(60 * 60 * 1000, 60_000 * 2 ** Math.min(delivery.attempts, 6))).toISOString();
+        await updateDelivery(admin, delivery.id, { status: "failed", lastError: message, failureClass: "transient", attempts: delivery.attempts + 1, nextAttemptAt });
+        return { kind: "transient", error: message };
+      }
+    } catch (error) {
+      return { kind: "transient", error: error instanceof Error ? error.message : "delivery record write failed" };
     }
   }
   if (permanentFailure !== null) return { kind: "permanent", error: permanentFailure };
+  if (deferredDelivery) return { kind: "transient", error: "email delivery backoff has not elapsed" };
   return { kind: "delivered", providerIds };
 }
 
@@ -1082,7 +1412,7 @@ async function processProviderJobs(input: {
   scanner: DocumentScanner;
   batchSize: number;
 }): Promise<WorkerSummary> {
-  const summary: WorkerSummary = { claimed: 0, delivered: 0, permanentFailed: 0, transientFailed: 0, skippedUnknown: 0 };
+  const summary: WorkerSummary = { claimed: 0, delivered: 0, permanentFailed: 0, transientFailed: 0, skippedUnknown: 0, skippedNoRecipients: 0, emailConfigMissing: false };
   const claimedResult = await callAppRpc<ProviderJobRow[]>(input.admin, "claim_provider_jobs", { p_batch_size: input.batchSize });
   if (claimedResult.error !== null) throw new Error(`provider job claim failed: ${claimedResult.error.message}`);
   for (const job of claimedResult.data ?? []) {
@@ -1094,7 +1424,8 @@ async function processProviderJobs(input: {
             : job.job_kind === "pdf_generate" ? "pdf.generate"
               : job.job_kind === "email_delivery" ? "email.deliver"
                 : job.job_kind === "content_publish" ? "content.publish"
-                  : job.job_kind === "settings_effective" ? "settings.effective" : job.job_kind;
+                  : job.job_kind === "content_expire" ? "content.expire"
+                    : job.job_kind === "settings_effective" ? "settings.effective" : job.job_kind;
     const event: OutboxEventRow = {
       id: job.id,
       event_key: job.idempotency_key,
@@ -1132,6 +1463,13 @@ export async function processOutboxBatch(input: {
   storage?: StorageProvider;
   scanner?: DocumentScanner;
 }): Promise<WorkerSummary> {
+  const readiness = providerEnvReadiness();
+  if (input.sender === undefined && !readiness.email.ready) {
+    /* Resend cannot be constructed without its environment, so claiming email
+     * work would burn attempts against a sender that cannot exist. Return
+     * before the claim and leave every event pending until config arrives. */
+    return { claimed: 0, delivered: 0, permanentFailed: 0, transientFailed: 0, skippedUnknown: 0, skippedNoRecipients: 0, emailConfigMissing: true };
+  }
   const startedAt = new Date().toISOString();
   const { data: jobRun } = await input.admin.from("job_runs").insert({ job_name: "outbox", status: "started", started_at: startedAt }).select("id").maybeSingle();
   try {
@@ -1144,7 +1482,7 @@ export async function processOutboxBatch(input: {
    * scan is needed, pass the real verified input through — never empty
    * placeholder values that would make the scanner decision meaningless. */
   const scanner = input.scanner ?? {
-    scan: async (scanInput: { bucket: string; objectKey: string; declaredMimeType: string; sizeBytes: number; checksumSha256: string }) => {
+    scan: async (scanInput: ScanInput) => {
       const configured = createConfiguredDocumentScanner();
       return configured.scan(scanInput);
     },
@@ -1159,7 +1497,7 @@ export async function processOutboxBatch(input: {
   }
   const events = claimed ?? [];
 
-  const summary: WorkerSummary = { claimed: events.length, delivered: 0, permanentFailed: 0, transientFailed: 0, skippedUnknown: 0 };
+  const summary: WorkerSummary = { claimed: events.length, delivered: 0, permanentFailed: 0, transientFailed: 0, skippedUnknown: 0, skippedNoRecipients: 0, emailConfigMissing: false };
 
   for (const event of events) {
     const outcome = await dispatchEvent(input.admin, event, sender, storage, scanner);
@@ -1170,6 +1508,9 @@ export async function processOutboxBatch(input: {
         });
         if (markError !== null) throw new Error(`mark delivered failed: ${markError.message}`);
         summary.delivered += 1;
+        if (outcome.providerIds.some((providerId) => providerId.startsWith("skipped:"))) {
+          summary.skippedNoRecipients += 1;
+        }
         break;
       }
       case "permanent": {
@@ -1208,6 +1549,7 @@ export async function processOutboxBatch(input: {
   summary.permanentFailed += providerSummary.permanentFailed;
   summary.transientFailed += providerSummary.transientFailed;
   summary.skippedUnknown += providerSummary.skippedUnknown;
+  summary.skippedNoRecipients += providerSummary.skippedNoRecipients;
   if (jobRun?.id) await input.admin.from("job_runs").update({ status: "succeeded", finished_at: new Date().toISOString(), outcome: summary }).eq("id", jobRun.id);
   return summary;
   } catch (error) {

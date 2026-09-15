@@ -92,7 +92,7 @@ export function FinanceActions({
         type: adjustType,
         requestedBy: actor,
       });
-      announce(`${request.ref} requested — awaiting finance approver.`);
+      announce(`${request.ref} requested · awaiting finance approver.`);
       setAdjustAmount("");
       setAdjustReason("");
       refresh();
@@ -114,7 +114,7 @@ export function FinanceActions({
         reason: refundReason,
         requestedBy: actor,
       });
-      announce(`${request.ref} requested — awaiting finance approver.`);
+      announce(`${request.ref} requested · awaiting finance approver.`);
       setRefundAmount("");
       setRefundReason("");
       refresh();
@@ -152,11 +152,11 @@ export function FinanceActions({
     try {
       if (kind === "adjustment") {
         const posted = await financeService.postAdjustment({ ref, postedBy: actor });
-        announce(`${ref} posted — balance updated on the shared ledger.`);
+        announce(`${ref} posted · balance updated on the shared ledger.`);
         void posted;
       } else {
         const posted = await financeService.postRefund({ ref, postedBy: actor });
-        announce(`${ref} posted through the sandbox provider — original receipt stays on record.`);
+        announce(`${ref} posted through the sandbox provider · original receipt stays on record.`);
         void posted;
       }
       await onLedgerChanged?.();
@@ -184,7 +184,7 @@ export function FinanceActions({
       <p className={styles.intro}>
         {mode === "supabase"
           ? "Officer requests and approver decisions follow maker/checker separation; posting appends authoritative signed ledger entries. Online refund provider activity remains in the local sandbox."
-          : "Officer requests and approver decisions follow maker/checker separation; posting appends signed ledger entries that never rewrite invoice items or payment history (demo rules — the school’s real policy is still pending)."}
+          : "Officer requests and approver decisions follow maker/checker separation; posting appends signed ledger entries that never rewrite invoice items or payment history (demo rules · the school’s real policy is still pending)."}
       </p>
 
       <div className={styles.grid}>

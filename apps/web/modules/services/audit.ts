@@ -13,31 +13,48 @@ import { demoNowIso } from "@/modules/demo/clock";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
 
-export type AuditAction =
-  | "Login"
-  | "Application reviewed"
-  | "Result published"
-  | "Payment reconciled"
-  | "Notice published"
-  | "Notice unpublished"
-  | "Notice edited"
-  | "Page status updated"
-  | "Timetable changed"
-  | "Setting changed"
-  | "Invoice viewed"
-  | "Result withdrawn"
-  | "Payment posted"
-  | "Link approved"
-  | "Link rejected"
-  | "Link revoked"
-  | "Link restricted"
-  | "Link capabilities changed"
-  | "Link requested"
-  | "Enrollment converted"
-  | "Staff invitation created"
-  | "Staff invitation accepted"
-  | "Reviewer assigned"
-  | "Scorecard saved";
+/**
+ * Known action labels for editor assistance. The server command surface
+ * records more kinds than any fixed list can track (for example
+ * "MFA verified" or "Account suspended"), so the type accepts any recorded
+ * string while keeping the common labels discoverable. Never treat this list
+ * as the full register; the audit page derives its filter from loaded data.
+ */
+export const KNOWN_AUDIT_ACTIONS = [
+  "Login",
+  "Logout",
+  "MFA verified",
+  "Password changed",
+  "Application reviewed",
+  "Result published",
+  "Payment reconciled",
+  "Notice published",
+  "Notice unpublished",
+  "Notice edited",
+  "Page status updated",
+  "Timetable changed",
+  "Setting changed",
+  "Invoice viewed",
+  "Result withdrawn",
+  "Payment posted",
+  "Link approved",
+  "Link rejected",
+  "Link revoked",
+  "Link restricted",
+  "Link restored",
+  "Link capabilities changed",
+  "Link requested",
+  "Enrollment converted",
+  "Staff invitation created",
+  "Staff invitation accepted",
+  "Staff invitation provider failed",
+  "Account suspended",
+  "Account reactivated",
+  "Reviewer assigned",
+  "Scorecard saved",
+] as const;
+
+export type AuditAction = (typeof KNOWN_AUDIT_ACTIONS)[number] | (string & {});
 
 export type AuditOutcome = "Success" | "Denied" | "Failed";
 
@@ -155,6 +172,12 @@ export interface AuditService {
   /** All safe audit events — seeded history plus session-recorded, newest first. */
   listEvents(): Promise<AuditEvent[]>;
   /**
+   * One page of the live audit register, newest first. `cursor` is the
+   * `created_at` of the oldest already-loaded event, so successive calls walk
+   * backwards through history. Rejects when the register is unavailable.
+   */
+  listEventsPage(input?: { limit?: number; cursor?: string | null }): Promise<{ events: AuditEvent[]; nextCursor: string | null }>;
+  /**
    * Append one safe event (plan.md Phase 4). Append-only: recorded events
    * are never edited or removed. Deterministic id and timestamp; the same
    * call twice creates two events (idempotency belongs to the action that
@@ -187,6 +210,27 @@ export const auditService: AuditService = {
     return [...sessionEvents, ...demoAuditEvents]
       .sort((a, b) => b.timestampIso.localeCompare(a.timestampIso))
       .map((event) => ({ ...event }));
+  },
+
+  async listEventsPage(input = {}) {
+    const limit = Math.min(Math.max(Math.trunc(input.limit ?? 50), 1), 100);
+    if (clientAdapterMode() === "supabase") {
+      const response = await adapterCall<ServerAuditEventRow[]>("audit.listPage", {
+        limit,
+        cursor: input.cursor ?? null,
+      });
+      if (!response.ok) throw new Error(response.errors[0]?.message ?? "Audit events are unavailable.");
+      const events = response.value.map(mapServerAuditEvent);
+      const last = events[events.length - 1];
+      return { events, nextCursor: events.length === limit && last !== undefined ? last.timestampIso : null };
+    }
+    const all = await this.listEvents();
+    const remaining = input.cursor === null || input.cursor === undefined
+      ? all
+      : all.filter((event) => event.timestampIso < input.cursor!);
+    const events = remaining.slice(0, limit);
+    const last = events[events.length - 1];
+    return { events, nextCursor: remaining.length > events.length && last !== undefined ? last.timestampIso : null };
   },
 
   async record(event) {

@@ -58,8 +58,9 @@ export interface SupportService {
   submitGrievance(input: GrievanceInput): Promise<{ ref: string }>;
   /** Authenticated grievance submission through the adapter (portal users). */
   submitAuthenticatedGrievance(input: GrievanceInput): Promise<{ ref: string }>;
-  /** The requester-safe record; null when the reference is unknown. */
+  /** The requester-safe record (no private notes, no assignee); null when the reference is unknown. */
   getGrievance(ref: string): Promise<Grievance | null>;
+  /** Staff-private projection: includes internal notes and assignment. Never serve to requesters. */
   listGrievances(): Promise<Grievance[]>;
   /** Appends a response event; without `resolve` the status moves to "In progress", with it to "Resolved". */
   respond(ref: string, text: string, by: string, resolve: boolean): Promise<Grievance>;
@@ -144,6 +145,19 @@ function copyGrievance(grievance: Grievance): Grievance {
   };
 }
 
+/**
+ * Requester-safe projection: the shared thread (submission + staff
+ * responses) without staff-private assignment or internal notes. Every
+ * requester-facing read (`getGrievance`, the `mine` adapter scope) must go
+ * through this so internal notes/assignment can never leak to requesters.
+ */
+export function toRequesterSafeGrievance(grievance: Grievance): Grievance {
+  const copy = copyGrievance(grievance);
+  delete copy.privateNotes;
+  delete copy.assignee;
+  return copy;
+}
+
 function requireGrievance(store: SupportStore, ref: string): Grievance {
   const grievance = store.grievances.find((item) => item.ref === ref);
   if (!grievance) throw new Error(`Unknown grievance reference: ${ref}`);
@@ -188,7 +202,8 @@ export function createDemoSupportService(latencyMs = 200): SupportService {
     async getGrievance(ref) {
       await sleep(latencyMs);
       const found = readStore().grievances.find((item) => item.ref === ref);
-      return found ? copyGrievance(found) : null;
+      /* Requester-safe projection: staff-private notes/assignment stay server-side. */
+      return found ? toRequesterSafeGrievance(found) : null;
     },
 
     async listGrievances() {
@@ -269,9 +284,23 @@ function mapSupportStatus(status: string): GrievanceStatus {
   return "New";
 }
 
+/**
+ * Map a server support row into the shared thread model (staff-private
+ * projection — keeps internal notes for the inbox; never serve to
+ * requesters). Single-argument shape so it stays safe as an Array.map
+ * callback at every existing call site.
+ */
 export function mapServerSupportRow(row: ServerSupportRow): Grievance {
   const name = row.requester_name ?? "Requester";
   return { ref: row.reference, category: row.category as GrievanceCategory, subject: row.subject, message: row.support_messages?.[0]?.body ?? "", contactName: name, contactPhone: row.requester_contact ?? undefined, raisedAtIso: row.created_at, status: mapSupportStatus(row.status), thread: (row.support_messages ?? []).map((message) => ({ kind: message.is_staff ? "response" : "submission", atIso: message.created_at, by: message.is_staff ? "School support" : name, text: message.body })), privateNotes: (row.support_private_notes ?? []).map((note) => ({ atIso: note.created_at, by: note.author_account_id, text: note.body })) };
+}
+
+/**
+ * Requester projection of a server support row (the `mine` scope): the
+ * shared thread without staff-private notes or assignment.
+ */
+export function mapRequesterSupportRow(row: ServerSupportRow): Grievance {
+  return toRequesterSafeGrievance(mapServerSupportRow(row));
 }
 
 const originalSupport = createDemoSupportService();
@@ -293,7 +322,8 @@ supportService.getGrievance = async (ref) => {
   const response = await adapterCall<ServerSupportRow[]>("support.list", { scope: "mine" });
   if (!response.ok) throw new Error(response.errors[0]?.message ?? "Support is unavailable.");
   const row = response.value.find((candidate) => candidate.reference === ref);
-  return row ? mapServerSupportRow(row) : null;
+  /* Requester scope: strip staff-private notes before returning. */
+  return row ? mapRequesterSupportRow(row) : null;
 };
 supportService.listGrievances = async () => {
   if (clientAdapterMode() !== "supabase") return originalSupport.listGrievances();

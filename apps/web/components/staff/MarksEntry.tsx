@@ -20,6 +20,13 @@ const DEFAULT_ACTOR = "M. Wani (exam office)";
 /** Minimum reason length for return/correction/withdrawal decisions. */
 const REASON_MIN_LENGTH = 10;
 
+/**
+ * Local draft-save state for the autosave indicator. The service offers no
+ * draft timestamp, so the indicator reports Saved/Unsaved only from local
+ * save results — never fabricated times.
+ */
+type DraftSaveState = "idle" | "saving" | "saved" | "unsaved" | "error";
+
 function cloneRows(rows: readonly MarksRow[]): MarksRow[] {
   return rows.map((row) => ({ ...row }));
 }
@@ -31,6 +38,13 @@ function rowProblem(row: MarksRow): string | null {
   if (row.obtained < 0) return "Marks cannot be negative.";
   if (row.obtained > row.max) return `Marks exceed the maximum of ${row.max}.`;
   return null;
+}
+
+/** Readable fallback for a version row whose note is empty (e.g. an approval
+ *  recorded without a moderation note). */
+function versionStateLabel(state?: string): string {
+  if (state === undefined || !(state in ENTRY_BATCH_STATUS_META)) return "";
+  return ENTRY_BATCH_STATUS_META[state as keyof typeof ENTRY_BATCH_STATUS_META].label;
 }
 
 /** One active assignment in the shape the batch-scope check needs. */
@@ -90,14 +104,19 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawalReason, setWithdrawalReason] = useState("");
   const [withdrawalReasonError, setWithdrawalReasonError] = useState<string | null>(null);
+  const [draftState, setDraftState] = useState<DraftSaveState>("idle");
   const summaryRef = useRef<HTMLDivElement>(null);
   const { summary } = useStaffContext();
   /* Phase-1 split: moderation actions (approve/return) belong to exam
      reviewers (results.approve); publish and correction belong to result
      publishers (results.publish). Entry controls keep the teacher
-     results.enter scope below. */
+     results.enter scope below. The entry officer may also raise a correction
+     request, which an independent reviewer approves before an editable
+     version opens. */
+  const canEnter = canAnyRole(summary?.roles ?? [], "results.enter");
   const canApprove = canAnyRole(summary?.roles ?? [], "results.approve");
   const canPublish = canAnyRole(summary?.roles ?? [], "results.publish");
+  const canRequestCorrection = canEnter || canPublish;
   const profileCode = summary?.profileCode ?? null;
 
   useEffect(() => {
@@ -125,6 +144,8 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     setRows(cloneRows(next.rows));
     setFieldErrors({});
     setSubmitErrors([]);
+    /* Rows now match the persisted batch, so no local edits are pending. */
+    setDraftState("idle");
     void academicsService.listVersions(batchRef).then(setVersions).catch(() => {});
   }
 
@@ -140,23 +161,28 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
       return { ...current, [index]: problem };
     });
     setSubmitErrors([]);
+    setDraftState("unsaved");
   }
 
   function setRemark(index: number, raw: string) {
     setRows((current) => current.map((row, i) => (i === index ? { ...row, remark: raw } : row)));
+    setDraftState("unsaved");
   }
 
   async function saveDraft() {
     setBusy("save");
+    setDraftState("saving");
     const result = await academicsService.saveEntryDraft(batchRef, rows);
     setBusy(null);
     if (!result.ok) {
+      setDraftState("error");
       setSubmitErrors(result.errors);
       focusSummary();
       return;
     }
     applyBatch(result.value);
-    setLive(`Draft saved${supabaseMode ? "" : " (demo)"} — ${result.value.ref}`);
+    setDraftState("saved");
+    setLive(`Draft saved${supabaseMode ? "" : " (demo)"} · ${result.value.ref}`);
   }
 
   async function submitForModeration() {
@@ -200,7 +226,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
 
   async function confirmReturn() {
     if (returnReason.trim().length < REASON_MIN_LENGTH) {
-      setReturnReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required — it is recorded on the batch.`);
+      setReturnReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required · it is recorded on the batch.`);
       return;
     }
     setReturnReasonError(null);
@@ -234,7 +260,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
 
   async function confirmCorrection() {
     if (correctionReason.trim().length < REASON_MIN_LENGTH) {
-      setCorrectionReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required — it is recorded in the version history.`);
+      setCorrectionReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required · it is recorded in the version history.`);
       return;
     }
     setCorrectionReasonError(null);
@@ -248,12 +274,16 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     applyBatch(result.value);
     setCorrectOpen(false);
     setCorrectionReason("");
-    setLive(`Correction v${result.value.version} started${supabaseMode ? "" : " (demo)"}`);
+    setLive(
+      supabaseMode
+        ? "Correction requested · an independent exam reviewer must approve it before the new editable version opens."
+        : `Correction v${result.value.version} started (demo)`,
+    );
   }
 
   async function confirmWithdraw() {
     if (withdrawalReason.trim().length < REASON_MIN_LENGTH) {
-      setWithdrawalReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required — it is recorded with the withdrawal.`);
+      setWithdrawalReasonError(`A reason of at least ${REASON_MIN_LENGTH} characters is required · it is recorded with the withdrawal.`);
       return;
     }
     setWithdrawalReasonError(null);
@@ -267,7 +297,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
     applyBatch(result.value);
     setWithdrawOpen(false);
     setWithdrawalReason("");
-    setLive(`${result.value.ref} withdrawn — the live portal publication was removed${supabaseMode ? "" : " (demo)"}`);
+    setLive(`${result.value.ref} withdrawn · the live portal publication was removed${supabaseMode ? "" : " (demo)"}`);
   }
 
   if (!batch) {
@@ -278,7 +308,24 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
   const editable = batch.status === "draft" || batch.status === "returned";
   const awaitingModeration = batch.status === "submitted" || batch.status === "moderation";
   const enteredCount = rows.filter((row) => row.obtained !== null).length;
-  const nextVersion = batch.version + 1;
+  /* Live sheets are a student × assessment matrix (one row per roster
+     candidate and component); demo sheets are one row per subject. */
+  const studentMatrix = rows.some((row) => (row.studentName ?? "").trim() !== "");
+  const hasActions =
+    editable
+    || (awaitingModeration && canApprove)
+    || (batch.status === "approved" && canPublish)
+    || (batch.status === "published" && (canRequestCorrection || canPublish));
+  const noActionNote =
+    batch.status === "submitted" || batch.status === "moderation"
+      ? "Awaiting an exam reviewer's moderation decision. No action is required from this workspace."
+      : batch.status === "approved"
+        ? "Awaiting a result publisher. No action is required from this workspace."
+        : batch.status === "published"
+          ? "Published. A correction request can be raised by the result entry officer or a result publisher."
+          : batch.status === "withdrawn"
+            ? "This sheet is withdrawn; no action is available in this workspace."
+            : "No action is available for this sheet with your role.";
 
   return (
     <div className={styles.workspace}>
@@ -292,7 +339,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         <h1 className="workspace-title">Marks entry</h1>
         <p className={`workspace-intro ${styles.meta}`}>
           <span className="num">{batch.ref}</span> · {batch.exam} · {batch.className} · {enteredCount}/
-          {rows.length} subjects entered · v{batch.version}
+          {rows.length} marks entered · v{batch.version}
         </p>
         <div className={styles.badgeRow}>
           <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
@@ -305,6 +352,17 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
           <p className="section-label">Returned by moderation</p>
           <p className={styles.returnedReason}>“{batch.returnedReason}”</p>
           <p className={styles.returnedHint}>Re-edit the sheet and submit again; the reason stays on record.</p>
+        </div>
+      ) : null}
+
+      {batch.status === "published" && batch.pendingCorrectionReason ? (
+        <div className={styles.returnedPanel}>
+          <p className="section-label">Correction pending review</p>
+          <p className={styles.returnedReason}>“{batch.pendingCorrectionReason}”</p>
+          <p className={styles.returnedHint}>
+            An independent exam reviewer approves the request. The published report stays on the portal until the
+            corrected version is reviewed and published.
+          </p>
         </div>
       ) : null}
 
@@ -344,7 +402,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
             </caption>
             <thead>
               <tr>
-                <th scope="col">Subject</th>
+                <th scope="col">{studentMatrix ? "Student" : "Subject"}</th>
                 <th scope="col">Max</th>
                 <th scope="col">Obtained</th>
                 <th scope="col">Grade</th>
@@ -353,16 +411,25 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr key={row.subject} className={fieldErrors[index] ? styles.invalidRow : undefined}>
+                <tr key={row.rosterId !== undefined ? `${row.rosterId}-${row.componentId ?? ""}` : `${row.subject}-${index}`} className={fieldErrors[index] ? styles.invalidRow : undefined}>
                   <td>
-                    <strong>{row.subject}</strong>
+                    {studentMatrix ? (
+                      <>
+                        <strong>{row.studentName ?? "Student"}</strong>
+                        {row.componentName !== undefined ? (
+                          <span className={styles.rowSub}>{row.componentName}</span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <strong>{row.subject}</strong>
+                    )}
                   </td>
                   <td className="num">{row.max}</td>
                   <td className={fieldErrors[index] ? "field--invalid" : undefined}>
                     {editable ? (
                       <div className={styles.inputCell}>
                         <label className="sr-only" htmlFor={`obtained-${index}`}>
-                          Obtained marks — {row.subject}
+                          Obtained marks · {row.subject}
                         </label>
                         <input
                           id={`obtained-${index}`}
@@ -398,7 +465,7 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
                   <td>
                     {editable ? (
                       <label className="sr-only" htmlFor={`remark-${index}`}>
-                        Teacher remark — {row.subject}
+                        Teacher remark · {row.subject}
                       </label>
                     ) : null}
                     {editable ? (
@@ -425,46 +492,73 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         <p className="section-label" id="entry-actions-heading">
           Actions
         </p>
-        <div className={styles.actions}>
-          {editable ? (
-            <>
-              <Button variant="quiet" onClick={saveDraft} disabled={busy !== null}>
-                {busy === "save" ? "Saving draft…" : "Save draft"}
+        {editable ? (
+          <p className={styles.draftStatus} role="status">
+            {busy === "save"
+              ? "Saving…"
+              : draftState === "saved"
+                ? "Saved. Reload restores this draft."
+                : draftState === "unsaved"
+                  ? "Unsaved changes."
+                  : draftState === "error"
+                    ? "Save failed · review the errors above."
+                    : enteredCount > 0
+                      ? `Draft in progress · ${enteredCount}/${rows.length} entered. Reload restores your last saved draft.`
+                      : "No marks entered yet. Reload restores your last saved draft."}
+          </p>
+        ) : null}
+        {hasActions ? (
+          <div className={styles.actions}>
+            {editable ? (
+              <>
+                <Button variant="quiet" onClick={saveDraft} disabled={busy !== null}>
+                  {busy === "save" ? "Saving draft…" : "Save draft"}
+                </Button>
+                <Button variant="primary" onClick={submitForModeration} disabled={busy !== null}>
+                  {busy === "submit" ? "Submitting…" : "Submit for moderation"}
+                </Button>
+              </>
+            ) : null}
+            {awaitingModeration && canApprove ? (
+              <>
+                <Button variant="primary" onClick={approve} disabled={busy !== null}>
+                  Approve
+                </Button>
+                <Button variant="quiet" onClick={() => setReturnOpen(true)} disabled={busy !== null}>
+                  Return with reason
+                </Button>
+              </>
+            ) : null}
+            {batch.status === "approved" && canPublish ? (
+              <Button variant="saffron" onClick={() => setPublishOpen(true)} disabled={busy !== null}>
+                Publish
               </Button>
-              <Button variant="primary" onClick={submitForModeration} disabled={busy !== null}>
-                {busy === "submit" ? "Submitting…" : "Submit for moderation"}
+            ) : null}
+            {batch.status === "published" && canRequestCorrection ? (
+              <Button variant="quiet" onClick={() => setCorrectOpen(true)} disabled={busy !== null}>
+                Request correction
               </Button>
-            </>
-          ) : null}
-          {awaitingModeration && canApprove ? (
-            <>
-              <Button variant="primary" onClick={approve} disabled={busy !== null}>
-                Approve
+            ) : null}
+            {batch.status === "published" && canPublish ? (
+              <Button variant="quiet" onClick={() => setWithdrawOpen(true)} disabled={busy !== null}>
+                Withdraw publication
               </Button>
-              <Button variant="quiet" onClick={() => setReturnOpen(true)} disabled={busy !== null}>
-                Return with reason
-              </Button>
-            </>
-          ) : null}
-          {batch.status === "approved" && canPublish ? (
-            <Button variant="saffron" onClick={() => setPublishOpen(true)} disabled={busy !== null}>
-              Publish
-            </Button>
-          ) : null}
-          {batch.status === "published" && canPublish ? (
-            <Button variant="quiet" onClick={() => setCorrectOpen(true)} disabled={busy !== null}>
-              Create correction (v{nextVersion})
-            </Button>
-          ) : null}
-          {batch.status === "published" && canPublish ? (
-            <Button variant="quiet" onClick={() => setWithdrawOpen(true)} disabled={busy !== null}>
-              Withdraw publication
-            </Button>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className={`small muted ${styles.noActionNote}`}>{noActionNote}</p>
+        )}
 
         {returnOpen ? (
-          <div className={styles.confirmPanel}>
+          <div
+            className={styles.confirmPanel}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setReturnOpen(false);
+                setReturnReasonError(null);
+              }
+            }}
+          >
             <label className={styles.confirmLabel} htmlFor="return-reason">
               Reason for returning to entry (required)
             </label>
@@ -497,12 +591,20 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         ) : null}
 
         {publishOpen ? (
-          <div className={styles.confirmPanel}>
+          <div
+            className={styles.confirmPanel}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setPublishOpen(false);
+            }}
+          >
             <p className={styles.confirmText}>
               <strong>
                 Publish v{batch.version} to {batch.className}?
               </strong>{" "}
-              A new publication reference is created and the portal report updates immediately{!supabaseMode ? " (demo)" : ""}.
+              A new publication reference is created
+              {supabaseMode
+                ? "; each student's report release is assembled separately before families can view it."
+                : " and the portal report updates immediately (demo)."}
             </p>
             <div className={styles.confirmActions}>
               <Button variant="saffron" onClick={confirmPublish} disabled={busy !== null}>
@@ -516,9 +618,17 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         ) : null}
 
         {correctOpen ? (
-          <div className={styles.confirmPanel}>
+          <div
+            className={styles.confirmPanel}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setCorrectOpen(false);
+                setCorrectionReasonError(null);
+              }
+            }}
+          >
             <label className={styles.confirmLabel} htmlFor="correction-reason">
-              Reason for correction v{nextVersion} (required)
+              Reason for correction (required)
             </label>
             <textarea
               id="correction-reason"
@@ -538,11 +648,12 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
               </p>
             ) : null}
             <p className={styles.confirmHelp}>
-              The correction opens a new editable version; the published report stays on record.
+              An independent exam reviewer approves the request, which opens a new editable version. The published
+              report stays on record.
             </p>
             <div className={styles.confirmActions}>
               <Button variant="primary" onClick={confirmCorrection} disabled={busy !== null}>
-                Start correction v{nextVersion}
+                Request correction
               </Button>
               <Button variant="quiet" onClick={() => { setCorrectOpen(false); setCorrectionReasonError(null); }} disabled={busy !== null}>
                 Cancel
@@ -552,7 +663,15 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         ) : null}
 
         {withdrawOpen ? (
-          <div className={styles.confirmPanel}>
+          <div
+            className={styles.confirmPanel}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setWithdrawOpen(false);
+                setWithdrawalReasonError(null);
+              }
+            }}
+          >
             <p className={styles.confirmText}>
               <strong>
                 Withdraw v{batch.version} from {batch.className}?
@@ -597,10 +716,11 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
         {publishedRef ? (
           <p className={styles.publishSuccess}>
             <strong>
-              Published as <span className="num">{publishedRef}</span>{!supabaseMode ? " (demo)" : ""}.
+              Published as <span className="num">{publishedRef}</span>
+              {!supabaseMode ? " (demo)" : ""}.
             </strong>{" "}
-            <Link prefetch={false} className="link-arrow" href="/portal/results">
-              View in portal →
+            <Link prefetch={false} className="link-arrow" href={canonicalStaffUrl(profileCode, `/results/${batch.ref}`)}>
+              View the publication record →
             </Link>
           </p>
         ) : null}
@@ -616,10 +736,10 @@ export function MarksEntry({ batchRef, initialBatch }: MarksEntryProps) {
               <li key={version.version} className={styles.versionRow}>
                 <strong className={`num ${styles.versionNum}`}>v{version.version}</strong>
                 <span className={styles.versionCopy}>
-                  <span className={styles.versionNote}>{version.note}</span>
-                  <small>
-                    {formatKolkata(version.atIso, { format: "full" })} · {version.by}
-                  </small>
+                  <span className={styles.versionNote}>{version.note || versionStateLabel(version.state)}</span>
+                  {version.atIso || version.by ? (
+                    <small>{[version.atIso ? formatKolkata(version.atIso, { format: "full" }) : "", version.by ?? ""].filter(Boolean).join(" · ")}</small>
+                  ) : null}
                 </span>
               </li>
             ))}
