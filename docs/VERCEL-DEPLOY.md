@@ -315,3 +315,10 @@ and no deployment was created.
 | Env sync dry run | `node scripts/vercel-env-sync.mjs` | Refuses when unlinked; dry-run lists 12 names for preview+production; missing-value and localhost-`APP_URL` refusals verified in a scratch copy |
 
 Local Node was 24.5.0; Vercel builds with Node 22 per `engines.node`.
+
+## Demo-only: staff MFA off
+
+`FASS_DEMO_NO_TOTP=true` disables the staff authenticator step (server-side elevation) for a
+client walkthrough. It is explicitly **not** for production: leave it unset (or `false`) on the
+real production environment so TOTP stays required. Env: set it for Preview and Production of
+the demo deployment only; remove it before promoting the app to real use.

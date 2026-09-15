@@ -89,8 +89,15 @@ export function requireCronSecretEnv(): { cronSecret: string } {
 }
 
 /** Whether TOTP/AAL2 is required for staff access. Production-like
- *  runtimes always require it; only `next dev` may use auto-elevation. */
+ *  runtimes always require it; only `next dev` may use auto-elevation.
+ *
+ *  `FASS_DEMO_NO_TOTP=true` is an explicitly labelled demo escape hatch for
+ *  a hosted client walkthrough: staff sign-in elevates server-side instead of
+ *  asking for an authenticator code. It must never be set on the production
+ *  environment; the default is unchanged and secure. */
 export function totpRequired(): boolean {
+  const demoNoTotp = process.env.FASS_DEMO_NO_TOTP?.trim().toLowerCase();
+  if (demoNoTotp === "true" || demoNoTotp === "1" || demoNoTotp === "on") return false;
   if (process.env.NODE_ENV !== "development") return true;
   const value = process.env.FASS_TOTP_REQUIRED?.trim().toLowerCase();
   return value !== "false" && value !== "0" && value !== "off";

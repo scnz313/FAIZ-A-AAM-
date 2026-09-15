@@ -37,13 +37,20 @@ describe("Supabase adapter configuration", () => {
     expect(developmentAuthEnabled()).toBe(false);
   });
 
-  it("always requires TOTP outside next dev", () => {
+  it("always requires TOTP outside next dev unless the labelled demo flag is on", () => {
     vi.stubEnv("FASS_TOTP_REQUIRED", "false");
     vi.stubEnv("NODE_ENV", "development");
     expect(totpRequired()).toBe(false);
 
     vi.stubEnv("NODE_ENV", "production");
     expect(totpRequired()).toBe(true);
+
+    vi.stubEnv("FASS_DEMO_NO_TOTP", "true");
+    expect(totpRequired()).toBe(false);
+
+    vi.stubEnv("FASS_DEMO_NO_TOTP", "false");
+    expect(totpRequired()).toBe(true);
+    vi.stubEnv("FASS_DEMO_NO_TOTP", "");
   });
 
   it("does not silently serve demo settings in Supabase mode", async () => {
