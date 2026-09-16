@@ -7,3 +7,6 @@ export { SectionLabel } from "./SectionLabel";
 export { Crest } from "./Crest";
 export { Sparkline } from "./Sparkline";
 export { TimeSeriesChart } from "./TimeSeriesChart";
+export { StatTile } from "./StatTile";
+export { BarChart } from "./BarChart";
+export { ProgressRail } from "./ProgressRail";

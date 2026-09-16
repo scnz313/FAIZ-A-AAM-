@@ -125,10 +125,14 @@ describe("provider and operations route contracts", () => {
 
   it("does not duplicate authoritative staff projections after hydration", () => {
     const home = source("components/staff/StaffHomeWorkspace.tsx");
+    const dashboard = source("modules/services/dashboard.ts");
     const queues = source("components/staff/DashboardQueues.tsx");
     const finance = source("app/staff/finance/FinanceWorkspace.tsx");
-    expect(home.match(/admissionsService\.listStaffRecords\(\)/g)).toHaveLength(1);
-    expect(home.match(/careersService\.listStaffRecords\(\)/g)).toHaveLength(1);
+    /* Each projection is fetched once per profile loader — the workspace
+       component itself never calls the module services directly. */
+    expect(home).not.toContain("listStaffRecords()");
+    expect(dashboard.match(/admissionsService\.listStaffRecords\(\)/g)).toHaveLength(2);
+    expect(dashboard.match(/careersService\.listStaffRecords\(\)/g)).toHaveLength(2);
     expect(queues).not.toContain("listStaffRecords()");
     expect(finance).toContain('if (mode !== "demo") return');
   });

@@ -129,7 +129,7 @@
   min-width: 0;
 }
 
-@container page (max-width: 1023px) {
+@container page (max-width: 767px) {
   .layout .registerPanel {
     order: -1;
   }

@@ -2,7 +2,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-5);
-  margin-top: var(--space-8);
   min-width: 0;
 }
 
@@ -83,6 +82,14 @@
 }
 
 @media (max-width: 1023px) {
+  .queues {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Inside the shell the queues pair two-up until the content column is
+   genuinely narrow; the viewport rule above still covers non-shell pages. */
+@container page (max-width: 767px) {
   .queues {
     grid-template-columns: 1fr;
   }

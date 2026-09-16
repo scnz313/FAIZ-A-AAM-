@@ -2018,6 +2018,200 @@ span:has(> .demo-badge) {
   }
 }
 
+/* Dashboard stat tiles and ruled charts --------------------------------------------- */
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 18px;
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.stat-tile--link {
+  transition: background 0.15s ease;
+}
+
+.stat-tile--link:hover {
+  background: var(--chalk-2);
+}
+
+.stat-tile-label {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat-tile-value {
+  font-family: var(--serif);
+  font-size: clamp(1.7rem, 2.4vw, 2.2rem);
+  font-weight: 560;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-tile-na {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  color: var(--faint);
+  line-height: 1.3;
+  padding: 6px 0;
+}
+
+.stat-tile-skeleton {
+  width: 56%;
+  height: 1.9rem;
+}
+
+.stat-tile-secondary {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.stat-tile-spark {
+  margin-top: 2px;
+}
+
+/* Horizontal bar ledger */
+.bar-chart-plot {
+  display: grid;
+  gap: 10px;
+}
+
+.bar-chart-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 1.1fr) minmax(0, 2fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.bar-chart-label {
+  font-size: 0.82rem;
+  color: var(--ink-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bar-chart-track {
+  display: block;
+  height: 12px;
+  background: var(--paper-deep);
+  border-radius: var(--r-s);
+  overflow: hidden;
+}
+
+.bar-chart-fill {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.bar-chart-fill--saffron { background: var(--saffron); }
+.bar-chart-fill--willow { background: var(--willow); }
+.bar-chart-fill--madder { background: var(--madder); }
+.bar-chart-fill--muted { background: var(--line-strong); }
+
+.bar-chart-value {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.bar-chart-total,
+.bar-chart-hint {
+  font-weight: 400;
+  color: var(--muted);
+  white-space: normal;
+}
+
+/* Stacked status rail */
+.progress-rail-track {
+  display: flex;
+  height: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  overflow: hidden;
+  background: var(--paper-deep);
+}
+
+.progress-rail-seg {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.progress-rail-seg--saffron { background: var(--saffron); }
+.progress-rail-seg--willow { background: var(--willow); }
+.progress-rail-seg--madder { background: var(--madder); }
+.progress-rail-seg--muted { background: var(--line-strong); }
+
+.progress-rail-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.progress-rail-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.progress-rail-key {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink);
+  flex: none;
+  align-self: center;
+}
+
+.progress-rail-key--saffron { background: var(--saffron); }
+.progress-rail-key--willow { background: var(--willow); }
+.progress-rail-key--madder { background: var(--madder); }
+.progress-rail-key--muted { background: var(--line-strong); }
+
+.progress-rail-name {
+  color: var(--ink-3);
+}
+
+.progress-rail-value {
+  font-weight: 650;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-rail-hint {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+@container page (max-width: 719px) {
+  .bar-chart-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "l v" "t t";
+    row-gap: 4px;
+  }
+  .bar-chart-label { grid-area: l; }
+  .bar-chart-track { grid-area: t; }
+  .bar-chart-value { grid-area: v; }
+}
+
 /* Not-found ------------------------------------------------------------------------- */
 
 .not-found {
@@ -2668,6 +2862,25 @@ button.chip:hover { border-color: var(--ink); color: var(--ink); }
   border-radius: var(--r-pill);
 }
 
+/* Vertical twin of .x-scroll for internally scrolling panels. */
+.y-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) var(--paper-deep);
+}
+
+.y-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.y-scroll::-webkit-scrollbar-track {
+  background: var(--paper-deep);
+}
+
+.y-scroll::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: var(--r-pill);
+}
+
 /* ── V15 tables (ledger) ───────────────────────── */
 /* position:relative makes the wrapper the containing block for absolutely
    positioned descendants (e.g. .sr-only column labels), so they are clipped
@@ -2847,6 +3060,16 @@ table.ledger tr.click { cursor: pointer; }
 /* V15: grid children may shrink below min-content so wide rows/tables never
    blow the track out on phones. */
 .g32 > *, .g34 > *, .g23 > * { min-width: 0; }
+/* The vertical panel stacking rule must not push a grid's second column
+   down; sibling panels inside these grids align to the same top edge. */
+.g32 > .panel + .panel,
+.g34 > .panel + .panel,
+.g23 > .panel + .panel { margin-top: 0; }
+/* A lone child in a two-column row spans the full width instead of leaving
+   an empty track beside it. */
+.g32 > :only-child,
+.g34 > :only-child,
+.g23 > :only-child { grid-column: 1 / -1; }
 @media (max-width: 1023px) { .g32, .g34, .g23 { grid-template-columns: 1fr; } }
 
 /* ── V15 responsive breakpoints ─────────────────── */
@@ -2912,7 +3135,7 @@ table.ledger tr.click { cursor: pointer; }
    narrower than the viewport once the sidebar takes its 250px. These mirror
    the viewport rules above for shell descendants only; public pages keep the
    media-query behaviour. */
-@container page (max-width: 1023px) {
+@container page (max-width: 767px) {
   .g32, .g34, .g23 { grid-template-columns: 1fr; }
 }
 
