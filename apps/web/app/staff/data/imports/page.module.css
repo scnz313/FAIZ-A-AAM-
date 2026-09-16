@@ -179,8 +179,23 @@
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) var(--paper-deep);
     gap: 0.75rem;
     padding: 0.65rem 0.85rem;
+  }
+
+  .stepper::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .stepper::-webkit-scrollbar-track {
+    background: var(--paper-deep);
+  }
+
+  .stepper::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: var(--r-pill);
   }
 
   .stepper li {

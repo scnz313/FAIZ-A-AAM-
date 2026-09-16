@@ -91,6 +91,8 @@ function resolveHref(link: NavLink, profileCode: ReturnType<typeof portalPrefixF
 /* Below this width the sidebar becomes an off-canvas drawer. */
 const DRAWER_BREAKPOINT = "(max-width: 1023px)";
 const DRAWER_ID = "shell-nav";
+/* Desktop-only sidebar preference; the drawer layout ignores it. */
+const SIDE_COLLAPSED_KEY = "fass-side-collapsed";
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -146,6 +148,7 @@ export function StaffShell({
   const homeHref = canonicalStaffUrl(profileCode, "");
   const [navOpen, setNavOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const supabaseMode = clientAdapterMode() === "supabase";
@@ -157,7 +160,24 @@ export function StaffShell({
 
   useEffect(() => {
     setMounted(true);
+    try {
+      setCollapsed(window.localStorage.getItem(SIDE_COLLAPSED_KEY) === "1");
+    } catch {
+      /* Storage unavailable: keep the expanded default. */
+    }
   }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(SIDE_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        /* Storage unavailable: the preference lasts for this page only. */
+      }
+      return next;
+    });
+  }
 
   /* Track the drawer layout; leaving it forces the drawer closed. */
   useEffect(() => {
@@ -258,8 +278,10 @@ export function StaffShell({
     ? `${summary.profileLabel ?? summary.roleLabel}${supabaseMode ? "" : " · demo session"}`
     : supabaseMode ? "Staff account" : "Demo session";
 
+  const sideCollapsed = mounted && collapsed && !isMobile;
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell${sideCollapsed ? " side-collapsed" : ""}`}>
       <aside
         ref={drawerRef}
         id={DRAWER_ID}
@@ -280,11 +302,22 @@ export function StaffShell({
               <span className="rl">{portalPrefix === "/administrator" ? "Administrator" : portalPrefix === "/principal" ? "Principal" : "Staff"}</span>
             </span>
           </div>
+          <button
+            type="button"
+            className="side-collapse no-print"
+            aria-label={sideCollapsed ? "Expand navigation" : "Minimise navigation"}
+            aria-expanded={!sideCollapsed}
+            aria-controls={DRAWER_ID}
+            title={sideCollapsed ? "Expand navigation" : "Minimise navigation"}
+            onClick={toggleCollapsed}
+          >
+            <span className={`msym${sideCollapsed ? "" : " flip"}`} aria-hidden="true">chevron_right</span>
+          </button>
         </div>
 
         <nav className="side-nav">
           {!supabaseMode ? (
-            <div className={styles.identitySwitcher}>
+            <div className={`${styles.identitySwitcher} side-switcher`}>
               <label htmlFor="staff-identity">Demo identity</label>
               <select
                 id="staff-identity"
@@ -312,7 +345,7 @@ export function StaffShell({
           ) : null}
 
           {status === "ready" && summary ? (
-            <div className={styles.workspaceSwitcher}>
+            <div className={`${styles.workspaceSwitcher} side-switcher`}>
               {summary.profileCode === null && workspaces.length > 1 ? (
                 <>
                   <label htmlFor="staff-workspace">Access profile</label>
@@ -339,7 +372,7 @@ export function StaffShell({
               ) : null}
             </div>
           ) : status === "error" ? (
-            <div className={styles.workspaceSwitcher}>
+            <div className={`${styles.workspaceSwitcher} side-switcher`}>
               <p className={styles.switcherError} role="alert">
                 {errorMessage}{" "}
                 <button type="button" className="button button--quiet button--small" onClick={retry}>
@@ -348,7 +381,7 @@ export function StaffShell({
               </p>
             </div>
           ) : (
-            <div className={styles.workspaceSwitcher}>
+            <div className={`${styles.workspaceSwitcher} side-switcher`}>
               <p className={styles.workspaceNote} role="status" aria-live="polite">
                 Loading workspace…
               </p>
@@ -371,9 +404,10 @@ export function StaffShell({
                       prefetch={false}
                       className={active ? "on" : undefined}
                       aria-current={active ? "page" : undefined}
+                      title={sideCollapsed ? link.label : undefined}
                     >
                       <span className="msym" aria-hidden="true">{link.icon}</span>
-                      <span>{link.label}</span>
+                      <span className="nav-label">{link.label}</span>
                     </Link>
                   );
                 })}
@@ -383,7 +417,7 @@ export function StaffShell({
         </nav>
 
         <div className="side-foot">
-          <span>Faiz E Aam · Bandipora</span>
+          <span className="nav-label">Faiz E Aam · Bandipora</span>
           <button
             type="button"
             className="btn btn-quiet btn-sm no-print"
@@ -392,7 +426,7 @@ export function StaffShell({
             title={supabaseMode ? "Sign out of this device" : "Back to sign in · demo sessions are not real"}
           >
             <span className="msym" aria-hidden="true">logout</span>
-            {signingOut ? "…" : "Exit"}
+            <span className="nav-label">{signingOut ? "…" : "Exit"}</span>
           </button>
         </div>
       </aside>

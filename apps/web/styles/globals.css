@@ -811,11 +811,6 @@ span:has(> .demo-badge) {
   border-bottom: 1px solid var(--line);
   margin-bottom: 20px;
   overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tabs::-webkit-scrollbar {
-  display: none;
 }
 
 .tabs button {
@@ -1405,6 +1400,15 @@ span:has(> .demo-badge) {
 .app-shell .side-head {
   padding: 18px 18px 14px;
   border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Desktop-only sidebar minimise control (drawer layouts never show it). */
+.app-shell .side-collapse {
+  display: none;
 }
 
 .app-shell .side-head .profile {
@@ -1710,6 +1714,21 @@ span:has(> .demo-badge) {
   width: 100%;
   margin: 0 auto;
   min-width: 0;
+  /* In-shell breakpoints respond to the content column, not the viewport:
+     at a 1024px viewport the sidebar leaves ~700px of content. */
+  container-type: inline-size;
+  container-name: page;
+}
+
+/* Grid/flex children may shrink below min-content; long tokens (emails,
+   references, filenames) wrap instead of clipping or blowing the column. */
+.app-shell .page > *,
+.app-shell .panel > * {
+  min-width: 0;
+}
+
+.app-shell .page :is(.ref, .email, .mono, .num-ref, code, td) {
+  overflow-wrap: anywhere;
 }
 
 /* V15 app-shell responsive ----------------------------------------------- */
@@ -1746,6 +1765,103 @@ span:has(> .demo-badge) {
 @media (min-width: 1024px) {
   .app-shell .ctx-burger {
     display: none !important;
+  }
+
+  .app-shell {
+    transition: grid-template-columns 0.15s ease;
+  }
+
+  .app-shell .side-collapse {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--ink-3);
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .app-shell .side-collapse:hover {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  .app-shell .side-collapse .msym {
+    font-size: 20px;
+  }
+
+  .app-shell .side-collapse .msym.flip {
+    transform: rotate(180deg);
+  }
+
+  /* Minimised sidebar: icon rail. Labels stay in the accessibility tree. */
+  .app-shell.side-collapsed {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .app-shell.side-collapsed .side-head {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 8px 12px;
+  }
+
+  .app-shell.side-collapsed .side-head .who,
+  .app-shell.side-collapsed .side-switcher,
+  .app-shell.side-collapsed .nav-group .ng-label {
+    display: none;
+  }
+
+  .app-shell.side-collapsed .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .app-shell.side-collapsed .side-nav {
+    padding: 10px 10px 20px;
+  }
+
+  .app-shell.side-collapsed .nav-group {
+    margin-top: 10px;
+  }
+
+  .app-shell.side-collapsed .nav-group a {
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    margin: 2px auto;
+  }
+
+  .app-shell.side-collapsed .nav-group a .count {
+    display: none;
+  }
+
+  .app-shell.side-collapsed .side-foot {
+    justify-content: center;
+    padding: 12px 8px;
+  }
+
+  .app-shell.side-collapsed .side-foot .btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell {
+    transition: none;
   }
 }
 
@@ -2490,6 +2606,9 @@ span:has(> .demo-badge) {
 
 /* ── V15 chips ─────────────────────────────────── */
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line); border-radius: var(--r-pill); font-size: 0.72rem; font-weight: 650; letter-spacing: 0.02em; color: var(--ink-3); background: var(--chalk); white-space: nowrap; }
+button.chip { cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+button.chip:hover { border-color: var(--ink); color: var(--ink); }
+.chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
 /* ── V15 forms ─────────────────────────────────── */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
@@ -2510,11 +2629,51 @@ span:has(> .demo-badge) {
 .val-summary ul { margin-left: 18px; font-size: 0.85rem; color: var(--madder-ink); }
 .val-summary a { color: inherit; text-decoration: underline; }
 
+/* ── V15 themed horizontal scrollbar ───────────── */
+/* Overlay-scrollbar platforms (macOS) hide the affordance entirely, which
+   reads as "cannot scroll". Every horizontal scroller shows a thin,
+   on-palette scrollbar instead. `.wiz-rail` intentionally keeps its own
+   hidden-scrollbar treatment. */
+.x-scroll,
+.table-wrap,
+.table--scroll,
+.tabs,
+.v14-tabs {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) var(--paper-deep);
+}
+
+.x-scroll::-webkit-scrollbar,
+.table-wrap::-webkit-scrollbar,
+.table--scroll::-webkit-scrollbar,
+.tabs::-webkit-scrollbar,
+.v14-tabs::-webkit-scrollbar {
+  height: 8px;
+}
+
+.x-scroll::-webkit-scrollbar-track,
+.table-wrap::-webkit-scrollbar-track,
+.table--scroll::-webkit-scrollbar-track,
+.tabs::-webkit-scrollbar-track,
+.v14-tabs::-webkit-scrollbar-track {
+  background: var(--paper-deep);
+}
+
+.x-scroll::-webkit-scrollbar-thumb,
+.table-wrap::-webkit-scrollbar-thumb,
+.table--scroll::-webkit-scrollbar-thumb,
+.tabs::-webkit-scrollbar-thumb,
+.v14-tabs::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: var(--r-pill);
+}
+
 /* ── V15 tables (ledger) ───────────────────────── */
 /* position:relative makes the wrapper the containing block for absolutely
    positioned descendants (e.g. .sr-only column labels), so they are clipped
-   by the scroll region instead of extending the document's scroll width. */
-.table-wrap { position: relative; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+   by the scroll region instead of extending the document's scroll width.
+   padding-bottom keeps the scrollbar clear of the last row's border. */
+.table-wrap { position: relative; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
 table.ledger { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 table.ledger caption { text-align: left; font-family: var(--serif); font-size: 1.15rem; font-weight: 600; padding: 10px 0 12px; color: var(--ink); }
 table.ledger th { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 9px 14px 9px 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line); }
@@ -2668,8 +2827,7 @@ table.ledger tr.click { cursor: pointer; }
 .seg a.on { background: var(--ink); color: var(--paper); }
 .seg button:hover:not(.on),
 .seg a:hover:not(.on) { background: var(--ink-soft-tint); }
-.v14-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-x: auto; scrollbar-width: none; }
-.v14-tabs::-webkit-scrollbar { display: none; }
+.v14-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-x: auto; }
 .v14-tabs button { padding: 10px 16px; font-size: 0.9rem; font-weight: 650; color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; cursor: pointer; margin-bottom: -1px; white-space: nowrap; }
 .v14-tabs button.on { color: var(--ink); border-bottom-color: var(--saffron); }
 .v14-tabs button:hover:not(.on) { color: var(--ink); }
@@ -2746,6 +2904,42 @@ table.ledger tr.click { cursor: pointer; }
   .service-rail a { border-right: 0; border-bottom: 1px solid var(--line) !important; min-height: 0; }
   .service-rail a:last-child { border-bottom: 0 !important; }
   .notice-strip { flex-wrap: wrap; }
+  .up-file { flex-wrap: wrap; }
+}
+
+/* Container-relative breakpoints: inside the app shell, workflow components
+   measure against the content column (`.app-shell .page`), which can be far
+   narrower than the viewport once the sidebar takes its 250px. These mirror
+   the viewport rules above for shell descendants only; public pages keep the
+   media-query behaviour. */
+@container page (max-width: 1023px) {
+  .g32, .g34, .g23 { grid-template-columns: 1fr; }
+}
+
+@container page (max-width: 719px) {
+  .q-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a" "m a" "s a"; gap: 8px; }
+  .q-row .q-t { grid-area: t; }
+  .q-row .q-m { grid-area: m; }
+  .q-row .q-s { grid-area: s; }
+  .q-row .q-act { grid-area: a; flex-direction: column; }
+  .q-head { display: none; }
+  .q-adj { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
+  .q-adj .q-act { flex-direction: row; justify-content: flex-start; }
+  .q-head5 { display: none; }
+  .q-row5 { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a" "m a" "e a" "s a"; row-gap: 7px; }
+  .q-row5 > :nth-child(1) { grid-area: t; }
+  .q-row5 > :nth-child(2) { grid-area: m; }
+  .q-row5 > :nth-child(3) { grid-area: e; }
+  .q-row5 > :nth-child(4) { grid-area: s; }
+  .q-row5 > :nth-child(5) { grid-area: a; justify-content: flex-end; }
+  .facts-ledger .fl-row { flex-direction: column; gap: 2px; }
+  .facts-ledger .fl-row .v { text-align: left; font-size: 0.98rem; }
+  .table-wrap table.ledger { min-width: 600px; }
+  table.ledger { font-size: 0.85rem; }
+  .seg { flex-wrap: wrap; }
+  .form-grid { grid-template-columns: 1fr; }
+  .kv { grid-template-columns: 1fr; gap: 0; }
+  .kv dt { padding-top: 8px; }
   .up-file { flex-wrap: wrap; }
 }
 

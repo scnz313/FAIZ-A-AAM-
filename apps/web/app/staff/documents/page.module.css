@@ -7,50 +7,149 @@
   padding: 0 0 var(--space-8);
 }
 
-.header {
-  margin-bottom: 0;
-}
-
 .scope {
-  border-bottom: 1px solid var(--line);
-  border-top: 1px solid var(--line);
-  max-width: 100%;
-  min-width: 0;
-  padding: var(--space-5) 0;
-}
-
-.scopeTitle,
-.sectionTitle,
-.accessTitle {
-  font-family: var(--serif);
-  font-weight: 650;
-}
-
-.scopeTitle {
-  font-size: 1.3rem;
-  margin: var(--space-2) 0 0;
-}
-
-.scopeNote,
-.scopeDetail,
-.accessNote {
+  margin: 0 0 var(--space-5);
   color: var(--muted);
   font-size: 0.82rem;
-  line-height: 1.6;
-}
-
-.scopeNote {
-  margin: var(--space-3) 0 0;
+  line-height: 1.55;
   max-width: 78ch;
   overflow-wrap: anywhere;
 }
 
-.scopeDetail {
-  border-top: 2px solid var(--saffron);
-  margin: var(--space-4) 0 0;
-  max-width: 76ch;
+.scope strong {
+  color: var(--ink-2);
+}
+
+.accessTitle {
+  font-family: var(--serif);
+  font-weight: 650;
+  margin: 0;
+}
+
+.accessNote {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+/* Category chip filter — scrolls sideways inside the panel. */
+.chipRow {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.chipRow > * {
+  flex: none;
+}
+
+.fileName {
+  display: block;
+  font-weight: 650;
   overflow-wrap: anywhere;
-  padding-left: var(--space-3);
+}
+
+.secondary {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.rowNote {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  margin-top: 4px;
+  max-width: 42ch;
+  overflow-wrap: anywhere;
+}
+
+.rowError {
+  display: block;
+  color: var(--madder-ink);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  margin-top: 4px;
+  max-width: 42ch;
+  overflow-wrap: anywhere;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.filterCount {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0;
+  padding: 10px 18px 14px;
+}
+
+.moreRow {
+  border-top: 1px solid var(--line-soft);
+  padding: 14px 18px;
+}
+
+.statePad {
+  padding: 18px;
+}
+
+/* Expandable detail row (same pattern as the users ledger) */
+.detailCell {
+  border-top: 0 !important;
+  padding: 0 !important;
+}
+
+.detailPanel {
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+  padding: 18px 24px;
+}
+
+/* Public register panel. When the content column is too narrow for two
+   tracks, the compact register panel comes first so the upload action is
+   not pushed below a long ledger. */
+.layout {
+  min-width: 0;
+}
+
+.registerPanel {
+  min-width: 0;
+}
+
+@container page (max-width: 1023px) {
+  .layout .registerPanel {
+    order: -1;
+  }
+}
+
+/* Public register panel */
+.registerTitle {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  font-weight: 650;
+  margin: 0 0 var(--space-3);
+}
+
+.registerNote {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  margin: var(--space-4) 0 0;
+  max-width: 60ch;
+  overflow-wrap: anywhere;
 }
 
 .uploadNote {
@@ -65,18 +164,11 @@
 .uploadForm {
   display: grid;
   gap: var(--space-4);
-  max-width: 640px;
   min-width: 0;
+  margin-bottom: var(--space-5);
 }
 
-.uploadFields {
-  display: grid;
-  gap: var(--space-3) var(--space-5);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 0;
-}
-
-.uploadFields :global(.field) {
+.uploadForm :global(.field) {
   margin-bottom: 0;
 }
 
@@ -87,21 +179,6 @@
   overflow-wrap: anywhere;
 }
 
-.sectionHead {
-  align-items: flex-end;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  justify-content: space-between;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.sectionTitle {
-  font-size: 1.5rem;
-  margin: var(--space-2) 0 0;
-}
-
 .resultCount {
   color: var(--muted);
   font-size: 0.78rem;
@@ -110,15 +187,11 @@
 }
 
 .loading {
-  border-bottom: 1px solid var(--line);
-  border-top: 1px solid var(--line);
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr);
-  margin-top: 10px;
   max-width: 100%;
   min-width: 0;
-  padding: var(--space-5) 2px;
 }
 
 .accessState {
@@ -156,11 +229,6 @@
   max-width: 100%;
 }
 
-.page :global(.table--scroll),
-.page :global(.table-wrap) {
-  max-width: 100%;
-}
-
 @media (max-width: 1023px) {
   .page {
     gap: var(--space-7);
@@ -180,20 +248,6 @@
     padding: var(--space-4) 0;
   }
 
-  .sectionHead {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .uploadFields {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .resultCount {
-    white-space: normal;
-  }
-
   .actions > :global(.btn),
   .actions > :global(.button),
   .switchBlock :global(.btn),
@@ -204,20 +258,8 @@
   .accessState {
     padding: 20px 16px;
   }
-}
 
-@media (max-width: 479px) {
-  .page {
-    gap: var(--space-6);
-  }
-
-  .sectionHead {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .actions,
-  .actions button {
-    width: 100%;
+  .detailPanel {
+    padding: 16px;
   }
 }

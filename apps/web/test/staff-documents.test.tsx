@@ -247,9 +247,12 @@ describe("staff document processing register", () => {
     expect(screen.getByText(/APP-2026-7K4M2Q/)).toBeInTheDocument();
     expect(screen.getByText(/JOB-2026-8N5P3R/)).toBeInTheDocument();
     expect(screen.getByText(/This authorized response contains 2 owner domains/)).toBeInTheDocument();
-    expect(screen.getByText(/mixed set is rendered exactly as returned by the database projection/)).toBeInTheDocument();
     expect(screen.getByText(/Auditor access is read-only/)).toBeInTheDocument();
-    expect(screen.getAllByText("Finalization")).toHaveLength(2);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Show details for admission-evidence.pdf" }));
+    expect(screen.getByText("Finalization")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show details for candidate-credential.pdf" }));
     expect(screen.getByText("Awaiting byte verification")).toBeInTheDocument();
   });
 
@@ -333,8 +336,8 @@ describe("staff public register approval", () => {
     await user.click(await screen.findByRole("button", { name: "Approve for public" }));
 
     expect(setVisibility).toHaveBeenCalledWith(READY_DOCUMENT.ref, "public_approved");
-    expect(await screen.findByRole("button", { name: "Withdraw from public" })).toBeInTheDocument();
-    expect(screen.getByText("Public register")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Withdraw" })).toBeInTheDocument();
+    expect(screen.getByText("Public")).toBeInTheDocument();
   });
 
   it("withdraws an approved document back to private", async () => {
@@ -347,11 +350,11 @@ describe("staff public register approval", () => {
     const user = userEvent.setup();
 
     renderWorkspaceWithRoles("auditor", ["auditor", "content_publisher"]);
-    await user.click(await screen.findByRole("button", { name: "Withdraw from public" }));
+    await user.click(await screen.findByRole("button", { name: "Withdraw" }));
 
     expect(setVisibility).toHaveBeenCalledWith(READY_DOCUMENT.ref, "private");
     expect(await screen.findByRole("button", { name: "Approve for public" })).toBeInTheDocument();
-    expect(screen.queryByText("Public register")).toBeNull();
+    expect(screen.queryByText("Public")).toBeNull();
   });
 
   it("keeps approval disabled for a document that is not clean and finalized", async () => {
@@ -394,7 +397,7 @@ describe("staff public register approval", () => {
       "title",
       "Only school documents can be approved for the public downloads register. Student, applicant, staff, and import records stay private.",
     );
-    expect(screen.getByText(/Not eligible for the public downloads register/)).toBeInTheDocument();
+    expect(screen.getByText("Student, applicant, staff, and import records")).toBeInTheDocument();
     expect(setVisibility).not.toHaveBeenCalled();
   });
 
@@ -409,7 +412,7 @@ describe("staff public register approval", () => {
     await user.click(await screen.findByRole("button", { name: "Approve for public" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/retention period/);
-    expect(screen.queryByText("Public register")).toBeNull();
+    expect(screen.queryByText("Public")).toBeNull();
   });
 });
 
