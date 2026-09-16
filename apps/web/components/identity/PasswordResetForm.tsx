@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
+import PasswordInput from "@/components/ui/PasswordInput";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { adapterCall } from "@/modules/services/adapter-client";
 
@@ -75,29 +76,29 @@ export default function PasswordResetForm() {
       {error !== null ? <p className="field-error" role="alert">{error}</p> : null}
       <div className="field">
         <label htmlFor="reset-password">New password <span aria-hidden="true">*</span></label>
-        <input
+        <PasswordInput
           ref={passwordRef}
           id="reset-password"
           className="input"
-          type="password"
           autoComplete="new-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           aria-describedby="reset-password-help"
+          revealLabel="new password"
           required
         />
         <p id="reset-password-help" className="field-help">At least 8 characters with a letter and a number.</p>
       </div>
       <div className="field">
         <label htmlFor="reset-password-confirmation">Confirm new password <span aria-hidden="true">*</span></label>
-        <input
+        <PasswordInput
           ref={confirmationRef}
           id="reset-password-confirmation"
           className="input"
-          type="password"
           autoComplete="new-password"
           value={confirmation}
           onChange={(event) => setConfirmation(event.target.value)}
+          revealLabel="password confirmation"
           required
         />
       </div>

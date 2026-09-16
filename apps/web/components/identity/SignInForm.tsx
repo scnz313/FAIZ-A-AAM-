@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/ui/Button";
+import PasswordInput from "@/components/ui/PasswordInput";
 import { DEFAULT_STAFF_PORTAL, isStaffPath } from "@/lib/auth/portal-routes";
 import { safeAuthRedirect } from "@/lib/auth/redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -355,10 +356,9 @@ export default function SignInForm({
               <label htmlFor={fieldId("password")}>
                 Password <span aria-hidden="true">*</span>
               </label>
-              <input
+              <PasswordInput
                 id={fieldId("password")}
                 className="input"
-                type="password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}

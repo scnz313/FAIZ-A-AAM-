@@ -10,3 +10,4 @@ export { TimeSeriesChart } from "./TimeSeriesChart";
 export { StatTile } from "./StatTile";
 export { BarChart } from "./BarChart";
 export { ProgressRail } from "./ProgressRail";
+export { default as PasswordInput } from "./PasswordInput";

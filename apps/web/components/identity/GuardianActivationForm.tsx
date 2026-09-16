@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import Button from "@/components/ui/Button";
+import PasswordInput from "@/components/ui/PasswordInput";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { guardiansService, type GuardianActivationPreview } from "@/modules/services/guardians";
 
@@ -140,16 +141,29 @@ function Field({
   return (
     <div className={`field ${error ? "field--invalid" : ""}`}>
       <label htmlFor={id}>{label} <span aria-hidden="true">*</span></label>
-      <input
-        id={id}
-        className="input"
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={error !== undefined}
-        aria-describedby={error ? errorId : undefined}
-        autoComplete={autoComplete}
-      />
+      {type === "password" ? (
+        <PasswordInput
+          id={id}
+          className="input"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-invalid={error !== undefined}
+          aria-describedby={error ? errorId : undefined}
+          autoComplete={autoComplete}
+          revealLabel={label.toLowerCase().startsWith("confirm") ? "password confirmation" : "password"}
+        />
+      ) : (
+        <input
+          id={id}
+          className="input"
+          type="text"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-invalid={error !== undefined}
+          aria-describedby={error ? errorId : undefined}
+          autoComplete={autoComplete}
+        />
+      )}
       {error ? <p id={errorId} className="field-error">{error}</p> : null}
     </div>
   );

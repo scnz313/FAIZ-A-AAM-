@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 
 import Button from "@/components/ui/Button";
+import PasswordInput from "@/components/ui/PasswordInput";
 import { DEFAULT_STAFF_PORTAL } from "@/lib/auth/portal-routes";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { clientAdapterMode } from "@/modules/services/adapter-client";
@@ -233,18 +234,32 @@ function Field({
   return (
     <div className={`field ${error ? "field--invalid" : ""}`}>
       <label htmlFor={id}>{label} <span aria-hidden="true">*</span></label>
-      <input
-        id={id}
-        className={`input ${mono ? "num" : ""}`}
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        aria-invalid={error !== undefined}
-        aria-describedby={error ? errorId : undefined}
-        autoComplete={autoComplete}
-        readOnly={readOnly}
-      />
+      {type === "password" ? (
+        <PasswordInput
+          id={id}
+          className="input"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          aria-invalid={error !== undefined}
+          aria-describedby={error ? errorId : undefined}
+          autoComplete={autoComplete}
+          revealLabel={label.toLowerCase().startsWith("confirm") ? "password confirmation" : "password"}
+        />
+      ) : (
+        <input
+          id={id}
+          className={`input ${mono ? "num" : ""}`}
+          type="text"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          aria-invalid={error !== undefined}
+          aria-describedby={error ? errorId : undefined}
+          autoComplete={autoComplete}
+          readOnly={readOnly}
+        />
+      )}
       {error ? <p id={errorId} className="field-error">{error}</p> : null}
     </div>
   );

@@ -12,8 +12,9 @@ export default async function SupportPage() {
     <div className={styles.page}>
       <div className="page-head">
         <div>
-          <h1 className={styles.title}>Grievances</h1>
-          <p className="ph-sub">Parent and applicant concerns, in order of arrival.</p>
+          <p className="eyebrow">Principal · Support</p>
+          <h1 className={styles.title}>Support inbox</h1>
+          <p className="ph-sub">Review concerns, keep internal notes separate, and send clear recorded responses.</p>
         </div>
       </div>
 

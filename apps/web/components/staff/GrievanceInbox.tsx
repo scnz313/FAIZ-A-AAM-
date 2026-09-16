@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import Button from "@/components/ui/Button";
@@ -71,6 +71,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
   const [loading, setLoading] = useState(initialItems === undefined);
   const [loadFailed, setLoadFailed] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [query, setQuery] = useState("");
   const [selectedRef, setSelectedRef] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +129,25 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
     else textareaRef.current?.focus();
   }, [items]);
 
-  const visible = filter === "all" ? items : items.filter((item) => item.status === filter);
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return items.filter((item) => {
+      if (filter !== "all" && item.status !== filter) return false;
+      if (normalized === "") return true;
+      return [item.ref, item.subject, item.category, item.contactName]
+        .some((value) => value.toLowerCase().includes(normalized));
+    });
+  }, [filter, items, query]);
+
+  useEffect(() => {
+    if (visible.length === 0) {
+      if (selectedRef !== null) setSelectedRef(null);
+      return;
+    }
+    if (!visible.some((item) => item.ref === selectedRef)) {
+      setSelectedRef(visible[0]?.ref ?? null);
+    }
+  }, [selectedRef, visible]);
 
   const counts: Record<GrievanceStatus, number> = {
     New: items.filter((item) => item.status === "New").length,
@@ -137,6 +156,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
   };
 
   const selected = items.find((item) => item.ref === selectedRef) ?? null;
+  const responseAuthor = summary?.displayName ?? RESPONSE_AUTHOR;
 
   function handleFilter(next: FilterKey) {
     setFilter(next);
@@ -164,8 +184,8 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
     setError(null);
     try {
       const updated = privateNote
-        ? await supportService.addPrivateNote(selected.ref, text, RESPONSE_AUTHOR)
-        : await supportService.respond(selected.ref, text, RESPONSE_AUTHOR, resolveAfterSend);
+        ? await supportService.addPrivateNote(selected.ref, text, responseAuthor)
+        : await supportService.respond(selected.ref, text, responseAuthor, resolveAfterSend);
       setItems((prev) => prev.map((item) => (item.ref === updated.ref ? updated : item)));
       setDraft("");
       setResolveAfterSend(false);
@@ -185,7 +205,7 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
     setSending(true);
     setError(null);
     try {
-      const updated = await supportService.reopen(selected.ref, RESPONSE_AUTHOR);
+      const updated = await supportService.reopen(selected.ref, responseAuthor);
       setItems((prev) => prev.map((item) => (item.ref === updated.ref ? updated : item)));
       setLiveMessage(`${updated.ref} reopened as New${supabaseMode ? "" : " (demo)"}`);
       focusTarget.current = "textarea";
@@ -220,12 +240,12 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
   }
 
   return (
-    <div>
-      <p className={styles.live} role="status" aria-live="polite">
+    <div className={styles.workspace}>
+      <p className="sr-only" role="status" aria-live="polite">
         {liveMessage}
       </p>
 
-      <div className={styles.summary} role="group" aria-label="Grievance summary by status">
+      <div className={styles.summary} role="group" aria-label="Support queue by status">
         {STATUSES.map((status) => (
           <div className={styles.summaryCell} key={status}>
             <span className={`status-dot status-dot--${STATUS_TONE[status]}`} aria-hidden="true" />
@@ -235,196 +255,215 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
             </div>
           </div>
         ))}
+        <div className={styles.summaryCell}>
+          <span className="msym" aria-hidden="true">inbox</span>
+          <div>
+            <p className={styles.summaryWord}>Open queue</p>
+            <p className={`num ${styles.summaryCount}`}>{counts.New + counts["In progress"]}</p>
+          </div>
+        </div>
       </div>
 
-      <div className={`tabs ${styles.filters}`} role="group" aria-label="Filter grievances by status">
-        {FILTERS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            className={filter === tab.key ? "active" : undefined}
-            aria-pressed={filter === tab.key}
-            onClick={() => handleFilter(tab.key)}
-          >
-            {tab.label}
-            <span className={`num ${styles.tabCount}`}>{tab.key === "all" ? items.length : counts[tab.key]}</span>
-          </button>
-        ))}
+      <div className={styles.toolbar}>
+        <div className={`seg ${styles.filters}`} role="group" aria-label="Filter support requests by status">
+          {FILTERS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              className={filter === tab.key ? "on" : undefined}
+              aria-pressed={filter === tab.key}
+              onClick={() => handleFilter(tab.key)}
+            >
+              {tab.label}
+              <span className={`num ${styles.tabCount}`}>{tab.key === "all" ? items.length : counts[tab.key]}</span>
+            </button>
+          ))}
+        </div>
+        <label className={styles.search}>
+          <span className="sr-only">Search support requests</span>
+          <span className="msym" aria-hidden="true">search</span>
+          <input
+            type="search"
+            aria-label="Search support requests"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search requests"
+          />
+        </label>
       </div>
 
       <div className={styles.grid}>
-        <section className={styles.listColumn} aria-labelledby="inbox-heading">
-          <div className={styles.sectionHead}>
-            <h2 id="inbox-heading" className="section-label">
-              Inbox
-            </h2>
+        <section className={`panel ${styles.listColumn}`} aria-labelledby="inbox-heading">
+          <div className="pn-head">
+            <div>
+              <h2 id="inbox-heading">Requests</h2>
+              <p className="sub">Newest first · {visible.length} in this view</p>
+            </div>
             {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
           </div>
-
-          {visible.length === 0 ? (
-            <p className={styles.empty}>No grievances in this view.</p>
-          ) : (
-            <ul className={styles.list}>
-              {visible.map((item) => (
-                <li key={item.ref}>
-                  <button
-                    type="button"
-                    className={`${styles.row}${item.ref === selectedRef ? ` ${styles.rowSelected}` : ""}`}
-                    aria-pressed={item.ref === selectedRef}
-                    onClick={() => handleSelect(item.ref)}
-                  >
-                    <span className={styles.rowTop}>
-                      <span className={`num ${styles.rowRef}`}>{item.ref}</span>
+          <div className={`pn-body flush ${styles.listViewport}`}>
+            {visible.length === 0 ? (
+              <p className={styles.empty}>{query.trim() ? "No requests match this search." : "No requests in this view."}</p>
+            ) : (
+              <ul className={styles.list}>
+                {visible.map((item) => (
+                  <li key={item.ref}>
+                    <button
+                      type="button"
+                      className={`${styles.row}${item.ref === selectedRef ? ` ${styles.rowSelected}` : ""}`}
+                      aria-pressed={item.ref === selectedRef}
+                      onClick={() => handleSelect(item.ref)}
+                    >
+                      <span className={styles.rowTop}>
+                        <span className={`num ${styles.rowRef}`}>{item.ref}</span>
+                        <StatusBadge tone={STATUS_TONE[item.status]}>{item.status}</StatusBadge>
+                      </span>
+                      <strong className={styles.rowSubject}>{item.subject}</strong>
                       <span className={styles.rowCategory}>{item.category}</span>
-                    </span>
-                    <strong className={styles.rowSubject}>{item.subject}</strong>
-                    <span className={styles.rowBottom}>
-                      <span className={styles.rowContact}>{item.contactName}</span>
-                      <time className={`num ${styles.rowDay}`} dateTime={item.raisedAtIso}>
-                        {formatKolkata(item.raisedAtIso, { format: "day" })}
-                      </time>
-                    </span>
-                    <StatusBadge tone={STATUS_TONE[item.status]}>{item.status}</StatusBadge>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                      <span className={styles.rowBottom}>
+                        <span className={styles.rowContact}>{item.contactName}</span>
+                        <time className={`num ${styles.rowDay}`} dateTime={item.raisedAtIso}>
+                          {formatKolkata(item.raisedAtIso, { format: "day" })}
+                        </time>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
         <section className={`panel ${styles.detail}`} aria-labelledby="grievance-detail-title">
           {selected === null ? (
-            <div>
-              <h2 id="grievance-detail-title" ref={headingRef} tabIndex={-1} className={styles.detailTitle}>
-                No grievance selected
-              </h2>
-              <p className={styles.detailMessage}>Choose a grievance from the inbox to read and respond.</p>
-            </div>
+            <>
+              <div className="pn-head"><h2>Case record</h2></div>
+              <div className={`pn-body ${styles.emptyDetail}`}>
+                <span className="msym" aria-hidden="true">inbox</span>
+                <h2 id="grievance-detail-title" ref={headingRef} tabIndex={-1}>No request selected</h2>
+                <p>Choose a request from the queue to read its record.</p>
+              </div>
+            </>
           ) : (
-            <div>
-              <div className={styles.detailTop}>
-                <span className={`num ${styles.detailRef}`}>{selected.ref}</span>
-                <span className={styles.detailCategory}>{selected.category}</span>
+            <>
+              <div className={`pn-head ${styles.detailHead}`}>
+                <div>
+                  <span className={`num ${styles.detailRef}`}>{selected.ref}</span>
+                  <span className={styles.detailCategory}>{selected.category}</span>
+                </div>
                 <StatusBadge tone={STATUS_TONE[selected.status]}>{selected.status}</StatusBadge>
               </div>
-              <h2 id="grievance-detail-title" ref={headingRef} tabIndex={-1} className={styles.detailTitle}>
-                {selected.subject}
-              </h2>
-              <p className={styles.detailMessage}>{selected.message}</p>
-              {selected.privateNotes && selected.privateNotes.length > 0 ? (
-                <section className={styles.response} aria-label="Staff private notes">
-                  <h3 className={styles.responseHeading}>Private notes</h3>
-                  <ul className={styles.thread}>
-                    {selected.privateNotes.map((note, index) => <li className={styles.threadEntry} key={`${note.atIso}-${index}`}><p className={styles.threadText}>{note.text}</p><p className={styles.threadMeta}><span className={styles.threadBy}>{note.by}</span><time className="num" dateTime={note.atIso}>{formatKolkata(note.atIso, { format: "full" })}</time></p></li>)}
-                  </ul>
+              <div className={`pn-body ${styles.detailBody}`}>
+                <h2 id="grievance-detail-title" ref={headingRef} tabIndex={-1} className={styles.detailTitle}>
+                  {selected.subject}
+                </h2>
+
+                <section className={styles.requestRecord} aria-labelledby="request-message-heading">
+                  <h3 id="request-message-heading" className={styles.responseHeading}>Request</h3>
+                  <p className={styles.detailMessage}>{selected.message}</p>
                 </section>
-              ) : null}
 
-              <dl className={styles.detailMeta}>
-                <div className={styles.detailMetaRow}>
-                  <dt>Raised</dt>
-                  <dd>
-                    <time className="num" dateTime={selected.raisedAtIso}>
-                      {formatKolkata(selected.raisedAtIso, { format: "full" })}
-                    </time>
-                  </dd>
-                </div>
-                <div className={styles.detailMetaRow}>
-                  <dt>Contact</dt>
-                  <dd>
-                    {selected.contactName}
-                    {selected.contactPhone !== undefined ? ` · ${selected.contactPhone}` : ""}
-                  </dd>
-                </div>
-              </dl>
+                <dl className={styles.detailMeta}>
+                  <div className={styles.detailMetaRow}>
+                    <dt>Raised</dt>
+                    <dd><time className="num" dateTime={selected.raisedAtIso}>{formatKolkata(selected.raisedAtIso, { format: "full" })}</time></dd>
+                  </div>
+                  <div className={styles.detailMetaRow}>
+                    <dt>Requester</dt>
+                    <dd>{selected.contactName}{selected.contactPhone !== undefined ? ` · ${selected.contactPhone}` : ""}</dd>
+                  </div>
+                  <div className={styles.detailMetaRow}>
+                    <dt>Assigned</dt>
+                    <dd>{selected.assignee?.by ?? "Unassigned"}</dd>
+                  </div>
+                </dl>
 
-              {selected.status === "Resolved" ? (
-                <div className={styles.response}>
-                  <h3 className={styles.responseHeading}>Response</h3>
-                  <ResponseThread events={selected.thread} />
-                  {canRespond ? (
-                    <div className={styles.reopenRow}>
-                      <Button variant="quiet" onClick={handleReopen} disabled={sending}>
-                        Reopen
-                      </Button>
-                      <span className={styles.reopenHint}>Moves the grievance back to New.</span>
+                {selected.thread.some((event) => event.kind === "response") ? (
+                  <section className={styles.recordSection} aria-labelledby="conversation-heading">
+                    <h3 id="conversation-heading" className={styles.responseHeading}>Conversation</h3>
+                    <ResponseThread events={selected.thread} />
+                  </section>
+                ) : null}
+
+                {selected.privateNotes && selected.privateNotes.length > 0 ? (
+                  <section className={`${styles.recordSection} ${styles.privateNotes}`} aria-labelledby="private-notes-heading">
+                    <div className={styles.privateHeading}>
+                      <h3 id="private-notes-heading" className={styles.responseHeading}>Private notes</h3>
+                      <span className="chip">Staff only</span>
                     </div>
-                  ) : null}
-                </div>
-              ) : canRespond ? (
-                <form className={styles.response} onSubmit={handleSend} noValidate>
-                  <h3 className={styles.responseHeading}>Response</h3>
-                  <div className={`field ${error !== null ? "field--invalid" : ""}`}>
-                    <label htmlFor="grievance-response">
-                      {privateNote ? "Private note" : "Response"} <span aria-hidden="true">*</span>
-                    </label>
-                    <textarea
-                      id="grievance-response"
-                      ref={textareaRef}
-                      className={`textarea ${styles.responseTextarea}`}
-                      value={draft}
-                      onChange={(event) => {
-                        setDraft(event.target.value);
-                        if (error !== null) setError(null);
-                      }}
-                      placeholder="What the applicant will see · factual and within school policy"
-                      required
-                      aria-invalid={error !== null}
-                      aria-describedby={error !== null ? "grievance-response-error" : undefined}
-                    />
-                    {error !== null && (
-                      <p id="grievance-response-error" className="field-error">
-                        {error}
-                      </p>
-                    )}
+                    <ul className={styles.thread}>
+                      {selected.privateNotes.map((note, index) => (
+                        <li className={styles.threadEntry} key={`${note.atIso}-${index}`}>
+                          <p className={styles.threadText}>{note.text}</p>
+                          <p className={styles.threadMeta}><span className={styles.threadBy}>{note.by}</span><time className="num" dateTime={note.atIso}>{formatKolkata(note.atIso, { format: "full" })}</time></p>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {selected.status === "Resolved" ? (
+                  canRespond ? (
+                    <div className={styles.reopenRow}>
+                      <Button variant="quiet" onClick={handleReopen} disabled={sending}>Reopen request</Button>
+                      <span className={styles.reopenHint}>Returns this case to the New queue.</span>
+                    </div>
+                  ) : null
+                ) : canRespond ? (
+                  <form className={styles.composer} onSubmit={handleSend} noValidate>
+                    <div className={styles.composerHead}>
+                      <div>
+                        <h3 className={styles.composerTitle}>{privateNote ? "Add private note" : "Write response"}</h3>
+                        <p>{privateNote ? "Only staff can read this note." : "The requester will receive this text by email."}</p>
+                      </div>
+                      {privateNote ? <span className="chip">Staff only</span> : null}
+                    </div>
+                    <div className={`field ${error !== null ? "field--invalid" : ""}`}>
+                      <label htmlFor="grievance-response">{privateNote ? "Private note" : "Response"} <span aria-hidden="true">*</span></label>
+                      <textarea
+                        id="grievance-response"
+                        ref={textareaRef}
+                        className={`textarea ${styles.responseTextarea}`}
+                        value={draft}
+                        onChange={(event) => {
+                          setDraft(event.target.value);
+                          if (error !== null) setError(null);
+                        }}
+                        placeholder={privateNote ? "Record internal context for staff" : "Write a factual response within school policy"}
+                        required
+                        aria-invalid={error !== null}
+                        aria-describedby={error !== null ? "grievance-response-error" : undefined}
+                      />
+                      {error !== null ? <p id="grievance-response-error" className="field-error">{error}</p> : null}
+                    </div>
+                    <div className={styles.composerOptions}>
+                      <label className={styles.checkRow}>
+                        <input type="checkbox" checked={privateNote} onChange={(event) => { setPrivateNote(event.target.checked); if (event.target.checked) setResolveAfterSend(false); }} />
+                        Staff-only private note
+                      </label>
+                      <label className={styles.checkRow}>
+                        <input type="checkbox" checked={resolveAfterSend} disabled={privateNote} onChange={(event) => setResolveAfterSend(event.target.checked)} />
+                        Resolve after sending
+                      </label>
+                    </div>
+                    <div className={styles.actions}>
+                      <Button variant="primary" type="submit" disabled={sending}>{sending ? "Recording…" : privateNote ? "Add private note" : "Send response"}</Button>
+                      <span className={styles.actionHint}>{privateNote ? "The requester never sees private notes." : "Sending moves the case to In progress unless you resolve it."}</span>
+                    </div>
+                  </form>
+                ) : (
+                  <div className={styles.readOnly}>
+                    <span className="msym" aria-hidden="true">lock_person</span>
+                    <p>Read only · responding requires the Support officer workspace.</p>
                   </div>
-
-                  <label className={styles.checkRow}>
-                    <input
-                      type="checkbox"
-                      checked={resolveAfterSend}
-                      onChange={(event) => setResolveAfterSend(event.target.checked)}
-                    />
-                    Resolve after sending
-                  </label>
-                  <label className={styles.checkRow}>
-                    <input type="checkbox" checked={privateNote} onChange={(event) => { setPrivateNote(event.target.checked); if (event.target.checked) setResolveAfterSend(false); }} />
-                    Staff-only private note
-                  </label>
-
-                  <div className={styles.actions}>
-                    <Button variant="primary" type="submit" disabled={sending}>
-                      {sending ? "Sending…" : "Send response"}
-                    </Button>
-                    <span className={styles.actionHint}>
-                      Sending marks the grievance In progress; tick Resolve after sending to close it.
-                    </span>
-                  </div>
-
-                  {selected.thread.some((event) => event.kind === "response") && (
-                    <ResponseThread events={selected.thread} />
-                  )}
-                </form>
-              ) : (
-                <div className={styles.response}>
-                  <h3 className={styles.responseHeading}>Response</h3>
-                  <p className={styles.reopenHint}>
-                    Read only · responding to grievances requires the Support officer workspace.
-                  </p>
-                  {selected.thread.some((event) => event.kind === "response") ? (
-                    <ResponseThread events={selected.thread} />
-                  ) : null}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </>
           )}
         </section>
       </div>
 
-      <p className={styles.panelNote}>
-        <span className="demo-badge">Demo</span>
-        <span>Responses are audited; the applicant sees only the response, never internal notes.</span>
-      </p>
+      <p className={styles.panelNote}>Public responses are visible to the requester. Private notes remain staff-only. Every action is recorded in the audit trail.</p>
     </div>
   );
 }
