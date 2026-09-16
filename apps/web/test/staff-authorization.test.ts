@@ -92,9 +92,13 @@ describe("canonical role → action matrix (Phase 1 maker/checker splits)", () =
     expect(canRole("result_publisher", "results.approve")).toBe(false);
     expect(canRole("result_publisher", "results.enter")).toBe(false);
 
-    /* Timetable manager owns create/validate/publish/override. */
+    /* Timetable manager owns create/validate/publish/override and shares
+       school-structure configuration with the system administrator. */
     expect(canRole("timetable_manager", "timetable.view")).toBe(true);
     expect(canRole("timetable_manager", "timetable.manage")).toBe(true);
+    expect(canRole("timetable_manager", "academics.configure")).toBe(true);
+    expect(canRole("result_entry_officer", "academics.configure")).toBe(false);
+    expect(canRole("admissions_officer", "academics.configure")).toBe(false);
 
     /* Support officer responds but no longer carries links.verify —
        guardian-link activation/restriction/revocation is Administrator-only. */
@@ -113,6 +117,7 @@ describe("canonical role → action matrix (Phase 1 maker/checker splits)", () =
     expect(canRole("system_administrator", "settings.manage")).toBe(true);
     expect(canRole("system_administrator", "audit.view")).toBe(true);
     expect(canRole("system_administrator", "links.verify")).toBe(true);
+    expect(canRole("system_administrator", "academics.configure")).toBe(true);
     expect(canRole("system_administrator", "admissions.approve")).toBe(false);
     expect(canRole("system_administrator", "finance.approve")).toBe(false);
     expect(canRole("system_administrator", "results.publish")).toBe(false);

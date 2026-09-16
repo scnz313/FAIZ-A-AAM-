@@ -28,6 +28,7 @@ export type StaffAction =
   | "results.enter"
   | "results.approve"
   | "results.publish"
+  | "academics.configure"
   | "timetable.view"
   | "timetable.manage"
   | "content.view"
@@ -69,8 +70,9 @@ const ROLE_ACTIONS: Record<string, ReadonlySet<StaffAction>> = {
   result_entry_officer: new Set(["home.view", "results.view", "results.enter", "documents.view"]),
   exam_reviewer: new Set(["home.view", "results.view", "results.approve", "documents.view"]),
   result_publisher: new Set(["home.view", "results.view", "results.publish", "documents.view"]),
-  /* Timetable: manager creates, validates, publishes, overrides. */
-  timetable_manager: new Set(["home.view", "timetable.view", "timetable.manage"]),
+  /* Timetable: manager creates, validates, publishes, overrides, and builds
+     the school structure (classes, subjects, exam terms) it schedules. */
+  timetable_manager: new Set(["home.view", "timetable.view", "timetable.manage", "academics.configure"]),
   /* Support: officer responds. Guardian-link activation/restriction/revocation
      is an Administrator-only decision; support_officer no longer carries
      links.verify. */
@@ -78,7 +80,7 @@ const ROLE_ACTIONS: Record<string, ReadonlySet<StaffAction>> = {
   /* Auditor: read-only audit and owning-record document evidence permitted by database policy. */
   auditor: new Set(["home.view", "audit.view", "documents.view"]),
   /* System administrator: configuration and access grants ONLY. */
-  system_administrator: new Set(["home.view", "users.manage", "settings.manage", "audit.view", "links.verify", "facility.view", "facility.manage"]),
+  system_administrator: new Set(["home.view", "users.manage", "settings.manage", "audit.view", "links.verify", "facility.view", "facility.manage", "academics.configure"]),
 };
 
 /** Sync check: can a role perform an action? */

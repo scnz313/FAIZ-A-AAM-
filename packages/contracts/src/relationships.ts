@@ -250,7 +250,7 @@ export const academicYearSchema = z.object({
 });
 export type AcademicYear = z.infer<typeof academicYearSchema>;
 
-export const GRADE_SECTION_STATUSES = ["active", "archived"] as const;
+export const GRADE_SECTION_STATUSES = ["planned", "active", "archived"] as const;
 export const gradeSectionStatusSchema = z.enum(GRADE_SECTION_STATUSES);
 export type GradeSectionStatus = z.infer<typeof gradeSectionStatusSchema>;
 

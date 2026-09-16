@@ -128,4 +128,7 @@ echo "== Security hardening suite (000106–000107)"
 echo "== Guardian link-request reference suite (000119)"
 "${PSQL[@]}" -q -f supabase/tests/database/guardian-link-request-reference.test.sql
 
+echo "== School configuration suite (000123)"
+"${PSQL[@]}" -q -f supabase/tests/database/school-configuration.test.sql
+
 echo "ALL LOCAL DATABASE CHECKS PASSED"

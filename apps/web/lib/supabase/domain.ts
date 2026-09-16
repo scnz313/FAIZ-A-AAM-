@@ -1358,7 +1358,7 @@ export function schoolConfigRead(
           gradeLabel: section.grades?.label ?? "Class",
           sectionLabel: section.section_label,
           academicYearId: section.academic_year_id,
-          status: section.status === "active" ? "active" : "archived",
+          status: (section.status === "planned" || section.status === "archived" ? section.status : "active") as GradeSection["status"],
         })),
       subjects: (subjectsResult.data ?? []).map((subject) => ({ id: subject.id, code: subject.code, name: subject.name })),
       periods: (periodsResult.data ?? [])
@@ -1383,6 +1383,208 @@ export function schoolConfigRead(
               : {},
           },
     };
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* School configuration (migration 000123)                              */
+/* ------------------------------------------------------------------ */
+
+/** Read the whole configuration projection for one academic year. */
+export function schoolSetupRead(supabase: SupabaseClient<Database>, academicYearId?: string) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "school_setup_read", {
+      p_academic_year_id: academicYearId ?? null,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupAcademicYearCreate(
+  supabase: SupabaseClient<Database>,
+  input: { label: string; startsOn: string; endsOn: string; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "academic_years_create", {
+      p_label: input.label,
+      p_starts_on: input.startsOn,
+      p_ends_on: input.endsOn,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupAcademicYearSetStatus(
+  supabase: SupabaseClient<Database>,
+  input: { id: string; status: string; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "academic_years_set_status", {
+      p_id: input.id,
+      p_status: input.status,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupGradeUpsert(
+  supabase: SupabaseClient<Database>,
+  input: { id?: string; code?: string; label?: string; sortOrder?: number; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "grades_upsert", {
+      p_id: input.id ?? null,
+      p_code: input.code ?? null,
+      p_label: input.label ?? null,
+      p_sort_order: input.sortOrder ?? null,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupGradesAddStandard(supabase: SupabaseClient<Database>, reason: string) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "grades_add_standard_catalog", { p_reason: reason });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupSectionCreate(
+  supabase: SupabaseClient<Database>,
+  input: { academicYearId: string; gradeId: string; sectionLabel: string; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "grade_sections_create", {
+      p_academic_year_id: input.academicYearId,
+      p_grade_id: input.gradeId,
+      p_section_label: input.sectionLabel,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupSectionSetStatus(
+  supabase: SupabaseClient<Database>,
+  input: { id: string; status: string; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "grade_sections_set_status", {
+      p_id: input.id,
+      p_status: input.status,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupSectionsCopyFromYear(
+  supabase: SupabaseClient<Database>,
+  input: { sourceYearId: string; targetYearId: string; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "grade_sections_copy_from_year", {
+      p_source_year_id: input.sourceYearId,
+      p_target_year_id: input.targetYearId,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupSubjectUpsert(
+  supabase: SupabaseClient<Database>,
+  input: { id?: string; code?: string; name?: string; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "subjects_upsert", {
+      p_id: input.id ?? null,
+      p_code: input.code ?? null,
+      p_name: input.name ?? null,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupExamTermCreate(
+  supabase: SupabaseClient<Database>,
+  input: {
+    academicYearId: string;
+    term: string;
+    gradeSectionIds: string[];
+    components: Array<{ subjectId: string; name: string; maxMarks: number }>;
+    reason: string;
+  },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "exam_terms_create", {
+      p_academic_year_id: input.academicYearId,
+      p_term: input.term,
+      p_grade_section_ids: input.gradeSectionIds,
+      p_components: input.components,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupComponentUpsert(
+  supabase: SupabaseClient<Database>,
+  input: { examDefinitionId: string; subjectId: string; name: string; maxMarks: number; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "assessment_components_upsert", {
+      p_exam_definition_id: input.examDefinitionId,
+      p_subject_id: input.subjectId,
+      p_name: input.name,
+      p_max_marks: input.maxMarks,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupComponentDelete(
+  supabase: SupabaseClient<Database>,
+  input: { id: string; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "assessment_components_delete", {
+      p_id: input.id,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
+  });
+}
+
+export function schoolSetupExamSetStatus(
+  supabase: SupabaseClient<Database>,
+  input: { id: string; status: string; reason: string },
+) {
+  return result<Json>(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "exam_definitions_set_status", {
+      p_id: input.id,
+      p_status: input.status,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return data;
   });
 }
 
