@@ -21,7 +21,7 @@ import {
 
 import { parseCsv } from "@/lib/imports/csv-core";
 import { adapterCall, clientAdapterMode } from "@/modules/services/adapter-client";
-import { demoGradeSections } from "@/modules/relationships/demo";
+import { demoAcademicYears, demoGradeSections } from "@/modules/relationships/demo";
 import { sessionGet, sessionKey, sessionSet } from "@/modules/services/session";
 import { shapeSourceRows, type ImportSourceRow } from "@/modules/imports/source-rows";
 import { validateSourceRows } from "@/modules/imports/validation";
@@ -550,6 +550,9 @@ export const dataImportService: DataImportService = {
     if (batch.state !== "validating" && batch.state !== "needs_resolution") {
       throw new Error(`Import batch is not ready for validation (state: ${batch.state}).`);
     }
+    const yearSections = demoGradeSections.filter(
+      (section) => section.academicYearId === batch.academicYearId && section.status === "active",
+    );
     const validation = validateSourceRows(batch.rows.map((row) => ({
       rowId: row.rowId,
       rowNumber: row.rowNumber,
@@ -557,12 +560,24 @@ export const dataImportService: DataImportService = {
       sourceKey: row.sourceKey,
       normalized: row.normalized,
     })), {
-      gradeSectionIds: new Set(
-        demoGradeSections
-          .filter((section) => section.academicYearId === batch.academicYearId)
-          .map((section) => section.id),
-      ),
+      gradeSectionIds: new Set(yearSections.map((section) => section.id)),
+      gradeSections: yearSections.map((section) => ({
+        id: section.id,
+        gradeCode: "",
+        gradeLabel: section.gradeLabel,
+        sectionLabel: section.sectionLabel,
+      })),
+      academicYearLabel: demoAcademicYears.find((year) => year.id === batch.academicYearId)?.label,
     });
+    /* A class label resolves to the canonical section reference the commit
+       step reads, exactly like the server validation route rewrites the
+       stored normalized row. */
+    for (const resolution of validation.resolutions) {
+      const target = batch.rows.find((candidate) => candidate.rowId === resolution.rowId);
+      if (target !== undefined) {
+        target.normalized = { ...target.normalized, [resolution.field]: resolution.value };
+      }
+    }
     const statusByRow = new Map(validation.rows.map((row) => [row.rowId, row.status]));
     batch.rows = batch.rows.map((row) => ({ ...row, status: statusByRow.get(row.rowId) ?? "valid" }));
     let issueCounter = 1;

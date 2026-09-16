@@ -24,6 +24,7 @@ const ROUTE_ACTIONS: ReadonlyArray<{ prefix: string; action: StaffAction }> = [
   { prefix: "/results", action: "results.view" },
   { prefix: "/timetables", action: "timetable.view" },
   { prefix: "/academics", action: "timetable.manage" },
+  { prefix: "/school", action: "academics.configure" },
   { prefix: "/notices", action: "content.view" },
   { prefix: "/content", action: "content.view" },
   { prefix: "/users", action: "users.manage" },

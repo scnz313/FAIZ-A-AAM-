@@ -57,7 +57,7 @@ export default function TeachingStaffWorkspace() {
   useEffect(() => {
     void refresh();
     void schoolConfigService.getConfiguration().then((config) => {
-      setSections(config.gradeSections.map((section) => ({
+      setSections(config.gradeSections.filter((section) => section.status === "active").map((section) => ({
         id: section.id,
         label: `${section.gradeLabel}-${section.sectionLabel}`,
         academicYearId: section.academicYearId,

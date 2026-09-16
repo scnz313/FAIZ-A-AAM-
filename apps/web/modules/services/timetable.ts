@@ -235,7 +235,7 @@ type SupabaseExamScheduleVersion = {
 };
 
 type SupabaseConfiguration = {
-  gradeSections: Array<{ id: string; ref?: string; gradeLabel: string; sectionLabel: string }>;
+  gradeSections: Array<{ id: string; ref?: string; gradeLabel: string; sectionLabel: string; status?: string }>;
   subjects?: Array<{ id: string; code?: string; name: string }>;
   assignments?: Array<{ id: string; ref?: string; gradeSectionId: string | null; subjectId: string | null; teacherName: string }>;
   rooms?: Array<{ id: string; label: string; code: string }>;
@@ -339,7 +339,7 @@ function uuidOrNull(value: string | null | undefined): string | null {
 
 function configuredSection(config: SupabaseConfiguration, className: string) {
   const normalized = className.replace(/^Class\s+/i, "").replace("-", " ");
-  return config.gradeSections.find((section) =>
+  return config.gradeSections.filter((section) => section.status !== "planned").find((section) =>
     `${section.gradeLabel.replace(/^Class\s+/i, "")}-${section.sectionLabel}` === className
     || `${section.gradeLabel.replace(/^Class\s+/i, "")} ${section.sectionLabel}` === normalized,
   );
@@ -600,7 +600,9 @@ export function listKnownClasses(): string[] {
 export async function listTimetableClasses(): Promise<string[]> {
   if (clientAdapterMode() === "supabase") {
     const config = await supabaseConfiguration();
-    return (config?.gradeSections ?? []).map((section) => classKeyForGradeSection({ gradeLabel: section.gradeLabel, sectionLabel: section.sectionLabel }));
+    return (config?.gradeSections ?? [])
+      .filter((section) => section.status !== "planned")
+      .map((section) => classKeyForGradeSection({ gradeLabel: section.gradeLabel, sectionLabel: section.sectionLabel }));
   }
   return listKnownClasses();
 }
@@ -1094,7 +1096,7 @@ export async function getTimetableEditorOptions(className: string = TIMETABLE_CL
   if (clientAdapterMode() === "supabase") {
     const config = await supabaseConfiguration();
     if (!config) return { subjects: [], teachers: [], rooms: [] };
-    const sectionId = config.gradeSections.find((candidate) => classKeyForGradeSection({ gradeLabel: candidate.gradeLabel, sectionLabel: candidate.sectionLabel }) === className)?.id;
+    const sectionId = config.gradeSections.filter((candidate) => candidate.status !== "planned").find((candidate) => classKeyForGradeSection({ gradeLabel: candidate.gradeLabel, sectionLabel: candidate.sectionLabel }) === className)?.id;
     if (!sectionId) return { subjects: [], teachers: [], rooms: [] };
     return {
       subjects: [...new Set((config.subjects ?? []).map((subject) => subject.name))].sort(),
@@ -1242,7 +1244,7 @@ async function mapPeriodsToDatabase(
 ): Promise<Array<Record<string, unknown>>> {
   const config = await supabaseConfiguration();
   if (!config) throw new Error("School timetable configuration is unavailable.");
-  const section = config.gradeSections.find((candidate) => classKeyForGradeSection({ gradeLabel: candidate.gradeLabel, sectionLabel: candidate.sectionLabel }) === className);
+  const section = config.gradeSections.filter((candidate) => candidate.status !== "planned").find((candidate) => classKeyForGradeSection({ gradeLabel: candidate.gradeLabel, sectionLabel: candidate.sectionLabel }) === className);
   if (!section) throw new Error("No timetable section is available for this class.");
   return Object.entries(periods).flatMap(([day, entries]) => entries.map((original) => {
     const edit = edits.find((candidate) => candidate.day === day && candidate.time === original.time);
@@ -1518,7 +1520,7 @@ export async function saveTimetableOverride(
     validateOverrideFields(input);
     const config = await supabaseConfiguration();
     if (!config) throw new Error("School timetable configuration is unavailable.");
-    const section = config.gradeSections.find((candidate) => classKeyForGradeSection({ gradeLabel: candidate.gradeLabel, sectionLabel: candidate.sectionLabel }) === className);
+    const section = config.gradeSections.filter((candidate) => candidate.status !== "planned").find((candidate) => classKeyForGradeSection({ gradeLabel: candidate.gradeLabel, sectionLabel: candidate.sectionLabel }) === className);
     if (!section?.ref) throw new Error("No timetable section is available for this class.");
     const day = timetableWeekdayForDate(input.dateIso);
     if (day === null) throw new Error("Choose a valid override date.");

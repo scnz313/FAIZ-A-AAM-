@@ -504,6 +504,9 @@ function NewBatchPanel({
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const creatingRef = useRef(false);
+  const { summary } = useStaffContext();
+  const canConfigure = canAnyRole(summary?.roles ?? [], "academics.configure");
+  const schoolSetupHref = canonicalStaffUrl(summary?.profileCode ?? null, "/school");
 
   const load = useCallback(async () => {
     setLoadError(false);
@@ -600,8 +603,12 @@ function NewBatchPanel({
           <LoadingSkeleton lines={2} label="Loading exam options" />
         ) : all.length === 0 ? (
           <p className={styles.panelNote}>
-            No exam definitions are available in your scope. Ask the examination office to configure the term and
-            assessment components first.
+            No exam definitions are available in your scope.{" "}
+            {canConfigure ? (
+              <Link className="underline-link" href={schoolSetupHref}>Configure in School setup</Link>
+            ) : (
+              "Ask the examination office to configure the term and assessment components first."
+            )}
           </p>
         ) : (
           <form
@@ -665,9 +672,12 @@ function NewBatchPanel({
                       {activeDefinition !== null ? sectionOptionLabel(activeDefinition) : "this class section"} yet.
                     </p>
                     <p className="small muted" style={{ margin: "4px 0 0" }}>
-                      A batch needs at least one subject with configured assessment components. Ask the examination
-                      office to add them for {termLabel(activeTerm)}, or choose another class section that is already
-                      configured.
+                      A batch needs at least one subject with configured assessment components.{" "}
+                      {canConfigure ? (
+                        <Link className="underline-link" href={schoolSetupHref}>Configure in School setup</Link>
+                      ) : (
+                        <>Ask the examination office to add them for {termLabel(activeTerm)}, or choose another class section that is already configured.</>
+                      )}
                     </p>
                   </div>
                 </div>

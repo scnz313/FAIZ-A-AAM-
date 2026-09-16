@@ -42,6 +42,18 @@ export type ValidationResult = {
   issues: ImportIssueDraft[];
   errorCount: number;
   warningCount: number;
+  /** Label references resolved to canonical ids during validation. The
+      caller rewrites the stored normalized value so the commit transaction
+      still reads a UUID. */
+  resolutions: Array<{ rowId: string; field: "gradeSectionId"; value: string }>;
+};
+
+/** One configured class section the validator can resolve labels against. */
+export type ImportGradeSectionRef = {
+  id: string;
+  gradeCode: string;
+  gradeLabel: string;
+  sectionLabel: string;
 };
 
 /** Known configuration the pure validator cannot discover by itself. */
@@ -49,6 +61,12 @@ export type ValidationContext = {
   /** Grade section ids for the batch's academic year, when the caller can
    *  read them. Omitted (demo mode) skips the existence check. */
   gradeSectionIds?: ReadonlySet<string>;
+  /** The batch year's configured sections. When present, a human class
+   *  label ("Class 8-A", "8A", "Nursery A") resolves to the section
+   *  reference instead of failing the format check. */
+  gradeSections?: readonly ImportGradeSectionRef[];
+  /** The batch year's label, used in the not-configured message. */
+  academicYearLabel?: string;
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -67,6 +85,80 @@ function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
+/** Compact a class label into its lookup key: "Class 8-A" → "8a",
+    "Nursery A" → "nurserya". */
+function classLabelKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^class\s+/, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+/** Resolve a human class label ("Class 8-A", "8A", "8/A", "Nursery-A") to
+    the grade section id configured for the import's academic year. A label
+    that matches more than one section resolves nothing — the row reports
+    the not-configured error instead of guessing. */
+function resolveClassSection(
+  value: string,
+  sections: readonly ImportGradeSectionRef[] | undefined,
+): string | null {
+  if (sections === undefined) return null;
+  const key = classLabelKey(value);
+  if (key === "") return null;
+  const matches = new Set<string>();
+  for (const section of sections) {
+    const sectionKey = classLabelKey(section.sectionLabel);
+    if (sectionKey === "") continue;
+    for (const gradeKey of [classLabelKey(section.gradeLabel), classLabelKey(section.gradeCode)]) {
+      if (gradeKey !== "" && gradeKey + sectionKey === key) {
+        matches.add(section.id);
+        break;
+      }
+    }
+  }
+  return matches.size === 1 ? ([...matches][0] ?? null) : null;
+}
+
+/** Shared grade-section reference check for enrollment and teaching
+    assignment rows. */
+function checkGradeSection(
+  row: ValidationRowInput,
+  gradeSectionId: string,
+  context: ValidationContext,
+  addIssue: (
+    row: ValidationRowInput,
+    severity: DataImportIssueSeverity,
+    code: DataImportIssueCode,
+    field: string | null,
+    message: string,
+    resolutionHint: string | null,
+  ) => void,
+): string | null {
+  if (gradeSectionId === "") {
+    addIssue(row, "error", "missing_required_field", "gradeSectionId", "An enrollment or assignment row needs a grade section reference.", "Map the class or grade section column from the source export.");
+    return null;
+  }
+  if (!isUuid(gradeSectionId)) {
+    if (context.gradeSections === undefined) {
+      addIssue(row, "error", "invalid_format", "gradeSectionId", "The grade section reference is not a valid school reference.", "Use the grade section identifier or a configured class label such as \"Class 8-A\".");
+      return null;
+    }
+    const resolved = resolveClassSection(gradeSectionId, context.gradeSections);
+    if (resolved === null) {
+      const yearLabel = context.academicYearLabel ?? "this academic year";
+      addIssue(row, "error", "unknown_grade_section", "gradeSectionId", `Class '${gradeSectionId}' is not configured for ${yearLabel} · add it in School setup`, "Create the class section in School setup, correct the value, or skip this row.");
+      return null;
+    }
+    return resolved;
+  }
+  if (context.gradeSectionIds !== undefined && !context.gradeSectionIds.has(gradeSectionId.toLowerCase())) {
+    addIssue(row, "error", "unknown_grade_section", "gradeSectionId", `Grade section ${gradeSectionId} is not configured for this academic year.`, "Choose a grade section reference or class label from the current school configuration, or skip this row.");
+    return null;
+  }
+  return gradeSectionId;
+}
+
 export function isMalformedContact(value: string): boolean {
   if (value === "") return false;
   return !EMAIL_PATTERN.test(value) && !PHONE_PATTERN.test(value.replace(/[\s-]/g, ""));
@@ -81,6 +173,7 @@ export function validateSourceRows(
   context: ValidationContext = {},
 ): ValidationResult {
   const issues: ImportIssueDraft[] = [];
+  const resolutions: ValidationResult["resolutions"] = [];
   const seenSourceKeys = new Map<string, string>();
   const seenStudentKeys = new Map<string, string>();
   const seenContacts = new Map<string, string>();
@@ -162,12 +255,9 @@ export function validateSourceRows(
 
     if (row.entity === "enrollments") {
       const gradeSectionId = text(row.normalized.gradeSectionId);
-      if (gradeSectionId === "") {
-        addIssue(row, "error", "missing_required_field", "gradeSectionId", "An enrollment row needs a grade section reference.", "Map the grade section column from the source export.");
-      } else if (!isUuid(gradeSectionId)) {
-        addIssue(row, "error", "invalid_format", "gradeSectionId", "The grade section reference is not a valid school reference.", "Use the grade section identifier from the school configuration export.");
-      } else if (context.gradeSectionIds !== undefined && !context.gradeSectionIds.has(gradeSectionId.toLowerCase())) {
-        addIssue(row, "error", "unknown_grade_section", "gradeSectionId", `Grade section ${gradeSectionId} is not configured for this academic year.`, "Choose a grade section reference from the current school configuration, or skip this row.");
+      const resolvedSection = checkGradeSection(row, gradeSectionId, context, addIssue);
+      if (resolvedSection !== null && resolvedSection !== gradeSectionId) {
+        resolutions.push({ rowId: row.rowId, field: "gradeSectionId", value: resolvedSection });
       }
       const studentKey = text(row.normalized.sourceKey) || sourceKey;
       if (studentKey !== "") {
@@ -187,12 +277,9 @@ export function validateSourceRows(
       if (staffMemberKey === "") {
         addIssue(row, "error", "missing_required_field", "staffMemberKey", "A teaching assignment needs a staff member key.", "Map the staff member key column from the source export.");
       }
-      if (gradeSectionId === "") {
-        addIssue(row, "error", "missing_required_field", "gradeSectionId", "A teaching assignment needs a grade section reference.", "Map the grade section column from the source export.");
-      } else if (!isUuid(gradeSectionId)) {
-        addIssue(row, "error", "invalid_format", "gradeSectionId", "The grade section reference is not a valid school reference.", "Use the grade section identifier from the school configuration export.");
-      } else if (context.gradeSectionIds !== undefined && !context.gradeSectionIds.has(gradeSectionId.toLowerCase())) {
-        addIssue(row, "error", "unknown_grade_section", "gradeSectionId", `Grade section ${gradeSectionId} is not configured for this academic year.`, "Choose a grade section reference from the current school configuration, or skip this row.");
+      const resolvedSection = checkGradeSection(row, gradeSectionId, context, addIssue);
+      if (resolvedSection !== null && resolvedSection !== gradeSectionId) {
+        resolutions.push({ rowId: row.rowId, field: "gradeSectionId", value: resolvedSection });
       }
       if (subjectId === "") {
         addIssue(row, "error", "missing_required_field", "subjectId", "A teaching assignment needs a subject reference.", "Map the subject column from the source export.");
@@ -226,5 +313,6 @@ export function validateSourceRows(
     issues,
     errorCount: issues.filter((issue) => issue.severity === "error").length,
     warningCount: issues.filter((issue) => issue.severity === "warning").length,
+    resolutions,
   };
 }

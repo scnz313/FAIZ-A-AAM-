@@ -58,17 +58,35 @@ export async function POST(
     );
   }
 
-  /* Grade section references are checked against the configured sections for
-   * the batch's academic year so an unknown (but well-formed) reference is a
-   * resolvable validation issue instead of a commit-time FK failure. */
+  /* Grade section references are checked against the active sections for the
+   * batch's academic year so an unknown (but well-formed) reference is a
+   * resolvable validation issue instead of a commit-time FK failure, and a
+   * planned or archived section never receives imported enrollments. The
+   * grade label/code join lets a human class label ("Class 8-A", "Nursery A")
+   * resolve to the section reference during validation. */
   const { data: sections, error: sectionsError } = await admin
     .from("grade_sections")
-    .select("id")
-    .eq("academic_year_id", batch.academic_year_id);
+    .select("id, section_label, grades(code, label)")
+    .eq("academic_year_id", batch.academic_year_id)
+    .eq("status", "active");
   if (sectionsError !== null) {
     return NextResponse.json({ error: "The school grade section configuration could not be read." }, { status: 503, headers });
   }
   const gradeSectionIds = new Set((sections ?? []).map((section) => section.id.toLowerCase()));
+  const gradeSections = (sections ?? []).map((section) => {
+    const grade = section.grades as unknown as { code: string; label: string } | null;
+    return {
+      id: section.id,
+      gradeCode: grade?.code ?? "",
+      gradeLabel: grade?.label ?? "",
+      sectionLabel: section.section_label,
+    };
+  });
+  const { data: yearRow } = await admin
+    .from("academic_years")
+    .select("label")
+    .eq("id", batch.academic_year_id)
+    .maybeSingle();
 
   /* Page through the stored rows: a PostgREST server row cap must never
    * silently abbreviate validation for a large batch. */
@@ -97,7 +115,26 @@ export async function POST(
     entity: row.entity as DataImportEntity,
     sourceKey: row.source_key,
     normalized: (row.normalized ?? {}) as Record<string, unknown>,
-  })), { gradeSectionIds });
+  })), { gradeSectionIds, gradeSections, academicYearLabel: yearRow?.label ?? undefined });
+
+  /* Persist label → id resolutions so the commit transaction still reads a
+     canonical grade section UUID from the stored normalized row. */
+  for (const resolution of validation.resolutions) {
+    const row = storedRows.find((candidate) => candidate.id === resolution.rowId);
+    if (row === undefined) continue;
+    const normalized = {
+      ...((row.normalized ?? {}) as Record<string, unknown>),
+      [resolution.field]: resolution.value,
+    };
+    const { error: updateError } = await admin
+      .from("data_import_rows")
+      .update({ normalized })
+      .eq("id", resolution.rowId)
+      .eq("batch_id", batchId);
+    if (updateError !== null) {
+      return NextResponse.json({ error: "The resolved class labels could not be recorded." }, { status: 503, headers });
+    }
+  }
 
   const applied = await callAppRpc<{ state: string; version: number; rowCount: number }>(admin, "data_import_apply_validation", {
     p_batch_id: batchId,

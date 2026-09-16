@@ -188,6 +188,53 @@ describe("row validation", () => {
     expect(codes).toContain("invalid_format");
   });
 
+  it("resolves configured class labels to the grade section reference", () => {
+    const section8a = "0129b314-0a7e-45b3-8e53-e5901f71d6a8";
+    const sectionNurseryA = "0129b314-0a7e-45b3-8e53-e5901f71d6b9";
+    const sectionLkgA = "0129b314-0a7e-45b3-8e53-e5901f71d6ca";
+    const context = {
+      gradeSections: [
+        { id: section8a, gradeCode: "8", gradeLabel: "Class 8", sectionLabel: "A" },
+        { id: sectionNurseryA, gradeCode: "nursery", gradeLabel: "Nursery", sectionLabel: "A" },
+        { id: sectionLkgA, gradeCode: "lkg", gradeLabel: "LKG", sectionLabel: "A" },
+      ],
+      academicYearLabel: "2026-27",
+    };
+
+    const spellings: Array<[string, string]> = [
+      ["Class 8-A", section8a],
+      ["Class 8 A", section8a],
+      ["8-A", section8a],
+      ["8A", section8a],
+      ["8/A", section8a],
+      ["class 8-a", section8a],
+      ["Nursery-A", sectionNurseryA],
+      ["LKG A", sectionLkgA],
+    ];
+    spellings.forEach(([value, expected], index) => {
+      const rowId = `00000000-0000-4000-8000-00000000${String(index).padStart(4, "0")}`;
+      const result = validateSourceRows([
+        row({ rowId, entity: "enrollments", sourceKey: `STU-${index}`, normalized: { gradeSectionId: value } }),
+      ], context);
+      expect(result.issues).toEqual([]);
+      expect(result.rows[0]?.status).toBe("valid");
+      expect(result.resolutions).toEqual([{ rowId, field: "gradeSectionId", value: expected }]);
+    });
+  });
+
+  it("reports an unconfigured class label against the batch year", () => {
+    const result = validateSourceRows([
+      row({ entity: "enrollments", sourceKey: "STU-1", normalized: { gradeSectionId: "Class 4-C" } }),
+    ], {
+      gradeSections: [{ id: "0129b314-0a7e-45b3-8e53-e5901f71d6a8", gradeCode: "8", gradeLabel: "Class 8", sectionLabel: "A" }],
+      academicYearLabel: "2026-27",
+    });
+    const issue = result.issues.find((candidate) => candidate.code === "unknown_grade_section");
+    expect(issue?.message).toBe("Class 'Class 4-C' is not configured for 2026-27 · add it in School setup");
+    expect(result.rows[0]?.status).toBe("error");
+    expect(result.resolutions).toEqual([]);
+  });
+
   it("flags a repeated enrollment for the same student", () => {
     const result = validateSourceRows([
       row({ rowId: "00000000-0000-4000-8000-000000000906", entity: "enrollments", sourceKey: "STU-1", normalized: { gradeSectionId: "00000000-0000-4000-8000-000000000708" } }),

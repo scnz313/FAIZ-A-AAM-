@@ -296,17 +296,50 @@ describe("new batch creation", () => {
     await user.selectOptions(term, "final");
 
     /* The component-less section is explained with a next step, never a
-       silent disabled select. */
+       silent disabled select. The principal also holds timetable_manager,
+       so the guidance links straight to School setup. */
     expect(screen.queryByLabelText("Subject")).not.toBeInTheDocument();
     expect(
       screen.getByText(/No assessment components are configured for Class 8 · A · 2026–27 yet\./),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Ask the examination office to add them for Final/)).toBeInTheDocument();
+    const setupLink = screen.getByRole("link", { name: "Configure in School setup" });
+    expect(setupLink).toHaveAttribute("href", "/principal/school");
+    expect(screen.queryByText(/Ask the examination office/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create batch" })).toBeDisabled();
 
     /* A configured section in another term stays creatable. */
     await user.selectOptions(term, "midterm");
     expect(screen.getByLabelText("Subject")).toHaveValue(SUBJECT_ID);
     expect(screen.getByRole("button", { name: "Create batch" })).toBeEnabled();
+  });
+
+  it("keeps the examination-office guidance for staff without academics.configure", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(academicsService, "listBatches").mockResolvedValue([]);
+    vi.spyOn(academicsService, "listExamDefinitions").mockResolvedValue({
+      ok: true,
+      value: [
+        EXAM_DEFINITIONS[0]!,
+        { ...EXAM_DEFINITIONS[0]!, id: EXAM2_ID, ref: "EXM-2026-0007", term: "final", subjects: [] },
+      ],
+    });
+
+    const entryOnly: StaffContextInitialState = {
+      ...PRINCIPAL_STATE,
+      summary: {
+        ...PRINCIPAL_STATE.summary!,
+        roles: ["result_entry_officer"],
+        role: "result_entry_officer",
+        roleLabel: "Result entry officer",
+      },
+    };
+    renderQueue(entryOnly);
+    await user.click(await screen.findByRole("button", { name: "New batch" }));
+
+    const term = await screen.findByLabelText("Term or exam");
+    await user.selectOptions(term, "final");
+
+    expect(screen.queryByRole("link", { name: "Configure in School setup" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Ask the examination office to add them for Final/)).toBeInTheDocument();
   });
 });

@@ -912,6 +912,13 @@ export function DataImportsWorkspace({
             )
           ) : null}
 
+          {activeBatch.scanError === null ? (
+            <p className="field-help">
+              The class column accepts a configured class label (&ldquo;Class 8-A&rdquo;, &ldquo;8A&rdquo;, &ldquo;Nursery-A&rdquo;) as well as the
+              grade section reference. Labels resolve against the batch&rsquo;s academic year · configure classes in School setup first.
+            </p>
+          ) : null}
+
           <div className={styles.actions}>
             <Button variant="primary" onClick={() => void handleRecordMapping()}
               disabled={busy || activeBatch.scanError !== null || activeBatch.scanHeaders.length === 0}>

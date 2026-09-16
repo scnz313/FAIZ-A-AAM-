@@ -40,6 +40,7 @@ const RECORD_LINKS: ReadonlyArray<NavLink> = [
   { subPath: "/guardians", label: "Guardians", icon: "family_restroom", action: "links.verify" },
 ];
 const DATA_LINKS: ReadonlyArray<NavLink> = [
+  { subPath: "/school", label: "School setup", icon: "apartment", action: "academics.configure" },
   { subPath: "/data/imports", label: "Imports", icon: "upload", action: "users.manage" },
   { subPath: "/data/exports", label: "Exports", icon: "download", action: "users.manage" },
   { subPath: "/settings", label: "Settings", icon: "tune", action: "settings.manage" },
@@ -48,6 +49,7 @@ const DATA_LINKS: ReadonlyArray<NavLink> = [
 const ACADEMIC_LINKS: ReadonlyArray<NavLink> = [
   { subPath: "/timetables", label: "Timetables", icon: "calendar_month", action: "timetable.view" },
   { subPath: "/academics/teachers", label: "Teaching records", icon: "person", action: "timetable.manage" },
+  { subPath: "/school", label: "School setup", icon: "apartment", action: "academics.configure" },
 ];
 const OFFICE_LINKS: ReadonlyArray<NavLink> = [
   { subPath: "/documents", label: "Documents", icon: "folder_open", action: "documents.view" },
