@@ -1,0 +1,292 @@
+/* School life page editor — section panels on the left, sticky live preview
+   and version history on the right. All measurements come from the shared
+   workspace tokens; the layout collapses inside the staff page container. */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+/* Two-up only inside a wide content container; below it the Edit · Preview
+   seg in the status strip swaps the single visible column. The `.page`
+   container caps at 1160px (≈1096px content box), so 1000px is the widest
+   reachable breakpoint that still leaves narrow viewports in toggle mode. */
+@container page (min-width: 1000px) {
+  .grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+
+.viewToggle {
+  display: none;
+}
+
+@container page (max-width: 999px) {
+  .viewToggle {
+    display: inline-flex;
+  }
+
+  .grid[data-view="edit"] .previewColumn {
+    display: none;
+  }
+
+  .grid[data-view="preview"] .formColumn {
+    display: none;
+  }
+}
+
+.statusStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--chalk);
+  margin-bottom: 18px;
+}
+
+.statusMeta {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+.statusActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.sectionList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sectionPanel {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--chalk);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sectionTitle {
+  font-family: var(--serif, serif);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.sectionHint {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.sectionBody {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@container page (max-width: 719px) {
+  .fieldRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.counter {
+  font-size: 0.6875rem;
+  color: var(--ink-soft);
+  text-align: right;
+}
+
+.itemRow {
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--paper);
+}
+
+.itemToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.itemName {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.itemActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.artworkLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.artChoices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@container page (max-width: 719px) {
+  .artChoices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.artChoice {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--chalk);
+  padding: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.artChoice:hover {
+  background: var(--paper);
+}
+
+.artChoice:focus-within {
+  outline: 2px solid var(--saffron);
+  outline-offset: 1px;
+}
+
+.artChoiceSelected {
+  border-color: var(--saffron);
+  box-shadow: inset 0 0 0 1px var(--saffron);
+}
+
+.artThumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+}
+
+.artThumb svg {
+  width: 100%;
+  height: 100%;
+}
+
+.artName {
+  font-size: 0.6875rem;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.previewPanel {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--chalk);
+}
+
+@container page (min-width: 1000px) {
+  /* The grid aligns items to the start, so the column must stretch to the
+     row height for the panel to have room to stick below the context bar. */
+  .previewColumn {
+    align-self: stretch;
+  }
+
+  .previewPanel {
+    position: sticky;
+    top: 64px;
+    max-height: calc(100vh - 88px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) var(--paper-deep);
+  }
+}
+
+.previewFrame {
+  max-height: 55vh;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.previewInner {
+  /* The preview renders the real page composition at reduced scale so a full
+     page fits the frame: gentler zoom when it owns the stacked/toggle column,
+     tighter inside the two-up 2fr column. `zoom` is layout-true — no
+     transform hacks. */
+  min-width: 0;
+  zoom: 0.85;
+}
+
+@container page (min-width: 1000px) {
+  .previewInner {
+    zoom: 0.62;
+  }
+}
+
+.historyTable {
+  width: 100%;
+  font-size: 0.8125rem;
+  border-collapse: collapse;
+}
+
+.historyTable th,
+.historyTable td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.historyTable th {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.historyEmpty {
+  padding: 12px 10px;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+.dirtyNote {
+  font-size: 0.75rem;
+  color: var(--saffron-ink, var(--saffron));
+  font-weight: 600;
+}

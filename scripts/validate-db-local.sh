@@ -134,4 +134,7 @@ echo "== School configuration suite (000123)"
 echo "== Delivery operations suite (000124)"
 "${PSQL[@]}" -q -f supabase/tests/database/delivery-operations.test.sql
 
+echo "== School-life page body suite (000125)"
+"${PSQL[@]}" -q -f supabase/tests/database/school-life-page.test.sql
+
 echo "ALL LOCAL DATABASE CHECKS PASSED"

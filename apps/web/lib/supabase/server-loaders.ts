@@ -10,12 +10,12 @@ import { serverAdapterOperation } from "@/lib/supabase/adapter-server";
 import { dataAdapter } from "@/lib/supabase/env";
 import { getServerActor } from "@/lib/auth/actor";
 import { isStaffPath } from "@/lib/auth/portal-routes";
-import { admissionPublicConfiguration, contentListPublic, contentListPublicDownloads, financeListAllAttempts, financeListAttemptsForInvoices, financeListInvoicesPage, financeListMyInvoices, financeListMyReceipts, financeListReconciliationProjection, jobsListPublishedVacancies, resolveFamilyContext, resolveStaffContext, type FinanceAttemptProjectionRow, type FinanceReconciliationProjectionRow } from "@/lib/supabase/domain";
+import { admissionPublicConfiguration, contentListPublic, contentListPublicDownloads, contentPublicPageBody, financeListAllAttempts, financeListAttemptsForInvoices, financeListInvoicesPage, financeListMyInvoices, financeListMyReceipts, financeListReconciliationProjection, jobsListPublishedVacancies, resolveFamilyContext, resolveStaffContext, type FinanceAttemptProjectionRow, type FinanceReconciliationProjectionRow } from "@/lib/supabase/domain";
 import { financeRegisterRange, financeRegisterView } from "@/modules/services/finance-register";
 import type { ServerFamilyContextResponse } from "@/modules/services/family-context";
 import type { ServerStaffContextResponse } from "@/modules/services/staff-context";
 import { mapServerStaffContext } from "@/modules/services/staff-context";
-import type { StaffProfileCode } from "@fass/contracts";
+import { parseSchoolLifePageBody, type SchoolLifePageBody, type StaffProfileCode } from "@fass/contracts";
 import {
   mapServerInvoiceView,
   mapServerReceipt,
@@ -363,32 +363,39 @@ export async function loadServerPublicContent(): Promise<ContentNotice[]> {
     );
 }
 
-/** Published public page body for one route slug, or null when the page is
- * not published. Falls back to nothing so the route can keep its concept
- * copy until the school publishes a managed page. */
-export async function loadServerPublicPageBody(slug: string): Promise<{ title: string; body: string[]; updatedAtIso: string | null } | null> {
-  let rows: ServerContentRow[];
+/** Published public page body for one route slug, or null when the page has
+ * no published version. Reads through app.public_page_body so a newer
+ * unpublished draft never takes the live page offline; the route keeps its
+ * concept copy until the school publishes a managed page. */
+export const loadServerPublicPageBody = cache(
+  async (slug: string): Promise<{ title: string; body: string[]; updatedAtIso: string | null } | null> => {
+    try {
+      const res = await contentPublicPageBody(await financeClient(), slug);
+      if (!res.ok || res.value === null) return null;
+      const parsed = parseServerPageBody(res.value.body);
+      return {
+        title: typeof res.value.title === "string" && res.value.title !== "" ? res.value.title : "School page",
+        body: parsed.length > 0 ? parsed : ["Published school page."],
+        updatedAtIso: typeof res.value.publishedAt === "string" ? res.value.publishedAt : null,
+      };
+    } catch {
+      return null;
+    }
+  },
+);
+
+/** Latest published School life body. Reads through app.public_page_body so a
+ * newer unpublished draft never takes the live page offline; null → the
+ * caller renders the shipped default. */
+export const loadServerSchoolLifeBody = cache(async (): Promise<SchoolLifePageBody | null> => {
   try {
-    rows = await loadServerPublicContentRows();
+    const res = await contentPublicPageBody(await financeClient(), "school-life");
+    if (!res.ok) return null;
+    return parseSchoolLifePageBody(res.value?.body);
   } catch {
     return null;
   }
-  const row = rows.find(
-    (candidate) => candidate.kind === "page" && candidate.slug === slug && candidate.current_status === "published",
-  );
-  if (!row) return null;
-  const { mapServerPublicPageRow } = await import("@/modules/services/content");
-  const page = mapServerPublicPageRow(row);
-  if (page.reviewStatus !== "published") return null;
-  const versionRow = [...(row.content_versions ?? [])].sort((left, right) => right.version - left.version)[0];
-  if (!versionRow) return null;
-  const parsed = parseServerPageBody(versionRow.body);
-  return {
-    title: versionRow.title,
-    body: parsed.length > 0 ? parsed : ["Published school page."],
-    updatedAtIso: versionRow.published_at ?? versionRow.created_at,
-  };
-}
+});
 
 /** Anonymous-safe public downloads register. Reads the same rows the anon and
  * authenticated RLS policies allow (`public_approved` and a finalized

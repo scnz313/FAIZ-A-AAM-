@@ -17,7 +17,7 @@
  * - All methods resolve immediately (no artificial latency).
  */
 
-import type { ErrorCode, ServiceResult } from "@fass/contracts";
+import { DEFAULT_SCHOOL_LIFE_BODY, type ErrorCode, type ServiceResult } from "@fass/contracts";
 
 import { demoNowIso } from "@/modules/demo/clock";
 import { formatKolkata } from "@/modules/iot/domain";
@@ -203,6 +203,43 @@ export type PublicPageRow = {
   owner: string;
 };
 
+/** Immutable version row for a managed page, projected for the editor.
+ * `body` is the stored JSON — the editor parses it against the page schema
+ * and falls back to the shipped default when a body predates the structured
+ * format or is absent. */
+export type ManagedPageVersion = {
+  id: string;
+  version: number;
+  title: string;
+  reviewStatus: ContentReviewStatus;
+  authorAccountId: string | null;
+  /** Display name of the version author, when the projection resolves it. */
+  authorDisplayName: string | null;
+  reviewedByAccountId: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  body: unknown;
+};
+
+/** A managed public page: the content item plus every immutable version,
+ * newest first. */
+export type ManagedPageState = {
+  slug: string;
+  contentItemId: string;
+  reference: string;
+  itemVersion: number;
+  currentStatus: NoticeStatus;
+  versions: ManagedPageVersion[];
+};
+
+export type PageDraftInput = {
+  title: string;
+  body: Record<string, unknown>;
+  expectedVersion?: number;
+  idempotencyKey?: string;
+  actor?: ContentActor;
+};
+
 const DEMO_CONTENT_EDITOR_ACCOUNT_ID = "00000000-0000-4000-8000-000000000204";
 const SEEDED_CONTENT_AUTHOR_ID = "demo-content-seed-editor";
 
@@ -292,6 +329,86 @@ function savePublicPageBodies(map: Map<string, { title: string; body: string[]; 
   sessionSet(PUBLIC_PAGE_BODIES_SESSION_KEY, [...map.entries()].map(([key, entry]) => ({ key, ...entry })));
 }
 
+/** Session key holding the managed-page version stores (demo adapter only). */
+export const MANAGED_PAGES_SESSION_KEY = sessionKey("content-managed-pages");
+
+function loadManagedPages(): Map<string, ManagedPageState> {
+  const stored = sessionGet<ManagedPageState[]>(MANAGED_PAGES_SESSION_KEY);
+  const map = new Map<string, ManagedPageState>();
+  for (const entry of stored ?? []) {
+    map.set(entry.slug, { ...entry, versions: [...entry.versions] });
+  }
+  return map;
+}
+
+function saveManagedPages(map: Map<string, ManagedPageState>): void {
+  sessionSet(MANAGED_PAGES_SESSION_KEY, [...map.values()]);
+}
+
+/** Build a managed-page state from a workspace row that has not been edited
+ * through the structured editor yet. The synthesized version mirrors the row
+ * exactly; its body is only populated for the school-life seed so the demo
+ * editor starts from the copy that is live today. */
+function synthesizeManagedPageState(row: PublicPageRow | undefined): ManagedPageState | null {
+  if (!row) return null;
+  const versions: ManagedPageVersion[] = row.versionId
+    ? [
+        {
+          id: row.versionId,
+          version: row.version,
+          title: row.label,
+          reviewStatus: row.reviewStatus,
+          authorAccountId: row.authorAccountId,
+          authorDisplayName: demoAuthorDisplayName(row.authorAccountId) ?? (row.owner || null),
+          reviewedByAccountId: row.reviewedByAccountId,
+          publishedAt: row.currentStatus === "published" ? demoNowIso() : null,
+          createdAt: demoNowIso(),
+          body: row.key === "school-life" ? DEFAULT_SCHOOL_LIFE_BODY : null,
+        },
+      ]
+    : [];
+  return {
+    slug: row.key,
+    contentItemId: row.contentItemId ?? `page:${row.key}`,
+    reference: row.reference ?? `PAGE-${row.key.toUpperCase()}`,
+    itemVersion: row.itemVersion,
+    currentStatus: row.currentStatus,
+    versions,
+  };
+}
+
+/** Mirror a workspace-table transition into the managed-page store so the
+ * editor's version history stays in step with `setPublicPageStatus`. */
+function recordManagedPageTransition(previous: PublicPageRow, updated: PublicPageRow): void {
+  const states = loadManagedPages();
+  const state = states.get(previous.key) ?? synthesizeManagedPageState(previous);
+  if (!state) return;
+  const version: ManagedPageVersion = {
+    id: updated.versionId ?? `page:${previous.key}:v${updated.version}`,
+    version: updated.version,
+    title: updated.label,
+    reviewStatus: updated.reviewStatus,
+    authorAccountId: updated.authorAccountId,
+    /* A transition never changes the author — carry the resolved name. */
+    authorDisplayName:
+      updated.authorAccountId !== null && updated.authorAccountId === state.versions[0]?.authorAccountId
+        ? (state.versions[0]?.authorDisplayName ?? null)
+        : (demoAuthorDisplayName(updated.authorAccountId) ?? (updated.owner || null)),
+    reviewedByAccountId: updated.reviewedByAccountId,
+    publishedAt: updated.currentStatus === "published" ? demoNowIso() : null,
+    createdAt: demoNowIso(),
+    /* A transition never changes the body — carry the latest stored one. */
+    body: state.versions[0]?.body ?? null,
+  };
+  states.set(previous.key, {
+    ...state,
+    itemVersion: Math.max(state.itemVersion, updated.itemVersion),
+    currentStatus: updated.currentStatus,
+    versions: [version, ...state.versions],
+  });
+  saveManagedPages(states);
+}
+
 /* ------------------------------------------------------------------ */
 /* Demo adapter                                                        */
 /* ------------------------------------------------------------------ */
@@ -318,6 +435,20 @@ const DEFAULT_DEMO_PUBLISHER: ContentActor = {
   role: "content_publisher",
 };
 
+const DEMO_ACCOUNT_NAMES: Record<string, string> = {
+  [DEFAULT_DEMO_EDITOR.accountId]: DEFAULT_DEMO_EDITOR.displayName,
+  [DEFAULT_DEMO_PUBLISHER.accountId]: DEFAULT_DEMO_PUBLISHER.displayName,
+  [DEMO_CONTENT_EDITOR_ACCOUNT_ID]: DEFAULT_DEMO_EDITOR.displayName,
+  [SEEDED_CONTENT_AUTHOR_ID]: DEFAULT_DEMO_EDITOR.displayName,
+};
+
+/** Display name for a demo author account, or null when the session actor
+ * uses an id the demo store does not know (the editor falls back to
+ * "staff"). */
+function demoAuthorDisplayName(accountId: string | null): string | null {
+  return accountId === null ? null : (DEMO_ACCOUNT_NAMES[accountId] ?? null);
+}
+
 type DemoIntent = {
   key: string;
   action:
@@ -327,9 +458,11 @@ type DemoIntent = {
     | "unpublish"
     | "page-request-review"
     | "page-approve"
-    | "page-publish";
+    | "page-publish"
+    | "page-draft";
   notice?: ContentNotice;
   page?: PublicPageRow;
+  pageState?: ManagedPageState;
 };
 export const CONTENT_INTENTS_SESSION_KEY = sessionKey("content-workflow-intents");
 
@@ -351,6 +484,11 @@ function replayedNotice(key: string, action: DemoIntent["action"]): ContentNotic
 function replayedPage(key: string, action: DemoIntent["action"]): PublicPageRow | null {
   const match = loadIntents().find((intent) => intent.key === key && intent.action === action && intent.page !== undefined);
   return match?.page ? { ...match.page } : null;
+}
+
+function replayedPageState(key: string): ManagedPageState | null {
+  const match = loadIntents().find((intent) => intent.key === key && intent.action === "page-draft" && intent.pageState !== undefined);
+  return match?.pageState ? { ...match.pageState, versions: [...match.pageState.versions] } : null;
 }
 
 function stableHash(value: string): string {
@@ -557,6 +695,13 @@ export interface ContentService {
   listDownloads(): Promise<DownloadItem[]>;
   /** Public-page workflow rows from the same content source as notices. */
   listPublicPages(): Promise<PublicPageRow[]>;
+  /** Managed-page editor read: the content item and every immutable
+   * version, newest first. Null when the page has no managed record yet —
+   * the editor then starts from the shipped default body. */
+  getPage(slug: string): Promise<ManagedPageState | null>;
+  /** Append a structured page-sections draft version. New pages omit the
+   * content reference and create the item. */
+  savePageDraft(slug: string, input: PageDraftInput): Promise<ContentResult<ManagedPageState>>;
   /** Advance exactly one canonical public-page workflow transition. */
   setPublicPageStatus(
     key: string,
@@ -947,8 +1092,15 @@ export function createDemoContentService(): ContentService {
 
       let updated: PublicPageRow;
       if (nextStatus === "In review") {
-        const denied = roleFailure<PublicPageRow>(actor, "content_editor");
-        if (denied !== null) return denied;
+        /* Pages may be sent for review by the editor who drafted them OR by
+           a publisher who authored the draft (000125 mirrors this on the
+           RPC) — the author check below still confines it to the writer. */
+        if (actor.role !== "content_editor" && actor.role !== "content_publisher") {
+          return contentFailure(
+            "forbidden",
+            "The content editor or content publisher role is required to send a page for review.",
+          );
+        }
         if (current.reviewStatus !== "draft") {
           return contentFailure("conflict", "Only a draft page version can be sent for review.");
         }
@@ -1021,6 +1173,7 @@ export function createDemoContentService(): ContentService {
       }
 
       savePublicPages(rows.map((row) => (row.key === key ? updated : row)));
+      recordManagedPageTransition(current, updated);
       saveIntent({ key: idempotencyKey, action, page: { ...updated } });
       void auditService.record({
         actor: actor.displayName,
@@ -1189,6 +1342,114 @@ export function createDemoContentService(): ContentService {
       return entry ? { ...entry } : null;
     },
 
+    async getPage(slug) {
+      const stored = loadManagedPages().get(slug);
+      if (stored) return stored;
+      return synthesizeManagedPageState(loadPublicPages().find((row) => row.key === slug));
+    },
+
+    async savePageDraft(slug, input) {
+      const actor = input.actor ?? DEFAULT_DEMO_EDITOR;
+      /* Page drafting accepts the publisher too — the migration mirrors this
+         so a publisher's draft is never deadlocked (it still cannot be
+         approved or published by its author). */
+      if (actor.role !== "content_editor" && actor.role !== "content_publisher") {
+        return contentFailure(
+          "forbidden",
+          "The content editor or content publisher role is required to draft public pages.",
+        );
+      }
+      if (input.title.trim() === "" || typeof input.body !== "object" || input.body === null || Array.isArray(input.body)) {
+        return contentFailure("validation", "A title and structured body are required to save a page draft.");
+      }
+      const states = loadManagedPages();
+      const existing = states.get(slug) ?? synthesizeManagedPageState(loadPublicPages().find((row) => row.key === slug));
+      const itemVersion = existing?.itemVersion ?? 0;
+      const expectedVersion = input.expectedVersion ?? itemVersion;
+      const idempotencyKey = input.idempotencyKey ?? workflowKey("page-draft", slug, expectedVersion, JSON.stringify(input.body));
+      const replay = replayedPageState(idempotencyKey);
+      if (replay !== null) return { ok: true, value: replay, replayed: true };
+      if (expectedVersion !== itemVersion) {
+        return staleFailure(expectedVersion, itemVersion, existing?.currentStatus ?? null);
+      }
+      const nextVersion = itemVersion + 1;
+      const version: ManagedPageVersion = {
+        id: `page:${slug}:v${nextVersion}`,
+        version: nextVersion,
+        title: input.title.trim(),
+        reviewStatus: "draft",
+        authorAccountId: actor.accountId,
+        authorDisplayName: actor.displayName,
+        reviewedByAccountId: null,
+        publishedAt: null,
+        createdAt: demoNowIso(),
+        body: input.body,
+      };
+      const state: ManagedPageState = existing
+        ? { ...existing, itemVersion: nextVersion, currentStatus: "draft", versions: [version, ...existing.versions] }
+        : {
+            slug,
+            contentItemId: `page:${slug}`,
+            reference: `PAGE-${slug.toUpperCase()}`,
+            itemVersion: nextVersion,
+            currentStatus: "draft",
+            versions: [version],
+          };
+      states.set(slug, state);
+      saveManagedPages(states);
+
+      /* Keep the Content workspace table in step: the page row shows the new
+         draft version and its author. */
+      const rows = loadPublicPages();
+      const current = rows.find((row) => row.key === slug);
+      const updatedRow: PublicPageRow = current
+        ? {
+            ...current,
+            contentItemId: state.contentItemId,
+            reference: state.reference,
+            versionId: version.id,
+            version: nextVersion,
+            itemVersion: nextVersion,
+            reviewStatus: "draft",
+            currentStatus: "draft",
+            label: version.title,
+            authorAccountId: actor.accountId,
+            reviewedByAccountId: null,
+            scheduledForIso: null,
+            status: "Draft",
+            lastReviewed: "—",
+            owner: actor.displayName,
+          }
+        : {
+            key: slug,
+            contentItemId: state.contentItemId,
+            reference: state.reference,
+            versionId: version.id,
+            version: nextVersion,
+            itemVersion: nextVersion,
+            reviewStatus: "draft",
+            currentStatus: "draft",
+            authorAccountId: actor.accountId,
+            reviewedByAccountId: null,
+            scheduledForIso: null,
+            label: version.title,
+            href: `/${slug}`,
+            status: "Draft",
+            lastReviewed: "—",
+            owner: actor.displayName,
+          };
+      savePublicPages(current ? rows.map((row) => (row.key === slug ? updatedRow : row)) : [...rows, updatedRow]);
+      saveIntent({ key: idempotencyKey, action: "page-draft", pageState: state });
+      void auditService.record({
+        actor: actor.displayName,
+        action: "Page edited",
+        target: `page:${slug}`,
+        outcome: "Success",
+        reason: `Draft version ${nextVersion} saved`,
+      });
+      return { ok: true, value: state };
+    },
+
     getVacancy: (slug) => Promise.resolve(vacancies.find((item) => item.slug === slug) ?? null),
     listVacancies: () => Promise.resolve(vacancies.map((item) => ({ ...item }))),
   };
@@ -1211,6 +1472,8 @@ type ServerContentVersionRow = {
   author_account_id?: string | null;
   reviewed_by_account_id?: string | null;
   approved_at?: string | null;
+  /* Staff-scope embed from `author_account_id` → user_accounts → people. */
+  author?: { people?: { display_name?: string | null } | null } | null;
 };
 
 /**
@@ -2204,6 +2467,130 @@ contentService.editPublicPage = async (key, input) => {
     owner: input.actor?.displayName ?? current.owner,
   };
   return { ok: true, value: await refreshServerPage(key, fallback, version) };
+};
+function mapManagedPageVersion(row: ServerContentVersionRow): ManagedPageVersion {
+  return {
+    id: row.id,
+    version: row.version,
+    title: row.title,
+    reviewStatus: reviewStatus(row.review_status, "draft"),
+    authorAccountId: row.author_account_id ?? null,
+    authorDisplayName: row.author?.people?.display_name ?? null,
+    reviewedByAccountId: row.reviewed_by_account_id ?? null,
+    publishedAt: row.published_at,
+    createdAt: row.created_at,
+    body: row.body,
+  };
+}
+
+function mapManagedPageState(row: ServerContentRow): ManagedPageState {
+  return {
+    slug: row.slug,
+    contentItemId: row.id,
+    reference: row.reference,
+    itemVersion: row.version ?? 0,
+    currentStatus: noticeStatus(row.current_status),
+    versions: [...(row.content_versions ?? [])]
+      .sort((left, right) => right.version - left.version)
+      .map(mapManagedPageVersion),
+  };
+}
+
+const originalGetPage = originalContent.getPage.bind(originalContent);
+const originalSavePageDraft = originalContent.savePageDraft.bind(originalContent);
+
+/** The staff `content.list` embed resolves an author's name only when RLS
+ * lets the caller read that account (own row, or administrator). The
+ * scope-gated author directory fills the gap for other staff — when the RPC
+ * is unavailable the names stay null and the editor falls back to "staff". */
+async function withAuthorDirectory(state: ManagedPageState): Promise<ManagedPageState> {
+  if (!state.versions.some((version) => version.authorAccountId !== null && version.authorDisplayName === null)) {
+    return state;
+  }
+  const directory = await adapterCall<Array<{ accountId?: unknown; displayName?: unknown }>>(
+    "content.authorDirectory",
+    { contentItemId: state.contentItemId },
+  );
+  if (!directory.ok) return state;
+  const names = new Map<string, string>();
+  for (const entry of directory.value) {
+    if (typeof entry.accountId === "string" && typeof entry.displayName === "string" && entry.displayName !== "") {
+      names.set(entry.accountId, entry.displayName);
+    }
+  }
+  if (names.size === 0) return state;
+  return {
+    ...state,
+    versions: state.versions.map((version) =>
+      version.authorDisplayName === null && version.authorAccountId !== null && names.has(version.authorAccountId)
+        ? { ...version, authorDisplayName: names.get(version.authorAccountId) ?? null }
+        : version,
+    ),
+  };
+}
+
+contentService.getPage = async (slug) => {
+  if (clientAdapterMode() !== "supabase") return originalGetPage(slug);
+  const response = await adapterCall<ServerContentRow[]>("content.list", { scope: "staff" });
+  if (!response.ok) throw new Error(response.errors[0]?.message ?? "Content is unavailable.");
+  const row = response.value.find((candidate) => candidate.kind === "page" && candidate.slug === slug);
+  return row ? withAuthorDirectory(mapManagedPageState(row)) : null;
+};
+contentService.savePageDraft = async (slug, input) => {
+  if (clientAdapterMode() !== "supabase") return originalSavePageDraft(slug, input);
+  const response = await adapterCall<ServerContentRow[]>("content.list", { scope: "staff" });
+  if (!response.ok) return adapterFailure(response, "Content is unavailable.");
+  const row = response.value.find((candidate) => candidate.kind === "page" && candidate.slug === slug);
+  const itemVersion = row?.version ?? 0;
+  const expectedVersion = input.expectedVersion ?? itemVersion;
+  if (expectedVersion !== itemVersion) {
+    return staleFailure(expectedVersion, itemVersion, row?.current_status ?? null);
+  }
+  const idempotencyKey =
+    input.idempotencyKey ?? workflowKey("page-draft", slug, itemVersion, JSON.stringify(input.body));
+  const save = await adapterCall<ServerContentTransition>("content.saveDraft", {
+    /* New pages omit the content reference entirely — the RPC creates the
+       item under slug. */
+    ...(row ? { contentItemId: row.id } : {}),
+    kind: "page",
+    slug,
+    title: input.title.trim(),
+    body: input.body,
+    expectedVersion: itemVersion,
+    idempotencyKey,
+  });
+  if (!save.ok) return adapterFailure(save, "Unable to save the page draft.");
+  /* Refresh the staff projection so the returned state carries the real
+     version rows; fall back to the transition response when the read lags. */
+  const refresh = await adapterCall<ServerContentRow[]>("content.list", { scope: "staff" });
+  const refreshed = refresh.ok
+    ? refresh.value.find((candidate) => candidate.kind === "page" && candidate.slug === slug)
+    : undefined;
+  const replayed = save.value.replayed ? { replayed: true } : {};
+  if (refreshed) return { ok: true, value: await withAuthorDirectory(mapManagedPageState(refreshed)), ...replayed };
+  const versionNumber = transitionVersion(save.value, itemVersion + 1);
+  const fallback: ManagedPageState = {
+    slug,
+    contentItemId: save.value.id ?? row?.id ?? `page:${slug}`,
+    reference: save.value.reference ?? row?.reference ?? `PAGE-${slug.toUpperCase()}`,
+    itemVersion: versionNumber,
+    currentStatus: "draft",
+    versions: [
+      {
+        id: transitionVersionId(save.value, undefined) ?? `page:${slug}:v${versionNumber}`,
+        version: versionNumber,
+        title: input.title.trim(),
+        reviewStatus: "draft",
+        authorAccountId: input.actor?.accountId ?? null,
+        authorDisplayName: input.actor?.displayName ?? null,
+        reviewedByAccountId: null,
+        publishedAt: null,
+        createdAt: demoNowIso(),
+        body: input.body,
+      },
+    ],
+  };
+  return { ok: true, value: fallback, ...replayed };
 };
 contentService.getPublicPageBody = async (key) => {
   if (clientAdapterMode() !== "supabase") return originalContent.getPublicPageBody(key);

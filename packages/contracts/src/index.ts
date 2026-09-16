@@ -6,3 +6,4 @@ export * from "./teaching-assignments";
 export * from "./data-import";
 export * from "./guardian-claims";
 export * from "./data-exports";
+export * from "./school-life-page";

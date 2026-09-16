@@ -16,6 +16,7 @@ const READ_OPERATION_NAMES: ReadonlySet<string> = new Set([
   "audit.listPage",
   "config.admissions",
   "config.read",
+  "content.authorDirectory",
   "content.list",
   "content.listDownloads",
   "context.family",

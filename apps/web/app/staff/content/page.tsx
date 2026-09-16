@@ -19,6 +19,7 @@ import {
   type PublicPageRow,
 } from "@/modules/services/content";
 import { canAnyRole } from "@/modules/services/staff-profiles";
+import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 
 import styles from "./page.module.css";
 
@@ -591,6 +592,15 @@ export default function ContentPage() {
                       <td className="num">{row.lastReviewed}</td>
                       <td>{row.owner}</td>
                       <td className={styles.cellAction}>
+                        {row.key === "school-life" ? (
+                          <Link
+                            prefetch={false}
+                            className="btn btn-quiet"
+                            href={canonicalStaffUrl(summary?.profileCode ?? null, "/content/pages/school-life")}
+                          >
+                            Edit page
+                          </Link>
+                        ) : null}
                         <button
                           type="button"
                           className="btn btn-quiet"

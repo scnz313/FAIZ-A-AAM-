@@ -3737,7 +3737,14 @@ export function jobsDecideV2(supabase: SupabaseClient<Database>, input: { applic
 
 export function contentList(supabase: SupabaseClient<Database>, scope: "public" | "staff" | "family" = "public") {
   return result(async () => {
-    const query = supabase.from("content_items").select("id, reference, kind, slug, current_status, scheduled_at, version, current_version_id, updated_at, content_versions(id, version, title, body, review_status, published_at, created_at, author_account_id, reviewed_by_account_id, approved_at), notices(id, reference, category, urgent, pinned, status, published_at, expires_at, review_due, scheduled_at, starts_at, unpublished_at, notice_audiences(audience, role_code, academic_year_id, grade_section_id, student_id))");
+    /* The staff projection additionally embeds the version author's display
+       name so workspaces can attribute drafts; anonymous/family scopes skip
+       it because those roles cannot read user_accounts. */
+    const versionSelect =
+      scope === "staff"
+        ? "id, version, title, body, review_status, published_at, created_at, author_account_id, reviewed_by_account_id, approved_at, author:user_accounts!author_account_id(people(display_name))"
+        : "id, version, title, body, review_status, published_at, created_at, author_account_id, reviewed_by_account_id, approved_at";
+    const query = supabase.from("content_items").select(`id, reference, kind, slug, current_status, scheduled_at, version, current_version_id, updated_at, content_versions(${versionSelect}), notices(id, reference, category, urgent, pinned, status, published_at, expires_at, review_due, scheduled_at, starts_at, unpublished_at, notice_audiences(audience, role_code, academic_year_id, grade_section_id, student_id))`);
     const { data, error } = scope === "public" ? await query.in("current_status", ["published", "expired"]) : await query;
     if (error !== null) throw mapRpcError(error);
     return (data ?? []) as unknown as Array<Record<string, unknown>>;
@@ -3831,6 +3838,26 @@ export function contentListPublic(supabase: SupabaseClient<Database>) {
       const current = row.current_version_id === null ? undefined : versionsById.get(row.current_version_id);
       return { ...row, content_versions: current === undefined ? [] : [current] };
     });
+  });
+}
+
+/** Display names of a content item's version authors, resolved through the
+ * scope-gated directory (000127) — workspaces must never render a raw account
+ * id, and RLS keeps other accounts' identity rows unreadable. */
+export function contentAuthorDirectory(supabase: SupabaseClient<Database>, contentItemId: string) {
+  return result<Json[]>(async () => {
+    const { data, error } = await callAppRpc<Json[]>(supabase, "content_author_directory", { p_content_item_id: contentItemId });
+    if (error !== null) throw mapRpcError(error);
+    return data ?? [];
+  });
+}
+
+/** Latest published body for a public page slug; stays readable while newer drafts exist (000126). */
+export function contentPublicPageBody(supabase: SupabaseClient<Database>, slug: string) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<{ title?: unknown; body?: unknown; version?: unknown; publishedAt?: unknown } | null>(supabase, "public_page_body", { p_slug: slug });
+    if (error !== null) throw mapRpcError(error);
+    return data;
   });
 }
 

@@ -2,6 +2,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.join(__dirname, "..", "apps", "web");
+/* Icon name literals also live in the shared contracts package (e.g. the
+   managed page bodies), which feeds the app UI directly. */
+const contractsRoot = path.join(__dirname, "..", "packages", "contracts", "src");
 const manifestPath = path.join(__dirname, "material-symbols-rounded-icons.txt");
 const names = new Set();
 
@@ -26,6 +29,7 @@ function visit(directory) {
 }
 
 visit(root);
+visit(contractsRoot);
 const discovered = [...names].sort();
 
 if (process.argv.includes("--check")) {
