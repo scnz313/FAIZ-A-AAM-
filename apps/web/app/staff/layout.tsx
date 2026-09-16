@@ -11,13 +11,22 @@ import { loadServerStaffContext } from "@/lib/supabase/server-loaders";
 import { loadServerNotifications } from "@/lib/supabase/server-loaders";
 import { mapServerStaffContext } from "@/modules/services/staff-context";
 import { isStaffPortalPath, isLegacyStaffPath, portalPrefixForProfile, staffSubPathForPathname } from "@/lib/auth/portal-routes";
+import { staffPortalLabel, staffRouteTitle } from "@/lib/metadata/staff-title";
 
 /* Indexing protection — staff workspaces contain private operational
    records. This is not authentication; server authorization arrives with
    the backend. */
-export const metadata: Metadata = {
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const pathname = (await headers()).get("x-fass-pathname") ?? "/staff";
+  const portal = staffPortalLabel(pathname);
+  return {
+    robots: { index: false, follow: false },
+    title: {
+      default: `${staffRouteTitle(pathname)} · ${portal}`,
+      template: `%s · ${portal} · Faiz E Aam Secondary School`,
+    },
+  };
+}
 
 /**
  * Split the middleware-preserved "pathname?search" header value into the

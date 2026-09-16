@@ -5,7 +5,7 @@ import { providerEnvReadiness } from "@/lib/supabase/env";
 import { DataImportsWorkspace } from "./ImportsWorkspace";
 
 export const metadata: Metadata = {
-  title: "Data imports · Staff",
+  title: "Data imports",
   description: "Upload, validate, and commit school-data imports.",
 };
 

@@ -11,7 +11,7 @@ import { loadServerInvoices, loadServerProfileCode, loadServerStaffReceipts } fr
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Receipt · Staff",
+  title: "Receipt",
 };
 
 /**

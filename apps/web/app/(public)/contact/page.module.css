@@ -39,7 +39,7 @@
 
 .details dt {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   line-height: 1.4;
@@ -93,7 +93,7 @@
   padding: 14px 16px 16px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.14em;
   line-height: 1.4;

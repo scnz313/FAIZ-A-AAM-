@@ -8,7 +8,7 @@ import { loadServerResultsBatches } from "@/lib/supabase/server-loaders";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Results · Staff",
+  title: "Results",
 };
 
 export default async function ResultsPage() {

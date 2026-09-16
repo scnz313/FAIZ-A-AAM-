@@ -14,7 +14,7 @@ import { PrintButton } from "./PrintButton";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Invoices · Staff",
+  title: "Invoices",
 };
 
 export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {

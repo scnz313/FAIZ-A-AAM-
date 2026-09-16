@@ -18,7 +18,7 @@ import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 
 import styles from "./page.module.css";
 
-export const metadata: Metadata = { title: "Result batch · Staff" };
+export const metadata: Metadata = { title: "Result batch" };
 
 /** Readable fallback for a version row whose note is empty. */
 function versionStateLabel(state?: string): string {

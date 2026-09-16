@@ -8,7 +8,7 @@ import { loadServerAdmissions } from "@/lib/supabase/server-loaders";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Admissions · Staff",
+  title: "Admissions",
 };
 
 export default async function StaffAdmissionsPage() {

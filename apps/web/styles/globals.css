@@ -259,7 +259,7 @@ textarea {
   gap: 10px;
   margin: 0 0 22px;
   color: var(--saffron-ink);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.15em;
   line-height: 1.2;
@@ -286,7 +286,7 @@ textarea {
 .section-label {
   margin: 0 0 12px;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -303,7 +303,7 @@ textarea {
   gap: 10px;
   margin: 0 0 22px;
   color: var(--saffron-ink);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.15em;
   line-height: 1.2;
@@ -669,7 +669,7 @@ textarea {
   border: 0;
   border-radius: var(--r-pill);
   color: var(--status-neutral);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   white-space: nowrap;
@@ -885,7 +885,7 @@ span:has(> .demo-badge) {
   border-top: 2px solid var(--ink);
   border-bottom: 1px solid var(--line);
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.11em;
   text-align: left;
@@ -1122,7 +1122,7 @@ span:has(> .demo-badge) {
 .public-header .brand-sub {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1324,7 +1324,7 @@ span:has(> .demo-badge) {
 
 .public-footer-col h2 {
   margin: 0 0 14px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -2385,7 +2385,7 @@ span:has(> .demo-badge) {
   align-items: center;
   gap: 16px;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.18em;
   line-height: 1.2;
@@ -2780,7 +2780,7 @@ span:has(> .demo-badge) {
 .sec-head .sub { color: var(--muted); font-size: 0.95rem; max-width: 46ch; margin: 0; }
 .rule { border: 0; border-top: 1px solid var(--line-soft); }
 .rule-strong { border: 0; border-top: 2px solid var(--ink); }
-.label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); }
+.label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); }
 .label-ink { color: var(--ink); }
 .stack { display: flex; flex-direction: column; }
 .row { display: flex; align-items: center; gap: 12px; }
@@ -2799,7 +2799,7 @@ span:has(> .demo-badge) {
 /* ── V15 buttons (canonical; emitted by Button.tsx) ── */
 
 /* ── V15 chips ─────────────────────────────────── */
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line); border-radius: var(--r-pill); font-size: 0.72rem; font-weight: 650; letter-spacing: 0.02em; color: var(--ink-3); background: var(--chalk); white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line); border-radius: var(--r-pill); font-size: 0.75rem; font-weight: 650; letter-spacing: 0.02em; color: var(--ink-3); background: var(--chalk); white-space: nowrap; }
 button.chip { cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
 button.chip:hover { border-color: var(--ink); color: var(--ink); }
 .chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
@@ -2889,7 +2889,7 @@ button.chip:hover { border-color: var(--ink); color: var(--ink); }
 .table-wrap { position: relative; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
 table.ledger { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 table.ledger caption { text-align: left; font-family: var(--serif); font-size: 1.15rem; font-weight: 600; padding: 10px 0 12px; color: var(--ink); }
-table.ledger th { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 9px 14px 9px 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line); }
+table.ledger th { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 9px 14px 9px 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line); }
 table.ledger td { padding: 12px 14px 12px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
 table.ledger tr:last-child td { border-bottom: 1px solid var(--line); }
 table.ledger td.num, table.ledger th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -2985,13 +2985,13 @@ table.ledger tr.click { cursor: pointer; }
 /* ── V15 facts ledger (school-record key/value rows) ── */
 .facts-ledger { border-top: 2px solid var(--ink); }
 .facts-ledger .fl-row { display: flex; justify-content: space-between; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
-.facts-ledger .fl-row .k { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+.facts-ledger .fl-row .k { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
 .facts-ledger .fl-row .v { font-family: var(--serif); font-size: 1.02rem; font-weight: 600; text-align: right; }
 
 /* ── V15 record card (specimen record panel) ───── */
 .record-card { background: var(--chalk); border: 1px solid var(--line-strong); border-radius: var(--r); position: relative; }
 .record-card .rc-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
-.record-card .rc-head .t, .record-card .rc-head .rc-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.record-card .rc-head .t, .record-card .rc-head .rc-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
 .record-card .rc-body { padding: 18px; }
 .record-card .rc-row { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px dotted var(--line); font-size: 0.88rem; }
 .record-card .rc-row:last-child { border-bottom: 0; }
@@ -2999,7 +2999,7 @@ table.ledger tr.click { cursor: pointer; }
 .record-card .rc-row .v { font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; }
 
 /* ── V15 maker-checker ─────────────────────────── */
-.maker-checker { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; color: var(--ink-3); border: 1px dashed var(--line-strong); border-radius: var(--r-pill); padding: 2px 9px; }
+.maker-checker { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 700; color: var(--ink-3); border: 1px dashed var(--line-strong); border-radius: var(--r-pill); padding: 2px 9px; }
 
 /* ── V15 timeline ──────────────────────────────── */
 .timeline { position: relative; padding-left: 26px; }
@@ -3009,7 +3009,7 @@ table.ledger tr.click { cursor: pointer; }
 .tl-item::before { content: ""; position: absolute; left: -24px; top: 5px; width: 11px; height: 11px; border-radius: 50%; background: var(--chalk); border: 2px solid var(--muted); }
 .tl-item.done::before { background: var(--willow); border-color: var(--willow); }
 .tl-item.cur::before { background: var(--saffron); border-color: var(--saffron); outline: 4px solid var(--saffron-soft); }
-.tl-when { font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tl-when { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tl-t { font-weight: 650; font-size: 0.94rem; }
 .tl-d { font-size: 0.85rem; color: var(--muted); line-height: 1.5; margin-top: 2px; }
 
@@ -3024,7 +3024,7 @@ table.ledger tr.click { cursor: pointer; }
 .wr-t { padding-top: 5px; font-size: 0.88rem; font-weight: 650; color: var(--muted); }
 .wr-t.cur { color: var(--ink); }
 .wr-t.done { color: var(--ink-2); }
-.wr-s { font-size: 0.72rem; color: var(--faint); font-weight: 600; display: block; }
+.wr-s { font-size: 0.75rem; color: var(--faint); font-weight: 600; display: block; }
 .wiz-form { background: var(--chalk); border: 1px solid var(--line); border-radius: var(--r); padding: clamp(20px, 3vw, 32px); }
 .wiz-form h2 { font-size: 1.35rem; margin-bottom: 4px; }
 .wiz-foot { display: flex; justify-content: space-between; gap: 12px; padding-top: 20px; border-top: 1px solid var(--line-soft); flex-wrap: wrap; align-items: center; }

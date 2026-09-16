@@ -8,7 +8,7 @@ import { FinanceWorkspace } from "./FinanceWorkspace";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Finance · Staff",
+  title: "Finance",
 };
 
 /**

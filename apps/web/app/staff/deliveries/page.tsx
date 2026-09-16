@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import DeliveriesWorkspace from "./DeliveriesWorkspace";
 
 export const metadata: Metadata = {
-  title: "Deliveries · Administrator",
+  title: "Deliveries",
 };
 
 export default function DeliveriesPage() {

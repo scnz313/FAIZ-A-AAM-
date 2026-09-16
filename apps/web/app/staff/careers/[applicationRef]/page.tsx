@@ -10,7 +10,7 @@ import { canonicalStaffUrl } from "@/lib/auth/portal-routes";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Application · Staff",
+  title: "Application",
 };
 
 export default async function ApplicationReviewPage({

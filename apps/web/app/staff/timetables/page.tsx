@@ -7,7 +7,7 @@ import { getDemoDateSheet } from "@/modules/services/timetable";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Timetables · Staff",
+  title: "Timetables",
 };
 
 export default function TimetablesPage() {

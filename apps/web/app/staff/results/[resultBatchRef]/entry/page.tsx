@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<{ resultBat
     ? await loadServerResultBatch(resultBatchRef)
     : await academicsService.getBatch(resultBatchRef);
   return {
-    title: batch ? `Marks entry · ${batch.exam} · ${batch.className}` : "Marks entry · Staff",
+    title: batch ? `Marks entry · ${batch.exam} · ${batch.className}` : "Marks entry",
   };
 }
 

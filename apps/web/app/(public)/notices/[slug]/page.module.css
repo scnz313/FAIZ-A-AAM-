@@ -29,7 +29,7 @@
   border-radius: var(--r-pill, 999px);
   background: var(--saffron-soft);
   color: var(--saffron-ink);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;

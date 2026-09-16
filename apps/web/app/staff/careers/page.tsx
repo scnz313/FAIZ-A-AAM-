@@ -9,7 +9,7 @@ import { loadServerJobs, loadServerVacancies } from "@/lib/supabase/server-loade
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Careers · Staff",
+  title: "Careers",
 };
 
 export default async function CareersPage() {

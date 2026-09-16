@@ -15,7 +15,7 @@ import { mergePaymentRegisterRows } from "@/modules/services/finance-server-map"
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Payments · Staff",
+  title: "Payments",
 };
 
 type PaymentStatus = "success" | "pending" | "failed";

@@ -11,7 +11,7 @@ import { ReconciliationRun } from "./ReconciliationRun";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Reconciliation · Staff",
+  title: "Reconciliation",
 };
 
 type ReconRow = {
