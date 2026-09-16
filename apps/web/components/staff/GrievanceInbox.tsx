@@ -441,14 +441,21 @@ export function GrievanceInbox({ initialItems }: { initialItems?: Grievance[] } 
                         <input type="checkbox" checked={privateNote} onChange={(event) => { setPrivateNote(event.target.checked); if (event.target.checked) setResolveAfterSend(false); }} />
                         Staff-only private note
                       </label>
-                      <label className={styles.checkRow}>
-                        <input type="checkbox" checked={resolveAfterSend} disabled={privateNote} onChange={(event) => setResolveAfterSend(event.target.checked)} />
+                      <label className={styles.checkRow} title={privateNote ? "A public response is required to resolve a request." : undefined}>
+                        <input
+                          type="checkbox"
+                          checked={resolveAfterSend}
+                          disabled={privateNote}
+                          aria-describedby={privateNote ? "resolve-after-send-help" : undefined}
+                          onChange={(event) => setResolveAfterSend(event.target.checked)}
+                        />
                         Resolve after sending
                       </label>
                     </div>
+                    {privateNote ? <p id="resolve-after-send-help" className={styles.optionHelp}>A public response is required to resolve a request.</p> : null}
                     <div className={styles.actions}>
-                      <Button variant="primary" type="submit" disabled={sending}>{sending ? "Recording…" : privateNote ? "Add private note" : "Send response"}</Button>
-                      <span className={styles.actionHint}>{privateNote ? "The requester never sees private notes." : "Sending moves the case to In progress unless you resolve it."}</span>
+                      <Button variant="primary" type="submit" disabled={sending}>{sending ? "Recording…" : privateNote ? "Add private note" : resolveAfterSend ? "Send and resolve" : "Send response"}</Button>
+                      <span className={styles.actionHint}>{privateNote ? "The requester never sees private notes." : resolveAfterSend ? "The response is sent and the case moves to Resolved." : "Sending moves the case to In progress."}</span>
                     </div>
                   </form>
                 ) : (

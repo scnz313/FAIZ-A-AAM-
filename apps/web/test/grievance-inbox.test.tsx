@@ -69,6 +69,17 @@ describe("GrievanceInbox", () => {
     expect(screen.queryByText("Transfer certificate collected")).not.toBeInTheDocument();
   });
 
+  it("explains why private notes cannot resolve a request", async () => {
+    const user = userEvent.setup();
+    render(<GrievanceInbox initialItems={requests} />);
+
+    await user.click(screen.getByLabelText("Staff-only private note"));
+
+    expect(screen.getByRole("button", { name: "Add private note" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Resolve after sending")).toBeDisabled();
+    expect(screen.getByText("A public response is required to resolve a request.")).toBeInTheDocument();
+  });
+
   it("records a response with the signed-in staff display name", async () => {
     const user = userEvent.setup();
     const updated: Grievance = {
@@ -81,7 +92,9 @@ describe("GrievanceInbox", () => {
 
     await user.type(screen.getByLabelText(/^Response/), "The receipt is now available.");
     await user.click(screen.getByLabelText("Resolve after sending"));
-    await user.click(screen.getByRole("button", { name: "Send response" }));
+    expect(screen.getByRole("button", { name: "Send and resolve" })).toBeInTheDocument();
+    expect(screen.getByText("The response is sent and the case moves to Resolved.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Send and resolve" }));
 
     await waitFor(() => expect(respond).toHaveBeenCalledWith(
       "SR-2026-NEW0001",
