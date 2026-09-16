@@ -144,28 +144,28 @@ export default function SecurityPage() {
                 aria-label="Active sessions table"
                 tabIndex={0}
               >
-                <table className="ledger">
+                <table className={`ledger ${styles.sessionsTable}`}>
                   <thead>
                     <tr>
                       <th>Device</th>
                       <th>Last active</th>
-                      <th><span className="sr-only">Actions</span></th>
+                      <th className={styles.actionHead}><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="strong small">Current browser · verified Supabase session</td>
+                      <td><strong className={styles.deviceName}>Current browser · verified Supabase session</strong></td>
                       <td className="num small muted">Active now</td>
-                      <td style={{ textAlign: "right" }}>
+                      <td className={styles.actionCell}>
                         <StatusBadge tone="good">Current</StatusBadge>
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <div className="pn-body" style={{ borderTop: "1px solid var(--line-soft)", paddingTop: 12 }}>
-                <p className="small muted" style={{ marginBottom: 10 }}>Close sessions on other browsers if you no longer recognize or use them.</p>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div className={styles.sessionFoot}>
+                <p className="small muted" style={{ margin: 0 }}>Close sessions on other browsers if you no longer recognize or use them.</p>
+                <div className={styles.sessionActions}>
                   <Button variant="quiet" onClick={() => void signOutProvider("others")} disabled={securityBusy !== null}>
                     {securityBusy === "others" ? "Closing…" : "Sign out other devices"}
                   </Button>
@@ -235,12 +235,12 @@ export default function SecurityPage() {
           <div className="pn-head"><h2>Active sessions</h2></div>
           <div className="pn-body flush">
             <div className="table-wrap">
-              <table className="ledger">
+              <table className={`ledger ${styles.sessionsTable}`}>
                 <thead>
                   <tr>
                     <th>Device</th>
                     <th>Last active</th>
-                    <th><span className="sr-only">Actions</span></th>
+                    <th className={styles.actionHead}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -248,9 +248,12 @@ export default function SecurityPage() {
                     const out = signedOut[session.id] === true;
                     return (
                       <tr key={session.id} style={out ? { opacity: 0.5 } : undefined}>
-                        <td className="strong small">{session.device}</td>
+                        <td>
+                          <strong className={styles.deviceName}>{session.device}</strong>
+                          <span className="small muted" style={{ display: "block", marginTop: 3 }}>{session.location}</span>
+                        </td>
                         <td className="num small muted">{session.lastActive}</td>
-                        <td style={{ textAlign: "right" }}>
+                        <td className={styles.actionCell}>
                           {out ? (
                             <StatusBadge tone="neutral">Signed out</StatusBadge>
                           ) : session.current ? (

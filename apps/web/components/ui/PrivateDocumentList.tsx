@@ -203,7 +203,7 @@ export function PrivateDocumentList({
 
   if (documents.length === 0) {
     return (
-      <div className="workspace-state">
+      <div className={`workspace-state ${styles.emptyPad}`}>
         <p className="workspace-state-title">{emptyTitle}</p>
         <p className="workspace-state-note">{emptyNote}</p>
       </div>
@@ -270,7 +270,7 @@ export function PrivateDocumentList({
         </p>
       </div>
       {visibleDocuments.length === 0 ? (
-        <div className="workspace-state">
+        <div className={`workspace-state ${styles.emptyPad}`}>
           <p className="workspace-state-title">No documents in this view</p>
           <p className="workspace-state-note">No authorized records match the selected filters. Clearing the filters restores the full register.</p>
           <button type="button" className={`button button--quiet ${styles.clearButton}`} onClick={clearFilters}>
@@ -278,104 +278,98 @@ export function PrivateDocumentList({
           </button>
         </div>
       ) : (
-        <ul className={styles.list}>
-          {visibleDocuments.map((document) => {
-            const deliveryState = delivery[document.ref];
-            const effectiveState = deliveryState?.state ?? document.processingState;
-            const presentation = DOCUMENT_STATE_PRESENTATION[effectiveState];
-            const busy = requesting.has(document.ref);
-            const approvalBusy = publicApproval?.pending.has(document.ref) ?? false;
-            const approvalError = publicApproval?.errors[document.ref];
-            const isPublic = document.visibility === "public_approved";
-            const publicEligible = document.ownerDomain === PUBLIC_REGISTER_OWNER_DOMAIN;
-            return (
-              <li key={document.ref} className={styles.row}>
-                <div className={styles.main}>
-                  <div className={styles.titleRow}>
-                    <strong>{document.filename}</strong>
-                    {isPublic ? <StatusBadge tone="good">Public register</StatusBadge> : null}
-                    <StatusBadge tone={presentation.tone}>{presentation.label}</StatusBadge>
-                  </div>
-                  <p className={styles.meta}>
-                    <span>{labelFromCode(document.category)}</span>
-                    <span>{document.mimeType}</span>
-                    <span className="num">{formatBytes(document.sizeBytes)}</span>
-                    <span className="num">v{document.version}</span>
-                  </p>
-                  {showOwner ? (
-                    <p className={styles.owner}>
-                      {labelFromCode(document.ownerDomain)} · <span className="num">{document.ownerReference ?? "Scoped record"}</span>
-                    </p>
-                  ) : null}
-                  {showProcessing ? (
-                    <dl className={styles.processing}>
-                      <div>
-                        <dt>Finalization</dt>
-                        <dd>{document.finalizationState === "verified" ? `Verified ${dateLabel(document.finalizedAtIso)}` : document.finalizationState === "failed" ? "Failed" : "Awaiting byte verification"}</dd>
+        <div className="table-wrap" role="region" aria-label="Private files register" tabIndex={0}>
+          <table className={`ledger ${styles.table}`}>
+            <caption className="sr-only">Private files with processing state and download actions</caption>
+            <thead>
+              <tr>
+                <th scope="col">Document</th>
+                <th scope="col">Status</th>
+                <th scope="col" className={styles.actionHead}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleDocuments.map((document) => {
+                const deliveryState = delivery[document.ref];
+                const effectiveState = deliveryState?.state ?? document.processingState;
+                const presentation = DOCUMENT_STATE_PRESENTATION[effectiveState];
+                const busy = requesting.has(document.ref);
+                const approvalBusy = publicApproval?.pending.has(document.ref) ?? false;
+                const approvalError = publicApproval?.errors[document.ref];
+                const isPublic = document.visibility === "public_approved";
+                const publicEligible = document.ownerDomain === PUBLIC_REGISTER_OWNER_DOMAIN;
+                const note = approvalError ?? deliveryState?.message ?? presentation.note;
+                return (
+                  <tr key={document.ref}>
+                    <td className={styles.documentCell}>
+                      <strong className={styles.fileName}>{document.filename}</strong>
+                      <span className={styles.meta}>
+                        {labelFromCode(document.category)} · <span className="num">{formatBytes(document.sizeBytes)}</span> · v<span className="num">{document.version}</span>
+                      </span>
+                      <span className={`num ${styles.meta}`}>{document.ref}</span>
+                      {showOwner ? (
+                        <span className={styles.owner}>
+                          {labelFromCode(document.ownerDomain)} · <span className="num">{document.ownerReference ?? "Scoped record"}</span>
+                        </span>
+                      ) : null}
+                      {showProcessing ? (
+                        <span className={styles.note}>
+                          {document.finalizationState === "verified" ? `Verified ${dateLabel(document.finalizedAtIso)}` : document.finalizationState === "failed" ? "Failed" : "Awaiting byte verification"} · Updated {dateLabel(document.updatedAtIso ?? document.createdAtIso)}
+                        </span>
+                      ) : null}
+                      {note ? (
+                        <span className={styles.note} role={approvalError ? "alert" : undefined}>{note}</span>
+                      ) : null}
+                      {publicApproval && !publicEligible && !isPublic && approvalError === undefined ? (
+                        <span className={styles.note}>Not eligible for the public downloads register.</span>
+                      ) : null}
+                    </td>
+                    <td className={styles.statusCell}>
+                      {isPublic ? <StatusBadge tone="good">Public</StatusBadge> : null}
+                      <StatusBadge tone={presentation.tone}>{presentation.label}</StatusBadge>
+                    </td>
+                    <td className={styles.actionCell}>
+                      <div className={styles.rowActions}>
+                        {publicApproval ? (
+                          isPublic ? (
+                            <button
+                              type="button"
+                              className="btn btn-quiet btn-sm"
+                              disabled={approvalBusy}
+                              onClick={() => publicApproval.onChange(document, "private")}
+                            >
+                              {approvalBusy ? "Updating…" : "Withdraw"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-quiet btn-sm"
+                              disabled={approvalBusy || document.processingState !== "ready" || !publicEligible}
+                              title={publicEligible ? PUBLIC_APPROVAL_ELIGIBLE_TITLE : PUBLIC_APPROVAL_INELIGIBLE_TITLE}
+                              onClick={() => publicApproval.onChange(document, "public_approved")}
+                            >
+                              {approvalBusy ? "Updating…" : "Approve"}
+                            </button>
+                          )
+                        ) : null}
+                        {document.processingState === "ready" ? (
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            disabled={busy}
+                            onClick={() => void requestDownload(document)}
+                          >
+                            {busy ? "Authorizing…" : "Download"}
+                          </button>
+                        ) : null}
                       </div>
-                      <div>
-                        <dt>Scan</dt>
-                        <dd>{presentation.label}</dd>
-                      </div>
-                      <div>
-                        <dt>Updated</dt>
-                        <dd>{dateLabel(document.updatedAtIso ?? document.createdAtIso)}</dd>
-                      </div>
-                    </dl>
-                  ) : null}
-                  {approvalError ? (
-                    <p className={styles.note} role="alert">
-                      {approvalError}
-                    </p>
-                  ) : (
-                    <p className={styles.note}>{deliveryState?.message ?? presentation.note}</p>
-                  )}
-                  {publicApproval && !publicEligible && !isPublic && approvalError === undefined ? (
-                    <p className={styles.note}>
-                      Not eligible for the public downloads register. Only school documents can be approved there; student,
-                      applicant, staff, and import records stay private.
-                    </p>
-                  ) : null}
-                </div>
-                <div className={styles.actions}>
-                  <span className={`num ${styles.reference}`}>{document.ref}</span>
-                  {publicApproval ? (
-                    isPublic ? (
-                      <button
-                        type="button"
-                        className="button button--quiet button--small"
-                        disabled={approvalBusy}
-                        onClick={() => publicApproval.onChange(document, "private")}
-                      >
-                        {approvalBusy ? "Updating…" : "Withdraw from public"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="button button--quiet button--small"
-                        disabled={approvalBusy || document.processingState !== "ready" || !publicEligible}
-                        title={publicEligible ? PUBLIC_APPROVAL_ELIGIBLE_TITLE : PUBLIC_APPROVAL_INELIGIBLE_TITLE}
-                        onClick={() => publicApproval.onChange(document, "public_approved")}
-                      >
-                        {approvalBusy ? "Updating…" : "Approve for public"}
-                      </button>
-                    )
-                  ) : null}
-                  {document.processingState === "ready" ? (
-                    <button
-                      type="button"
-                      className="button button--primary button--small"
-                      disabled={busy}
-                      onClick={() => void requestDownload(document)}
-                    >
-                      {busy ? "Authorizing…" : "Download"}
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-      </ul>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );

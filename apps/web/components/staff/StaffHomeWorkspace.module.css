@@ -76,8 +76,8 @@
   display: flex;
   justify-content: space-between;
   margin: 6px 0 14px;
-  font-size: 0.72rem;
-  color: var(--faint);
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .activityList {

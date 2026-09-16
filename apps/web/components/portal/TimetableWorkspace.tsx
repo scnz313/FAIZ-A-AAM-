@@ -183,10 +183,10 @@ export function TimetableWorkspace({
               </div>
             ) : (
               <div className="table-wrap" role="region" aria-label={`${day} timetable table`} tabIndex={0}>
-                <table className="ledger">
+                <table className={`ledger ${styles.ledgerTable} ${styles.dayTable}`}>
                   <thead>
                     <tr>
-                      <th style={{ width: 70 }}>Period</th>
+                      <th>Period</th>
                       <th>Subject</th>
                       <th>Teacher</th>
                       <th>Room</th>
@@ -196,12 +196,12 @@ export function TimetableWorkspace({
                     {selectedPeriods.map((period, index) => {
                       const isBreak = period.kind === "break" || period.kind === "assembly";
                       return (
-                        <tr key={`${period.time}-${period.subject}-${index}`} style={isBreak ? { background: "var(--chalk-2)" } : undefined}>
+                        <tr key={`${period.time}-${period.subject}-${index}`} className={isBreak ? styles.breakRow : undefined}>
                           <td className="num strong">{periodNumber(selectedPeriods, index)}</td>
-                          <td className={isBreak ? "" : "strong"}>
-                            {period.subject}
+                          <td className={styles.subjectCell}>
+                            <strong className={isBreak ? undefined : styles.subjectName}>{period.subject}</strong>
                             {period.change ? (
-                              <span className="chip" style={{ marginLeft: 8, borderColor: "var(--saffron-line)", color: "var(--saffron-ink)" }}>
+                              <span className={`chip ${styles.overrideChip}`}>
                                 Override · this week
                               </span>
                             ) : null}
@@ -233,10 +233,10 @@ export function TimetableWorkspace({
               </div>
             ) : (
             <div className="table-wrap" role="region" aria-label="Week at a glance table" tabIndex={0}>
-              <table className="ledger" style={{ minWidth: 640 }}>
+              <table className={`ledger ${styles.ledgerTable} ${styles.weekTable}`}>
                 <thead>
                   <tr>
-                    <th style={{ width: 64 }}>Pd</th>
+                    <th>Pd</th>
                     {weekDays.map((d) => <th key={d}>{d}</th>)}
                   </tr>
                 </thead>
@@ -290,7 +290,7 @@ export function TimetableWorkspace({
               </div>
             ) : (
               <div className="table-wrap" role="region" aria-label="Exam date sheet table" tabIndex={0}>
-                <table className="ledger">
+                <table className={`ledger ${styles.ledgerTable} ${styles.examTable}`}>
                   <thead>
                     <tr>
                       <th>Date</th>
@@ -327,7 +327,7 @@ export function TimetableWorkspace({
       )}
 
       {/* V15 callout for overrides/versions info */}
-      <div style={{ marginTop: 18 }}>
+      <div className={styles.calloutWrap}>
         <div className="callout">
           <span className="msym" style={{ fontSize: 20, flex: "none", marginTop: 1, color: "var(--ink-3)" }}>info</span>
           <span className="small">

@@ -1,26 +1,121 @@
-/* V14 timetable workspace — seg controls + Panel with flush ledger tables */
-
 .toolbarRow {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: flex;
   flex-wrap: wrap;
-  margin-bottom: 18px;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
 .noteLine {
-  font-size: 0.82rem;
-  color: var(--muted);
-  margin: 0;
-  padding: 10px 18px;
-  line-height: 1.5;
   border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 10px 16px;
+}
+
+.ledgerTable {
+  min-width: 640px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.ledgerTable :is(th, td) {
+  overflow-wrap: normal;
+  padding: 11px 14px;
+  vertical-align: middle;
+  word-break: normal;
+}
+
+.ledgerTable th:first-child,
+.ledgerTable td:first-child {
+  padding-left: 16px;
+}
+
+.ledgerTable th:last-child,
+.ledgerTable td:last-child {
+  padding-right: 16px;
+}
+
+.dayTable th:nth-child(1),
+.dayTable td:nth-child(1) {
+  width: 12%;
+}
+
+.dayTable th:nth-child(2),
+.dayTable td:nth-child(2) {
+  width: 34%;
+}
+
+.dayTable th:nth-child(3),
+.dayTable td:nth-child(3) {
+  width: 28%;
+}
+
+.dayTable th:nth-child(4),
+.dayTable td:nth-child(4) {
+  width: 26%;
+}
+
+.weekTable {
+  min-width: 720px;
+}
+
+.weekTable th:nth-child(1),
+.weekTable td:nth-child(1) {
+  width: 10%;
+}
+
+.examTable th:nth-child(1),
+.examTable td:nth-child(1) {
+  width: 16%;
+}
+
+.examTable th:nth-child(2),
+.examTable td:nth-child(2) {
+  width: 14%;
+}
+
+.examTable th:nth-child(3),
+.examTable td:nth-child(3) {
+  width: 38%;
+}
+
+.examTable th:nth-child(4),
+.examTable td:nth-child(4) {
+  width: 32%;
+}
+
+.subjectCell {
+  min-width: 0;
+}
+
+.subjectName {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.breakRow {
+  background: var(--chalk-2);
+}
+
+.overrideChip {
+  border-color: var(--saffron-line);
+  color: var(--saffron-ink);
+  margin-left: 8px;
+}
+
+.calloutWrap {
+  margin-top: 16px;
 }
 
 @media (max-width: 719px) {
   .toolbarRow {
-    flex-direction: column;
     align-items: flex-start;
+    flex-direction: column;
   }
 }

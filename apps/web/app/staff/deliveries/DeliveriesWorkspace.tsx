@@ -187,52 +187,21 @@ export default function DeliveriesWorkspace() {
         <div>
           <p className="eyebrow">Administrator · Deliveries</p>
           <h1 className={styles.title}>Deliveries</h1>
-          <p className="ph-sub">
-            Outbox events and recipient deliveries. The worker also runs daily; a manual run drains the queue now.
-            Retries and requeues are audited.
-          </p>
+          <p className="ph-sub">Outbox events and recipient deliveries · manual worker runs and audited retries</p>
         </div>
       </div>
 
       {board ? (
-        <div className={`facts-ledger ${styles.summary}`} aria-label="Delivery queue summary">
-          <SummaryFact label="Pending" value={board.summary.pending} />
-          <SummaryFact label="Processing" value={board.summary.processing} />
-          <SummaryFact label="Delivered" value={board.summary.delivered} />
-          <SummaryFact label="Failed events" value={board.summary.failed} />
-          <SummaryFact label="Failed deliveries" value={board.summary.deliveriesFailedPermanent} />
-        </div>
+        <section className="panel" aria-label="Delivery queue summary">
+          <div className={`pn-body flush ${styles.summaryStrip}`}>
+            <SummaryStat label="Pending" value={board.summary.pending} />
+            <SummaryStat label="Processing" value={board.summary.processing} />
+            <SummaryStat label="Delivered" value={board.summary.delivered} />
+            <SummaryStat label="Failed events" value={board.summary.failed} />
+            <SummaryStat label="Failed deliveries" value={board.summary.deliveriesFailedPermanent} />
+          </div>
+        </section>
       ) : null}
-
-      <div className={styles.toolbar}>
-        <div className="seg" role="group" aria-label="Delivery status filter">
-          {FILTERS.map((entry) => (
-            <button
-              key={entry.value}
-              type="button"
-              aria-pressed={filter === entry.value}
-              onClick={() => {
-                setFilter(entry.value);
-                closeAction();
-              }}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
-        <div className={styles.toolbar}>
-          <span className={styles.toolbarMeta}>
-            {workerLastRunAt !== null ? (
-              <>Last worker run <RelativeTime iso={workerLastRunAt} /></>
-            ) : (
-              "Last worker run not recorded"
-            )}
-          </span>
-          <Button variant="primary" type="button" onClick={() => void runWorker()} disabled={workerBusy}>
-            {workerBusy ? "Running…" : "Run worker now"}
-          </Button>
-        </div>
-      </div>
 
       {announcement ? <p className={styles.liveNote} aria-live="polite">{announcement}</p> : null}
       {operationError ? <p className={styles.error} role="alert">{operationError}</p> : null}
@@ -241,12 +210,39 @@ export default function DeliveriesWorkspace() {
         <div className="pn-head">
           <div>
             <h2 id="deliveries-ledger-heading">Outbox events</h2>
-            <p className="sub">
-              Recipient addresses are masked. A failed delivery is retried only after an explicit reason.
-            </p>
+            <p className="sub">Masked recipients · retries require an explicit reason</p>
           </div>
         </div>
         <div className="pn-body flush">
+          <div className={styles.toolbar}>
+            <div className="seg" role="group" aria-label="Delivery status filter">
+              {FILTERS.map((entry) => (
+                <button
+                  key={entry.value}
+                  type="button"
+                  aria-pressed={filter === entry.value}
+                  onClick={() => {
+                    setFilter(entry.value);
+                    closeAction();
+                  }}
+                >
+                  {entry.label}
+                </button>
+              ))}
+            </div>
+            <div className={styles.toolbarRight}>
+              <span className={styles.toolbarMeta}>
+                {workerLastRunAt !== null ? (
+                  <>Last worker run <RelativeTime iso={workerLastRunAt} /></>
+                ) : (
+                  "Last worker run not recorded"
+                )}
+              </span>
+              <Button variant="primary" type="button" onClick={() => void runWorker()} disabled={workerBusy}>
+                {workerBusy ? "Running…" : "Run worker now"}
+              </Button>
+            </div>
+          </div>
           {loadError && events === null ? (
             <div className={styles.statePad}>
               <ErrorPanel
@@ -277,7 +273,7 @@ export default function DeliveriesWorkspace() {
                     <th scope="col">Recipients</th>
                     <th scope="col">Status</th>
                     <th scope="col">Last error</th>
-                    <th scope="col">Actions</th>
+                    <th scope="col" className={styles.actionHead}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -305,8 +301,13 @@ export default function DeliveriesWorkspace() {
   );
 }
 
-function SummaryFact({ label, value }: { label: string; value: number }) {
-  return <div className="fl-row"><span className="k">{label}</span><span className="v num">{value}</span></div>;
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className={styles.summaryCell}>
+      <span className={styles.summaryLabel}>{label}</span>
+      <span className={`num ${styles.summaryValue}`}>{value}</span>
+    </div>
+  );
 }
 
 function DeliveryEventRow({
@@ -334,86 +335,103 @@ function DeliveryEventRow({
   const retryDelivery = action?.kind === "retry"
     ? event.deliveries.find((delivery) => delivery.deliveryId === action.deliveryId)
     : undefined;
+  const formOpen = requeueOpen || retryDelivery !== undefined;
+  const visibleDeliveries = event.deliveries.slice(0, 2);
+  const hiddenDeliveryCount = Math.max(0, event.deliveries.length - visibleDeliveries.length);
+  const hasRetryAction = event.deliveries.some((delivery) => delivery.status === "failed");
+  const hasRequeueAction = event.status === "failed";
   return (
-    <tr>
-      <td className={styles.eventCell}>
-        <span className={styles.eventKind}>{event.kind}</span>
-        <span className={styles.secondary}>{event.targetType} · {event.targetReference}</span>
-        <span className={styles.secondary}>{event.eventKey}</span>
-      </td>
-      <td>
-        {event.deliveries.length === 0 ? (
-          <span className={styles.secondary}>No recipient deliveries</span>
-        ) : (
-          <div className={styles.recipientList}>
-            {event.deliveries.map((delivery) => (
-              <div key={delivery.deliveryId} className={styles.recipient}>
-                <span className={styles.recipientAddress}>{delivery.recipientMasked}</span>
-                <StatusBadge tone={DELIVERY_TONE[delivery.status] ?? "neutral"}>
-                  {delivery.status.replace(/_/g, " ")}
-                </StatusBadge>
-              </div>
-            ))}
-          </div>
-        )}
-      </td>
-      <td className={styles.statusCell}>
-        <StatusBadge tone={EVENT_TONE[event.status]}>{EVENT_LABEL[event.status]}</StatusBadge>
-        <span className={styles.secondary}>
-          Attempt <span className="num">{event.attempts}</span> of <span className="num">{event.maxAttempts}</span>
-        </span>
-        {event.nextAttemptAt !== null && event.status !== "delivered" ? (
-          <span className={styles.secondary}>Next attempt <RelativeTime iso={event.nextAttemptAt} /></span>
-        ) : null}
-        {event.deliveredAt !== null ? (
-          <span className={styles.secondary}>Delivered <RelativeTime iso={event.deliveredAt} /></span>
-        ) : null}
-      </td>
-      <td className={styles.errorCell}>{event.lastError ?? "—"}</td>
-      <td>
-        {requeueOpen || retryDelivery !== undefined ? (
-          <ReasonForm
-            id={requeueOpen ? event.eventId : retryDelivery?.deliveryId ?? event.eventId}
-            label={requeueOpen ? "Requeue event" : "Retry delivery"}
-            reason={reason}
-            error={fieldError}
-            busy={busy}
-            onReason={onReason}
-            onCancel={onCancel}
-            onSubmit={onSubmit}
-          />
-        ) : (
-          <div className={styles.actions}>
-            {event.deliveries
-              .filter((delivery) => delivery.status === "failed")
-              .map((delivery) => (
-                <button
-                  key={delivery.deliveryId}
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() =>
-                    onOpen({ kind: "retry", deliveryId: delivery.deliveryId, label: delivery.recipientMasked })
-                  }
-                >
-                  Retry · {delivery.recipientMasked}
-                </button>
+    <>
+      <tr className={styles.dataRow}>
+        <td className={styles.eventCell}>
+          <span className={styles.eventKind}>{event.kind}</span>
+          <span className={styles.secondary}>{event.targetType} · {event.targetReference}</span>
+        </td>
+        <td className={styles.recipientsCell}>
+          {event.deliveries.length === 0 ? (
+            <span className={styles.secondary}>No recipient deliveries</span>
+          ) : (
+            <div className={styles.recipientList}>
+              {visibleDeliveries.map((delivery) => (
+                <div key={delivery.deliveryId} className={styles.recipient}>
+                  <span className={styles.recipientAddress}>{delivery.recipientMasked}</span>
+                  <StatusBadge tone={DELIVERY_TONE[delivery.status] ?? "neutral"}>
+                    {delivery.status.replace(/_/g, " ")}
+                  </StatusBadge>
+                </div>
               ))}
-            {event.status === "failed" ? (
-              <button
-                type="button"
-                className="btn btn-accent btn-sm"
-                onClick={() => onOpen({ kind: "requeue", eventId: event.eventId, label: event.eventKey })}
-              >
-                Requeue
-              </button>
-            ) : null}
-            {event.status !== "failed" && !event.deliveries.some((delivery) => delivery.status === "failed") ? (
-              <span className={styles.secondary}>No action needed</span>
-            ) : null}
-          </div>
-        )}
-      </td>
-    </tr>
+              {hiddenDeliveryCount > 0 ? (
+                <details>
+                  <summary className={styles.secondary}>+{hiddenDeliveryCount} more {hiddenDeliveryCount === 1 ? "recipient" : "recipients"}</summary>
+                  {event.deliveries.slice(2).map((delivery) => (
+                    <div key={delivery.deliveryId} className={styles.recipient}>
+                      <span className={styles.recipientAddress}>{delivery.recipientMasked}</span>
+                      <StatusBadge tone={DELIVERY_TONE[delivery.status] ?? "neutral"}>{delivery.status.replace(/_/g, " ")}</StatusBadge>
+                    </div>
+                  ))}
+                </details>
+              ) : null}
+            </div>
+          )}
+        </td>
+        <td className={styles.statusCell}>
+          <StatusBadge tone={EVENT_TONE[event.status]}>{EVENT_LABEL[event.status]}</StatusBadge>
+          <span className={styles.secondary}>
+            Attempt <span className="num">{event.attempts}</span> of <span className="num">{event.maxAttempts}</span>
+            {event.deliveredAt !== null ? <> · Delivered <RelativeTime iso={event.deliveredAt} /></> : null}
+            {event.nextAttemptAt !== null && event.status !== "delivered" ? <> · Next <RelativeTime iso={event.nextAttemptAt} /></> : null}
+          </span>
+        </td>
+        <td className={styles.errorCell}>{event.lastError ?? "—"}</td>
+        <td className={styles.actionCell}>
+          {hasRetryAction || hasRequeueAction ? (
+            <div className={styles.rowActions}>
+              {event.deliveries
+                .filter((delivery) => delivery.status === "failed")
+                .map((delivery) => (
+                  <button
+                    key={delivery.deliveryId}
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() =>
+                      onOpen({ kind: "retry", deliveryId: delivery.deliveryId, label: delivery.recipientMasked })
+                    }
+                  >
+                    Retry · {delivery.recipientMasked}
+                  </button>
+                ))}
+              {hasRequeueAction ? (
+                <button
+                  type="button"
+                  className="btn btn-accent btn-sm"
+                  onClick={() => onOpen({ kind: "requeue", eventId: event.eventId, label: event.eventKey })}
+                >
+                  Requeue
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <span className={styles.mutedInline}>No action needed</span>
+          )}
+        </td>
+      </tr>
+      {formOpen ? (
+        <tr>
+          <td colSpan={5} className={styles.formCell}>
+            <ReasonForm
+              id={requeueOpen ? event.eventId : retryDelivery?.deliveryId ?? event.eventId}
+              label={requeueOpen ? "Requeue event" : "Retry delivery"}
+              reason={reason}
+              error={fieldError}
+              busy={busy}
+              onReason={onReason}
+              onCancel={onCancel}
+              onSubmit={onSubmit}
+            />
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
@@ -438,6 +456,7 @@ function ReasonForm({
 }) {
   return (
     <div className={styles.inlineForm}>
+      <p className={styles.mutedInline}>{label}</p>
       <div className="field">
         <label htmlFor={`delivery-reason-${id}`}>Reason</label>
         <input
@@ -450,7 +469,7 @@ function ReasonForm({
         />
         {error ? <p id={`delivery-error-${id}`} className="field-error">{error}</p> : null}
       </div>
-      <div className={styles.actions}>
+      <div className={styles.formActions}>
         <button type="button" className="btn btn-primary btn-sm" onClick={onSubmit} disabled={busy}>
           {busy ? "Saving…" : label}
         </button>

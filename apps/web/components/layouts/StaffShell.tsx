@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { MouseEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, ReactNode } from "react";
 
 import { useStaffContext } from "@/components/staff/StaffContextProvider";
 import { Crest } from "@/components/ui/Crest";
@@ -117,11 +117,9 @@ const FOCUSABLE_SELECTOR = [
 export function StaffShell({
   children,
   initialNotifications,
-  developmentAuth = false,
 }: {
   children: ReactNode;
   initialNotifications?: NotificationItem[];
-  developmentAuth?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -154,12 +152,16 @@ export function StaffShell({
   const [collapsed, setCollapsed] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
   const supabaseMode = clientAdapterMode() === "supabase";
   /* Hydration-safe gate: attribute-bearing drawer state (inert, tabIndex,
      role) stays absent from the SSR DOM and appears only after mount. */
   const [mounted, setMounted] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const profileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const profilePopRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -194,10 +196,57 @@ export function StaffShell({
     return () => query.removeEventListener("change", sync);
   }, []);
 
-  /* A route change closes the drawer. */
+  /* A route change closes the drawer and profile menu. */
   useEffect(() => {
     setNavOpen(false);
+    setProfileOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+    const handler = (event: globalThis.MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setProfileOpen(false);
+        profileMenuButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [profileOpen]);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+    const first = profilePopRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
+    first?.focus();
+  }, [profileOpen]);
+
+  const handleProfileMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(profilePopRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    if (items.length === 0) return;
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = (index + step + items.length) % items.length;
+      items[next]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  };
 
   /* While open: lock body scroll, focus the first nav link (not the
      panel itself, so Shift+Tab wraps inside the trap), trap Tab, close
@@ -277,9 +326,12 @@ export function StaffShell({
   }
 
   const staffInitial = (status === "ready" && summary ? summary.displayName : "S").charAt(0).toUpperCase();
+  const staffDisplayName = status === "ready" && summary ? summary.displayName : "Staff member";
   const roleLabelStr = status === "ready" && summary
     ? `${summary.profileLabel ?? summary.roleLabel}${supabaseMode ? "" : " · demo session"}`
     : supabaseMode ? "Staff account" : "Demo session";
+  const settingsHref = canonicalStaffUrl(profileCode, "/settings");
+  const canOpenSettings = canAnyRole(navigationRoles, "settings.manage");
 
   const sideCollapsed = mounted && collapsed && !isMobile;
 
@@ -467,11 +519,68 @@ export function StaffShell({
                 {switching ? " · Updating…" : ""}
               </div>
               <NotificationBell items={initialNotifications ?? (supabaseMode ? [] : demoStaffNotifications())} accountId={identityId ?? undefined} audience="staff" />
-              {developmentAuth ? (
-                <Link className="link-arrow" href="/sign-in/staff" prefetch={false} style={{ color: "#D8CFBB" }}>
-                  Switch account
-                </Link>
-              ) : null}
+              <div className={styles.profileMenu} ref={profileMenuRef}>
+                <button
+                  ref={profileMenuButtonRef}
+                  type="button"
+                  className={styles.profileTrigger}
+                  aria-haspopup="menu"
+                  aria-expanded={profileOpen}
+                  aria-label={`Account menu for ${staffDisplayName}`}
+                  onClick={() => setProfileOpen((open) => !open)}
+                >
+                  <span className={styles.profileAvatar} aria-hidden="true">{staffInitial}</span>
+                </button>
+                {profileOpen ? (
+                  <div
+                    ref={profilePopRef}
+                    className={styles.profilePop}
+                    role="menu"
+                    onKeyDown={handleProfileMenuKeyDown}
+                  >
+                    <p className={styles.profilePopHead}>{staffDisplayName}</p>
+                    <div className={styles.profilePopList}>
+                      {canOpenSettings ? (
+                        <Link
+                          className={styles.profilePopItem}
+                          role="menuitem"
+                          href={settingsHref}
+                          prefetch={false}
+                          onClick={() => setProfileOpen(false)}
+                        >
+                          <span className={styles.profilePopIcon} aria-hidden="true">
+                            <span className="msym" aria-hidden="true">settings</span>
+                          </span>
+                          <span className={styles.profilePopMeta}>
+                            <span className={styles.profilePopTitle}>Settings</span>
+                            <span className={styles.profilePopHint}>School configuration and policy</span>
+                          </span>
+                        </Link>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={styles.profilePopItem}
+                        role="menuitem"
+                        disabled={signingOut}
+                        onClick={() => {
+                          setProfileOpen(false);
+                          void handleSignOut();
+                        }}
+                      >
+                        <span className={styles.profilePopIcon} aria-hidden="true">
+                          <span className="msym" aria-hidden="true">logout</span>
+                        </span>
+                        <span className={styles.profilePopMeta}>
+                          <span className={styles.profilePopTitle}>{signingOut ? "Signing out…" : "Log out"}</span>
+                          <span className={styles.profilePopHint}>
+                            {supabaseMode ? "Sign out of this device" : "Return to staff sign-in"}
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               {signOutError ? <span className={styles.switcherError} role="alert">{signOutError}</span> : null}
             </div>
           </div>

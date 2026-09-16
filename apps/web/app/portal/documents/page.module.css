@@ -21,11 +21,115 @@
   max-width: 62ch;
 }
 
-.groupTitle {
-  font-family: var(--serif);
-  font-size: 1.4rem;
-  font-weight: 580;
-  margin: 0;
+.registerTable {
+  min-width: 640px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.registerTable :is(th, td) {
+  overflow-wrap: normal;
+  padding: 11px 14px;
+  vertical-align: middle;
+  word-break: normal;
+}
+
+.registerTable th:first-child,
+.registerTable td:first-child {
+  padding-left: 16px;
+}
+
+.registerTable th:last-child,
+.registerTable td:last-child {
+  padding-right: 16px;
+}
+
+.registerTable th:nth-child(1),
+.registerTable td:nth-child(1) {
+  width: 36%;
+}
+
+.registerTable th:nth-child(2),
+.registerTable td:nth-child(2) {
+  width: 16%;
+}
+
+.registerTable th:nth-child(3),
+.registerTable td:nth-child(3) {
+  width: 14%;
+}
+
+.registerTable th:nth-child(4),
+.registerTable td:nth-child(4) {
+  width: 16%;
+}
+
+.registerTable th:nth-child(5),
+.registerTable td:nth-child(5) {
+  width: 18%;
+}
+
+.actionHead,
+.actionCell {
+  text-align: right;
+}
+
+.docTitle {
+  align-items: center;
+  display: flex;
+  font-size: 0.9rem;
+  font-weight: 650;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.docIcon {
+  color: var(--muted);
+  flex: none;
+  font-size: 20px;
+}
+
+.rowActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.recordStrip {
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recordCell {
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 16px;
+}
+
+.recordCell + .recordCell {
+  border-left: 0;
+}
+
+.recordLabel {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recordValue {
+  color: var(--ink-2);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
 }
 
 .rows {

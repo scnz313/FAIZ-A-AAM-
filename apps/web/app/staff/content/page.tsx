@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import Button from "@/components/ui/Button";
@@ -214,6 +214,7 @@ export default function ContentPage() {
      nothing publishes until the publisher confirms. */
   const [scheduleKey, setScheduleKey] = useState<string | null>(null);
   const [scheduleAt, setScheduleAt] = useState("");
+  const [workflowKey, setWorkflowKey] = useState<string | null>(null);
   const { summary } = useStaffContext();
   const actor: ContentActor | null = summary
     ? { accountId: summary.accountId, displayName: summary.displayName, role: summary.role }
@@ -292,10 +293,9 @@ export default function ContentPage() {
         setPages((previous) =>
           previous ? previous.map((candidate) => (candidate.key === row.key ? result.value : candidate)) : previous,
         );
-        if (action.next === "Scheduled") {
-          setScheduleKey(null);
-          setScheduleAt("");
-        }
+        setScheduleKey(null);
+        setScheduleAt("");
+        setWorkflowKey(null);
         announce(`Page "${row.label}" advanced to ${action.next.toLowerCase()}${isDemo ? " in this demo session" : ""}.`);
       } else {
         announce(result.message);
@@ -447,19 +447,21 @@ export default function ContentPage() {
       </div>
 
       <section className="panel" aria-labelledby="content-list-heading">
-        <div className={styles.panelHead}>
-          <h2 id="content-list-heading" className={styles.panelTitle}>
-            Public pages
-          </h2>
+        <div className="pn-head">
+          <div>
+            <h2 id="content-list-heading">Public pages</h2>
+            <p className="sub">Status, last review, and owner</p>
+          </div>
           <div className={styles.panelActions}>
             {isDemo ? <span className="demo-badge">Demo data</span> : null}
             {canDraft ? (
-              <Button variant="quiet" onClick={openNewPage} disabled={busy || pageSaving}>
+              <Button variant="quiet" size="sm" onClick={openNewPage} disabled={busy || pageSaving}>
                 New page draft
               </Button>
             ) : null}
           </div>
         </div>
+        <div className="pn-body flush">
 
         {(newPageOpen || editingPage !== null) && canDraft ? (
           <div className={`panel ${styles.pageEditor}`} aria-labelledby="page-editor-heading">
@@ -533,11 +535,13 @@ export default function ContentPage() {
         ) : null}
 
         {loadError !== null ? (
-          <ErrorPanel title="Content could not be loaded." note={`${loadError} No content was changed.`}>
-            <Button variant="quiet" disabled={busy} onClick={retryLoad}>
-              Try again
-            </Button>
-          </ErrorPanel>
+          <div className={styles.bodyPad}>
+            <ErrorPanel title="Content could not be loaded." note={`${loadError} No content was changed.`}>
+              <Button variant="quiet" disabled={busy} onClick={retryLoad}>
+                Try again
+              </Button>
+            </ErrorPanel>
+          </div>
         ) : null}
 
         {announcement && (
@@ -547,25 +551,27 @@ export default function ContentPage() {
         )}
 
         {pages === null ? (
-          <LoadingSkeleton lines={4} label="Loading public pages…" />
+          <div className={styles.bodyPad}>
+            <LoadingSkeleton lines={4} label="Loading public pages…" />
+          </div>
         ) : pages.length === 0 && loadError === null ? (
-          <EmptyState
-            title="No public pages"
-            note="Pages appear here once the first draft is created. Archived pages stay in this list; nothing is hard-deleted."
-          />
+          <div className={styles.bodyPad}>
+            <EmptyState
+              title="No public pages"
+              note="Pages appear here once the first draft is created. Archived pages stay in this list; nothing is hard-deleted."
+            />
+          </div>
         ) : pages.length > 0 ? (
-          <div className={`table--scroll ${styles.tableShell}`} role="region" aria-label="Public pages table" tabIndex={0}>
-            <table className={`table ${styles.table}`}>
+          <div className={`table-wrap ${styles.tableShell}`} role="region" aria-label="Public pages table" tabIndex={0}>
+            <table className={`ledger ${styles.pagesTable}`}>
               <caption className="sr-only">Public pages with status, last review and owner</caption>
               <thead>
                 <tr>
                   <th scope="col">Page</th>
                   <th scope="col">Status</th>
-                  <th scope="col" className="num">Last reviewed</th>
+                  <th scope="col">Last reviewed</th>
                   <th scope="col">Owner</th>
-                  <th scope="col">
-                    <span className="sr-only">Action</span>
-                  </th>
+                  <th scope="col" className={styles.actionHead}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -574,74 +580,134 @@ export default function ContentPage() {
                   const scheduleNote = pageScheduleNote(row.scheduledForIso);
                   const draftAction = actions.find((action) => action.next === "In review") ?? null;
                   const publisherActions = actions.filter((action) => action.next !== "In review");
+                  const scheduleAction = publisherActions.find((action) => action.next === "Scheduled") ?? null;
                   const selfAuthored = row.authorAccountId !== null && row.authorAccountId === actor?.accountId;
                   const canEditRow =
                     canDraft &&
                     (row.reviewStatus === "draft" || row.currentStatus === "archived" || row.currentStatus === "expired");
+                  const workflowOpen = workflowKey === row.key || scheduleKey === row.key;
+                  const hasWorkflow = actions.length > 0;
                   return (
-                    <tr key={row.key}>
-                      <td>
-                        <Link prefetch={false} className={styles.pageLink} href={row.href}>
-                          {row.label}
-                        </Link>
-                      </td>
-                      <td>
-                        <StatusBadge tone={PAGE_STATUS_TONE[row.status]}>{row.status}</StatusBadge>
-                        {scheduleNote !== null ? <span className={styles.scheduleNote}>{scheduleNote}</span> : null}
-                      </td>
-                      <td className="num">{row.lastReviewed}</td>
-                      <td>{row.owner}</td>
-                      <td className={styles.cellAction}>
-                        {row.key === "school-life" ? (
-                          <Link
-                            prefetch={false}
-                            className="btn btn-quiet"
-                            href={canonicalStaffUrl(summary?.profileCode ?? null, "/content/pages/school-life")}
-                          >
-                            Edit page
+                    <Fragment key={row.key}>
+                      <tr>
+                        <td className={styles.pageCell}>
+                          <Link prefetch={false} className={styles.pageLink} href={row.href}>
+                            {row.label}
                           </Link>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="btn btn-quiet"
-                          disabled={busy || pageSaving}
-                          onClick={(event) => void openPreview(row, event.currentTarget)}
-                        >
-                          <span className="msym" aria-hidden="true" style={{ fontSize: 16 }}>visibility</span>Preview
-                        </button>
-                        {draftAction !== null ? (
-                          <Button variant="quiet" disabled={busy} onClick={() => void advancePage(row, draftAction)}>
-                            {draftAction.label}
-                          </Button>
-                        ) : null}
-                        {publisherActions.length > 0 ? (
-                          selfAuthored ? (
-                            <span>A different publisher is required</span>
-                          ) : (
-                            publisherActions.map((action) =>
-                              action.next === "Scheduled" ? (
-                                scheduleKey === row.key ? (
-                                  <span key="page-schedule" className={styles.scheduleForm}>
-                                    <label className="sr-only" htmlFor={`page-schedule-${row.key}`}>
-                                      Schedule publication for {row.label}
-                                    </label>
-                                    <input
-                                      id={`page-schedule-${row.key}`}
-                                      className="input"
-                                      type="datetime-local"
-                                      value={scheduleAt}
-                                      onChange={(event) => setScheduleAt(event.target.value)}
-                                      disabled={busy}
-                                    />
+                        </td>
+                        <td className={styles.statusCell}>
+                          <StatusBadge tone={PAGE_STATUS_TONE[row.status]}>{row.status}</StatusBadge>
+                          {scheduleNote !== null ? <span className={styles.scheduleNote}>{scheduleNote}</span> : null}
+                        </td>
+                        <td className={styles.dateCell}>{row.lastReviewed}</td>
+                        <td className={styles.ownerCell}>{row.owner}</td>
+                        <td className={styles.cellAction}>
+                          {row.key === "school-life" ? (
+                            <Link
+                              prefetch={false}
+                              className="btn btn-ghost btn-sm"
+                              href={canonicalStaffUrl(summary?.profileCode ?? null, "/content/pages/school-life")}
+                            >
+                              Edit page
+                            </Link>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={busy || pageSaving}
+                            onClick={(event) => void openPreview(row, event.currentTarget)}
+                          >
+                            Preview
+                          </button>
+                          {canEditRow ? (
+                            <Button variant="ghost" size="sm" disabled={busy || pageSaving} onClick={() => void openEditPage(row)}>
+                              Edit draft
+                            </Button>
+                          ) : null}
+                          {hasWorkflow ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={busy}
+                              aria-expanded={workflowOpen}
+                              aria-controls={`page-workflow-${row.key}`}
+                              onClick={() => {
+                                if (workflowOpen) {
+                                  setWorkflowKey(null);
+                                  setScheduleKey(null);
+                                  setScheduleAt("");
+                                } else {
+                                  setWorkflowKey(row.key);
+                                }
+                              }}
+                            >
+                              {workflowOpen ? "Close workflow" : "Workflow"}
+                            </button>
+                          ) : null}
+                          {!hasWorkflow && !canEditRow && row.key !== "school-life" ? (
+                            <span aria-label="No action available">—</span>
+                          ) : null}
+                        </td>
+                      </tr>
+                      {workflowOpen && hasWorkflow ? (
+                        <tr key={`${row.key}-workflow`}>
+                          <td colSpan={5} className={styles.formCell}>
+                            <div id={`page-workflow-${row.key}`} className={styles.workflowPanel} role="region" aria-label={`Review workflow for ${row.label}`}>
+                              <p className={styles.workflowTitle}>Review workflow for {row.label}</p>
+                              {selfAuthored && publisherActions.length > 0 ? (
+                                <p className={styles.actionHint}>Publish and schedule steps need another publisher.</p>
+                              ) : (
+                                <div className={styles.workflowActions}>
+                                  {draftAction !== null ? (
+                                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => void advancePage(row, draftAction)}>
+                                      {draftAction.label}
+                                    </Button>
+                                  ) : null}
+                                  {publisherActions.map((action) =>
+                                    action.next === "Scheduled" ? null : (
+                                      <Button key={action.label} variant="ghost" size="sm" disabled={busy || selfAuthored} onClick={() => void advancePage(row, action)}>
+                                        {action.label}
+                                      </Button>
+                                    ),
+                                  )}
+                                  {scheduleAction !== null && !selfAuthored ? (
                                     <Button
-                                      variant="quiet"
+                                      variant="ghost"
+                                      size="sm"
+                                      disabled={busy}
+                                      onClick={() => {
+                                        setScheduleKey(row.key);
+                                        setScheduleAt("");
+                                      }}
+                                    >
+                                      Schedule
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              )}
+                              {scheduleKey === row.key && scheduleAction !== null && !selfAuthored ? (
+                                <div className={styles.scheduleForm}>
+                                  <label htmlFor={`page-schedule-${row.key}`}>Schedule publication</label>
+                                  <input
+                                    id={`page-schedule-${row.key}`}
+                                    className="input"
+                                    type="datetime-local"
+                                    value={scheduleAt}
+                                    onChange={(event) => setScheduleAt(event.target.value)}
+                                    disabled={busy}
+                                  />
+                                  <div className={styles.scheduleActions}>
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
                                       disabled={busy || scheduleAt === ""}
-                                      onClick={() => void advancePage(row, action)}
+                                      onClick={() => void advancePage(row, scheduleAction)}
                                     >
                                       Set schedule
                                     </Button>
                                     <Button
                                       variant="quiet"
+                                      size="sm"
                                       disabled={busy}
                                       onClick={() => {
                                         setScheduleKey(null);
@@ -650,64 +716,46 @@ export default function ContentPage() {
                                     >
                                       Cancel
                                     </Button>
-                                  </span>
-                                ) : (
-                                  <Button
-                                    key="page-schedule-open"
-                                    variant="quiet"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      setScheduleKey(row.key);
-                                      setScheduleAt("");
-                                    }}
-                                  >
-                                    Schedule
-                                  </Button>
-                                )
-                              ) : (
-                                <Button key={action.label} variant="quiet" disabled={busy} onClick={() => void advancePage(row, action)}>
-                                  {action.label}
-                                </Button>
-                              ),
-                            )
-                          )
-                        ) : null}
-                        {canEditRow ? (
-                          <Button variant="quiet" disabled={busy || pageSaving} onClick={() => void openEditPage(row)}>
-                            Edit
-                          </Button>
-                        ) : null}
-                        {actions.length === 0 && !canEditRow ? (
-                          <span aria-label="No action available">—</span>
-                        ) : null}
-                      </td>
-                    </tr>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
         ) : null}
+        </div>
       </section>
 
       <section className="panel" aria-labelledby="notice-status-heading">
-        <div className={styles.panelHead}>
-          <h2 id="notice-status-heading" className={styles.panelTitle}>
-            Notice status
-          </h2>
+        <div className="pn-head">
+          <div>
+            <h2 id="notice-status-heading">Notice status</h2>
+            <p className="sub">Audience, version, and review dates</p>
+          </div>
           {isDemo ? <span className="demo-badge">Demo data</span> : null}
         </div>
-
+        <div className="pn-body flush">
         {notices === null ? (
-          <LoadingSkeleton lines={4} label="Loading notice status…" />
+          <div className={styles.bodyPad}>
+            <LoadingSkeleton lines={4} label="Loading notice status…" />
+          </div>
         ) : notices.length === 0 && loadError === null ? (
-          <EmptyState
-            title="No notices"
-            note="Published, scheduled and draft notices appear here with their audiences and versions. Archived notices remain in this list; nothing is hard-deleted."
-          />
+          <div className={styles.bodyPad}>
+            <EmptyState
+              title="No notices"
+              note="Published, scheduled and draft notices appear here with their audiences and versions. Archived notices remain in this list; nothing is hard-deleted."
+            />
+          </div>
         ) : notices.length > 0 ? (
-          <div className={`table--scroll ${styles.tableShell}`} role="region" aria-label="Notice status table" tabIndex={0}>
-            <table className={`table ${styles.table}`}>
+          <div className={`table-wrap ${styles.tableShell}`} role="region" aria-label="Notice status table" tabIndex={0}>
+            <table className={`ledger ${styles.noticesTable}`}>
               <caption className="sr-only">Notices with pinned state, status, audience, version and review due date</caption>
               <thead>
                 <tr>
@@ -716,36 +764,35 @@ export default function ContentPage() {
                   <th scope="col">Audience</th>
                   <th scope="col">Status</th>
                   <th scope="col" className={styles.colMore}>Pinned</th>
-                  <th scope="col" className={`num ${styles.colMore}`}>
-                    Version
-                  </th>
-                  <th scope="col" className="num">Published</th>
-                  <th scope="col" className={`num ${styles.colOptional}`}>Review due</th>
+                  <th scope="col" className={styles.colMore}>Version</th>
+                  <th scope="col">Published</th>
+                  <th scope="col" className={styles.colOptional}>Review due</th>
                 </tr>
               </thead>
               <tbody>
                 {notices.map((notice) => (
                   <tr key={notice.slug}>
-                    <td>
+                    <td className={styles.pageCell}>
                       <strong>{notice.title}</strong>
                     </td>
                     <td className={styles.colMore}>{notice.category}</td>
-                    <td>{AUDIENCE_LABEL[notice.audience]}</td>
-                    <td>
+                    <td className={styles.nowrapCell}>{AUDIENCE_LABEL[notice.audience]}</td>
+                    <td className={styles.statusCell}>
                       <StatusBadge tone={NOTICE_STATUS_TONE[notice.status]}>{NOTICE_STATUS_LABEL[notice.status]}</StatusBadge>
                     </td>
                     <td className={styles.colMore}>{notice.pinned ? "Pinned" : "—"}</td>
                     <td className={`num ${styles.colMore}`}>{notice.version}</td>
-                    <td className="num">
+                    <td className={styles.dateCell}>
                       {notice.status === "published" ? formatKolkata(notice.dateIso, { format: "day" }) : "—"}
                     </td>
-                    <td className={`num ${styles.colOptional}`}>{notice.reviewDue}</td>
+                    <td className={`${styles.dateCell} ${styles.colOptional}`}>{notice.reviewDue}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : null}
+        </div>
       </section>
 
       <p className={styles.note}>Content changes are versioned; public pages show only published current content. Archiving and unpublishing are terminal · nothing is hard-deleted.</p>

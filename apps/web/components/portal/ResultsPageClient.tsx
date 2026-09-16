@@ -228,7 +228,7 @@ function ResultsBody({ initialPublications }: { initialPublications?: Publicatio
                   aria-label={`${term.label} subject marks table`}
                   tabIndex={0}
                 >
-                  <table className="ledger">
+                  <table className={`ledger ${styles.marksTable}`}>
                     <thead>
                       <tr>
                         <th>Subject</th>
@@ -245,12 +245,14 @@ function ResultsBody({ initialPublications }: { initialPublications?: Publicatio
                           : null;
                         return (
                           <tr key={mark.subject}>
-                            <td className="strong">{mark.subject}</td>
+                            <td className={styles.subjectCell}>
+                              <strong className={styles.subjectName}>{mark.subject}</strong>
+                            </td>
                             <td className="num">
                               {statusLabel !== null ? <em className={styles.mutedEm}>{statusLabel}</em> : `${mark.obtained}/${mark.max}`}
                             </td>
                             <td className="num">{mark.grade}</td>
-                            <td className="small muted">{mark.remark || "—"}</td>
+                            <td className={styles.remarkCell}>{mark.remark || "—"}</td>
                           </tr>
                         );
                       })}

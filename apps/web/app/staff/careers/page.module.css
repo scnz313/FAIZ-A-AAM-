@@ -3,15 +3,6 @@
   gap: 18px;
 }
 
-.page > section {
-  min-width: 0;
-}
-
-/* The global workspace-header margin is absorbed by the grid gap. */
-.header {
-  margin-bottom: 0;
-}
-
 .title {
   font-family: var(--serif);
   font-size: clamp(1.5rem, 2.4vw, 1.95rem);
@@ -21,90 +12,56 @@
   margin: 0;
 }
 
-/* Vacancy summary line under the deck: ruled, tabular counts. */
-.summary {
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.82rem;
-  letter-spacing: 0.02em;
-  margin: 16px 0 0;
-  padding-top: 14px;
+.stats {
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.summary strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.sectionHead {
-  align-items: baseline;
+.statCell {
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 14px;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 18px;
 }
 
-.sectionHead h2 {
-  margin: 0;
+.statCell + .statCell {
+  border-left: 0;
 }
 
-.queueTable {
-  min-width: 880px;
-}
-
-/* Per-status tab counts, matching the admissions queue. */
-.tabCount {
+.statLabel {
   color: var(--muted);
   font-size: 0.72rem;
-  margin-left: 6px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-/* The ref anchor stretches over the whole row, so the entire row is a link. */
-.queueRow {
-  position: relative;
-}
-
-.queueRow:hover {
-  background: var(--paper-deep);
-}
-
-.rowLink {
+.statValue {
   color: var(--ink);
-  text-decoration: none;
-}
-
-.rowLink::after {
-  content: "";
-  inset: 0;
-  position: absolute;
-}
-
-.queueRow:hover .rowLink {
-  color: var(--saffron-ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.rowLink:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.ruleNote {
-  border-top: 1px solid var(--line);
-  padding-top: 18px;
-}
-
-.ruleNote p {
-  color: var(--muted);
   font-family: var(--serif);
-  font-size: 0.88rem;
-  line-height: 1.55;
-  margin: 0;
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  line-height: 1.1;
 }
 
-/* Whole-cell numerics align right so columns of figures compare. */
-.queueTable th:global(.num),
-.queueTable td:global(.num) {
-  text-align: right;
+.statNote {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 719px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .statCell + .statCell {
+    border-left: 1px solid var(--line-strong);
+    border-top: 0;
+  }
 }

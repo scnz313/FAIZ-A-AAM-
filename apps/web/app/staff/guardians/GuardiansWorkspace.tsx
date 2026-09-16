@@ -136,12 +136,14 @@ export default function GuardiansWorkspace() {
       </div>
 
       {summary ? (
-        <div className={`facts-ledger ${styles.summary}`} aria-label="Guardian activation summary">
-          <SummaryFact label="Guardians" value={summary.guardians} />
-          <SummaryFact label="With portal access" value={summary.active} />
-          <SummaryFact label="Activation pending" value={summary.pending} />
-          <SummaryFact label="No email recorded" value={summary.noEmail} />
-        </div>
+        <section className="panel" aria-label="Guardian activation summary">
+          <div className={`pn-body flush ${styles.summaryStrip}`}>
+            <SummaryStat label="Guardians" value={summary.guardians} />
+            <SummaryStat label="With portal access" value={summary.active} />
+            <SummaryStat label="Activation pending" value={summary.pending} />
+            <SummaryStat label="No email recorded" value={summary.noEmail} />
+          </div>
+        </section>
       ) : null}
 
       {announcement ? <p className={styles.liveNote} aria-live="polite">{announcement}</p> : null}
@@ -151,7 +153,7 @@ export default function GuardiansWorkspace() {
         <div className="pn-head">
           <div>
             <h2 id="guardian-ledger-heading">Family portal activation</h2>
-            <p className="sub">Contacts are school records. Email delivery proves ownership only when the guardian uses the secure link.</p>
+            <p className="sub">Record email contacts, send activation links, and track portal access</p>
           </div>
         </div>
         <div className="pn-body flush">
@@ -179,7 +181,7 @@ export default function GuardiansWorkspace() {
                     <th scope="col">Students</th>
                     <th scope="col">Email contact</th>
                     <th scope="col">Portal access</th>
-                    <th scope="col">Actions</th>
+                    <th scope="col" className={styles.actionHead}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -209,8 +211,13 @@ export default function GuardiansWorkspace() {
   );
 }
 
-function SummaryFact({ label, value }: { label: string; value: number }) {
-  return <div className="fl-row"><span className="k">{label}</span><span className="v num">{value}</span></div>;
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className={styles.summaryCell}>
+      <span className={styles.summaryLabel}>{label}</span>
+      <span className={`num ${styles.summaryValue}`}>{value}</span>
+    </div>
+  );
 }
 
 function GuardianRow({
@@ -240,68 +247,85 @@ function GuardianRow({
 }) {
   const contact = row.contacts.find((candidate) => candidate.channel === "email" && candidate.state !== "revoked");
   const canSend = contact !== undefined && ["not_activated", "expired", "revoked", "delivery_failed"].includes(row.accessState);
+  const visibleStudents = row.students.slice(0, 2);
+  const hiddenStudentCount = Math.max(0, row.students.length - visibleStudents.length);
   return (
-    <tr>
-      <td>
-        <strong>{row.displayName}</strong>
-        <span className={styles.secondary}>{row.guardianId.slice(0, 8)}</span>
-      </td>
-      <td>
-        <div className={styles.studentList}>
-          {row.students.map((student) => <span key={student.linkId}>{student.displayName} · {student.classLabel}</span>)}
-        </div>
-      </td>
-      <td>
-        {contact ? (
-          <><span className={styles.email}>{contact.value}</span><span className={styles.secondary}>{contact.state.replace(/_/g, " ")}</span></>
-        ) : action === "contact" ? (
-          <InlineActionForm
-            kind="contact"
-            id={row.guardianId}
-            email={email}
-            reason={reason}
-            error={fieldError}
-            busy={busy}
-            onEmail={onEmail}
-            onReason={onReason}
-            onCancel={onCancel}
-            onSubmit={onSubmit}
-          />
-        ) : (
-          <div className={styles.inlinePrompt}>
-            <span>No email recorded</span>
-            <button type="button" className="btn btn-quiet btn-sm" onClick={() => onOpen(row.guardianId, "contact")}>Add email</button>
+    <>
+      <tr className={styles.dataRow}>
+        <td className={styles.guardianCell}>
+          <strong className={styles.guardianName}>{row.displayName}</strong>
+          <span className={`num ${styles.guardianRef}`}>{row.guardianId.slice(0, 8)}</span>
+        </td>
+        <td className={styles.studentsCell}>
+          {row.students.length === 0 ? (
+            <span className={styles.secondary}>No linked students</span>
+          ) : (
+            <div className={styles.studentList}>
+              {visibleStudents.map((student) => (
+                <span key={student.linkId} className={styles.studentLine}>
+                  {student.displayName} · {student.classLabel}
+                </span>
+              ))}
+              {hiddenStudentCount > 0 ? (
+                <details>
+                  <summary className={styles.secondary}>+{hiddenStudentCount} more {hiddenStudentCount === 1 ? "student" : "students"}</summary>
+                  {row.students.slice(2).map((student) => (
+                    <span key={student.linkId} className={styles.studentLine}>{student.displayName} · {student.classLabel}</span>
+                  ))}
+                </details>
+              ) : null}
+            </div>
+          )}
+        </td>
+        <td className={styles.contactCell}>
+          {contact ? (
+            <>
+              <span className={styles.email}>{contact.value}</span>
+              <span className={styles.secondary}>{contact.state.replace(/_/g, " ")}</span>
+            </>
+          ) : (
+            <div className={styles.inlinePrompt}>
+              <span className={styles.mutedText}>No email recorded</span>
+              <button type="button" className="btn btn-quiet btn-sm" onClick={() => onOpen(row.guardianId, "contact")}>Add email</button>
+            </div>
+          )}
+        </td>
+        <td className={styles.statusCell}>
+          <StatusBadge tone={STATUS_TONE[row.accessState]}>{STATUS_LABEL[row.accessState]}</StatusBadge>
+          <AccessDetail row={row} />
+        </td>
+        <td className={styles.actionCell}>
+          <div className={styles.rowActions}>
+            {row.accessState === "invited" ? (
+              <>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => onOpen(row.guardianId, "resend")}>Resend</button>
+                <button type="button" className="btn btn-danger btn-sm" onClick={() => onOpen(row.guardianId, "revoke")}>Revoke</button>
+              </>
+            ) : canSend ? (
+              <button type="button" className="btn btn-accent btn-sm" onClick={() => onOpen(row.guardianId, "activate")}>Send activation</button>
+            ) : null}
           </div>
-        )}
-      </td>
-      <td>
-        <StatusBadge tone={STATUS_TONE[row.accessState]}>{STATUS_LABEL[row.accessState]}</StatusBadge>
-        <AccessDetail row={row} />
-      </td>
-      <td>
-        {action !== null && action !== "contact" ? (
-          <InlineActionForm
-            kind={action}
-            id={row.guardianId}
-            email={email}
-            reason={reason}
-            error={fieldError}
-            busy={busy}
-            onEmail={onEmail}
-            onReason={onReason}
-            onCancel={onCancel}
-            onSubmit={onSubmit}
-          />
-        ) : row.accessState === "invited" ? (
-          <div className={styles.actions}>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onOpen(row.guardianId, "resend")}>Resend</button>
-            <button type="button" className="btn btn-danger btn-sm" onClick={() => onOpen(row.guardianId, "revoke")}>Revoke</button>
-          </div>
-        ) : canSend ? (
-          <button type="button" className="btn btn-accent btn-sm" onClick={() => onOpen(row.guardianId, "activate")}>Send activation</button>
-        ) : null}
-      </td>
-    </tr>
+        </td>
+      </tr>
+      {action !== null ? (
+        <tr>
+          <td colSpan={5} className={styles.formCell}>
+            <InlineActionForm
+              kind={action}
+              id={row.guardianId}
+              email={email}
+              reason={reason}
+              error={fieldError}
+              busy={busy}
+              onEmail={onEmail}
+              onReason={onReason}
+              onCancel={onCancel}
+              onSubmit={onSubmit}
+            />
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
@@ -344,18 +368,21 @@ function InlineActionForm({
   const label = kind === "contact" ? "Save email" : kind === "activate" ? "Send activation" : kind === "resend" ? "Resend activation" : "Revoke activation";
   return (
     <div className={styles.inlineForm}>
-      {kind === "contact" ? (
+      <p className={styles.formTitle}>{label}</p>
+      <div className={styles.formGrid}>
+        {kind === "contact" ? (
+          <div className="field">
+            <label htmlFor={`guardian-email-${id}`}>Email</label>
+            <input id={`guardian-email-${id}`} className="input" type="email" value={email} onChange={(event) => onEmail(event.target.value)} />
+          </div>
+        ) : null}
         <div className="field">
-          <label htmlFor={`guardian-email-${id}`}>Email</label>
-          <input id={`guardian-email-${id}`} className="input" type="email" value={email} onChange={(event) => onEmail(event.target.value)} />
+          <label htmlFor={`guardian-reason-${kind}-${id}`}>Reason</label>
+          <input id={`guardian-reason-${kind}-${id}`} className="input" value={reason} onChange={(event) => onReason(event.target.value)} aria-invalid={error !== null} aria-describedby={error ? `guardian-error-${kind}-${id}` : undefined} />
+          {error ? <p id={`guardian-error-${kind}-${id}`} className="field-error">{error}</p> : null}
         </div>
-      ) : null}
-      <div className="field">
-        <label htmlFor={`guardian-reason-${kind}-${id}`}>Reason</label>
-        <input id={`guardian-reason-${kind}-${id}`} className="input" value={reason} onChange={(event) => onReason(event.target.value)} aria-invalid={error !== null} aria-describedby={error ? `guardian-error-${kind}-${id}` : undefined} />
-        {error ? <p id={`guardian-error-${kind}-${id}`} className="field-error">{error}</p> : null}
       </div>
-      <div className={styles.actions}>
+      <div className={styles.formActions}>
         <button type="button" className={`btn ${kind === "revoke" ? "btn-danger" : "btn-primary"} btn-sm`} onClick={onSubmit} disabled={busy}>{busy ? "Saving…" : label}</button>
         <button type="button" className="btn btn-quiet btn-sm" onClick={onCancel} disabled={busy}>Cancel</button>
       </div>

@@ -112,6 +112,21 @@ describe("DeliveriesWorkspace", () => {
     await waitFor(() => expect(screen.getByText(/Last worker run/).textContent).toContain("ago"));
   });
 
+  it("reveals recipients beyond the compact preview", async () => {
+    const event = BOARD.events[0]!;
+    const delivery = event.deliveries[0]!;
+    mocks.list.mockResolvedValue({ ...BOARD, events: [{ ...event, deliveries: [delivery, { ...delivery, deliveryId: "second", recipientMasked: "se***@example.test" }, { ...delivery, deliveryId: "third", recipientMasked: "th***@example.test" }] }] });
+    render(<DeliveriesWorkspace />);
+    const summary = await screen.findByText("+1 more recipient");
+    const details = summary.closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    await userEvent.click(summary);
+    expect(details).toHaveAttribute("open");
+    expect(details.textContent).toContain("th***@example.test");
+    await userEvent.click(summary);
+    expect(details).not.toHaveAttribute("open");
+  });
+
   it("offers retry only for the failed delivery and requeue only for the failed event", async () => {
     render(<DeliveriesWorkspace />);
     await waitFor(() => expect(screen.getByText("Retry · fi***@example.test")).toBeTruthy());

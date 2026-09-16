@@ -492,9 +492,11 @@ function ClassesPanel({
       <div className="pn-head">
         <div>
           <h2 id="classes-heading">Classes</h2>
-          <p className="sub">The class catalog is shared across years. Codes are permanent once a class is referenced.</p>
+          <p className="sub">Shared catalog · codes are permanent once referenced</p>
         </div>
-        <div className={styles.panelActions}>
+      </div>
+      <div className="pn-body flush">
+        <div className={styles.panelToolbar}>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setCreatePanel(createPanel === "catalog" ? null : "catalog"); setAction(null); }}>
             Add standard classes (Nursery to Class 10)
           </button>
@@ -502,8 +504,6 @@ function ClassesPanel({
             Add class
           </button>
         </div>
-      </div>
-      <div className="pn-body flush">
         {createPanel === "catalog" ? (
           <div className={styles.detailPanel}>
             <h3 className={styles.detailHeading}>Add standard classes</h3>
@@ -548,7 +548,7 @@ function ClassesPanel({
           </div>
         ) : (
           <div className="table-wrap" role="region" aria-label="Class catalog" tabIndex={0}>
-            <table className={`ledger ${styles.table}`}>
+            <table className={`ledger ${styles.table} ${styles.classesTable}`}>
               <caption className="sr-only">Classes with code, sort order, section count and reference state</caption>
               <thead>
                 <tr>
@@ -557,7 +557,7 @@ function ClassesPanel({
                   <th scope="col" className="num">Sort order</th>
                   <th scope="col" className="num">Sections this year</th>
                   <th scope="col">Referenced</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col" className={styles.actionHead}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -603,17 +603,21 @@ function GradeRow({
 }) {
   return (
     <>
-      <tr>
-        <td><strong>{grade.label}</strong></td>
+      <tr className={styles.dataRow}>
+        <td className={styles.primaryCell}>
+          <strong className={styles.rowTitle}>{grade.label}</strong>
+        </td>
         <td className="num">{grade.code}</td>
         <td className="num">{grade.sortOrder}</td>
         <td className="num">{grade.sectionCount}</td>
         <td>{grade.referenced ? "Referenced" : <span className={styles.secondary}>Not referenced</span>}</td>
-        <td>
+        <td className={styles.actionCell}>
           {editing ? null : (
-            <button type="button" className="btn btn-quiet btn-sm" onClick={onEdit} aria-expanded={false} aria-controls={`grade-edit-${grade.id}`}>
-              Edit
-            </button>
+            <div className={styles.rowActions}>
+              <button type="button" className="btn btn-quiet btn-sm" onClick={onEdit} aria-expanded={false} aria-controls={`grade-edit-${grade.id}`}>
+                Edit
+              </button>
+            </div>
           )}
         </td>
       </tr>
@@ -789,7 +793,7 @@ function SectionsPanel({
           </div>
         ) : (
           <div className="table-wrap" role="region" aria-label="Sections for the selected year" tabIndex={0}>
-            <table className={`ledger ${styles.table}`}>
+            <table className={`ledger ${styles.table} ${styles.sectionsTable}`}>
               <caption className="sr-only">Sections for the selected academic year with status, enrolment and exam counts</caption>
               <thead>
                 <tr>
@@ -797,7 +801,7 @@ function SectionsPanel({
                   <th scope="col">Status</th>
                   <th scope="col" className="num">Enrolled</th>
                   <th scope="col" className="num">Exams</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col" className={styles.actionHead}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -844,20 +848,17 @@ function SectionRow({
   const open = action?.kind === "section-status" && action.id === section.id ? action : null;
   return (
     <>
-      <tr>
-        <td>
-          <strong>{section.gradeLabel} · {section.sectionLabel}</strong>
-          <span className={styles.secondary}>{section.ref}</span>
-          {section.status === "planned" ? (
-            <span className={styles.secondary}>Activate to use in enrollments, timetables and results.</span>
-          ) : null}
+      <tr className={styles.dataRow}>
+        <td className={styles.primaryCell}>
+          <strong className={styles.rowTitle}>{section.gradeLabel} · {section.sectionLabel}</strong>
+          <span className={`num ${styles.rowRef}`}>{section.ref}</span>
         </td>
         <td><StatusBadge tone={SECTION_TONE[section.status]}>{section.status}</StatusBadge></td>
         <td className="num">{section.enrollmentCount}</td>
         <td className="num">{section.examCount}</td>
-        <td>
+        <td className={styles.actionCell}>
           {open === null ? (
-            <div className={styles.actions}>
+            <div className={styles.rowActions}>
               {SECTION_TRANSITIONS[section.status].map((transition) => {
                 const blocked = transition.status === "archived" && section.enrollmentCount > 0;
                 return (
@@ -1057,7 +1058,7 @@ function SubjectsPanel({
           </div>
         ) : (
           <div className="table-wrap" role="region" aria-label="Subject catalog" tabIndex={0}>
-            <table className={`ledger ${styles.table}`}>
+            <table className={`ledger ${styles.table} ${styles.subjectsTable}`}>
               <caption className="sr-only">Subjects with code, component usage and reference state</caption>
               <thead>
                 <tr>
@@ -1065,7 +1066,7 @@ function SubjectsPanel({
                   <th scope="col">Name</th>
                   <th scope="col" className="num">Components</th>
                   <th scope="col">Referenced</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col" className={styles.actionHead}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1111,16 +1112,18 @@ function SubjectRow({
 }) {
   return (
     <>
-      <tr>
+      <tr className={styles.dataRow}>
         <td className="num">{subject.code}</td>
-        <td><strong>{subject.name}</strong></td>
+        <td className={styles.primaryCell}><strong className={styles.rowTitle}>{subject.name}</strong></td>
         <td className="num">{subject.componentCount}</td>
         <td>{subject.referenced ? "Referenced" : <span className={styles.secondary}>Not referenced</span>}</td>
-        <td>
+        <td className={styles.actionCell}>
           {editing ? null : (
-            <button type="button" className="btn btn-quiet btn-sm" onClick={onEdit} aria-expanded={false} aria-controls={`subject-edit-${subject.id}`}>
-              Rename
-            </button>
+            <div className={styles.rowActions}>
+              <button type="button" className="btn btn-quiet btn-sm" onClick={onEdit} aria-expanded={false} aria-controls={`subject-edit-${subject.id}`}>
+                Rename
+              </button>
+            </div>
           )}
         </td>
       </tr>
@@ -1231,15 +1234,15 @@ function ExamsPanel({
       <div className="pn-head">
         <div>
           <h2 id="exams-heading">Exam terms and components</h2>
-          <p className="sub">An exam term creates one definition per chosen class section, each with its marking components.</p>
+          <p className="sub">One definition per class section · marking components per subject</p>
         </div>
-        <div className={styles.panelActions}>
+      </div>
+      <div className="pn-body flush">
+        <div className={styles.panelToolbar}>
           <button type="button" className="btn btn-quiet btn-sm" onClick={() => { setCreatePanel(createPanel === "exam-term" ? null : "exam-term"); setAction(null); }}>
             New exam term
           </button>
         </div>
-      </div>
-      <div className="pn-body flush">
         {createPanel === "exam-term" && yearId !== null ? (
           <div className={styles.detailPanel}>
             <h3 className={styles.detailHeading}>New exam term</h3>
@@ -1268,20 +1271,22 @@ function ExamsPanel({
           </div>
         ) : (
           termNames.map((term) => (
-            <div key={term}>
-              <h3 className={styles.termHeading}>
-                {term} <span>· {terms.get(term)?.length ?? 0} {(terms.get(term)?.length ?? 0) === 1 ? "section" : "sections"}</span>
-              </h3>
+            <div key={term} className={styles.termBlock}>
+              <div className={styles.termHead}>
+                <h3 className={styles.termHeading}>{term}</h3>
+                <span className={styles.termMeta}>
+                  {terms.get(term)?.length ?? 0} {(terms.get(term)?.length ?? 0) === 1 ? "section" : "sections"}
+                </span>
+              </div>
               <div className="table-wrap" role="region" aria-label={`Exam definitions for ${term}`} tabIndex={0}>
-                <table className={`ledger ${styles.tableWide}`}>
+                <table className={`ledger ${styles.table} ${styles.examsTable}`}>
                   <caption className="sr-only">Exam definitions for {term} with status and component counts</caption>
                   <thead>
                     <tr>
                       <th scope="col">Class section</th>
-                      <th scope="col">Reference</th>
                       <th scope="col">Status</th>
                       <th scope="col" className="num">Components</th>
-                      <th scope="col">Actions</th>
+                      <th scope="col" className={styles.actionHead}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1347,13 +1352,15 @@ function ExamRow({
   const closed = exam.status === "closed";
   return (
     <>
-      <tr>
-        <td><strong>{exam.sectionLabel}</strong></td>
-        <td className="num">{exam.ref}</td>
-        <td><StatusBadge tone={EXAM_TONE[exam.status]}>{exam.status}</StatusBadge></td>
+      <tr className={styles.dataRow}>
+        <td className={styles.primaryCell}>
+          <strong className={styles.rowTitle}>{exam.sectionLabel}</strong>
+          <span className={`num ${styles.rowRef}`}>{exam.ref}</span>
+        </td>
+        <td className={styles.statusCell}><StatusBadge tone={EXAM_TONE[exam.status]}>{exam.status}</StatusBadge></td>
         <td className="num">{exam.components.length}</td>
-        <td>
-          <div className={styles.actions}>
+        <td className={styles.actionCell}>
+          <div className={styles.rowActions}>
             {EXAM_TRANSITIONS[exam.status].map((transition) => (
               <button
                 key={transition.status}
@@ -1378,7 +1385,7 @@ function ExamRow({
       </tr>
       {open !== null ? (
         <tr>
-          <td colSpan={5} className={styles.detailCell}>
+          <td colSpan={4} className={styles.detailCell}>
             <div className={styles.detailPanel}>
               <ReasonForm
                 id={`exam-${exam.id}`}
@@ -1394,7 +1401,7 @@ function ExamRow({
       ) : null}
       {componentsOpen ? (
         <tr>
-          <td colSpan={5} className={styles.detailCell}>
+          <td colSpan={4} className={styles.detailCell}>
             <div className={styles.detailPanel} id={`exam-components-${exam.id}`}>
               <h3 className={styles.detailHeading}>Marking components · {exam.sectionLabel} {exam.term}</h3>
               <ComponentsEditor
@@ -1440,14 +1447,14 @@ function ComponentsEditor({
         <p className={styles.secondary}>No components yet · add one below.</p>
       ) : (
         <div className="table-wrap" role="region" aria-label={`Components for ${exam.sectionLabel} ${exam.term}`} tabIndex={0}>
-          <table className={`ledger ${styles.componentTable}`}>
+          <table className={`ledger ${styles.componentTable} ${styles.componentsTable}`}>
             <thead>
               <tr>
                 <th scope="col">Subject</th>
                 <th scope="col">Component</th>
                 <th scope="col" className="num">Max marks</th>
                 <th scope="col" className="num">Batches</th>
-                <th scope="col">Actions</th>
+                <th scope="col" className={styles.actionHead}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1529,14 +1536,17 @@ function ComponentRow({
 }) {
   return (
     <>
-      <tr>
-        <td><strong>{component.subjectName}</strong><span className={styles.secondary}>{component.subjectCode}</span></td>
+      <tr className={styles.dataRow}>
+        <td className={styles.primaryCell}>
+          <strong className={styles.rowTitle}>{component.subjectName}</strong>
+          <span className={`num ${styles.rowRef}`}>{component.subjectCode}</span>
+        </td>
         <td>{component.name}</td>
         <td className="num">{component.maxMarks}</td>
         <td className="num">{component.batchCount}</td>
-        <td>
+        <td className={styles.actionCell}>
           {editing || deleting ? null : (
-            <div className={styles.actions}>
+            <div className={styles.rowActions}>
               <button
                 type="button"
                 className="btn btn-quiet btn-sm"

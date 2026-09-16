@@ -1,0 +1,196 @@
+.toolbar {
+  margin-bottom: 16px;
+}
+
+.tabCount {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-left: 6px;
+}
+
+.searchIcon {
+  color: var(--muted);
+  font-size: 19px;
+}
+
+.emptyState {
+  padding: 42px 18px;
+  text-align: center;
+}
+
+.emptyIll {
+  margin: 0 auto 12px;
+}
+
+.emptyIcon {
+  font-size: 26px;
+}
+
+.emptyTitle {
+  font-size: 1.02rem;
+}
+
+.emptyCopy {
+  margin: 6px auto 14px;
+  max-width: 340px;
+}
+
+.actionHead {
+  text-align: right;
+}
+
+.queueViewport {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+
+.queueInner {
+  min-width: 760px;
+}
+
+.qHead {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) 108px 130px minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.qHead span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.queue {
+  border-top: 0;
+}
+
+.qRow {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) 108px 130px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.qRow:last-child {
+  border-bottom: 0;
+}
+
+.qRow:hover {
+  background: var(--ink-soft-tint);
+}
+
+.qTitle {
+  font-size: 0.93rem;
+  font-weight: 650;
+}
+
+.qSub {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.qVacancy {
+  color: var(--ink-3);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.qDate {
+  color: var(--ink-3);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.qReviewer {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.qAct {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin: 0;
+  padding: 42px 18px;
+  text-align: center;
+}
+
+.refreshRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.refreshRow p {
+  margin: 0;
+}
+
+.statusLine {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 0 0 12px;
+}
+
+@media (max-width: 719px) {
+  .queueInner {
+    min-width: 0;
+  }
+
+  .qHead {
+    display: none;
+  }
+
+  .qRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "c a"
+      "v a"
+      "d a"
+      "s a"
+      "r a";
+    row-gap: 8px;
+  }
+
+  .qCandidate {
+    grid-area: c;
+  }
+
+  .qVacancy {
+    grid-area: v;
+  }
+
+  .qDate {
+    grid-area: d;
+  }
+
+  .qStatus {
+    grid-area: s;
+  }
+
+  .qReviewer {
+    grid-area: r;
+  }
+
+  .qAct {
+    grid-area: a;
+    align-self: start;
+  }
+}

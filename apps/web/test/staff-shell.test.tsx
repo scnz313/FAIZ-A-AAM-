@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,7 @@ const PINNED = new Date("2026-08-10T05:00:00.000Z");
 const IDENTITY_SESSION_KEY = sessionKey("identity");
 const STAFF_IDENTITY_KEY = sessionKey("staff-identity");
 const SANA_ACCOUNT_ID = "00000000-0000-4000-8000-000000000203";
+const PRINCIPAL_ACCOUNT_ID = "00000000-0000-4000-8000-000000000205";
 const FINANCE_GRANT_ID = "00000000-0000-4000-8000-000000000304";
 const PUBLISHER_GRANT_ID = "00000000-0000-4000-8000-000000000305";
 const ADMISSIONS_GRANT_ID = "00000000-0000-4000-8000-000000000306";
@@ -61,6 +62,28 @@ describe("StaffShell profile-led chrome", () => {
     expect(screen.getByRole("link", { name: "Users" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Audit" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Results" })).toBeTruthy();
+  });
+
+  it("shows only profile-menu actions the active profile can use", async () => {
+    const user = userEvent.setup();
+    render(
+      <StaffContextProvider>
+        <StaffShell>content</StaffShell>
+      </StaffContextProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("Administrator · demo session")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Account menu for/i }));
+    expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: /Settings/i })).toBeTruthy();
+    expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: /Log out/i })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /Account menu for/i }));
+    await user.selectOptions(screen.getByLabelText("Demo identity"), PRINCIPAL_ACCOUNT_ID);
+    await waitFor(() => expect(screen.getByText("Principal · demo session")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Account menu for/i }));
+
+    expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: /Settings/i })).toBeNull();
+    expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: /Log out/i })).toBeTruthy();
   });
 
   it("keeps the legacy workspace selector when the demo identity is a pre-profile account", async () => {

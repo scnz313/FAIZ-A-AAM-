@@ -18,8 +18,7 @@ export default async function CareersPage() {
     ? await Promise.all([loadServerVacancies(), loadServerJobs()])
     : await Promise.all([careersService.listVacancies(), careersService.listStaffRecords()]);
   const vacancyTitles = Object.fromEntries(allVacancies.map((vacancy) => [vacancy.slug, vacancy.title]));
-  const openVacancies = allVacancies.filter((vacancy) => vacancy.status === "open");
-  const open = openVacancies;
+  const open = allVacancies.filter((vacancy) => vacancy.status === "open");
   const closed = allVacancies.length - open.length;
   const nearestDeadlineIso = open.map((vacancy) => vacancy.deadlineIso).sort()[0];
 
@@ -31,27 +30,30 @@ export default async function CareersPage() {
           <p className="ph-sub">Recruitment pipeline. Scorecards and panel notes are visible to staff with HR roles only.</p>
         </div>
       </div>
-      <p className={styles.summary}>
-        <strong className="num">{open.length}</strong> open · <strong className="num">{closed}</strong> closed
-        {nearestDeadlineIso ? (
-          <>
-            {" "}· nearest deadline{" "}
-            <strong className="num">{formatKolkata(nearestDeadlineIso, { format: "day" })}</strong>
-          </>
-        ) : null}
-      </p>
 
-      <section aria-labelledby="queue-heading">
-        <div className={styles.sectionHead}>
-          <h2 id="queue-heading" className="section-label">
-            Recruitment queue
-          </h2>
-          {!serverMode ? <span className="demo-badge">Demo data</span> : null}
+      <section className="panel" aria-label="Vacancy summary">
+        <div className={`pn-body flush ${styles.stats}`}>
+          <div className={styles.statCell}>
+            <span className={styles.statLabel}>Open vacancies</span>
+            <span className={`num ${styles.statValue}`}>{open.length}</span>
+          </div>
+          <div className={styles.statCell}>
+            <span className={styles.statLabel}>Closed vacancies</span>
+            <span className={`num ${styles.statValue}`}>{closed}</span>
+          </div>
+          <div className={styles.statCell}>
+            <span className={styles.statLabel}>Nearest deadline</span>
+            <span className={`num ${styles.statValue}`}>
+              {nearestDeadlineIso ? formatKolkata(nearestDeadlineIso, { format: "day" }) : "—"}
+            </span>
+            {nearestDeadlineIso ? <span className={styles.statNote}>For open roles only</span> : null}
+          </div>
         </div>
-        <CareersQueue initial={initialRecords} vacancyTitles={vacancyTitles} demoMode={!serverMode} />
       </section>
 
-      {!serverMode ? <div className={styles.ruleNote}><p>Fictional demo recruitment records.</p></div> : null}
+      <CareersQueue initial={initialRecords} vacancyTitles={vacancyTitles} demoMode={!serverMode} />
+
+      {!serverMode ? <p className="demo-note">Demo session · every application above is fictional concept data.</p> : null}
     </div>
   );
 }

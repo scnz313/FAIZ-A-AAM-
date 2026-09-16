@@ -275,15 +275,18 @@ export default function DocumentsPage() {
       ) : (
         <>
           {supabaseMode ? (
-            <section aria-labelledby="private-files-heading">
-              <h2 id="private-files-heading" className={styles.groupTitle}>
-                Private files
-              </h2>
-              <PrivateDocumentList
-                documents={bundle.metadata ?? []}
-                emptyTitle="No private files yet"
-                emptyNote={`Files generated or uploaded for ${childName} appear here with their finalization and scan state.`}
-              />
+            <section className="panel" aria-labelledby="private-files-heading">
+              <div className="pn-head">
+                <h2 id="private-files-heading">Private files</h2>
+                <p className="sub">Scanned uploads and generated records for {childName}</p>
+              </div>
+              <div className="pn-body flush">
+                <PrivateDocumentList
+                  documents={bundle.metadata ?? []}
+                  emptyTitle="No private files yet"
+                  emptyNote={`Files generated or uploaded for ${childName} appear here with their finalization and scan state.`}
+                />
+              </div>
             </section>
           ) : null}
 
@@ -302,14 +305,14 @@ export default function DocumentsPage() {
                 </div>
               ) : (
               <div className="table-wrap">
-                <table className="ledger">
+                <table className={`ledger ${styles.registerTable}`}>
                   <thead>
                     <tr>
                       <th>Document</th>
                       <th>Kind</th>
                       <th>Added</th>
                       <th>State</th>
-                      <th><span className="sr-only">Actions</span></th>
+                      <th className={styles.actionHead}><span className="sr-only">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -318,9 +321,9 @@ export default function DocumentsPage() {
                       const document = reportCardDocument(term);
                       return (
                         <tr key={term.termId}>
-                          <td className="strong">
-                            <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                              <span className="msym" style={{ fontSize: 20, color: "var(--muted)" }}>description</span>
+                          <td>
+                            <span className={styles.docTitle}>
+                              <span className={`msym ${styles.docIcon}`} aria-hidden="true">description</span>
                               {term.termLabel} report card
                             </span>
                           </td>
@@ -343,9 +346,9 @@ export default function DocumentsPage() {
                               </span>
                             )}
                           </td>
-                          <td style={{ textAlign: "right" }}>
+                          <td className={styles.actionCell}>
                             {available ? (
-                              <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                              <div className={styles.rowActions}>
                                 <Link prefetch={false} className="btn btn-ghost btn-sm" href={`/portal/results?term=${term.termId}`}>
                                   <span className="msym" style={{ fontSize: 16 }}>visibility</span> View
                                 </Link>
@@ -358,7 +361,7 @@ export default function DocumentsPage() {
                                     <span className="msym" style={{ fontSize: 16 }}>download</span> PDF
                                   </button>
                                 ) : null}
-                              </span>
+                              </div>
                             ) : (
                               <span className="tiny muted">—</span>
                             )}
@@ -386,14 +389,14 @@ export default function DocumentsPage() {
                 </div>
               ) : (
                 <div className="table-wrap">
-                  <table className="ledger">
+                  <table className={`ledger ${styles.registerTable}`}>
                     <thead>
                       <tr>
                         <th>Document</th>
                         <th>Kind</th>
                         <th>Added</th>
                         <th>State</th>
-                        <th><span className="sr-only">Actions</span></th>
+                        <th className={styles.actionHead}><span className="sr-only">Actions</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -409,9 +412,9 @@ export default function DocumentsPage() {
                         };
                         return (
                           <tr key={receipt.ref}>
-                            <td className="strong">
-                              <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                <span className="msym" style={{ fontSize: 20, color: "var(--muted)" }}>receipt_long</span>
+                            <td>
+                              <span className={styles.docTitle}>
+                                <span className={`msym ${styles.docIcon}`} aria-hidden="true">receipt_long</span>
                                 {receipt.ref}
                               </span>
                             </td>
@@ -423,8 +426,8 @@ export default function DocumentsPage() {
                                 Ready
                               </span>
                             </td>
-                            <td style={{ textAlign: "right" }}>
-                              <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                            <td className={styles.actionCell}>
+                              <div className={styles.rowActions}>
                                 <Link prefetch={false} className="btn btn-ghost btn-sm" href={`/portal/receipts/${receipt.ref}`}>
                                   <span className="msym" style={{ fontSize: 16 }}>visibility</span> View
                                 </Link>
@@ -437,7 +440,7 @@ export default function DocumentsPage() {
                                     <span className="msym" style={{ fontSize: 16 }}>download</span> PDF
                                   </button>
                                 ) : null}
-                              </span>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -460,20 +463,19 @@ export default function DocumentsPage() {
           {/* Panel for school record references */}
           <section className="panel">
             <div className="pn-head"><h2>School records</h2></div>
-            <div className="pn-body">
-              <div className="facts-ledger" aria-label="School record references">
-                <div className="fl-row">
-                  <span className="k">Student reference</span>
-                  <span className="v num">{bundle.studentRef}</span>
+            <div className="pn-body flush">
+              <div className={styles.recordStrip} aria-label="School record references">
+                <div className={styles.recordCell}>
+                  <span className={styles.recordLabel}>Student reference</span>
+                  <span className={`num ${styles.recordValue}`}>{bundle.studentRef}</span>
                 </div>
-                <div className="fl-row">
-                  <span className="k">Enrolment reference</span>
-                  <span className="v num">{bundle.enrollmentRef}</span>
+                <div className={styles.recordCell}>
+                  <span className={styles.recordLabel}>Enrolment reference</span>
+                  <span className={`num ${styles.recordValue}`}>{bundle.enrollmentRef}</span>
                 </div>
               </div>
-              <p className="muted small" style={{ marginTop: 10 }}>
-                References identify the school record. Issued certificates and generated documents appear in the
-                register above once the school publishes them.
+              <p className="muted small" style={{ margin: 0, padding: "12px 16px 14px" }}>
+                References identify the school record. Issued certificates and generated documents appear in the register above once the school publishes them.
               </p>
             </div>
           </section>

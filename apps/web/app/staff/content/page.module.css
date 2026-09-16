@@ -17,14 +17,6 @@
   margin: 0;
 }
 
-.panelHead {
-  align-items: baseline;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
 .panelActions {
   align-items: center;
   display: flex;
@@ -32,9 +24,9 @@
 }
 
 .pageEditor {
-  border: 1px solid var(--line);
-  margin-bottom: 18px;
-  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  margin: 0;
+  padding: 16px 18px;
 }
 
 .editorHead {
@@ -56,33 +48,229 @@
   justify-content: flex-end;
 }
 
-.panelTitle {
-  font-family: var(--serif);
-  font-size: 1.25rem;
+.liveNote {
+  color: var(--saffron-ink);
+  font-size: 0.82rem;
+  margin: 0;
+  padding: 12px 18px 0;
+}
+
+.bodyPad {
+  padding: 18px;
+}
+
+.tableShell {
+  container-type: inline-size;
+}
+
+.pagesTable,
+.noticesTable {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.pagesTable {
+  min-width: 780px;
+}
+
+.noticesTable {
+  min-width: 720px;
+}
+
+.pagesTable :is(th, td),
+.noticesTable :is(th, td) {
+  overflow-wrap: normal;
+  padding: 11px 14px;
+  vertical-align: middle;
+  word-break: normal;
+}
+
+.pagesTable th:first-child,
+.pagesTable td:first-child,
+.noticesTable th:first-child,
+.noticesTable td:first-child {
+  padding-left: 16px;
+}
+
+.pagesTable th:last-child,
+.pagesTable td:last-child,
+.noticesTable th:last-child,
+.noticesTable td:last-child {
+  padding-right: 16px;
+}
+
+.pagesTable th:nth-child(1),
+.pagesTable td:nth-child(1) {
+  width: 26%;
+}
+
+.pagesTable th:nth-child(2),
+.pagesTable td:nth-child(2) {
+  width: 14%;
+}
+
+.pagesTable th:nth-child(3),
+.pagesTable td:nth-child(3) {
+  width: 14%;
+}
+
+.pagesTable th:nth-child(4),
+.pagesTable td:nth-child(4) {
+  width: 14%;
+}
+
+.pagesTable th:nth-child(5),
+.pagesTable td:nth-child(5) {
+  width: 32%;
+}
+
+.noticesTable th:nth-child(1),
+.noticesTable td:nth-child(1) {
+  width: 22%;
+}
+
+.noticesTable th:nth-child(2),
+.noticesTable td:nth-child(2) {
+  width: 12%;
+}
+
+.noticesTable th:nth-child(3),
+.noticesTable td:nth-child(3) {
+  width: 10%;
+}
+
+.noticesTable th:nth-child(4),
+.noticesTable td:nth-child(4) {
+  width: 12%;
+}
+
+.noticesTable th:nth-child(5),
+.noticesTable td:nth-child(5) {
+  width: 10%;
+}
+
+.noticesTable th:nth-child(6),
+.noticesTable td:nth-child(6) {
+  width: 8%;
+}
+
+.noticesTable th:nth-child(7),
+.noticesTable td:nth-child(7) {
+  width: 14%;
+}
+
+.noticesTable th:nth-child(8),
+.noticesTable td:nth-child(8) {
+  width: 12%;
+}
+
+.actionHead,
+.cellAction {
+  text-align: right;
+}
+
+.pageCell {
+  min-width: 0;
+}
+
+.pageLink {
+  color: inherit;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.pageLink:hover {
+  color: var(--saffron-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.statusCell,
+.dateCell,
+.ownerCell,
+.nowrapCell {
+  white-space: nowrap;
+}
+
+.cellAction {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+
+.formCell {
+  background: var(--paper);
+  border-top: 0 !important;
+  padding: 0 !important;
+}
+
+.workflowPanel {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.workflowTitle {
+  color: var(--ink-2);
+  font-size: 0.82rem;
   font-weight: 650;
   margin: 0;
 }
 
-.liveNote {
-  color: var(--saffron-ink);
-  font-size: 0.82rem;
-  margin: 0 0 14px;
+.workflowActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.loading {
+.actionHint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  max-width: 16ch;
+  text-align: right;
+}
+
+.scheduleForm {
+  align-items: flex-start;
+  display: grid;
+  gap: 10px;
+  max-width: 360px;
+}
+
+.scheduleForm :global(.input) {
+  min-width: 0;
+  width: 100%;
+}
+
+.scheduleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scheduleNote {
+  color: var(--muted);
+  display: block;
+  font-size: 0.76rem;
+  margin-top: 4px;
+  white-space: normal;
+}
+
+.note {
+  border-top: 1px solid var(--line);
   color: var(--muted);
   font-family: var(--serif);
   font-size: 0.88rem;
+  line-height: 1.5;
   margin: 0;
-}
-
-.table {
-  min-width: 620px;
-}
-
-/* Column priority follows the panel width, not the viewport. */
-.tableShell {
-  container-type: inline-size;
+  padding-top: 18px;
 }
 
 @container (max-width: 900px) {
@@ -97,67 +285,6 @@
   }
 }
 
-.pageLink {
-  color: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-  transition: color 0.15s ease;
-}
-
-.pageLink:hover {
-  color: var(--saffron);
-}
-
-.cellAction {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  justify-content: flex-end;
-}
-
-/* Inline page schedule control: the datetime field and its confirm sit in the
-   action cell until the publisher commits or cancels. */
-.scheduleForm {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.scheduleForm :global(.input) {
-  min-width: 200px;
-  width: auto;
-}
-
-/* Scheduled rows carry the effective instant beneath the status badge. */
-.scheduleNote {
-  color: var(--muted);
-  display: block;
-  font-size: 0.78rem;
-  margin-top: 4px;
-}
-
-.note {
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-family: var(--serif);
-  font-size: 0.88rem;
-  line-height: 1.5;
-  margin: 0;
-  padding-top: 18px;
-}
-
-/* Whole-cell numerics align right so columns of figures compare. */
-.table th:global(.num),
-.table td:global(.num) {
-  text-align: right;
-}
-
-/* Draft preview dialog — read-only public typography (serif title, ruled
-   meta, lede plus body). No publish action lives inside the preview. */
 .previewDialog {
   background: var(--chalk);
   border: 1px solid var(--ink);

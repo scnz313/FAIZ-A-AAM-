@@ -265,9 +265,15 @@ describe("staff content page maker/checker actions", () => {  it("lets a differe
 
     const pageRow = screen.getByRole("link", { name: "School life" }).closest("tr");
     expect(pageRow).not.toBeNull();
-    await user.click(within(pageRow!).getByRole("button", { name: "Approve" }));
+    const workflowToggle = within(pageRow!).getByRole("button", { name: "Workflow" });
+    expect(workflowToggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(workflowToggle);
+    expect(workflowToggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(within(screen.getByRole("region", { name: "Review workflow for School life" })).getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(within(pageRow!).getByText("Approved")).toBeTruthy());
-    await user.click(within(pageRow!).getByRole("button", { name: "Publish" }));
+    expect(screen.queryByRole("region", { name: "Review workflow for School life" })).toBeNull();
+    await user.click(within(pageRow!).getByRole("button", { name: "Workflow" }));
+    await user.click(within(screen.getByRole("region", { name: "Review workflow for School life" })).getByRole("button", { name: "Publish" }));
     await waitFor(() => expect(within(pageRow!).getByText("Published")).toBeTruthy());
 
     const persisted = window.sessionStorage.getItem(PUBLIC_PAGES_SESSION_KEY);

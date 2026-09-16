@@ -239,7 +239,7 @@ export function StaffHomeWorkspace() {
           </p>
         </div>
         {ready && roleLabels.length > 0 ? (
-          <div className={`${styles.roleChips} x-scroll`}>
+          <div className={`${styles.roleChips} x-scroll`} role="region" aria-label="Active staff roles" tabIndex={0}>
             {roleLabels.map((role) => (
               <span key={role} className="chip">{role.replace(/_/g, " ")}</span>
             ))}

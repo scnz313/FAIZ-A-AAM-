@@ -75,6 +75,67 @@
   gap: 14px;
 }
 
+.marksTable {
+  min-width: 520px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.marksTable :is(th, td) {
+  overflow-wrap: normal;
+  padding: 11px 14px;
+  vertical-align: middle;
+  word-break: normal;
+}
+
+.marksTable th:first-child,
+.marksTable td:first-child {
+  padding-left: 16px;
+}
+
+.marksTable th:last-child,
+.marksTable td:last-child {
+  padding-right: 16px;
+}
+
+.marksTable th:nth-child(1),
+.marksTable td:nth-child(1) {
+  width: 30%;
+}
+
+.marksTable th:nth-child(2),
+.marksTable td:nth-child(2) {
+  width: 18%;
+}
+
+.marksTable th:nth-child(3),
+.marksTable td:nth-child(3) {
+  width: 14%;
+}
+
+.marksTable th:nth-child(4),
+.marksTable td:nth-child(4) {
+  width: 38%;
+}
+
+.subjectCell {
+  min-width: 0;
+}
+
+.subjectName {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.remarkCell {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 /* Legacy publication list (kept for backward compat) */
 .publicationList {
   list-style: none;

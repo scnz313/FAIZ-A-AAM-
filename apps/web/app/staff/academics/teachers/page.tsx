@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -65,6 +65,16 @@ export default function TeachingStaffWorkspace() {
       setSubjects(config.subjects.map((subject) => ({ id: subject.id, name: subject.name })));
     }).catch(() => {});
   }, [refresh]);
+
+  const stats = useMemo(() => {
+    if (rows === null) return null;
+    const assignments = rows.flatMap((row) => row.assignments);
+    return {
+      teachers: rows.length,
+      active: assignments.filter((assignment) => assignment.status === "active").length,
+      ended: assignments.filter((assignment) => assignment.status === "ended").length,
+    };
+  }, [rows]);
 
   function announce(text: string) {
     setNotice(text);
@@ -159,6 +169,192 @@ export default function TeachingStaffWorkspace() {
     }
   }
 
+  function renderTeacherRows(row: TeachingStaffRecord): ReactNode[] {
+    const rendered: ReactNode[] = [];
+    const assignments = row.assignments;
+
+    if (assignments.length === 0) {
+      rendered.push(
+        <tr key={`${row.staffMemberId}-empty`}>
+          <td className={styles.name}>{row.displayName}</td>
+          <td>{row.title}</td>
+          <td><span className={styles.muted}>No assignments</span></td>
+          <td>—</td>
+          <td className={styles.actionCell}>
+            {canManage ? (
+              <div className={styles.rowActions}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => { setAssignFor(row.staffMemberId); setErrors({}); }}
+                  disabled={busy}
+                >
+                  Add assignment
+                </button>
+              </div>
+            ) : (
+              <span className={styles.muted}>Read only</span>
+            )}
+          </td>
+        </tr>,
+      );
+    } else {
+      assignments.forEach((assignment, index) => {
+        const tone = assignment.status === "active" ? "good" : assignment.status === "scheduled" ? "watch" : "neutral";
+        rendered.push(
+          <tr key={assignment.id} className={index === 0 ? styles.groupStart : undefined}>
+            <td className={styles.name}>
+              {index === 0 ? row.displayName : <span className={styles.continuation} aria-hidden="true">—</span>}
+            </td>
+            <td>
+              {index === 0 ? row.title : <span className={styles.continuation} aria-hidden="true">—</span>}
+            </td>
+            <td>
+              <span className={styles.assignmentLabel}>
+                {assignment.gradeLabel ?? "—"}-{assignment.sectionLabel ?? "—"} · {assignment.subjectName ?? "—"}
+              </span>
+              <span className={`num ${styles.assignmentRef}`}>{assignment.ref}</span>
+            </td>
+            <td>
+              <StatusBadge tone={tone}>{assignment.status}</StatusBadge>
+            </td>
+            <td className={styles.actionCell}>
+              <div className={styles.rowActions}>
+                {index === 0 && canManage ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => { setAssignFor(row.staffMemberId); setErrors({}); }}
+                    disabled={busy}
+                  >
+                    Add assignment
+                  </button>
+                ) : null}
+                {canManage && assignment.status !== "ended" ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => { setEndingId(assignment.id); setEndReason(""); setEndError(false); }}
+                    disabled={busy}
+                  >
+                    End
+                  </button>
+                ) : null}
+              </div>
+            </td>
+          </tr>,
+        );
+
+        if (endingId === assignment.id) {
+          rendered.push(
+            <tr key={`end-${assignment.id}`}>
+              <td colSpan={5} className={styles.formCell}>
+                <div className={styles.inlineForm}>
+                  <p className={styles.formTitle}>End assignment {assignment.ref}</p>
+                  <div className={styles.formGrid}>
+                    <div className={`field ${styles.formGridFull}`}>
+                      <label htmlFor={`end-reason-${assignment.id}`}>Reason (recorded in audit trail)</label>
+                      <input
+                        id={`end-reason-${assignment.id}`}
+                        className="input"
+                        type="text"
+                        value={endReason}
+                        onChange={(event) => { setEndReason(event.target.value); setEndError(false); }}
+                        aria-invalid={endError}
+                      />
+                      {endError ? <p className="field-error">A reason is required.</p> : null}
+                    </div>
+                  </div>
+                  <div className={styles.formActionsInline}>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => void handleEnd(assignment.id)} disabled={busy}>
+                      {busy ? "Ending…" : "Confirm end"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-quiet btn-sm"
+                      onClick={() => { setEndingId(null); setEndReason(""); }}
+                      disabled={busy}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </td>
+            </tr>,
+          );
+        }
+      });
+    }
+
+    if (assignFor === row.staffMemberId) {
+      rendered.push(
+        <tr key={`assign-${row.staffMemberId}`}>
+          <td colSpan={5} className={styles.formCell}>
+            <div className={styles.inlineForm}>
+              <p className={styles.formTitle}>Add assignment for {row.displayName}</p>
+              <div className={styles.formGrid}>
+                <div className="field">
+                  <label htmlFor={`assign-section-${row.staffMemberId}`}>Class and section</label>
+                  <select
+                    id={`assign-section-${row.staffMemberId}`}
+                    className="select"
+                    value={assignSection}
+                    onChange={(event) => setAssignSection(event.target.value)}
+                  >
+                    <option value="">Choose class…</option>
+                    {sections.map((section) => (
+                      <option key={section.id} value={section.id}>{section.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor={`assign-subject-${row.staffMemberId}`}>Subject</label>
+                  <select
+                    id={`assign-subject-${row.staffMemberId}`}
+                    className="select"
+                    value={assignSubject}
+                    onChange={(event) => setAssignSubject(event.target.value)}
+                  >
+                    <option value="">Choose subject…</option>
+                    {subjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>{subject.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className={`field ${styles.formGridFull}`}>
+                  <label htmlFor={`assign-reason-${row.staffMemberId}`}>Reason (recorded in audit trail)</label>
+                  <input
+                    id={`assign-reason-${row.staffMemberId}`}
+                    className="input"
+                    type="text"
+                    value={assignReason}
+                    onChange={(event) => setAssignReason(event.target.value)}
+                  />
+                  {errors.assignment ? <p className="field-error">{errors.assignment}</p> : null}
+                </div>
+              </div>
+              <div className={styles.formActionsInline}>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleAssign(row.staffMemberId)} disabled={busy}>
+                  {busy ? "Recording…" : "Record assignment"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-quiet btn-sm"
+                  onClick={() => { setAssignFor(null); setErrors({}); }}
+                  disabled={busy}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </td>
+        </tr>,
+      );
+    }
+
+    return rendered;
+  }
+
   return (
     <div className={styles.page}>
       <div className="page-head">
@@ -176,6 +372,23 @@ export default function TeachingStaffWorkspace() {
           {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
         </div>
       </div>
+
+      {stats !== null ? (
+        <div className={styles.summaryStrip} aria-label="Teaching staff summary">
+          <div className={styles.summaryCell}>
+            <span className={styles.summaryLabel}>Teachers</span>
+            <span className={styles.summaryValue}>{stats.teachers}</span>
+          </div>
+          <div className={styles.summaryCell}>
+            <span className={styles.summaryLabel}>Active assignments</span>
+            <span className={styles.summaryValue}>{stats.active}</span>
+          </div>
+          <div className={styles.summaryCell}>
+            <span className={styles.summaryLabel}>Ended (on file)</span>
+            <span className={styles.summaryValue}>{stats.ended}</span>
+          </div>
+        </div>
+      ) : null}
 
       {loadError ? <p className={styles.errorNote} role="alert">{loadError}</p> : null}
       {notice ? <p className={styles.liveNote} role="status" aria-live="polite">{notice}</p> : null}
@@ -223,109 +436,28 @@ export default function TeachingStaffWorkspace() {
           </div>
         ) : (
           <section className="panel">
-            <div className="pn-head"><h2>Teaching records</h2></div>
+            <div className="pn-head">
+              <div>
+                <h2>Teaching records</h2>
+                <p className="sub">One row per class and subject assignment</p>
+              </div>
+            </div>
             <div className="pn-body flush">
-          <table className={`ledger ${styles.table}`}>
-            <caption className="sr-only">Non-login teaching staff with their class and subject assignments</caption>
-            <thead>
-              <tr>
-                <th scope="col">Teacher</th>
-                <th scope="col">Title</th>
-                <th scope="col">Assignments</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.staffMemberId}>
-                  <td className={styles.name}>{row.displayName}</td>
-                  <td>{row.title}</td>
-                  <td>
-                    {row.assignments.length === 0 ? (
-                      <span className={styles.muted}>No assignments</span>
-                    ) : (
-                      <ul className={styles.assignmentList}>
-                        {row.assignments.map((assignment) => (
-                          <li key={assignment.id} className={styles.assignmentItem}>
-                            <span className="num">{assignment.ref}</span>
-                            <span>{assignment.gradeLabel ?? "—"}-{assignment.sectionLabel ?? "—"} · {assignment.subjectName ?? "—"}</span>
-                            <StatusBadge tone={assignment.status === "active" ? "good" : assignment.status === "scheduled" ? "watch" : "neutral"}>
-                              {assignment.status}
-                            </StatusBadge>
-                            {canManage && assignment.status !== "ended" ? (
-                              endingId === assignment.id ? (
-                                <span className={styles.endBox}>
-                                  <input className="input" type="text" value={endReason}
-                                    onChange={(event) => { setEndReason(event.target.value); }}
-                                    placeholder="Why is this assignment ending?"
-                                    aria-label={`Reason for ending ${assignment.ref}`}
-                                    aria-invalid={endError} />
-                                  {endError ? <p className="field-error">A reason is required.</p> : null}
-                                  <button type="button" className="button button--danger button--small"
-                                    onClick={() => void handleEnd(assignment.id)} disabled={busy}>
-                                    {busy ? "Ending…" : "Confirm end"}
-                                  </button>
-                                  <button type="button" className="button button--quiet button--small"
-                                    onClick={() => { setEndingId(null); setEndReason(""); }} disabled={busy}>Cancel</button>
-                                </span>
-                              ) : (
-                                <button type="button" className="button button--quiet button--small"
-                                  onClick={() => { setEndingId(assignment.id); setEndReason(""); }} disabled={busy}>
-                                  End
-                                </button>
-                              )
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </td>
-                  <td>
-                    {canManage ? (
-                      assignFor === row.staffMemberId ? (
-                        <div className={styles.assignForm}>
-                          <select className="select" value={assignSection}
-                            onChange={(event) => setAssignSection(event.target.value)}
-                            aria-label="Class and section">
-                            <option value="">Choose class…</option>
-                            {sections.map((section) => (
-                              <option key={section.id} value={section.id}>{section.label}</option>
-                            ))}
-                          </select>
-                          <select className="select" value={assignSubject}
-                            onChange={(event) => setAssignSubject(event.target.value)}
-                            aria-label="Subject">
-                            <option value="">Choose subject…</option>
-                            {subjects.map((subject) => (
-                              <option key={subject.id} value={subject.id}>{subject.name}</option>
-                            ))}
-                          </select>
-                          <input className="input" type="text" value={assignReason}
-                            onChange={(event) => setAssignReason(event.target.value)}
-                            placeholder="Reason (recorded in audit trail)"
-                            aria-label="Assignment reason" />
-                          {errors.assignment ? <p className="field-error">{errors.assignment}</p> : null}
-                          <button type="button" className="button button--primary button--small"
-                            onClick={() => void handleAssign(row.staffMemberId)} disabled={busy}>
-                            {busy ? "Recording…" : "Record assignment"}
-                          </button>
-                          <button type="button" className="button button--quiet button--small"
-                            onClick={() => { setAssignFor(null); setErrors({}); }} disabled={busy}>Cancel</button>
-                        </div>
-                      ) : (
-                        <button type="button" className="button button--quiet button--small"
-                          onClick={() => { setAssignFor(row.staffMemberId); setErrors({}); }} disabled={busy}>
-                          Add assignment
-                        </button>
-                      )
-                    ) : (
-                      <span className={styles.muted}>Read only</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              <table className={`ledger ${styles.table}`}>
+                <caption className="sr-only">Non-login teaching staff with class and subject assignments</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Teacher</th>
+                    <th scope="col">Title</th>
+                    <th scope="col">Assignment</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className={styles.actionHead}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.flatMap((row) => renderTeacherRows(row))}
+                </tbody>
+              </table>
             </div>
           </section>
         )}

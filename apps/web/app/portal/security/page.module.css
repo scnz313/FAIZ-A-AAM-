@@ -12,12 +12,73 @@
   margin: 0;
 }
 
-/* V14 auto-fit grid */
 .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 18px;
   align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.sessionsTable {
+  min-width: 480px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.sessionsTable :is(th, td) {
+  overflow-wrap: normal;
+  padding: 11px 14px;
+  vertical-align: middle;
+  word-break: normal;
+}
+
+.sessionsTable th:first-child,
+.sessionsTable td:first-child {
+  padding-left: 16px;
+}
+
+.sessionsTable th:last-child,
+.sessionsTable td:last-child {
+  padding-right: 16px;
+}
+
+.sessionsTable th:nth-child(1),
+.sessionsTable td:nth-child(1) {
+  width: 50%;
+}
+
+.sessionsTable th:nth-child(2),
+.sessionsTable td:nth-child(2) {
+  width: 24%;
+}
+
+.sessionsTable th:nth-child(3),
+.sessionsTable td:nth-child(3) {
+  width: 26%;
+}
+
+.actionHead,
+.actionCell {
+  text-align: right;
+}
+
+.deviceName {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.sessionFoot {
+  border-top: 1px solid var(--line-soft);
+  padding: 12px 16px 14px;
+}
+
+.sessionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 /* Sign-in method rows */

@@ -227,16 +227,37 @@ export function ResultsBatches({ batches: initial }: { batches?: EntryBatch[] | 
   }
 
   return (
-    <section aria-labelledby="batch-queue-heading">
-      <div className={styles.sectionHead}>
-        <h2 id="batch-queue-heading" className="section-label">
-          Batch queue
-        </h2>
-        <div className={styles.headActions}>
-          {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
+    <>
+      {newBatchOpen && canEnter ? (
+        <div id="new-batch-panel">
+          <NewBatchPanel onCreated={handleBatchCreated} onClose={() => setNewBatchOpen(false)} />
+        </div>
+      ) : null}
+
+      {batches !== null ? (
+        <div className={`toolbar ${styles.toolbar}`}>
+          <div className="seg x-scroll" role="group" aria-label="Filter batches by status">
+            {STATUS_FILTERS.map((tab) => {
+              const count = tab.key === "all" ? batches.length : batches.filter((b) => b.status === tab.key).length;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  aria-pressed={filter === tab.key}
+                  className={filter === tab.key ? "on" : undefined}
+                  onClick={() => setFilter(tab.key)}
+                >
+                  {tab.label}
+                  <span className={`num ${styles.tabCount}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="spacer" />
           {canEnter ? (
             <Button
               variant="primary"
+              size="sm"
               onClick={() => setNewBatchOpen((open) => !open)}
               aria-expanded={newBatchOpen}
               aria-controls="new-batch-panel"
@@ -245,36 +266,10 @@ export function ResultsBatches({ batches: initial }: { batches?: EntryBatch[] | 
             </Button>
           ) : null}
         </div>
-      </div>
-
-      {newBatchOpen && canEnter ? (
-        <div id="new-batch-panel">
-          <NewBatchPanel onCreated={handleBatchCreated} onClose={() => setNewBatchOpen(false)} />
-        </div>
       ) : null}
 
-      {batches !== null && (
-        <div className="tabs" role="group" aria-label="Filter batches by status">
-          {STATUS_FILTERS.map((tab) => {
-            const count = tab.key === "all" ? batches.length : batches.filter((b) => b.status === tab.key).length;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                aria-pressed={filter === tab.key}
-                className={filter === tab.key ? "active" : undefined}
-                onClick={() => setFilter(tab.key)}
-              >
-                {tab.label}
-                <span className={`num ${styles.tabCount}`}>{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {loadError && batches !== null ? (
-        <p className="small muted" role="status">
+        <p className={styles.statusLine} role="status">
           The batch queue could not be refreshed. Showing the last loaded records.
         </p>
       ) : null}
@@ -285,129 +280,179 @@ export function ResultsBatches({ batches: initial }: { batches?: EntryBatch[] | 
           </Button>
         </ErrorPanel>
       ) : visible === null ? (
-        <p className={styles.live}>Loading batch queue…</p>
+        <p className={styles.statusLine} role="status">
+          Loading batch queue…
+        </p>
       ) : visible.length === 0 ? (
-        <p className={styles.live}>No batches in this view.</p>
-      ) : (
-        <div className="queue">
-          <div className="q-head5" aria-hidden="true">
-            <span>Batch</span>
-            <span>Term</span>
-            <span>Entry</span>
-            <span>Status</span>
-            <span style={{ textAlign: "right" }}>Action</span>
+        <section className="panel" aria-labelledby="batch-queue-heading">
+          <div className="pn-head">
+            <div>
+              <h2 id="batch-queue-heading">Batch queue</h2>
+              <p className="sub">Nothing in this view</p>
+            </div>
+            {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
           </div>
-          {visible.map((batch) => (
-            <BatchRow
-              key={batch.ref}
-              batch={batch}
-              busy={busyRef === batch.ref}
-              correcting={correctingRef === batch.ref}
-              correctionReason={correctionReason}
-              canEnter={canEnter}
-              canApprove={canApprove}
-              canPublish={canPublish}
-              canView={canView}
-              canRequestCorrection={canRequestCorrection}
-              pendingCorrectionReason={correctionsBySheet.get(batch.ref)}
-              profileCode={profileCode}
-              supabaseMode={supabaseMode}
-              onCorrectionReasonChange={setCorrectionReason}
-              onApprove={approve}
-              onPublish={publish}
-              onStartCorrection={startCorrection}
-              onOpenCorrection={(ref) => {
-                setCorrectingRef(ref);
-                setCorrectionReason("");
-              }}
-              onCancelCorrection={() => {
-                setCorrectingRef(null);
-                setCorrectionReason("");
-              }}
-              withdrawing={withdrawingRef === batch.ref}
-              withdrawalReason={withdrawalReason}
-              onWithdrawalReasonChange={setWithdrawalReason}
-              onWithdraw={withdraw}
-              onOpenWithdraw={(ref) => {
-                setWithdrawingRef(ref);
-                setWithdrawalReason("");
-              }}
-              onCancelWithdraw={() => {
-                setWithdrawingRef(null);
-                setWithdrawalReason("");
-              }}
-              returning={returningRef === batch.ref}
-              returnReason={returnReason}
-              onReturnReasonChange={setReturnReason}
-              onReturn={returnForCorrection}
-              onOpenReturn={(ref) => {
-                setReturningRef(ref);
-                setReturnReason("");
-              }}
-              onCancelReturn={() => {
-                setReturningRef(null);
-                setReturnReason("");
-              }}
-              publishing={publishingRef === batch.ref}
-              onOpenPublish={(ref) => {
-                setPublishingRef(ref);
-              }}
-              onCancelPublish={() => {
-                setPublishingRef(null);
-              }}
-            />
-          ))}
-        </div>
+          <div className="pn-body">
+            <div className={styles.emptyState}>
+              <div className={`empty-ill ${styles.emptyIll}`}>
+                <span className={`msym ${styles.emptyIcon}`}>grading</span>
+              </div>
+              <div className={`strong ${styles.emptyTitle}`}>No batches in this view.</div>
+              <p className={`muted small ${styles.emptyCopy}`}>
+                Batches move through entry, moderation, and publication. Try another status filter.
+              </p>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFilter("all")}>
+                Show all batches
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className={`panel ${styles.queuePanel}`} aria-labelledby="batch-queue-heading">
+          <div className="pn-head">
+            <div>
+              <h2 id="batch-queue-heading">Batch queue</h2>
+              <p className="sub">{visible.length} in this view</p>
+            </div>
+            {!supabaseMode ? <span className="demo-badge">Demo data</span> : null}
+          </div>
+          <div className="pn-body flush">
+            <div className={`table-wrap ${styles.queueViewport}`}>
+              <table className={`ledger ${styles.batchTable}`}>
+                <thead>
+                  <tr>
+                    <th scope="col">Batch</th>
+                    <th scope="col">Term</th>
+                    <th scope="col" className="num">Entry</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className={styles.actionHead}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((batch) => (
+                    <BatchRow
+                      key={batch.ref}
+                      batch={batch}
+                      busy={busyRef === batch.ref}
+                      correcting={correctingRef === batch.ref}
+                      correctionReason={correctionReason}
+                      canEnter={canEnter}
+                      canApprove={canApprove}
+                      canPublish={canPublish}
+                      canView={canView}
+                      canRequestCorrection={canRequestCorrection}
+                      pendingCorrectionReason={correctionsBySheet.get(batch.ref)}
+                      profileCode={profileCode}
+                      supabaseMode={supabaseMode}
+                      onCorrectionReasonChange={setCorrectionReason}
+                      onApprove={approve}
+                      onPublish={publish}
+                      onStartCorrection={startCorrection}
+                      onOpenCorrection={(ref) => {
+                        setCorrectingRef(ref);
+                        setCorrectionReason("");
+                      }}
+                      onCancelCorrection={() => {
+                        setCorrectingRef(null);
+                        setCorrectionReason("");
+                      }}
+                      withdrawing={withdrawingRef === batch.ref}
+                      withdrawalReason={withdrawalReason}
+                      onWithdrawalReasonChange={setWithdrawalReason}
+                      onWithdraw={withdraw}
+                      onOpenWithdraw={(ref) => {
+                        setWithdrawingRef(ref);
+                        setWithdrawalReason("");
+                      }}
+                      onCancelWithdraw={() => {
+                        setWithdrawingRef(null);
+                        setWithdrawalReason("");
+                      }}
+                      returning={returningRef === batch.ref}
+                      returnReason={returnReason}
+                      onReturnReasonChange={setReturnReason}
+                      onReturn={returnForCorrection}
+                      onOpenReturn={(ref) => {
+                        setReturningRef(ref);
+                        setReturnReason("");
+                      }}
+                      onCancelReturn={() => {
+                        setReturningRef(null);
+                        setReturnReason("");
+                      }}
+                      publishing={publishingRef === batch.ref}
+                      onOpenPublish={(ref) => {
+                        setPublishingRef(ref);
+                      }}
+                      onCancelPublish={() => {
+                        setPublishingRef(null);
+                      }}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       )}
 
       {canView && corrections !== null && corrections.length > 0 ? (
         <section className="panel" aria-labelledby="corrections-review-heading">
           <div className="pn-head">
-            <h3 id="corrections-review-heading">Corrections awaiting review</h3>
-            <span className="chip">{corrections.length}</span>
+            <div>
+              <h3 id="corrections-review-heading">Corrections awaiting review</h3>
+              <p className="sub">{corrections.length} pending approval</p>
+            </div>
           </div>
-          <div className="pn-body">
+          <div className="pn-body flush">
             <p className={styles.panelNote}>
               A correction request opens a new editable sheet only after an independent exam reviewer approves it.
               The published version stays on file.
             </p>
-            <div className="queue">
-              <div className="q-head" aria-hidden="true">
-                <span>Correction</span>
-                <span>Class · subject</span>
-                <span>Requested</span>
-                <span style={{ textAlign: "right" }}>Action</span>
-              </div>
-              {corrections.map((correction) => (
-                <div className="q-row" key={correction.requestId}>
-                  <div>
-                    <div className="q-t">
-                      <span className="num">{correction.sheetRef ?? correction.releaseRef ?? "Result batch"}</span>
-                    </div>
-                    <div className="q-s">{correction.reason}</div>
-                  </div>
-                  <div className="q-m">
-                    {correction.className ?? "Class"} · {correction.subject ?? "Subject"}
-                    {correction.term ? ` · ${termLabel(correction.term)}` : ""}
-                  </div>
-                  <div className="q-m">
-                    {correction.requestedAtIso ? formatKolkata(correction.requestedAtIso, { format: "day" }) : ""}
-                  </div>
-                  <div className="q-act">
-                    {canApprove ? (
-                      <Button
-                        variant="primary"
-                        disabled={approvingId !== null}
-                        onClick={() => void approveCorrectionRequest(correction)}
-                      >
-                        {approvingId === correction.requestId ? "Approving…" : "Approve correction"}
-                      </Button>
-                    ) : (
-                      <span className="small muted">Awaiting reviewer</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="table-wrap" role="region" aria-label="Corrections awaiting review table" tabIndex={0}>
+              <table className={`ledger ${styles.correctionTable}`}>
+                <thead>
+                  <tr>
+                    <th scope="col">Correction</th>
+                    <th scope="col">Class · subject</th>
+                    <th scope="col">Requested</th>
+                    <th scope="col" className={styles.actionHead}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {corrections.map((correction) => (
+                    <tr key={correction.requestId}>
+                      <td>
+                        <div className={`q-t num ${styles.qTitle}`}>
+                          {correction.sheetRef ?? correction.releaseRef ?? "Result batch"}
+                        </div>
+                        <div className={`q-s ${styles.qSub}`}>{correction.reason}</div>
+                      </td>
+                      <td className={styles.termCell}>
+                        {correction.className ?? "Class"} · {correction.subject ?? "Subject"}
+                        {correction.term ? ` · ${termLabel(correction.term)}` : ""}
+                      </td>
+                      <td className={`num ${styles.qDate}`}>
+                        {correction.requestedAtIso ? formatKolkata(correction.requestedAtIso, { format: "day" }) : "—"}
+                      </td>
+                      <td className={styles.actionCell}>
+                        {canApprove ? (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={approvingId !== null}
+                            onClick={() => void approveCorrectionRequest(correction)}
+                          >
+                            {approvingId === correction.requestId ? "Approving…" : "Approve correction"}
+                          </Button>
+                        ) : (
+                          <span className="small muted">Awaiting reviewer</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -468,7 +513,7 @@ export function ResultsBatches({ batches: initial }: { batches?: EntryBatch[] | 
       <p className={styles.live} aria-live="polite">
         {live}
       </p>
-    </section>
+    </>
   );
 }
 
@@ -663,15 +708,15 @@ function NewBatchPanel({
             <div className="field">
               {subjects.length === 0 ? (
                 <div className="callout warn" role="status" id="new-batch-subject-empty">
-                  <span className="msym" aria-hidden="true" style={{ fontSize: 20 }}>
+                  <span className={`msym ${styles.infoIcon}`} aria-hidden="true">
                     info
                   </span>
                   <div>
-                    <p className="strong" style={{ margin: 0 }}>
+                    <p className={`strong ${styles.calloutTitle}`}>
                       No assessment components are configured for{" "}
                       {activeDefinition !== null ? sectionOptionLabel(activeDefinition) : "this class section"} yet.
                     </p>
-                    <p className="small muted" style={{ margin: "4px 0 0" }}>
+                    <p className={`small muted ${styles.calloutText}`}>
                       A batch needs at least one subject with configured assessment components.{" "}
                       {canConfigure ? (
                         <Link className="underline-link" href={schoolSetupHref}>Configure in School setup</Link>
@@ -801,199 +846,218 @@ function BatchRow({
   const entered = batch.enteredCount ?? batch.rows.filter((row) => row.obtained !== null).length;
   const total = batch.totalCount ?? batch.rows.length;
 
+  const showFlag = (batch.note || pendingCorrectionReason) && !correcting && !withdrawing && !returning && !publishing;
+
   return (
-    <div className={styles.batchItem}>
-      <div className="q-row5">
-        <div>
-          <div className="q-t">
+    <>
+      <tr className={styles.batchRow}>
+        <td className={styles.batchCell}>
+          <div className={`q-t num ${styles.qTitle}`}>
             <Link prefetch={false} className={styles.rowLink} href={canonicalStaffUrl(profileCode, `/results/${batch.ref}`)}>
-              <span className="num">{batch.ref}</span>
+              {batch.ref}
             </Link>
           </div>
-          <div className="q-s">
+          <div className={`q-s ${styles.qSub}`}>
             {batch.className} · {batch.subject}
             {batch.publishedAtIso ? ` · published ${formatKolkata(batch.publishedAtIso, { format: "day" })}` : ""}
           </div>
-        </div>
-        <div className="q-m">{batch.exam}</div>
-        <div className="q-m num">
+        </td>
+        <td className={styles.termCell}>{batch.exam}</td>
+        <td className={`num ${styles.entryCell}`}>
           {entered}/{total}
-        </div>
-        <div>
+        </td>
+        <td className={styles.statusCell}>
           <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
-        </div>
-        <div className="q-act">
-          {canEnter ? (
-            <Button variant="quiet" href={canonicalStaffUrl(profileCode, `/results/${batch.ref}/entry`)}>
-              {batch.status === "draft" || batch.status === "returned" ? "Open entry" : "View sheet"}
-            </Button>
-          ) : null}
-          {canApprove && (batch.status === "submitted" || batch.status === "moderation") && (
-            <Button variant="primary" onClick={() => onApprove(batch.ref)} disabled={busy}>
-              Approve
-            </Button>
-          )}
-          {canApprove && (batch.status === "submitted" || batch.status === "moderation") && (
-            <Button
-              variant="quiet"
-              onClick={() => (returning ? onCancelReturn() : onOpenReturn(batch.ref))}
-              disabled={busy}
-            >
-              Return
-            </Button>
-          )}
-          {canPublish && batch.status === "approved" && (
-            <Button
-              variant="saffron"
-              onClick={() => (publishing ? onCancelPublish() : onOpenPublish(batch.ref))}
-              disabled={busy}
-              aria-expanded={publishing}
-            >
-              Publish
-            </Button>
-          )}
-          {canRequestCorrection && batch.status === "published" && (
-            <Button
-              variant="quiet"
-              onClick={() => (correcting ? onCancelCorrection() : onOpenCorrection(batch.ref))}
-              disabled={busy}
-            >
-              Request correction
-            </Button>
-          )}
-          {canPublish && batch.status === "published" && (
-            <Button
-              variant="quiet"
-              onClick={() => (withdrawing ? onCancelWithdraw() : onOpenWithdraw(batch.ref))}
-              disabled={busy}
-            >
-              Withdraw
-            </Button>
-          )}
-          {canView && !canEnter && !canApprove && !canPublish ? (
-            <Button variant="quiet" href={canonicalStaffUrl(profileCode, `/results/${batch.ref}`)}>
-              Open
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {(batch.note || pendingCorrectionReason) && !correcting && !withdrawing && !returning && !publishing && (
-        <p className={styles.noteLine}>
-          {pendingCorrectionReason ? `Correction pending reviewer approval · ${pendingCorrectionReason}` : batch.note}
-        </p>
-      )}
-
-      {publishing && batch.status === "approved" && (
-        <div
-          className="panel"
-          role="group"
-          aria-label={`Confirm publication of ${batch.ref}`}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onCancelPublish();
-          }}
-        >
-          <p>
-            Publish <strong className="num">{batch.ref}</strong> · {batch.exam} · {batch.className} ·{" "}
-            {batch.subject} · v{batch.version}? A new immutable publication is created
-            {supabaseMode
-              ? "; each student's report release is assembled separately before families can view it."
-              : " and the portal report updates immediately (demo)."}
-          </p>
-          <div className={styles.actions}>
-            <Button variant="saffron" onClick={() => onPublish(batch.ref)} disabled={busy}>
-              Publish v{batch.version}
-            </Button>
-            <Button variant="quiet" onClick={onCancelPublish} disabled={busy}>
-              Cancel
-            </Button>
+        </td>
+        <td className={styles.actionCell}>
+          <div className={styles.qAct}>
+            {canEnter ? (
+              <Button variant="ghost" size="sm" href={canonicalStaffUrl(profileCode, `/results/${batch.ref}/entry`)}>
+                {batch.status === "draft" || batch.status === "returned" ? "Open entry" : "View sheet"}
+              </Button>
+            ) : null}
+            {canApprove && (batch.status === "submitted" || batch.status === "moderation") ? (
+              <Button variant="primary" size="sm" onClick={() => onApprove(batch.ref)} disabled={busy}>
+                Approve
+              </Button>
+            ) : null}
+            {canApprove && (batch.status === "submitted" || batch.status === "moderation") ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => (returning ? onCancelReturn() : onOpenReturn(batch.ref))}
+                disabled={busy}
+              >
+                Return
+              </Button>
+            ) : null}
+            {canPublish && batch.status === "approved" ? (
+              <Button
+                variant="accent"
+                size="sm"
+                onClick={() => (publishing ? onCancelPublish() : onOpenPublish(batch.ref))}
+                disabled={busy}
+                aria-expanded={publishing}
+              >
+                Publish
+              </Button>
+            ) : null}
+            {canRequestCorrection && batch.status === "published" ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => (correcting ? onCancelCorrection() : onOpenCorrection(batch.ref))}
+                disabled={busy}
+              >
+                Request correction
+              </Button>
+            ) : null}
+            {canPublish && batch.status === "published" ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => (withdrawing ? onCancelWithdraw() : onOpenWithdraw(batch.ref))}
+                disabled={busy}
+              >
+                Withdraw
+              </Button>
+            ) : null}
+            {canView && !canEnter && !canApprove && !canPublish ? (
+              <Button variant="ghost" size="sm" href={canonicalStaffUrl(profileCode, `/results/${batch.ref}`)}>
+                Open
+              </Button>
+            ) : null}
           </div>
-        </div>
-      )}
+        </td>
+      </tr>
 
-      {correcting && (
-        <div className="panel">
-          <label className="sr-only" htmlFor={`correction-reason-${batch.ref}`}>
-            Reason for correction (required)
-          </label>
-          <input
-            id={`correction-reason-${batch.ref}`}
-            className="input"
-            type="text"
-            value={correctionReason}
-            onChange={(event) => onCorrectionReasonChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") onCancelCorrection();
-            }}
-            placeholder="Reason for correction (required) · an independent reviewer approves before an editable version opens"
-            aria-required="true"
-          />
-          <div className={styles.actions}>
-            <Button variant="primary" onClick={() => onStartCorrection(batch.ref)} disabled={busy}>
-              Request correction
-            </Button>
-            <Button variant="quiet" onClick={onCancelCorrection} disabled={busy}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
+      {showFlag ? (
+        <tr className={styles.noteRow}>
+          <td colSpan={5}>
+            {pendingCorrectionReason ? `Correction pending reviewer approval · ${pendingCorrectionReason}` : batch.note}
+          </td>
+        </tr>
+      ) : null}
 
-      {withdrawing && (
-        <div className="panel">
-          <label className="sr-only" htmlFor={`withdraw-reason-${batch.ref}`}>
-            Reason for withdrawing v{batch.version} (required)
-          </label>
-          <input
-            id={`withdraw-reason-${batch.ref}`}
-            className="input"
-            type="text"
-            value={withdrawalReason}
-            onChange={(event) => onWithdrawalReasonChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") onCancelWithdraw();
-            }}
-            placeholder={`Reason for withdrawing v${batch.version} (required) · the live report is removed`}
-            aria-required="true"
-          />
-          <div className={styles.actions}>
-            <Button variant="danger" onClick={() => onWithdraw(batch.ref)} disabled={busy}>
-              Withdraw publication
-            </Button>
-            <Button variant="quiet" onClick={onCancelWithdraw} disabled={busy}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
+      {publishing && batch.status === "approved" ? (
+        <tr className={styles.followUpRow}>
+          <td colSpan={5}>
+            <div
+              role="group"
+              aria-label={`Confirm publication of ${batch.ref}`}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") onCancelPublish();
+              }}
+            >
+              <p className={styles.followUpCopy}>
+                Publish <strong className="num">{batch.ref}</strong> · {batch.exam} · {batch.className} ·{" "}
+                {batch.subject} · v{batch.version}? A new immutable publication is created
+                {supabaseMode
+                  ? "; each student's report release is assembled separately before families can view it."
+                  : " and the portal report updates immediately (demo)."}
+              </p>
+              <div className={styles.actions}>
+                <Button variant="accent" size="sm" onClick={() => onPublish(batch.ref)} disabled={busy}>
+                  Publish v{batch.version}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={onCancelPublish} disabled={busy}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      ) : null}
 
-      {returning && (
-        <div className="panel">
-          <label className="sr-only" htmlFor={`return-reason-${batch.ref}`}>
-            Reason for returning {batch.ref} (required)
-          </label>
-          <input
-            id={`return-reason-${batch.ref}`}
-            className="input"
-            type="text"
-            value={returnReason}
-            onChange={(event) => onReturnReasonChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") onCancelReturn();
-            }}
-            placeholder="Why is the sheet back with the entry officer? This reason is recorded on the batch."
-            aria-required="true"
-          />
-          <div className={styles.actions}>
-            <Button variant="primary" onClick={() => onReturn(batch.ref)} disabled={busy}>
-              Confirm return
-            </Button>
-            <Button variant="quiet" onClick={onCancelReturn} disabled={busy}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
+      {correcting ? (
+        <tr className={styles.followUpRow}>
+          <td colSpan={5}>
+            <label className="sr-only" htmlFor={`correction-reason-${batch.ref}`}>
+              Reason for correction (required)
+            </label>
+            <input
+              id={`correction-reason-${batch.ref}`}
+              className="input"
+              type="text"
+              value={correctionReason}
+              onChange={(event) => onCorrectionReasonChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") onCancelCorrection();
+              }}
+              placeholder="Reason for correction (required) · an independent reviewer approves before an editable version opens"
+              aria-required="true"
+            />
+            <div className={styles.actions}>
+              <Button variant="primary" size="sm" onClick={() => onStartCorrection(batch.ref)} disabled={busy}>
+                Request correction
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onCancelCorrection} disabled={busy}>
+                Cancel
+              </Button>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+
+      {withdrawing ? (
+        <tr className={styles.followUpRow}>
+          <td colSpan={5}>
+            <label className="sr-only" htmlFor={`withdraw-reason-${batch.ref}`}>
+              Reason for withdrawing v{batch.version} (required)
+            </label>
+            <input
+              id={`withdraw-reason-${batch.ref}`}
+              className="input"
+              type="text"
+              value={withdrawalReason}
+              onChange={(event) => onWithdrawalReasonChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") onCancelWithdraw();
+              }}
+              placeholder={`Reason for withdrawing v${batch.version} (required) · the live report is removed`}
+              aria-required="true"
+            />
+            <div className={styles.actions}>
+              <Button variant="danger" size="sm" onClick={() => onWithdraw(batch.ref)} disabled={busy}>
+                Withdraw publication
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onCancelWithdraw} disabled={busy}>
+                Cancel
+              </Button>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+
+      {returning ? (
+        <tr className={styles.followUpRow}>
+          <td colSpan={5}>
+            <label className="sr-only" htmlFor={`return-reason-${batch.ref}`}>
+              Reason for returning {batch.ref} (required)
+            </label>
+            <input
+              id={`return-reason-${batch.ref}`}
+              className="input"
+              type="text"
+              value={returnReason}
+              onChange={(event) => onReturnReasonChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") onCancelReturn();
+              }}
+              placeholder="Why is the sheet back with the entry officer? This reason is recorded on the batch."
+              aria-required="true"
+            />
+            <div className={styles.actions}>
+              <Button variant="primary" size="sm" onClick={() => onReturn(batch.ref)} disabled={busy}>
+                Confirm return
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onCancelReturn} disabled={busy}>
+                Cancel
+              </Button>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }

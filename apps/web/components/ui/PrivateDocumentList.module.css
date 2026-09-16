@@ -1,16 +1,8 @@
-.list {
-  border-top: 1px solid var(--line);
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-}
-
-/* Register filters — readiness chips reuse the service states, category
-   chips derive from the records in hand. Groups stack vertically. */
 .filters {
+  border-bottom: 1px solid var(--line-soft);
   display: grid;
   gap: 10px;
-  margin: 12px 0 4px;
+  padding: 12px 16px;
 }
 
 .filters :global(.tabs) {
@@ -23,7 +15,7 @@
 
 .filterCount {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   margin: 0;
 }
 
@@ -31,28 +23,57 @@
   min-height: 44px;
 }
 
-.row {
-  align-items: flex-start;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  gap: 20px;
-  justify-content: space-between;
-  padding: 16px 2px;
+.table {
+  min-width: 640px;
+  table-layout: fixed;
+  width: 100%;
 }
 
-.main {
+.table :is(th, td) {
+  overflow-wrap: normal;
+  padding: 11px 14px;
+  vertical-align: middle;
+  word-break: normal;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 16px;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 16px;
+}
+
+.table th:nth-child(1),
+.table td:nth-child(1) {
+  width: 42%;
+}
+
+.table th:nth-child(2),
+.table td:nth-child(2) {
+  width: 18%;
+}
+
+.table th:nth-child(3),
+.table td:nth-child(3) {
+  width: 40%;
+}
+
+.actionHead,
+.actionCell {
+  text-align: right;
+}
+
+.documentCell {
   min-width: 0;
 }
 
-.titleRow {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.titleRow strong {
-  font-size: 0.88rem;
+.fileName {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 650;
   overflow-wrap: anywhere;
 }
 
@@ -60,70 +81,27 @@
 .owner,
 .note {
   color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.5;
-  margin: 5px 0 0;
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-}
-
-.meta span:not(:last-child)::after {
-  color: var(--faint);
-  content: " ·";
-}
-
-.owner {
+  display: block;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  margin-top: 3px;
   overflow-wrap: anywhere;
 }
 
-.note {
-  max-width: 66ch;
+.statusCell {
+  white-space: nowrap;
 }
 
-.processing {
+.rowActions {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 24px;
-  margin: 12px 0 0;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
-.processing div {
-  display: grid;
-  gap: 2px;
-}
-
-.processing dt {
-  color: var(--muted);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.processing dd {
-  color: var(--muted);
-  font-size: 0.78rem;
-  margin: 0;
-}
-
-.actions {
-  align-items: flex-end;
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.reference {
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.actions button {
-  min-height: 44px;
+.emptyPad {
+  padding: 16px;
 }
 
 @media (max-width: 719px) {
@@ -134,19 +112,13 @@
   .clearButton {
     width: 100%;
   }
-}
 
-@media (max-width: 479px) {
-  .row {
-    align-items: stretch;
-    flex-direction: column;
+  .rowActions {
+    justify-content: flex-start;
   }
 
-  .actions {
-    align-items: flex-start;
-  }
-
-  .actions button {
-    width: 100%;
+  .actionHead,
+  .actionCell {
+    text-align: left;
   }
 }

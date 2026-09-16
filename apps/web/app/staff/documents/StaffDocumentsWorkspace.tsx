@@ -376,33 +376,58 @@ export function StaffDocumentsWorkspace() {
     }
   };
 
+  const scopeNote = [
+    `Scope: ${summary.profileLabel ?? summary.roleLabel}.`,
+    ownerDomainCount > 1 ? `This authorized response contains ${ownerDomainCount} owner domains.` : null,
+    summary.role === "auditor" ? "Auditor access is read-only." : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <div className={styles.page}>
       <div className="page-head">
         <div>
           <h1>Private documents</h1>
-          <p className="ph-sub">
-            Read-only processing oversight for files the active staff workspace is authorized to inspect.
-          </p>
+          <p className="ph-sub">Authorized processing register for scanned and quarantined files.</p>
         </div>
       </div>
 
-      <p className={styles.scope}>
-        Scope: <strong>{summary.profileLabel ?? summary.roleLabel}</strong>. Records come from the database projection for the active role, assignment and owning-record policies; owner labels are context only.
-        {ownerDomainCount > 1 ? ` This authorized response contains ${ownerDomainCount} owner domains.` : ""}
-        {summary.role === "auditor" ? " Auditor access is read-only; every file request is re-authorized against its owning record." : ""}
-      </p>
+      {documents !== null && documentsTotal > 0 ? (
+        <section className="panel" aria-label="Register summary">
+          <div className={`pn-body flush ${styles.summaryStrip}`}>
+            <div className={styles.summaryCell}>
+              <span className={styles.summaryLabel}>Records</span>
+              <span className={`num ${styles.summaryValue}`}>{documentsTotal}</span>
+            </div>
+            <div className={styles.summaryCell}>
+              <span className={styles.summaryLabel}>Scope</span>
+              <span className={styles.summaryValue}>
+                {summary.profileLabel ?? summary.roleLabel}
+                {ownerDomainCount > 1 ? `. This authorized response contains ${ownerDomainCount} owner domains.` : ""}
+                {summary.role === "auditor" ? " Auditor access is read-only." : ""}
+              </span>
+            </div>
+            <div className={styles.summaryCell}>
+              <span className={styles.summaryLabel}>Owner labels</span>
+              <span className={styles.summaryValue}>Context only · not authorization</span>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <p className={styles.scope}>{scopeNote}</p>
+      )}
 
-      <div className={`g32 ${styles.layout}`}>
+      <div className={`grid g32 ${styles.layout}`}>
         <section className="panel" aria-labelledby="document-register-heading">
           <div className="pn-head">
             <div>
               <h2 id="document-register-heading">Authorized files</h2>
-              <p className="sub">Processing register</p>
+              <p className="sub">Download, inspect processing, and manage public approval</p>
             </div>
             {documents !== null && documentsTotal > 0 ? (
               <p className={styles.resultCount} aria-live="polite">
-                <span className="num">{documentsTotal}</span> {documentsTotal === 1 ? "record" : "records"}
+                <span className="num">{visibleDocuments.length}</span> shown
               </p>
             ) : null}
           </div>
@@ -477,8 +502,8 @@ export function StaffDocumentsWorkspace() {
                     </div>
                   </div>
                 ) : (
-                  <div className="table-wrap" role="region" aria-label="Authorized document register" tabIndex={0}>
-                    <table className="ledger">
+                  <div className={`table-wrap ${styles.tableWrap}`} role="region" aria-label="Authorized document register" tabIndex={0}>
+                    <table className={`ledger ${styles.registerTable}`}>
                       <caption className="sr-only">Authorized documents with owner, processing state, and actions</caption>
                       <thead>
                         <tr>
@@ -486,7 +511,7 @@ export function StaffDocumentsWorkspace() {
                           <th scope="col">Owner</th>
                           <th scope="col">Status</th>
                           <th scope="col">Updated</th>
-                          <th scope="col">Actions</th>
+                          <th scope="col" className={styles.actionHead}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -534,86 +559,83 @@ export function StaffDocumentsWorkspace() {
                 ) : null}
               </div>
             ) : null}
+            {documents !== null && documents.length > 0 ? (
+              <p className={styles.panelFoot}>
+                Quarantined files stay private until an officer resolves them. Download links are short-lived.
+              </p>
+            ) : null}
           </div>
         </section>
 
-        <section className={`panel ${styles.registerPanel}`} aria-labelledby="public-register-heading">
+        <aside className={`panel ${styles.sidePanel}`} aria-labelledby="public-register-heading">
           <div className="pn-head">
             <div>
-              <h2 id="public-register-heading">Public register</h2>
-              <p className="sub">School documents approved for the public downloads page</p>
+              <h2 id="public-register-heading">
+                {canManagePublicRegister ? "Add a school document" : "Public register"}
+              </h2>
+              <p className="sub">Public downloads page · school documents only</p>
             </div>
           </div>
-          <div className="pn-body">
+          <div className={`pn-body ${canManagePublicRegister ? styles.sideBody : "flush"}`}>
             {canManagePublicRegister ? (
-              <>
-                <h3 className={styles.registerTitle}>Add a school document</h3>
-                <p className={styles.uploadNote}>
-                  Upload a non-sensitive school document for the public downloads register. The file stays private until
-                  its security scan is complete, then you can approve it for public view in the register.
-                </p>
-                <form className={styles.uploadForm} onSubmit={(event) => void handleUpload(event)}>
-                  <div className="field">
-                    <label htmlFor="school-document-file">Document file</label>
-                    <input
-                      ref={uploadInputRef}
-                      id="school-document-file"
-                      className="input"
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={(event) => {
-                        setUploadFile(event.target.files?.[0] ?? null);
-                        setUploadError(null);
-                      }}
-                    />
-                    <p className="field-help">PDF, JPEG, or PNG · up to 10 MB.</p>
-                  </div>
-                  <div className="field">
-                    <label htmlFor="school-document-category">Register category</label>
-                    <select
-                      id="school-document-category"
-                      className="select"
-                      value={uploadCategory}
-                      onChange={(event) => setUploadCategory(event.target.value)}
-                    >
-                      {SCHOOL_DOCUMENT_CATEGORIES.map((category) => (
-                        <option key={category.value} value={category.value}>{category.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {uploadError ? (
-                    <p className="field-error" role="alert">{uploadError}</p>
-                  ) : null}
-                  {uploadNotice ? (
-                    <p className={styles.uploadNotice} role="status" aria-live="polite">{uploadNotice}</p>
-                  ) : null}
-                  <div>
-                    <button type="submit" className="button button--primary" disabled={uploadPending}>
-                      {uploadPending ? "Uploading…" : "Upload document"}
-                    </button>
-                  </div>
-                </form>
-                <hr className="rule" />
-              </>
+              <form className={styles.uploadForm} onSubmit={(event) => void handleUpload(event)}>
+                <div className="field">
+                  <label htmlFor="school-document-file">Document file</label>
+                  <input
+                    ref={uploadInputRef}
+                    id="school-document-file"
+                    className="input"
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(event) => {
+                      setUploadFile(event.target.files?.[0] ?? null);
+                      setUploadError(null);
+                    }}
+                  />
+                  <p className="field-help">PDF, JPEG, or PNG · up to 10 MB</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="school-document-category">Register category</label>
+                  <select
+                    id="school-document-category"
+                    className="select"
+                    value={uploadCategory}
+                    onChange={(event) => setUploadCategory(event.target.value)}
+                  >
+                    {SCHOOL_DOCUMENT_CATEGORIES.map((category) => (
+                      <option key={category.value} value={category.value}>{category.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {uploadError ? (
+                  <p className="field-error" role="alert">{uploadError}</p>
+                ) : null}
+                {uploadNotice ? (
+                  <p className={styles.uploadNotice} role="status" aria-live="polite">{uploadNotice}</p>
+                ) : null}
+                <button type="submit" className="btn btn-primary btn-sm" disabled={uploadPending}>
+                  {uploadPending ? "Uploading…" : "Upload document"}
+                </button>
+              </form>
             ) : null}
-            <div className="facts-ledger" aria-label="Public register rules">
-              <div className="fl-row">
-                <span className="k">Who approves</span>
-                <span className="v">{canManagePublicRegister ? "This workspace can approve for public view" : "A content publisher approves for public view"}</span>
+            <dl className={styles.sideRules} aria-label="Public register rules">
+              <div className={styles.sideRule}>
+                <dt>Who approves</dt>
+                <dd>{canManagePublicRegister ? "This workspace" : "Content publisher"}</dd>
               </div>
-              <div className="fl-row">
-                <span className="k">Eligibility</span>
-                <span className="v">Only clean, finalized school documents</span>
+              <div className={styles.sideRule}>
+                <dt>Eligibility</dt>
+                <dd>Clean, finalized school documents</dd>
               </div>
-              <div className="fl-row">
-                <span className="k">Stays private</span>
-                <span className="v">Student, applicant, staff, and import records</span>
+              <div className={styles.sideRule}>
+                <dt>Stays private</dt>
+                <dd>Student, applicant, staff, and import records</dd>
               </div>
-              <div className="fl-row">
-                <span className="k">Audit</span>
-                <span className="v">Every visibility change is recorded</span>
+              <div className={styles.sideRule}>
+                <dt>Audit</dt>
+                <dd>Every visibility change is recorded</dd>
               </div>
-            </div>
+            </dl>
             {canManagePublicRegister ? (
               <p className={styles.registerNote}>
                 Approving for public view adds a document to the public downloads register. Only clean, finalized
@@ -621,7 +643,7 @@ export function StaffDocumentsWorkspace() {
               </p>
             ) : null}
           </div>
-        </section>
+        </aside>
       </div>
     </div>
   );
@@ -656,10 +678,10 @@ function DocumentRow({
   return (
     <>
       <tr>
-        <td>
+        <td className={styles.documentCell}>
           <strong className={styles.fileName}>{document.filename}</strong>
           <span className={styles.secondary}>
-            {labelFromCode(document.category)} · {document.mimeType} · <span className="num">{formatBytes(document.sizeBytes)}</span> · v{document.version}
+            {labelFromCode(document.category)} · <span className="num">{formatBytes(document.sizeBytes)}</span>
           </span>
           {approvalError ? (
             <span className={styles.rowError} role="alert">{approvalError}</span>
@@ -667,18 +689,15 @@ function DocumentRow({
             <span className={styles.rowNote}>{delivery.message}</span>
           ) : null}
         </td>
-        <td>
+        <td className={styles.ownerCell}>
           {labelFromCode(document.ownerDomain)}
-          <span className={`ref ${styles.secondary}`}>{document.ownerReference ?? "Scoped record"}</span>
+          <span className={styles.secondary}>{document.ownerReference ?? "Scoped record"}</span>
         </td>
-        <td>
+        <td className={styles.statusCell}>
           <StatusBadge tone={presentation.tone}>{presentation.label}</StatusBadge>
-          <span className={styles.secondary}>{processingLine(document)}</span>
         </td>
-        <td>
-          <span className={styles.secondary}>{shortDate(document.updatedAtIso ?? document.createdAtIso)}</span>
-        </td>
-        <td>
+        <td className={`num ${styles.dateCell}`}>{shortDate(document.updatedAtIso ?? document.createdAtIso)}</td>
+        <td className={styles.actionCell}>
           <div className={styles.rowActions}>
             {document.processingState === "ready" ? (
               <button
@@ -740,6 +759,8 @@ function DocumentRow({
                 <dd>{isPublic ? "Public downloads register" : "Private"}</dd>
                 <dt>Checksum</dt>
                 <dd>{document.checksumVerified ? "Verified" : "Not verified"}</dd>
+                <dt>Scan</dt>
+                <dd>{processingLine(document)}</dd>
                 <dt>Finalization</dt>
                 <dd>{document.finalizationState === "verified" ? `Verified ${shortDate(document.finalizedAtIso)}` : document.finalizationState === "failed" ? "Failed" : "Awaiting byte verification"}</dd>
                 <dt>Created</dt>

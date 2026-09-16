@@ -1857,6 +1857,15 @@ span:has(> .demo-badge) {
     padding: 0;
     justify-content: center;
   }
+
+  /* A centred 1160px page leaves symmetric gutters that grow when the icon
+     rail frees ~186px of shell width. Fill the main column instead so the
+     sidebar-to-content gap matches the expanded layout. Mobile drawer layout
+     is unchanged — side-collapsed is desktop-only. */
+  .app-shell.side-collapsed .page {
+    max-width: none;
+    margin-inline: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

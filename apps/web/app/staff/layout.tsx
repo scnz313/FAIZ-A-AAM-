@@ -88,7 +88,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
 
   return (
     <StaffContextProvider initialState={initialState}>
-      <StaffShell initialNotifications={initialNotifications} developmentAuth={quickSignIn}>
+      <StaffShell initialNotifications={initialNotifications}>
         <StaffRouteGuard>{children}</StaffRouteGuard>
       </StaffShell>
     </StaffContextProvider>

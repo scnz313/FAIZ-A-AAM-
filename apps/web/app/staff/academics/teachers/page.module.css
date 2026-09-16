@@ -1,211 +1,235 @@
 .page {
+  display: grid;
+  gap: 16px;
+  max-width: 100%;
+  min-width: 0;
+  padding-bottom: var(--space-6);
+}
+
+.summaryStrip {
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.summaryCell {
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  max-width: 100%;
+  gap: 4px;
   min-width: 0;
+  padding: 12px 16px;
 }
 
-.header {
-  margin-bottom: 0.25rem;
+.summaryCell + .summaryCell {
+  border-left: 0;
 }
 
-.actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  max-width: 100%;
-  min-width: 0;
+.summaryLabel {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summaryValue {
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  line-height: 1.1;
 }
 
 .form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  background: var(--chalk);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  display: grid;
+  gap: 12px;
   max-width: 32rem;
   min-width: 0;
-  padding: 1.25rem;
-  border: 1px solid var(--hairline, #ddd6c8);
-  border-radius: var(--r);
-  background: var(--chalk, #fffdf8);
+  padding: 16px;
 }
 
 .formActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  max-width: 100%;
-  min-width: 0;
+  gap: 10px;
 }
 
 .table {
-  max-width: 100%;
+  min-width: 760px;
+  table-layout: fixed;
   width: 100%;
 }
 
+.table :is(th, td) {
+  overflow-wrap: normal;
+  padding: 11px 14px;
+  vertical-align: middle;
+  word-break: normal;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 16px;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 16px;
+}
+
+.table th:nth-child(1),
+.table td:nth-child(1) {
+  width: 16%;
+}
+
+.table th:nth-child(2),
+.table td:nth-child(2) {
+  width: 18%;
+}
+
+.table th:nth-child(3),
+.table td:nth-child(3) {
+  width: 34%;
+}
+
+.table th:nth-child(4),
+.table td:nth-child(4) {
+  width: 12%;
+}
+
+.table th:nth-child(5),
+.table td:nth-child(5) {
+  width: 20%;
+}
+
+.actionHead,
+.actionCell {
+  text-align: right;
+}
+
 .name {
-  font-weight: 600;
+  font-weight: 650;
+}
+
+.continuation {
+  color: var(--faint);
+}
+
+.groupStart td {
+  border-top: 1px solid var(--line);
+}
+
+.groupStart:first-child td {
+  border-top: 0;
+}
+
+.assignmentRef {
+  color: var(--muted);
+  display: block;
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+.assignmentLabel {
+  display: block;
+  line-height: 1.4;
 }
 
 .muted {
-  color: var(--ink-60, #6b7280);
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
-.assignmentList {
+.rowActions {
+  align-items: center;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.formCell {
+  background: var(--paper);
+  border-top: 0 !important;
+  padding: 0 !important;
+}
+
+.inlineForm {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+
+.formTitle {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  font-weight: 650;
   margin: 0;
-  max-width: 100%;
-  min-width: 0;
-  padding: 0;
-  list-style: none;
 }
 
-.assignmentItem {
+.formGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 640px;
+}
+
+.formGrid :global(.field) {
+  margin-bottom: 0;
+}
+
+.formGridFull {
+  grid-column: 1 / -1;
+}
+
+.formActionsInline {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.endBox {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.endBox .input {
-  min-width: 16rem;
-}
-
-.assignForm {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-width: 100%;
-  min-width: 16rem;
+  gap: 8px;
 }
 
 .loading {
-  color: var(--ink-60, #6b7280);
+  color: var(--muted);
+  padding: 16px;
 }
 
 .errorNote {
-  color: var(--alert, #b42318);
+  color: var(--madder-ink);
+  margin: 0;
 }
 
 .liveNote {
-  color: var(--willow, #536d57);
-}
-
-.note {
-  color: var(--ink-60, #6b7280);
-  font-size: 0.875rem;
-  max-width: 60rem;
-}
-
-@media (max-width: 1023px) {
-  .page {
-    gap: 1.25rem;
-  }
-
-  .form {
-    max-width: 100%;
-  }
+  color: var(--willow-ink);
+  font-size: 0.82rem;
+  margin: 0;
 }
 
 @media (max-width: 719px) {
-  .page {
-    gap: 1rem;
+  .summaryStrip {
+    grid-template-columns: 1fr;
   }
 
-  /* Roster keeps its scroll wrapper: the table holds a min-width so only
-     .table--scroll scrolls, never the page. */
-  .table {
-    min-width: 600px;
+  .summaryCell + .summaryCell {
+    border-left: 1px solid var(--line-strong);
+    border-top: 0;
   }
 
   .form {
     max-width: none;
-    width: 100%;
   }
 
-  /* In-cell editors stack to a single full-width column usable at 320px. */
-  .assignmentItem {
-    align-items: stretch;
-    flex-direction: column;
+  .formGrid {
+    grid-template-columns: 1fr;
   }
 
-  .endBox {
-    align-items: stretch;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    width: 100%;
-  }
-
-  .endBox .input {
-    font-size: 1rem;
+  .rowActions :global(.btn) {
     min-height: 44px;
-    min-width: 0;
-    width: 100%;
-  }
-
-  .endBox button {
-    min-height: 44px;
-    width: 100%;
-  }
-
-  .assignForm {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    min-width: 0;
-    width: 100%;
-  }
-
-  .assignForm select,
-  .assignForm input {
-    font-size: 1rem;
-    min-height: 44px;
-    min-width: 0;
-    width: 100%;
-  }
-
-  .assignForm button {
-    min-height: 44px;
-    width: 100%;
-  }
-}
-
-@media (max-width: 479px) {
-  .form {
-    gap: 0.75rem;
-    padding: 1rem;
-  }
-
-  .formActions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .formActions > * {
-    min-height: 44px;
-    width: 100%;
-  }
-
-  .actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .actions > * {
-    min-height: 44px;
-    width: 100%;
   }
 }
