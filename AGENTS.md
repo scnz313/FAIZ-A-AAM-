@@ -77,8 +77,13 @@ acceptance, and production. All new database corrections start at `000100`.
   `000117_reference_entropy`, and `000118_notification_dismiss` were applied
   through the Supabase MCP server on 15 September 2026 (the linked CLI was
   unresponsive) and their ledger rows were repaired to the file versions,
-  matching a `supabase db push` ledger. The next database correction starts
-  at `000119`.
+  matching a `supabase db push` ledger. `000119_guardian_link_request_
+  reference` and `000120_notice_published_timestamp` were already on the
+  remote ledger on 16 September 2026; `000121_staff_invitation_lifecycle`,
+  `000122_guardian_activation_operations`, `000123_school_configuration`, and
+  `000124_delivery_operations` were applied through the Supabase MCP server on
+  16 September 2026 with ledger rows repaired to the file versions (remote now
+  `000001–000124`). The next database correction starts at `000125`.
 - **Phase 11 is active.** The prior "Phase 10 complete" claim is retracted:
   green local gates do not prove end-to-end completion.
 - All database corrections must be **forward migrations from `000100`**.
