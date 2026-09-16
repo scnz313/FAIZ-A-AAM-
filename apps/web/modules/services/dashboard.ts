@@ -451,19 +451,13 @@ async function loadPendingLinks(supabaseMode: boolean): Promise<number> {
 }
 
 async function loadTimetableSummary(): Promise<TimetableSummary> {
-  const classes = await timetableService.listTimetableClasses();
-  const versions = await Promise.all(classes.map((className) => timetableService.getTimetableVersionList(className)));
-  const perClass = classes.map((label, index) => {
-    const list = versions[index] ?? [];
-    const current = list.find((entry) => entry.status === "draft") ?? list[0];
-    return { label, status: current?.status ?? "none" };
-  });
-  const flat = versions.flat();
+  const overview = await timetableService.getTimetableStatusOverview();
+  const statuses = overview.flatMap((entry) => entry.statuses);
   return {
-    classes: classes.length,
-    published: flat.filter((entry) => entry.status === "published").length,
-    drafts: flat.filter((entry) => entry.status === "draft").length,
-    perClass,
+    classes: overview.length,
+    published: statuses.filter((status) => status === "published").length,
+    drafts: statuses.filter((status) => status === "draft").length,
+    perClass: overview.map(({ label, statuses: versions }) => ({ label, status: versions.includes("draft") ? "draft" : versions[0] ?? "none" })),
   };
 }
 

@@ -1211,6 +1211,25 @@ export async function getTimetableVersionList(className: string = TIMETABLE_CLAS
   return [...history, fixtureVersion];
 }
 
+export async function getTimetableStatusOverview(): Promise<Array<{ label: string; statuses: string[] }>> {
+  if (clientAdapterMode() !== "supabase") {
+    return Promise.all(listKnownClasses().map(async (label) => ({
+      label,
+      statuses: (await getTimetableVersionList(label)).map((entry) => entry.status ?? "none"),
+    })));
+  }
+  const [configuration, versions] = await Promise.all([
+    adapterCall<SupabaseConfiguration>("config.read", {}),
+    adapterCall<Array<{ grade_section_id: string; status: string }>>("timetable.listVersions", { summaryOnly: true }),
+  ]);
+  if (!configuration.ok) throw new Error(configuration.errors[0]?.message ?? "Timetable configuration could not be loaded.");
+  if (!versions.ok) throw new Error(versions.errors[0]?.message ?? "Timetable summary could not be loaded.");
+  return configuration.value.gradeSections.filter((section) => section.status !== "planned").map((section) => ({
+    label: classKeyForGradeSection(section),
+    statuses: versions.value.filter((version) => version.grade_section_id === section.id).map((version) => version.status),
+  }));
+}
+
 function applyEdits(
   periods: Record<string, Period[]>,
   edits: ReadonlyArray<TimetablePeriodEdit>,
@@ -1930,6 +1949,7 @@ export const timetableService = {
   getEffectiveTimetable,
   getTimetableVersion,
   getTimetableVersionList,
+  getTimetableStatusOverview,
   publishTimetable,
   saveTimetableDraft,
   saveTimetableDraftAsync,

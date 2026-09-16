@@ -6,6 +6,7 @@ import {
   getDateSheetState,
   getEffectiveTimetable,
   getTimetablePortalProjection,
+  getTimetableStatusOverview,
   listTimetableOverrides,
   listTimetableOverridesAsync,
   revokeTimetableOverride,
@@ -135,6 +136,42 @@ afterEach(() => {
 });
 
 describe("results and timetable Supabase facades", () => {
+  it("loads one timetable summary for all configured classes without period details", async () => {
+    const calls: Array<{ op: string; payload: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? "{}"));
+      calls.push(request);
+      if (request.op === "config.read") return json({ ok: true, value: { gradeSections: [
+        ...SERVER_CONFIG.gradeSections,
+        { id: "empty", gradeLabel: "Class 9", sectionLabel: "A" },
+        { id: "planned", gradeLabel: "Class 6", sectionLabel: "A", status: "planned" },
+      ] } });
+      if (request.op === "timetable.listVersions") return json({ ok: true, value: [
+        { grade_section_id: SECTION_ID, status: "draft", version: 3 },
+        { grade_section_id: SECTION_ID, status: "published", version: 2 },
+        { grade_section_id: "planned", status: "draft", version: 1 },
+      ] });
+      throw new Error("Unexpected operation");
+    }));
+    await expect(getTimetableStatusOverview()).resolves.toEqual([
+      { label: "10-B", statuses: ["draft", "published"] },
+      { label: "9-A", statuses: [] },
+    ]);
+    expect(calls).toEqual([
+      { op: "config.read", payload: {} },
+      { op: "timetable.listVersions", payload: { summaryOnly: true } },
+    ]);
+  });
+
+  it.each(["config.read", "timetable.listVersions"])("does not report zero timetables when %s fails", async (failedOp) => {
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const { op } = JSON.parse(String(init?.body ?? "{}"));
+      if (op === failedOp) return json({ ok: false, errors: [{ code: "unavailable", message: "read unavailable", field: null }] }, 503);
+      return json({ ok: true, value: op === "config.read" ? SERVER_CONFIG : [] });
+    }));
+    await expect(getTimetableStatusOverview()).rejects.toThrow("read unavailable");
+  });
+
   it("maps batches and sends draft/submit commands without falling back to fixtures", async () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

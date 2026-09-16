@@ -2100,7 +2100,16 @@ export type ExamScheduleProjection = {
   }>;
 };
 
-export function timetableListVersions(supabase: SupabaseClient<Database>) {
+export function timetableListVersions(supabase: SupabaseClient<Database>, summaryOnly = false) {
+  if (summaryOnly) {
+    return result(async () => {
+      const { data, error } = await supabase.from("timetable_versions")
+        .select("id, grade_section_id, status, version")
+        .order("version", { ascending: false });
+      if (error !== null) throw mapRpcError(error);
+      return data ?? [];
+    });
+  }
   return result(async () => {
     const { data, error } = await supabase
       .from("timetable_versions")

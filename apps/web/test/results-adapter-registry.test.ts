@@ -4,7 +4,8 @@
  * read-only exam-definition op and the create-batch op with its exact zod
  * payload shape (uuid selection + optional idempotency key).
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { timetableListVersions } from "@/lib/supabase/domain";
 
 import { adapterModules } from "@/app/api/adapter/registry";
 import type { AdapterOperation } from "@/app/api/adapter/registry/types";
@@ -22,6 +23,28 @@ function operation(name: string): AdapterOperation {
 }
 
 describe("results batch-creation adapter operations", () => {
+  it("accepts a boolean timetable summary flag while retaining the full-history default", () => {
+    const read = operation("timetable.listVersions");
+    for (const payload of [{}, { summaryOnly: true }, { summaryOnly: false }]) {
+      expect(read.schema.safeParse({ op: "timetable.listVersions", payload }).success).toBe(true);
+    }
+    expect(read.schema.safeParse({ op: "timetable.listVersions", payload: { summaryOnly: "true" } }).success).toBe(false);
+  });
+
+  it("reads only timetable version metadata for the dashboard under the same database client", async () => {
+    const rows = [{ id: "version", grade_section_id: SECTION_ID, status: "draft", version: 2 }];
+    const order = vi.fn().mockResolvedValue({ data: rows, error: null });
+    const select = vi.fn().mockReturnValue({ order });
+    const from = vi.fn().mockReturnValue({ select });
+    const rpc = vi.fn();
+    const db = { from, rpc } as unknown as Parameters<typeof timetableListVersions>[0];
+    await expect(timetableListVersions(db, true)).resolves.toMatchObject({ ok: true, value: rows });
+    expect(from).toHaveBeenCalledExactlyOnceWith("timetable_versions");
+    expect(select).toHaveBeenCalledExactlyOnceWith("id, grade_section_id, status, version");
+    expect(order).toHaveBeenCalledExactlyOnceWith("version", { ascending: false });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it("registers the exam-definition read with an empty payload", () => {
     const read = operation("results.examDefinitions");
     expect(read.schema.safeParse({ op: "results.examDefinitions", payload: {} }).success).toBe(true);
