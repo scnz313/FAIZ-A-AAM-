@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { callAppRpc } from "@/lib/supabase/rpc";
 import { secretsMatch } from "@/lib/auth/secret-equal";
 
@@ -23,6 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ doc
   if (!document) return NextResponse.json({ error: "Document not found." }, { status: 404, headers: { "Cache-Control": "no-store" } });
   const result = await callAppRpc<{ reference: string; status: string }>(admin, "documents_apply_scan", { p_document_id: document.id, p_status: status, p_detail: typeof body?.detail === "string" ? body.detail : null });
   if (result.error !== null || result.data === null) return NextResponse.json({ error: "Scanner result could not be recorded." }, { status: 422, headers: { "Cache-Control": "no-store" } });
+  scheduleOutboxKick("documents.scan_result");
   return NextResponse.json({ ok: true, documentRef: result.data.reference, status: result.data.status }, { headers: { "Cache-Control": "no-store" } });
 }
 

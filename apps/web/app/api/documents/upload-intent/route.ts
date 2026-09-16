@@ -5,6 +5,7 @@ import { isSameOrigin } from "@/lib/auth/same-origin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -174,6 +175,7 @@ export async function POST(request: Request) {
 
   const signed = await createSupabaseAdminClient().storage.from("fass-private-documents").createSignedUploadUrl(objectKey);
   if (signed.error !== null || signed.data === null) return NextResponse.json({ error: "Upload service is temporarily unavailable.", correlationId }, { status: 503, headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId } });
+  scheduleOutboxKick("documents.upload_intent");
   return NextResponse.json(
     { ok: true, documentRef: metadata.data.reference, objectKey, token: signed.data.token, bucket: "fass-private-documents", status: metadata.data.status },
     { headers: { "Cache-Control": "no-store", "X-Correlation-Id": correlationId } },

@@ -8,6 +8,7 @@ import { readJsonBounded, SMALL_JSON_MAX_BYTES } from "@/lib/http/request-body";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 
 /**
  * Signed upload intent for the one optional profile photo on a public job
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, code: "unavailable", error: "The upload service is temporarily unavailable.", correlationId }, { status: 503, headers: { ...HEADERS, "X-Correlation-Id": correlationId } });
   }
 
+  scheduleOutboxKick("careers.photo_intent");
   return NextResponse.json(
     { ok: true, documentRef: result.data.documentRef, objectKey: result.data.objectKey, token: signed.data.token, bucket },
     { status: 200, headers: { ...HEADERS, "X-Correlation-Id": correlationId } },

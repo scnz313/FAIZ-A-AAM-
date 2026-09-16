@@ -43,6 +43,7 @@ const DATA_LINKS: ReadonlyArray<NavLink> = [
   { subPath: "/school", label: "School setup", icon: "apartment", action: "academics.configure" },
   { subPath: "/data/imports", label: "Imports", icon: "upload", action: "users.manage" },
   { subPath: "/data/exports", label: "Exports", icon: "download", action: "users.manage" },
+  { subPath: "/deliveries", label: "Deliveries", icon: "mail", action: "deliveries.manage" },
   { subPath: "/settings", label: "Settings", icon: "tune", action: "settings.manage" },
   { subPath: "/audit", label: "Audit", icon: "history", action: "audit.view" },
 ];

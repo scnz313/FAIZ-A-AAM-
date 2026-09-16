@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { consumeAuthRateLimit, isSameOrigin, registerApplicant } from "@/lib/auth/identity-server";
 import { readJsonBounded, SMALL_JSON_MAX_BYTES } from "@/lib/http/request-body";
 import { dataAdapter } from "@/lib/supabase/env";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { statusForServiceResult, withCorrelation } from "@/app/api/adapter/registry";
 
 export async function POST(request: NextRequest) {
@@ -45,5 +46,6 @@ export async function POST(request: NextRequest) {
     purpose: value.purpose === "job_application" ? "job_application" : "student_admission",
     next: typeof value.next === "string" ? value.next : undefined,
   }), correlationRef);
+  if (result.ok) scheduleOutboxKick("auth.applicant_register");
   return NextResponse.json(result, { status: statusForServiceResult(result), headers });
 }

@@ -9,6 +9,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { documentActorCanAccess, type StoredDocumentAccessRecord } from "@/modules/services/document-access.server";
 import { detectContentType } from "@/modules/services/document-providers";
@@ -133,6 +134,7 @@ export async function POST(request: Request, { params }: Params) {
     }
   }
 
+  scheduleOutboxKick("documents.finalize");
   return NextResponse.json(
     { ok: true, documentRef: result.data.reference, state: result.data.status === "clean" ? "ready" : result.data.status, checksumVerified: result.data.checksumVerified },
     { headers: { "Cache-Control": "no-store" } },

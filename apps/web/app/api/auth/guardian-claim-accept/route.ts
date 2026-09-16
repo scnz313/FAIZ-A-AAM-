@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { acceptGuardianActivation, consumeAuthRateLimit, isSameOrigin } from "@/lib/auth/identity-server";
 import { readJsonBounded, SMALL_JSON_MAX_BYTES } from "@/lib/http/request-body";
 import { dataAdapter } from "@/lib/supabase/env";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { statusForServiceResult, withCorrelation } from "@/app/api/adapter/registry";
 
@@ -44,5 +45,6 @@ export async function POST(request: NextRequest) {
     givenName: payload.givenName,
     familyName: payload.familyName,
   }), correlationRef);
+  if (result.ok) scheduleOutboxKick("auth.guardian_claim_accept");
   return NextResponse.json(result, { status: statusForServiceResult(result), headers });
 }

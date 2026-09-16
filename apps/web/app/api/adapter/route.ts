@@ -5,6 +5,8 @@ import { getServerActor } from "@/lib/auth/actor";
 import { isSameOrigin } from "@/lib/auth/same-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { dataAdapter } from "@/lib/supabase/env";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
+import { isReadOperation } from "./read-operations";
 import {
   parseAdapterOperation,
   ReferenceResolutionError,
@@ -84,6 +86,11 @@ export async function POST(request: NextRequest) {
     }
   }
   const safeResult = withCorrelation(result, correlationRef);
+  /* Successful writes can enqueue outbox events (emails, provider jobs);
+     drain them right after the response instead of waiting for the cron. */
+  if (safeResult.ok && !isReadOperation(parsed.operation.name)) {
+    scheduleOutboxKick(`adapter:${parsed.operation.name}`);
+  }
   const payload = parsed.payload as Record<string, unknown>;
   const cookies: Array<{ name: string; value: string }> = [];
   if (safeResult.ok && parsed.operation.name === "context.family" && typeof (payload.studentId ?? payload.studentRef) === "string") {

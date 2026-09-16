@@ -58,11 +58,12 @@ export async function POST(request: Request) {
     });
   }
 
-  // Remove any existing TOTP factors via the admin API. The user-scoped
-  // client cannot unenroll VERIFIED factors at AAL1 (Supabase requires AAL2
-  // for that), so we use the secret-key admin client to delete them first.
-  // This lets us enroll a fresh factor whose secret we can use to generate
-  // a valid TOTP code. Dev-only — the admin key never leaves the server.
+  // Remove only previous "Dev auto-elevation" factors via the admin API.
+  // The user-scoped client cannot unenroll VERIFIED factors at AAL1 (Supabase
+  // requires AAL2 for that), so we use the secret-key admin client to delete
+  // them first. A real "Staff access" factor is never touched: the dev
+  // factor must be replaced each sign-in because its secret is not
+  // retrievable. Dev-only — the admin key never leaves the server.
   const userId = claimsData.claims.sub;
   if (typeof userId !== "string" || userId.length === 0) {
     return NextResponse.json(
@@ -78,12 +79,13 @@ export async function POST(request: Request) {
   // necessary because the user-scoped client cannot unenroll verified
   // factors at AAL1. Cast to access the private methods.
   const adminAuth = admin.auth.admin as unknown as {
-    _listFactors: (params: { userId: string }) => Promise<{ data: { factors: Array<{ id: string }> } | null }>;
+    _listFactors: (params: { userId: string }) => Promise<{ data: { factors: Array<{ id: string; friendly_name?: string }> } | null }>;
     _deleteFactor: (params: { userId: string; id: string }) => Promise<{ error: unknown | null }>;
   };
   const { data: adminFactors } = await adminAuth._listFactors({ userId });
   const existingFactors = adminFactors?.factors ?? [];
   for (const factor of existingFactors) {
+    if (factor.friendly_name !== "Dev auto-elevation") continue;
     await adminAuth._deleteFactor({ userId, id: factor.id });
   }
 

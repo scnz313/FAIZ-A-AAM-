@@ -12,6 +12,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 
 /**
  * Finalize the optional public-application profile photo. The server reads the
@@ -155,6 +156,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, code: "unavailable", error: "The photo was verified but could not be attached. Try again.", correlationId }, { status: 503, headers: { ...HEADERS, "X-Correlation-Id": correlationId } });
   }
 
+  scheduleOutboxKick("careers.photo_finalize");
   return NextResponse.json(
     { ok: true, documentRef: finalized.data.reference, state: "pending_scan" },
     { status: 200, headers: HEADERS },

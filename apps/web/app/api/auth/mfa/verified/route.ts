@@ -4,6 +4,7 @@ import { isSameOrigin } from "@/lib/auth/same-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { dataAdapter } from "@/lib/supabase/env";
 import { markMfaVerified, recordAuthEvent } from "@/lib/supabase/domain";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request.url, request.headers.get("origin"), request.headers.get("host"), request.headers.get("sec-fetch-site"))) {
@@ -15,6 +16,9 @@ export async function POST(request: Request) {
   if (claimsError !== null || claimsData === null) return NextResponse.json({ ok: false, errors: [{ code: "unauthenticated", message: "Sign in to continue.", field: null }] }, { status: 401 });
   if (claimsData.claims.aal !== "aal2") return NextResponse.json({ ok: false, errors: [{ code: "forbidden", message: "Complete two-step verification first.", field: null }] }, { status: 403 });
   const result = await markMfaVerified(supabase);
-  if (result.ok) await recordAuthEvent(supabase, "signed_in");
+  if (result.ok) {
+    await recordAuthEvent(supabase, "signed_in");
+    scheduleOutboxKick("auth.mfa_verified");
+  }
   return NextResponse.json(result, { status: result.ok ? 200 : 403, headers: { "Cache-Control": "no-store" } });
 }

@@ -31,6 +31,7 @@ const ROUTE_ACTIONS: ReadonlyArray<{ prefix: string; action: StaffAction }> = [
   { prefix: "/data", action: "users.manage" },
   { prefix: "/link-requests", action: "links.verify" },
   { prefix: "/guardians", action: "links.verify" },
+  { prefix: "/deliveries", action: "deliveries.manage" },
   { prefix: "/audit", action: "audit.view" },
   { prefix: "/settings", action: "settings.manage" },
   { prefix: "/support", action: "support.view" },

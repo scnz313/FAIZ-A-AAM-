@@ -131,4 +131,7 @@ echo "== Guardian link-request reference suite (000119)"
 echo "== School configuration suite (000123)"
 "${PSQL[@]}" -q -f supabase/tests/database/school-configuration.test.sql
 
+echo "== Delivery operations suite (000124)"
+"${PSQL[@]}" -q -f supabase/tests/database/delivery-operations.test.sql
+
 echo "ALL LOCAL DATABASE CHECKS PASSED"

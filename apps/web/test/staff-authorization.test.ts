@@ -118,6 +118,9 @@ describe("canonical role → action matrix (Phase 1 maker/checker splits)", () =
     expect(canRole("system_administrator", "audit.view")).toBe(true);
     expect(canRole("system_administrator", "links.verify")).toBe(true);
     expect(canRole("system_administrator", "academics.configure")).toBe(true);
+    expect(canRole("system_administrator", "deliveries.manage")).toBe(true);
+    expect(canRole("principal", "deliveries.manage")).toBe(false);
+    expect(canRole("admissions_officer", "deliveries.manage")).toBe(false);
     expect(canRole("system_administrator", "admissions.approve")).toBe(false);
     expect(canRole("system_administrator", "finance.approve")).toBe(false);
     expect(canRole("system_administrator", "results.publish")).toBe(false);

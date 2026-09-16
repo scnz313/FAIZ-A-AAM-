@@ -5,6 +5,7 @@ import { isSameOrigin } from "@/lib/auth/same-origin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -125,6 +126,7 @@ export async function POST(
     });
   }
 
+  scheduleOutboxKick("data_imports.scan_status");
   return respond({
     state: advanced.data.state, version: advanced.data.version,
     scanStatus: document.scan_status, advanced: true, nextStep: "mapping", stalled: false,

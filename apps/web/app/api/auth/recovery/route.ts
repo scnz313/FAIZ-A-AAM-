@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { consumeAuthRateLimit, isSameOrigin, requestRecovery } from "@/lib/auth/identity-server";
 import { readJsonBounded, SMALL_JSON_MAX_BYTES } from "@/lib/http/request-body";
 import { dataAdapter } from "@/lib/supabase/env";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { statusForServiceResult, withCorrelation } from "@/app/api/adapter/registry";
 
 export async function POST(request: NextRequest) {
@@ -42,5 +43,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, errors: [{ code: "retryable", message: "Recovery is temporarily unavailable. Try again shortly.", field: null, retryable: true }], correlationRef }, { status: 503, headers });
   }
   const result = withCorrelation(await requestRecovery({ identifier }), correlationRef);
+  if (result.ok) scheduleOutboxKick("auth.recovery");
   return NextResponse.json(result, { status: result.ok ? 202 : statusForServiceResult(result), headers });
 }

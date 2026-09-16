@@ -36,6 +36,7 @@ export type StaffAction =
   | "content.publish"
   | "links.verify"
   | "users.manage"
+  | "deliveries.manage"
   | "audit.view"
   | "settings.manage"
   | "support.view"
@@ -80,7 +81,7 @@ const ROLE_ACTIONS: Record<string, ReadonlySet<StaffAction>> = {
   /* Auditor: read-only audit and owning-record document evidence permitted by database policy. */
   auditor: new Set(["home.view", "audit.view", "documents.view"]),
   /* System administrator: configuration and access grants ONLY. */
-  system_administrator: new Set(["home.view", "users.manage", "settings.manage", "audit.view", "links.verify", "facility.view", "facility.manage", "academics.configure"]),
+  system_administrator: new Set(["home.view", "users.manage", "deliveries.manage", "settings.manage", "audit.view", "links.verify", "facility.view", "facility.manage", "academics.configure"]),
 };
 
 /** Sync check: can a role perform an action? */

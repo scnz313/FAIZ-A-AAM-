@@ -8,6 +8,7 @@ import { readJsonBounded, PUBLIC_JSON_MAX_BYTES } from "@/lib/http/request-body"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
 import { supportPublicIntake } from "@/lib/supabase/domain";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { captchaAdapter } from "@/lib/support/captcha";
 
 const inputSchema = z.object({
@@ -59,5 +60,6 @@ export async function POST(request: Request) {
   if (!captcha.ok) return NextResponse.json({ ok: false, errors: [{ code: "forbidden", message: "Complete the CAPTCHA check before sending your concern.", field: "captchaToken" }] }, { status: 403, headers });
   const intakeKey = createHash("sha256").update(`support-public:${forwarded}`, "utf8").digest("hex");
   const result = await supportPublicIntake(createSupabaseAdminClient(), { ...parsed.data, intakeKey, captchaProvider: captcha.provider, captchaVerifiedAt: captcha.verifiedAt ?? undefined });
+  if (result.ok) scheduleOutboxKick("support.public_intake");
   return NextResponse.json(result, { status: result.ok ? 200 : 400, headers });
 }

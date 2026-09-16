@@ -6,6 +6,7 @@ import { CSV_MAX_ROWS } from "@/lib/imports/csv-core";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { validateSourceRows, type ValidationRowInput } from "@/modules/imports/validation";
 import type { DataImportEntity } from "@fass/contracts";
@@ -159,6 +160,7 @@ export async function POST(
     return NextResponse.json({ error: "The validation state could not be finalised." }, { status: 503, headers });
   }
 
+  scheduleOutboxKick("data_imports.validate");
   return NextResponse.json({
     ok: true,
     state: finished.data.state,

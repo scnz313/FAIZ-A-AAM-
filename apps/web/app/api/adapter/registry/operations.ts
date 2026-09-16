@@ -14,6 +14,8 @@ import {
   contentReviewVersion,
   contentSaveDraft,
   contentUnpublish,
+  deliveriesAdminList,
+  deliveryRetry,
   documentsGet,
   documentsList,
   documentsListPage,
@@ -36,6 +38,7 @@ import {
   notificationsMarkAll,
   notificationsList,
   notificationsUnreadCount,
+  outboxEventRetry,
   settingsRead,
   settingsReadLatest,
   settingsSave,
@@ -129,5 +132,13 @@ export const operationsModule: AdapterModule = {
     operation("documents.listPage", z.object({ ownerDomain: z.string().optional(), ownerRecordId: uuid.optional(), limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().min(0).optional() }), ({ supabase }, payload) => documentsListPage(supabase, payload)),
     operation("documents.get", z.object({ reference: publicReference }), ({ supabase }, payload) => documentsGet(supabase, payload.reference)),
     operation("documents.setPublicVisibility", z.object({ reference: publicReference, visibility: z.enum(["private", "public_approved"]), reason: z.string().max(500).optional() }), ({ supabase }, payload) => documentsSetPublicVisibility(supabase, payload)),
+    /* Delivery operations (migration 000124): the RPCs enforce
+       system_administrator + aal2; the adapter surface stays session-bound. */
+    operation("deliveries.list", z.object({
+      status: z.enum(["pending", "processing", "delivered", "failed"]).nullable().optional(),
+      limit: z.number().int().min(1).max(500).optional(),
+    }), ({ supabase }, payload) => deliveriesAdminList(supabase, payload)),
+    operation("deliveries.retry", z.object({ deliveryId: uuid, reason: z.string().min(3).max(500) }), ({ supabase }, payload) => deliveryRetry(supabase, payload)),
+    operation("deliveries.requeueEvent", z.object({ eventId: uuid, reason: z.string().min(3).max(500) }), ({ supabase }, payload) => outboxEventRetry(supabase, payload)),
   ],
 };

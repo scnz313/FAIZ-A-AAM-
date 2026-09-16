@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { isSameOrigin } from "@/lib/auth/identity-server";
 import { dataAdapter } from "@/lib/supabase/env";
 import { recordAuthEvent } from "@/lib/supabase/domain";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
@@ -20,5 +21,6 @@ export async function POST(request: NextRequest) {
   if (error !== null) {
     return NextResponse.json({ ok: false, errors: [{ code: "retryable", message: "Sign out could not be completed. Try again.", field: null }] }, { status: 503, headers });
   }
+  scheduleOutboxKick("auth.sign_out");
   return new NextResponse(null, { status: 204, headers });
 }

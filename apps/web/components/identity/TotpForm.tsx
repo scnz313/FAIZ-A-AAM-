@@ -79,11 +79,44 @@ export default function TotpForm({ adapter, totpRequired = true }: { adapter?: "
       try {
         const { data } = await supabase.auth.mfa.listFactors();
         if (cancelled) return;
-        const existing = data?.totp ?? [];
-        if (existing.length > 0 && existing[0] !== undefined) {
-          setFactorId(existing[0].id);
+        const factors = data?.totp ?? [];
+        const isDevFactor = (factor: { friendly_name?: string }) =>
+          factor.friendly_name === "Dev auto-elevation";
+        /* A verified dev factor carries a secret nobody knows — challenging
+           it would lock the account out. Only a verified real factor may be
+           challenged; verified dev factors are purged server-side first. */
+        const realVerified = factors.find(
+          (factor) => factor.status === "verified" && !isDevFactor(factor),
+        );
+        if (realVerified !== undefined) {
+          setFactorId(realVerified.id);
           setPhase("challenge");
           return;
+        }
+        if (factors.some((factor) => factor.status === "verified" && isDevFactor(factor))) {
+          try {
+            await fetch("/api/auth/mfa/purge-dev-factors", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{}",
+            });
+          } catch {
+            /* Purge is best-effort — a fresh enrolment still succeeds and the
+               dev factor is ignored on the next sign-in. */
+          }
+          if (cancelled) return;
+        }
+        /* Stale unverified "Staff access" factors from abandoned enrolments
+           block a fresh enrol with "factor already exists"; they can be
+           unenrolled client-side at AAL1. */
+        for (const factor of factors) {
+          if (factor.status === "verified" || isDevFactor(factor)) continue;
+          try {
+            await supabase.auth.mfa.unenroll({ factorId: factor.id });
+          } catch {
+            /* Unenroll is best-effort — enrol errors surface below. */
+          }
+          if (cancelled) return;
         }
         const { data: enrolled, error } = await supabase.auth.mfa.enroll({
           factorType: "totp",

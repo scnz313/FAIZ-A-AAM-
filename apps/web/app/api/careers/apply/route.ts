@@ -8,6 +8,7 @@ import { readJsonBounded, PUBLIC_JSON_MAX_BYTES } from "@/lib/http/request-body"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { dataAdapter } from "@/lib/supabase/env";
 import { callAppRpc } from "@/lib/supabase/rpc";
+import { scheduleOutboxKick } from "@/lib/supabase/outbox-kick";
 
 /**
  * Public job-application intake (owner requirement, 15 September 2026).
@@ -115,6 +116,7 @@ export async function POST(request: Request) {
     );
   }
 
+  scheduleOutboxKick("careers.apply");
   return NextResponse.json(
     { ok: true, reference: result.data.reference },
     { status: 200, headers: { ...HEADERS, "X-Correlation-Id": correlationId } },

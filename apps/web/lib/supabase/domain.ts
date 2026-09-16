@@ -4196,3 +4196,58 @@ export function documentsSetPublicVisibility(
     };
   });
 }
+
+/* ---------------------------------------------------------------------- */
+/* Delivery operations (migration 000124)                                  */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Administrator delivery projection: outbox events newest-first with nested
+ * masked notification deliveries and a queue summary. The
+ * `app.deliveries_admin_list` RPC enforces system_administrator + aal2.
+ */
+export function deliveriesAdminList(
+  supabase: SupabaseClient<Database>,
+  input: { status?: string | null; limit?: number } = {},
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "deliveries_admin_list", {
+      p_status: input.status ?? null,
+      p_limit: input.limit ?? 100,
+    });
+    if (error !== null) throw mapRpcError(error);
+    return requireRow(data, "deliveries");
+  });
+}
+
+/** Return one failed delivery to the worker's retryable state and requeue its
+ *  parent event. Audited by `app.delivery_retry`. */
+export function deliveryRetry(
+  supabase: SupabaseClient<Database>,
+  input: { deliveryId: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "delivery_retry", {
+      p_delivery_id: input.deliveryId,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error, "conflict");
+    return requireRow(data, "delivery retry");
+  });
+}
+
+/** Requeue a failed outbox event with a three-attempt extension.
+ *  Audited by `app.outbox_event_retry`. */
+export function outboxEventRetry(
+  supabase: SupabaseClient<Database>,
+  input: { eventId: string; reason: string },
+) {
+  return result(async () => {
+    const { data, error } = await callAppRpc<Json>(supabase, "outbox_event_retry", {
+      p_event_id: input.eventId,
+      p_reason: input.reason,
+    });
+    if (error !== null) throw mapRpcError(error, "conflict");
+    return requireRow(data, "outbox event retry");
+  });
+}
